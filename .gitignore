@@ -1,0 +1,4 @@
+.vscode/
+target/
+vapoursynth/__pycache__/
+vscache/
