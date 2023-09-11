@@ -1,6 +1,6 @@
 use crate::view;
 
-use super::bindings::ass;
+use super::bindings::{ass, c_string};
 
 pub struct Subtitles {
     renderer: ass::Renderer,
@@ -12,8 +12,10 @@ pub fn init_renderer(width: i32, height: i32) -> ass::Renderer {
     renderer.set_frame_size(width, height);
     renderer.set_storage_size(width, height);
     renderer.set_fonts(
-        Some(ass::CString::new("/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf").unwrap()),
-        ass::CString::new("Alegreya Sans").unwrap(),
+        Some(c_string(
+            "/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf",
+        )),
+        c_string("Alegreya Sans"),
         ass::FontProvider::Autodetect,
         None,
         false,
