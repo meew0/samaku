@@ -1,7 +1,6 @@
-use std::ffi::OsStr;
 use std::path::Path;
 
-use super::bindings::vapoursynth;
+use super::bindings::{c_string, vapoursynth};
 pub use vapoursynth::FrameRate;
 
 const DEFAULT_SCRIPT: &str = include_str!("default_scripts/video.py");
@@ -9,8 +8,6 @@ const DEFAULT_SCRIPT: &str = include_str!("default_scripts/video.py");
 const KF_KEY: &str = "__aegi_keyframes";
 const TC_KEY: &str = "__aegi_timecodes";
 const AUDIO_KEY: &str = "__aegi_hasaudio";
-
-use super::bindings::c_string;
 
 pub struct Video {
     script: vapoursynth::Script,
