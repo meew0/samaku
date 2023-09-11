@@ -5,6 +5,8 @@ use std::path::Path;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
+use super::c_string;
+
 fn vs_panic(ret: i32, message: &str) {
     if ret > 0 {
         panic!("{}", message);
@@ -228,7 +230,7 @@ impl Script {
         }
     }
 
-    pub fn get_variable(&mut self, name: CString, dst: &MutMap) {
+    pub fn get_variable(&self, name: CString, dst: &MutMap) {
         let script_api = get_script_api();
         let ret =
             unsafe { (*script_api).getVariable.unwrap()(self.script, name.as_ptr(), dst.map) };
@@ -762,4 +764,46 @@ pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
             vs::VSChromaLocation::VSC_CHROMA_LEFT as i64,
         );
     }
+}
+
+const PRELUDE: &str = include_str!("../default_scripts/prelude.py");
+
+pub fn open_script<P: AsRef<Path>>(code: &str, filename: P) -> Script {
+    let mut core = Core::create_core(0).unwrap();
+    let mut script = match core.create_script() {
+        Some(script) => script,
+        None => {
+            // This matches how it's done in aegi, where a core is only ever specifically freed
+            // when script creation fails. Doing it otherwise leads to “double free of core”
+            // errors.
+            core.free();
+            panic!("Could not create script");
+        }
+    };
+    script.eval_set_working_dir(1);
+
+    let handle = core.add_log_handler(|msg_type, msg| println!("{} - {}", msg_type, msg));
+
+    let mut map_owned = OwnedMap::create_map().unwrap();
+    let map = map_owned.as_mut();
+    map.set_path(c_string("filename"), filename);
+    map.set_path(c_string("__aegi_vscache"), Path::new("./vscache/"));
+    map.set_utf8(c_string("__aegi_vsplugins"), c_string(""));
+    map.set_path(
+        c_string("__samaku_vapoursynth_path"),
+        std::fs::canonicalize(Path::new("./vapoursynth")).unwrap(),
+    );
+    // TODO: user paths
+    script.set_variables(map.as_const());
+
+    let mut vscript = String::from(PRELUDE);
+    vscript.push_str(code);
+
+    script
+        .evaluate_buffer(c_string(vscript), c_string("samaku"))
+        .unwrap();
+
+    core.remove_log_handler(handle);
+
+    script
 }

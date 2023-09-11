@@ -5,18 +5,14 @@ use super::bindings::vapoursynth;
 pub use vapoursynth::FrameRate;
 
 const DEFAULT_SCRIPT: &str = include_str!("default_scripts/video.py");
-const PRELUDE: &str = include_str!("default_scripts/prelude.py");
 
 const KF_KEY: &str = "__aegi_keyframes";
 const TC_KEY: &str = "__aegi_timecodes";
 const AUDIO_KEY: &str = "__aegi_hasaudio";
 
-fn c_string<T: Into<Vec<u8>>>(rust_str: T) -> vapoursynth::CString {
-    vapoursynth::CString::new(rust_str).unwrap()
-}
+use super::bindings::c_string;
 
 pub struct Video {
-    core: vapoursynth::Core,
     script: vapoursynth::Script,
     node: vapoursynth::Node,
     pub current_frame: i32,
@@ -27,47 +23,7 @@ pub struct Video {
 
 impl Video {
     pub fn load<P: AsRef<Path>>(filename: P) -> Video {
-        let mut core = vapoursynth::Core::create_core(0).unwrap();
-        let mut script = match core.create_script() {
-            Some(script) => script,
-            None => {
-                // This matches how it's done in aegi, where a core is only ever specifically freed
-                // when script creation fails. Doing it otherwise leads to “double free of core”
-                // errors.
-                core.free();
-                panic!("Could not create script");
-            }
-        };
-        script.eval_set_working_dir(1);
-
-        let handle = core.add_log_handler(|msg_type, msg| println!("{} - {}", msg_type, msg));
-
-        if filename.as_ref().extension() == Some(OsStr::new("vpy"))
-            || filename.as_ref().extension() == Some(OsStr::new("vpy"))
-        {
-            todo!()
-        } else {
-            let mut map_owned = vapoursynth::OwnedMap::create_map().unwrap();
-            let map = map_owned.as_mut();
-            map.set_path(c_string("filename"), filename);
-            map.set_path(c_string("__aegi_vscache"), Path::new("./vscache/"));
-            map.set_utf8(c_string("__aegi_vsplugins"), c_string(""));
-            map.set_path(
-                c_string("__samaku_vapoursynth_path"),
-                std::fs::canonicalize(Path::new("./vapoursynth")).unwrap(),
-            );
-            // TODO: user paths
-            script.set_variables(map.as_const());
-
-            let mut vscript = String::from(PRELUDE);
-            vscript.push_str(DEFAULT_SCRIPT);
-
-            script
-                .evaluate_buffer(c_string(vscript), c_string("samaku"))
-                .unwrap()
-        }
-
-        core.remove_log_handler(handle);
+        let script = vapoursynth::open_script(DEFAULT_SCRIPT, filename);
 
         let node: vapoursynth::Node = script.get_output_node(0).unwrap();
         println!("Output node is video: {}", node.is_video());
@@ -146,7 +102,6 @@ impl Video {
         };
 
         Video {
-            core,
             script,
             node: out_node,
             current_frame: 0,
