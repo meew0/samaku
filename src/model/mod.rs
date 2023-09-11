@@ -5,6 +5,7 @@ pub mod pane;
 pub struct GlobalState {
     pub video: Option<media::Video>,
     pub subtitles: Option<media::Subtitles>,
+    pub audio: Option<media::Audio>,
 }
 
 impl Default for GlobalState {
@@ -12,6 +13,7 @@ impl Default for GlobalState {
         Self {
             video: None,
             subtitles: None,
+            audio: None,
         }
     }
 }

@@ -1,6 +1,8 @@
+mod audio;
 mod bindings;
-pub mod subtitle;
-pub mod video;
+mod subtitle;
+mod video;
 
+pub use audio::Audio;
 pub use subtitle::Subtitles;
 pub use video::Video;

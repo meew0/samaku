@@ -1,5 +1,5 @@
 use rustsynth_sys as vs;
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
@@ -11,38 +11,6 @@ fn vs_panic(ret: i32, message: &str) {
     if ret > 0 {
         panic!("{}", message);
     }
-}
-
-pub type CString = std::ffi::CString;
-
-pub fn path_to_cstring<P: AsRef<Path>>(p: P) -> CString {
-    // https://stackoverflow.com/a/59224987
-    // Why is this not in the standard library?
-
-    let path = p.as_ref();
-    let mut buf = Vec::new();
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        buf.extend(path.as_os_str().as_bytes());
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStrExt;
-        buf.extend(
-            path.as_os_str()
-                .encode_wide()
-                .map(|b| {
-                    let b = b.to_ne_bytes();
-                    b.get(0).map(|s| *s).into_iter().chain(b.get(1).map(|s| *s))
-                })
-                .flatten(),
-        );
-    }
-
-    CString::new(buf).unwrap()
 }
 
 static SCRIPTAPI: AtomicPtr<vs::VSSCRIPTAPI> = AtomicPtr::new(ptr::null_mut());
@@ -265,6 +233,8 @@ impl Script {
     }
 }
 
+unsafe impl Send for Script {}
+
 impl Drop for Script {
     fn drop(&mut self) {
         let script_api = get_script_api();
@@ -391,7 +361,7 @@ impl<'a> MutMap<'a> {
 
     pub fn set_path<P: AsRef<Path>>(&mut self, key: CString, value: P) {
         // TODO: technically, we are reinterpreting arbitrary bytes as UTF-8 here
-        self.set_utf8(key, path_to_cstring(value));
+        self.set_utf8(key, super::path_to_cstring(value));
     }
 
     pub fn append_int(&mut self, key: CString, value: i64) {
@@ -476,6 +446,10 @@ impl Node {
         self.get_node_type() == vs::VSMediaType::mtVideo as i32
     }
 
+    pub fn is_audio(&self) -> bool {
+        self.get_node_type() == vs::VSMediaType::mtAudio as i32
+    }
+
     pub fn get_video_info<'a>(&'a self) -> Option<VideoInfo<'a>> {
         let api = get_api();
         let vi = unsafe { (*api).getVideoInfo.unwrap()(self.node) };
@@ -484,6 +458,19 @@ impl Node {
         } else {
             Some(VideoInfo {
                 vi,
+                _a: PhantomData,
+            })
+        }
+    }
+
+    pub fn get_audio_info<'a>(&'a self) -> Option<AudioInfo<'a>> {
+        let api = get_api();
+        let ai = unsafe { (*api).getAudioInfo.unwrap()(self.node) };
+        if ai.is_null() {
+            None
+        } else {
+            Some(AudioInfo {
+                ai,
                 _a: PhantomData,
             })
         }
@@ -510,6 +497,8 @@ impl Node {
         }
     }
 }
+
+unsafe impl Send for Node {}
 
 impl Drop for Node {
     fn drop(&mut self) {
@@ -558,6 +547,35 @@ impl VideoInfo<'_> {
             numerator: unsafe { (*self.vi).fpsNum },
             denominator: unsafe { (*self.vi).fpsDen },
         }
+    }
+}
+
+pub const AUDIO_FRAME_SAMPLES: u32 = vs::VS_AUDIO_FRAME_SAMPLES;
+
+pub struct AudioInfo<'a> {
+    ai: *const vs::VSAudioInfo,
+    _a: PhantomData<&'a vs::VSAudioInfo>,
+}
+
+impl AudioInfo<'_> {
+    pub fn float_samples(&self) -> bool {
+        unsafe { (*self.ai).format.sampleType == vs::VSSampleType::stFloat as i32 }
+    }
+
+    pub fn get_bytes_per_sample(&self) -> i32 {
+        unsafe { (*self.ai).format.bytesPerSample }
+    }
+
+    pub fn get_sample_rate(&self) -> i32 {
+        unsafe { (*self.ai).sampleRate }
+    }
+
+    pub fn get_num_channels(&self) -> i32 {
+        unsafe { (*self.ai).format.numChannels }
+    }
+
+    pub fn get_num_samples(&self) -> i64 {
+        unsafe { (*self.ai).numSamples }
     }
 }
 

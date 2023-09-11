@@ -22,6 +22,19 @@ pub fn global_update(
         GlobalMessage::VideoFileSelected(path_buf) => {
             global_state.video = Some(media::Video::load(path_buf));
         }
+        GlobalMessage::LoadAudio => {
+            return iced::Command::perform(
+                rfd::AsyncFileDialog::new().pick_file(),
+                Message::map_option(|handle: rfd::FileHandle| {
+                    Message::Global(GlobalMessage::AudioFileSelected(
+                        handle.path().to_path_buf(),
+                    ))
+                }),
+            );
+        }
+        GlobalMessage::AudioFileSelected(path_buf) => {
+            global_state.audio = Some(media::Audio::load(path_buf));
+        }
         GlobalMessage::LoadSubtitles => {
             if let Some(_) = &global_state.video {
                 let future = async {

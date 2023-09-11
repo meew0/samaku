@@ -1,3 +1,6 @@
 [submodule "libass-sys/libass"]
 	path = libass-sys/libass
 	url = https://github.com/libass/libass.git
+[submodule "bestsource-sys/bestsource"]
+	path = bestsource-sys/bestsource
+	url = https://github.com/vapoursynth/bestsource.git

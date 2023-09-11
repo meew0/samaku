@@ -1,3 +1,5 @@
+#![feature(int_roundings)]
+
 mod controller;
 mod keyboard;
 mod media;

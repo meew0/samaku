@@ -1,8 +1,9 @@
 [package]
-name = "libass-sys"
+name = "bestsource-sys"
 version = "0.1.0"
 edition = "2021"
-links = "ass"
+links = "bestsource"
 
 [build-dependencies]
 bindgen = "0.68"
+cc = "1.0"

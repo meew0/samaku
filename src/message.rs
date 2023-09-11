@@ -37,6 +37,8 @@ impl Message {
 pub enum GlobalMessage {
     LoadVideo,
     VideoFileSelected(std::path::PathBuf),
+    LoadAudio,
+    AudioFileSelected(std::path::PathBuf),
     LoadSubtitles,
     SubtitleFileRead(String),
     NextFrame,
