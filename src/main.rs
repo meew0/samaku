@@ -20,6 +20,7 @@ pub fn main() -> iced::Result {
 
 struct Samaku {
     global_state: model::GlobalState,
+    workers: controller::workers::Workers,
     panes: pane_grid::State<model::pane::PaneData>,
     panes_created: u64,
     focus: Option<pane_grid::Pane>,
@@ -34,12 +35,18 @@ impl Application for Samaku {
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
         let (panes, _) = pane_grid::State::new(model::pane::PaneData::new(0));
 
+        let global_state = model::GlobalState::default();
+        let mut workers = controller::workers::Workers::default();
+
+        workers.spawn(controller::workers::Type::VideoDecoder, &global_state);
+
         (
             Samaku {
                 panes,
                 panes_created: 1,
                 focus: None,
-                global_state: model::GlobalState::default(),
+                global_state: global_state,
+                workers: workers,
             },
             Command::none(),
         )
@@ -103,12 +110,18 @@ impl Application for Samaku {
             Self::Message::Global(global_message) => {
                 return controller::global::global_update(&mut self.global_state, global_message);
             }
-            Self::Message::Dispatch(pane_message) => {
+            Self::Message::Pane(pane_message) => {
                 if let Some(pane) = self.focus {
                     if let Some(data) = self.panes.get_mut(&pane) {
                         return controller::pane::dispatch_update(&mut data.state, pane_message);
                     }
                 }
+            }
+            Self::Message::Worker(worker_message) => {
+                self.workers.dispatch_update(worker_message);
+            }
+            Self::Message::SpawnWorker(worker_type) => {
+                self.workers.spawn(worker_type, &self.global_state);
             }
         }
 
@@ -116,7 +129,7 @@ impl Application for Samaku {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        subscription::events_with(|event, status| {
+        let events = subscription::events_with(|event, status| {
             if let event::Status::Captured = status {
                 return None;
             }
@@ -128,7 +141,19 @@ impl Application for Samaku {
                 }) => keyboard::handle_key_press(modifiers, key_code),
                 _ => None,
             }
-        })
+        });
+
+        use iced::futures::StreamExt;
+        let worker_messages = subscription::unfold(
+            std::any::TypeId::of::<controller::workers::Workers>(),
+            self.workers.receiver.take(),
+            move |mut receiver| async move {
+                let message = receiver.as_mut().unwrap().next().await.unwrap();
+                (message, receiver)
+            },
+        );
+
+        Subscription::batch(vec![events, worker_messages])
     }
 
     fn view(&self) -> Element<Self::Message> {

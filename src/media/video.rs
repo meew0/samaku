@@ -9,12 +9,17 @@ const KF_KEY: &str = "__aegi_keyframes";
 const TC_KEY: &str = "__aegi_timecodes";
 const AUDIO_KEY: &str = "__aegi_hasaudio";
 
-pub struct Video {
-    script: vapoursynth::Script,
-    node: vapoursynth::Node,
+#[derive(Debug, Clone, Copy)]
+pub struct VideoMetadata {
     pub frame_rate: FrameRate,
     pub width: i32,
     pub height: i32,
+}
+
+pub struct Video {
+    script: vapoursynth::Script,
+    node: vapoursynth::Node,
+    pub metadata: VideoMetadata,
 }
 
 impl Video {
@@ -100,9 +105,11 @@ impl Video {
         Video {
             script,
             node: out_node,
-            frame_rate,
-            width,
-            height,
+            metadata: VideoMetadata {
+                frame_rate,
+                width,
+                height,
+            },
         }
     }
 

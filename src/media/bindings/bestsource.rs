@@ -2,7 +2,7 @@ use std::ffi::{c_void, CString};
 
 use bestsource_sys as bs;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct AudioProperties {
     pub is_float: bool,
     pub bytes_per_sample: i32,

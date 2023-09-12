@@ -8,3 +8,4 @@ pub use audio::AudioProperties;
 pub use subtitle::Subtitles;
 pub use video::FrameRate;
 pub use video::Video;
+pub use video::VideoMetadata;

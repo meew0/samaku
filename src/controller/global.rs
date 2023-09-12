@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    media,
-    message::{GlobalMessage, Message},
+    controller, media,
+    message::{self, GlobalMessage, Message},
     model,
 };
 
@@ -11,20 +11,20 @@ pub fn global_update(
     global_message: GlobalMessage,
 ) -> iced::Command<Message> {
     match global_message {
-        GlobalMessage::LoadVideo => {
+        GlobalMessage::SelectVideoFile => {
             return iced::Command::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
                 Message::map_option(|handle: rfd::FileHandle| {
-                    Message::Global(GlobalMessage::VideoFileSelected(
-                        handle.path().to_path_buf(),
+                    Message::Worker(message::WorkerMessage::VideoDecoder(
+                        message::VideoDecoderMessage::LoadVideo(handle.path().to_path_buf()),
                     ))
                 }),
             );
         }
-        GlobalMessage::VideoFileSelected(path_buf) => {
-            global_state.video = Some(media::Video::load(path_buf));
+        GlobalMessage::VideoLoaded(metadata) => {
+            global_state.video_metadata = Some(*metadata);
         }
-        GlobalMessage::LoadAudio => {
+        GlobalMessage::SelectAudioFile => {
             return iced::Command::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
                 Message::map_option(|handle: rfd::FileHandle| {
@@ -35,16 +35,15 @@ pub fn global_update(
             );
         }
         GlobalMessage::AudioFileSelected(path_buf) => {
-            let audio = media::Audio::load(path_buf);
+            let mut audio_lock = global_state.audio.lock().unwrap();
+            *audio_lock = Some(media::Audio::load(path_buf));
 
-            // for now
-            global_state.cpal_stream = Some(super::playback::start_playback_cpal(
-                Arc::clone(&global_state.playback_state),
-                audio,
+            return message::Message::command(message::Message::SpawnWorker(
+                controller::workers::Type::CpalPlayback,
             ));
         }
-        GlobalMessage::LoadSubtitles => {
-            if let Some(_) = &global_state.video {
+        GlobalMessage::SelectSubtitleFile => {
+            if let Some(_) = &global_state.video_metadata {
                 let future = async {
                     match rfd::AsyncFileDialog::new().pick_file().await {
                         Some(handle) => {
@@ -62,11 +61,11 @@ pub fn global_update(
             }
         }
         GlobalMessage::SubtitleFileRead(content) => {
-            if let Some(video) = &global_state.video {
+            if let Some(video_metadata) = &global_state.video_metadata {
                 global_state.subtitles = Some(media::Subtitles::load_utf8(
                     content,
-                    video.width,
-                    video.height,
+                    video_metadata.width,
+                    video_metadata.height,
                 ));
             }
         }

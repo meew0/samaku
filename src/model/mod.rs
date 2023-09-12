@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::media;
 
@@ -6,18 +6,18 @@ pub mod pane;
 pub mod playback;
 
 pub struct GlobalState {
-    pub video: Option<media::Video>,
+    pub video_metadata: Option<media::VideoMetadata>,
     pub subtitles: Option<media::Subtitles>,
-    pub cpal_stream: Option<cpal::Stream>,
+    pub audio: Arc<Mutex<Option<media::Audio>>>,
     pub playback_state: Arc<playback::PlaybackState>,
 }
 
 impl Default for GlobalState {
     fn default() -> Self {
         Self {
-            video: None,
+            video_metadata: None,
             subtitles: None,
-            cpal_stream: None,
+            audio: Arc::new(Mutex::new(None)),
             playback_state: Arc::new(playback::PlaybackState::default()),
         }
     }
