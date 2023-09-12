@@ -111,9 +111,19 @@ fn data_callback<T>(
     data: &mut [T],
     audio_mutex: &Arc<Mutex<Option<media::Audio>>>,
     state: &Arc<model::playback::PlaybackState>,
-) {
+) where
+    T: Default,
+{
     // Lock the audio mutex, so nothing else tries to access the audio data at the moment.
     let mut audio_lock = audio_mutex.lock().unwrap();
+
+    // If playback is paused, zero the array and return
+    if !state.playing.load(Ordering::Relaxed) {
+        for i in data.iter_mut() {
+            *i = Default::default();
+        }
+        return;
+    }
 
     if let Some(audio) = audio_lock.as_mut() {
         // Lock the position mutex, so nothing tries to change the position

@@ -67,6 +67,7 @@ pub enum GlobalMessage {
 
     PlaybackAdvanceFrames(i32),
     PlaybackAdvanceSeconds(f64),
+    TogglePlayback,
 }
 
 #[derive(Debug, Clone)]

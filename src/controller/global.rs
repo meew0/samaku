@@ -82,6 +82,14 @@ pub fn global_update(
             global_state.playback_state.add_seconds(delta_seconds);
             return Message::command_all(message::playback_step_all());
         }
+        GlobalMessage::TogglePlayback => {
+            // For some reason `fetch_not`, which would perform a toggle in place,
+            // is unstable. `fetch_xor` with true should be equivalent.
+            global_state
+                .playback_state
+                .playing
+                .fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 
     iced::Command::none()
