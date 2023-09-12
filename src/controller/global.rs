@@ -21,6 +21,9 @@ pub fn global_update(
         }
         GlobalMessage::VideoLoaded(metadata) => {
             global_state.video_metadata = Some(*metadata);
+
+            // Emit a playback step, such that the frame gets shown immediately
+            return Message::command_all(message::playback_step_all());
         }
         GlobalMessage::SelectAudioFile => {
             return iced::Command::perform(

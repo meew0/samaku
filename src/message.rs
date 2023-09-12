@@ -39,6 +39,11 @@ impl Message {
         iced::Command::perform(async { message }, |m| m)
     }
 
+    // Returns a Command that returns several messages
+    pub fn command_all(messages: impl IntoIterator<Item = Self>) -> iced::Command<Self> {
+        iced::Command::batch(messages.into_iter().map(|m| Self::command(m)))
+    }
+
     // Returns a function that maps Some(x) to some message, and None to Message::None
     pub fn map_option<A, F1: FnOnce(A) -> Self>(f1: F1) -> impl FnOnce(Option<A>) -> Self {
         |a_opt| match a_opt {
@@ -77,4 +82,11 @@ pub enum WorkerMessage {
 pub enum VideoDecoderMessage {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
+}
+
+// Returns all PlaybackStep messages. For now, there's only 1
+pub fn playback_step_all() -> Vec<Message> {
+    vec![Message::Worker(WorkerMessage::VideoDecoder(
+        VideoDecoderMessage::PlaybackStep,
+    ))]
 }

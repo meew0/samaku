@@ -89,13 +89,11 @@ pub fn spawn(
             &config.into(),
             move |data: &mut [f32], _| {
                 data_callback::<f32>(data, &audio_mutex, &playback_state);
-                tx_out
-                    .unbounded_send(message::Message::Worker(
-                        message::WorkerMessage::VideoDecoder(
-                            message::VideoDecoderMessage::PlaybackStep,
-                        ),
-                    ))
-                    .expect("Error while emitting PlaybackStep");
+                for message in message::playback_step_all().into_iter() {
+                    tx_out
+                        .unbounded_send(message)
+                        .expect("Error while emitting PlaybackStep");
+                }
             },
             move |err| println!("Audio stream error: {}", err),
             None,
