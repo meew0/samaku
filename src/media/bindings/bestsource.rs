@@ -18,6 +18,8 @@ pub struct BestAudioSource {
     internal: *mut c_void,
 }
 
+unsafe impl Send for BestAudioSource {}
+
 impl BestAudioSource {
     pub fn new<P1: AsRef<std::path::Path>, P2: AsRef<std::path::Path>>(
         source_file: P1,
@@ -82,14 +84,9 @@ impl BestAudioSource {
 
     // TODO: get_planar_audio
 
-    pub fn get_packed_audio(&mut self, start: i64, slice: &mut [u8]) {
+    pub fn get_packed_audio(&mut self, slice: &mut [u8], start: i64, count: i64) {
         unsafe {
-            bs::BestAudioSource_GetPackedAudio(
-                self.internal,
-                slice.as_mut_ptr(),
-                start,
-                slice.len() as i64,
-            )
+            bs::BestAudioSource_GetPackedAudio(self.internal, slice.as_mut_ptr(), start, count)
         };
     }
 }

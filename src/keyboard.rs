@@ -13,6 +13,7 @@ pub(crate) fn handle_key_press(
         iced::keyboard::KeyCode::F6 => Some(Message::CyclePaneType),
         iced::keyboard::KeyCode::V => Some(Message::Global(GlobalMessage::LoadVideo)),
         iced::keyboard::KeyCode::B => Some(Message::Global(GlobalMessage::LoadSubtitles)),
+        iced::keyboard::KeyCode::N => Some(Message::Global(GlobalMessage::LoadAudio)),
         iced::keyboard::KeyCode::Period => Some(Message::Global(GlobalMessage::NextFrame)),
         iced::keyboard::KeyCode::Comma => Some(Message::Global(GlobalMessage::PreviousFrame)),
         _ => None,
