@@ -38,6 +38,27 @@ impl PlaybackState {
     pub fn current_frame(&self, frame_rate: media::FrameRate) -> i32 {
         (self.seconds() * f64::from(frame_rate)).floor() as i32
     }
+
+    // These do not require a mutable reference as the struct
+    // ensures unique mutability by itself
+    pub fn add_ticks(&self, delta: i64) {
+        let mut lock = self.authoritative_position.lock().unwrap();
+        let new_value = lock.saturating_add_signed(delta);
+        *lock = new_value;
+        self.position.store(new_value, Ordering::Relaxed);
+    }
+
+    pub fn add_seconds(&self, delta_seconds: f64) {
+        if self.rate() == 0 {
+            return;
+        }
+        let delta_ticks: i64 = (delta_seconds * self.rate() as f64).round() as i64;
+        self.add_ticks(delta_ticks);
+    }
+
+    pub fn add_frames(&self, delta_frames: i32, frame_rate: media::FrameRate) {
+        self.add_seconds(delta_frames as f64 / f64::from(frame_rate));
+    }
 }
 
 impl Default for PlaybackState {

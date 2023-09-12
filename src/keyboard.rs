@@ -14,8 +14,18 @@ pub(crate) fn handle_key_press(
         iced::keyboard::KeyCode::V => Some(Message::Global(GlobalMessage::SelectVideoFile)),
         iced::keyboard::KeyCode::B => Some(Message::Global(GlobalMessage::SelectSubtitleFile)),
         iced::keyboard::KeyCode::N => Some(Message::Global(GlobalMessage::SelectAudioFile)),
-        iced::keyboard::KeyCode::Period => Some(Message::Global(GlobalMessage::NextFrame)),
-        iced::keyboard::KeyCode::Comma => Some(Message::Global(GlobalMessage::PreviousFrame)),
+        iced::keyboard::KeyCode::Comma => {
+            Some(Message::Global(GlobalMessage::PlaybackAdvanceFrames(-1)))
+        }
+        iced::keyboard::KeyCode::Period => {
+            Some(Message::Global(GlobalMessage::PlaybackAdvanceFrames(1)))
+        }
+        iced::keyboard::KeyCode::Left => {
+            Some(Message::Global(GlobalMessage::PlaybackAdvanceSeconds(-1.0)))
+        }
+        iced::keyboard::KeyCode::Right => {
+            Some(Message::Global(GlobalMessage::PlaybackAdvanceSeconds(1.0)))
+        }
         _ => None,
     }
 }

@@ -70,11 +70,17 @@ pub fn global_update(
                 ));
             }
         }
-        GlobalMessage::NextFrame => {
-            todo!();
+        GlobalMessage::PlaybackAdvanceFrames(delta_frames) => {
+            if let Some(video_metadata) = &global_state.video_metadata {
+                global_state
+                    .playback_state
+                    .add_frames(delta_frames, video_metadata.frame_rate);
+            }
+            return Message::command_all(message::playback_step_all());
         }
-        GlobalMessage::PreviousFrame => {
-            todo!();
+        GlobalMessage::PlaybackAdvanceSeconds(delta_seconds) => {
+            global_state.playback_state.add_seconds(delta_seconds);
+            return Message::command_all(message::playback_step_all());
         }
     }
 

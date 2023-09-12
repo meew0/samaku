@@ -64,8 +64,9 @@ pub enum GlobalMessage {
 
     AudioFileSelected(std::path::PathBuf),
     SubtitleFileRead(String),
-    NextFrame,
-    PreviousFrame,
+
+    PlaybackAdvanceFrames(i32),
+    PlaybackAdvanceSeconds(f64),
 }
 
 #[derive(Debug, Clone)]
