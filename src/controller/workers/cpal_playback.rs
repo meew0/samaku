@@ -104,7 +104,7 @@ pub fn spawn(
 
     Some(super::Worker {
         worker_type: super::Type::CpalPlayback,
-        handle: stream,
+        _handle: stream,
         message_in: tx_in,
     })
 }

@@ -1,4 +1,6 @@
-use std::ffi::{c_void, CString};
+#![allow(dead_code)]
+
+use std::ffi::c_void;
 
 use bestsource_sys as bs;
 

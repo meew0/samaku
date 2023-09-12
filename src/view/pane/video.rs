@@ -1,8 +1,4 @@
-use crate::{
-    controller::global,
-    message::{Message, PaneMessage},
-    model,
-};
+use crate::model;
 
 macro_rules! empty {
     () => {

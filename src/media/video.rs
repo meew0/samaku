@@ -17,7 +17,7 @@ pub struct VideoMetadata {
 }
 
 pub struct Video {
-    script: vapoursynth::Script,
+    _script: vapoursynth::Script,
     node: vapoursynth::Node,
     pub metadata: VideoMetadata,
 }
@@ -54,6 +54,10 @@ impl Video {
         };
 
         // TODO: keyframes and timecodes
+        println!(
+            "num_kf: {}, num_tc: {}, has_audio: {}",
+            num_kf, num_tc, has_audio,
+        );
 
         let frame = node.get_frame(0).unwrap();
         let props = frame.get_properties_ro().unwrap();
@@ -103,7 +107,7 @@ impl Video {
         };
 
         Video {
-            script,
+            _script: script,
             node: out_node,
             metadata: VideoMetadata {
                 frame_rate,

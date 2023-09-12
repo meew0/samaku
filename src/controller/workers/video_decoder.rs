@@ -51,7 +51,7 @@ pub fn spawn(
 
     let worker = super::Worker {
         worker_type: super::Type::VideoDecoder,
-        handle,
+        _handle: handle,
         message_in: tx_in,
     };
 

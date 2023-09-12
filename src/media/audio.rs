@@ -5,8 +5,6 @@ use super::bindings::bestsource;
 
 pub use bestsource::AudioProperties;
 
-const DEFAULT_SCRIPT: &str = include_str!("default_scripts/audio.py");
-
 pub struct Audio {
     source: bestsource::BestAudioSource,
     pub properties: bestsource::AudioProperties,

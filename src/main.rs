@@ -8,8 +8,8 @@ mod model;
 mod theme;
 mod view;
 
+use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::widget::{container, responsive, scrollable, text};
 use iced::{event, executor, subscription, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 use model::pane::{PaneData, PaneState};
@@ -157,11 +157,11 @@ impl Application for Samaku {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let focus = self.focus;
-        let total_panes = self.panes.len();
+        // let focus = self.focus;
+        // let total_panes = self.panes.len();
 
-        let pane_grid = PaneGrid::new::<PaneData>(&self.panes, |pane, data, is_maximized| {
-            let is_focused = focus == Some(pane);
+        let pane_grid = PaneGrid::new::<PaneData>(&self.panes, |_pane, data, _is_maximized| {
+            // let is_focused = focus == Some(pane);
 
             let pane_view = view::pane::dispatch_view(&self.global_state, &data.state);
             let title_bar = pane_grid::TitleBar::new(pane_view.title);

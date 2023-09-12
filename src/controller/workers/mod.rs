@@ -1,7 +1,7 @@
 mod cpal_playback;
 mod video_decoder;
 
-use std::{cell::RefCell, rc::Rc, thread};
+use std::{cell::RefCell, thread};
 
 use crate::{message, model};
 
@@ -13,7 +13,7 @@ pub enum Type {
 
 pub struct Worker<H, M> {
     worker_type: Type,
-    handle: H,
+    _handle: H,
     message_in: std::sync::mpsc::Sender<M>,
 }
 
@@ -29,7 +29,10 @@ pub struct Workers {
 
 fn try_dispatch<H, M>(worker_opt: &Option<Worker<H, M>>, message: M) {
     if let Some(worker) = worker_opt {
-        worker.message_in.send(message);
+        // Can fail if the channel is closed.
+        // For now, just ignore.
+        // TODO: possibly drop the worker or something in this case
+        let _ = worker.message_in.send(message);
     }
 }
 

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     controller, media,
     message::{self, GlobalMessage, Message},

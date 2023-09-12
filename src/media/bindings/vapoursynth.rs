@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rustsynth_sys as vs;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::marker::PhantomData;

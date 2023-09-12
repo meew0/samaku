@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use libass_sys as libass;
 
 pub type CString = std::ffi::CString;
