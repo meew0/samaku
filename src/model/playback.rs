@@ -45,7 +45,7 @@ impl Default for PlaybackState {
         Self {
             authoritative_position: Mutex::new(0),
             position: 0.into(),
-            rate: 0.into(),
+            rate: 1000.into(), // if nothing is loaded, use milliseconds for position
             playing: false.into(),
         }
     }
