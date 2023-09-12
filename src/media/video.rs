@@ -12,7 +12,6 @@ const AUDIO_KEY: &str = "__aegi_hasaudio";
 pub struct Video {
     script: vapoursynth::Script,
     node: vapoursynth::Node,
-    pub current_frame: i32,
     pub frame_rate: FrameRate,
     pub width: i32,
     pub height: i32,
@@ -101,7 +100,6 @@ impl Video {
         Video {
             script,
             node: out_node,
-            current_frame: 0,
             frame_rate,
             width,
             height,
@@ -157,17 +155,5 @@ impl Video {
         write_ptr.chunks_mut(4).for_each(|chunk| chunk[0] = 0xff);
 
         iced::widget::image::Handle::from_pixels(width as u32, height as u32, out)
-    }
-
-    pub fn get_current_frame(&self) -> iced::widget::image::Handle {
-        self.get_frame(self.current_frame)
-    }
-
-    pub fn next_frame(&mut self) {
-        self.current_frame += 1;
-    }
-
-    pub fn previous_frame(&mut self) {
-        self.current_frame -= 1;
     }
 }

@@ -15,11 +15,14 @@ pub fn view<'a>(
         ]),
         Some(video) => match &global_state.subtitles {
             Some(subtitles) => {
-                let base = video.get_current_frame();
-                let stack = subtitles.render_onto(base, video.current_frame, video.frame_rate);
+                let current_frame = global_state.playback_state.current_frame(video.frame_rate);
+                let base = video.get_frame(current_frame);
+                let stack = subtitles.render_onto(base, current_frame, video.frame_rate);
                 iced::widget::scrollable(crate::view::widget::ImageStack::new(stack))
             }
-            None => iced::widget::scrollable(iced::widget::image(video.get_current_frame())),
+            None => iced::widget::scrollable(iced::widget::image(
+                video.get_frame(global_state.playback_state.current_frame(video.frame_rate)),
+            )),
         },
     };
 

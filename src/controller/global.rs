@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     media,
     message::{GlobalMessage, Message},
@@ -33,7 +35,13 @@ pub fn global_update(
             );
         }
         GlobalMessage::AudioFileSelected(path_buf) => {
-            global_state.audio = Some(media::Audio::load(path_buf));
+            let audio = media::Audio::load(path_buf);
+
+            // for now
+            global_state.cpal_stream = Some(super::playback::start_playback_cpal(
+                Arc::clone(&global_state.playback_state),
+                audio,
+            ));
         }
         GlobalMessage::LoadSubtitles => {
             if let Some(_) = &global_state.video {
@@ -63,13 +71,10 @@ pub fn global_update(
             }
         }
         GlobalMessage::NextFrame => {
-            global_state.video.as_mut().map(|video| video.next_frame());
+            todo!();
         }
         GlobalMessage::PreviousFrame => {
-            global_state
-                .video
-                .as_mut()
-                .map(|video| video.previous_frame());
+            todo!();
         }
     }
 
