@@ -1,4 +1,5 @@
 .vscode/
+build/
 target/
 vapoursynth/__pycache__/
 vscache/
