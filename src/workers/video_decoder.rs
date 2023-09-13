@@ -31,9 +31,12 @@ pub fn spawn(
                             if new_frame != last_frame {
                                 last_frame = new_frame;
                                 let handle = video.get_frame(new_frame);
-                                if let Err(_) = tx_out.unbounded_send(
-                                    message::Message::VideoFrameAvailable(new_frame, handle),
-                                ) {
+                                if tx_out
+                                    .unbounded_send(message::Message::VideoFrameAvailable(
+                                        new_frame, handle,
+                                    ))
+                                    .is_err()
+                                {
                                     return;
                                 }
                             }
@@ -43,8 +46,9 @@ pub fn spawn(
                         // Load new video
                         let video = media::Video::load(path_buf);
                         let metadata_box = Box::new(video.metadata);
-                        if let Err(_) =
-                            tx_out.unbounded_send(message::Message::VideoLoaded(metadata_box))
+                        if tx_out
+                            .unbounded_send(message::Message::VideoLoaded(metadata_box))
+                            .is_err()
                         {
                             return;
                         }
@@ -56,11 +60,9 @@ pub fn spawn(
         }
     });
 
-    let worker = super::Worker {
+    super::Worker {
         worker_type: super::Type::VideoDecoder,
         _handle: handle,
         message_in: tx_in,
-    };
-
-    worker
+    }
 }

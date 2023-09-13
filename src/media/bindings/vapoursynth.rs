@@ -56,7 +56,7 @@ fn get_api() -> *const vs::VSAPI {
     }
 }
 
-pub type LogHandler = dyn Fn(i32, &str) -> ();
+pub type LogHandler = dyn Fn(i32, &str);
 
 unsafe extern "C" fn log_handler(msg_type: c_int, msg: *const c_char, user_data: *mut c_void) {
     let log_handler: *mut Box<LogHandler> = unsafe { std::mem::transmute(user_data) };
@@ -111,7 +111,7 @@ impl Core {
         self.get_plugin_by_id(CString::new("com.vapoursynth.resize").unwrap())
     }
 
-    pub fn add_log_handler(&mut self, handler: impl Fn(i32, &str) -> () + 'static) -> LogHandle {
+    pub fn add_log_handler(&mut self, handler: impl Fn(i32, &str) + 'static) -> LogHandle {
         self.check_null();
         let api = get_api();
 
@@ -452,7 +452,7 @@ impl Node {
         self.get_node_type() == vs::VSMediaType::mtAudio as i32
     }
 
-    pub fn get_video_info<'a>(&'a self) -> Option<VideoInfo<'a>> {
+    pub fn get_video_info(&self) -> Option<VideoInfo<'_>> {
         let api = get_api();
         let vi = unsafe { (*api).getVideoInfo.unwrap()(self.node) };
         if vi.is_null() {
@@ -465,7 +465,7 @@ impl Node {
         }
     }
 
-    pub fn get_audio_info<'a>(&'a self) -> Option<AudioInfo<'a>> {
+    pub fn get_audio_info(&self) -> Option<AudioInfo<'_>> {
         let api = get_api();
         let ai = unsafe { (*api).getAudioInfo.unwrap()(self.node) };
         if ai.is_null() {
@@ -598,7 +598,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn get_properties_ro<'a>(&'a self) -> Option<ConstMap<'a>> {
+    pub fn get_properties_ro(&self) -> Option<ConstMap<'_>> {
         let api = get_api();
         let map = unsafe { (*api).getFramePropertiesRO.unwrap()(self.frame) };
         if map.is_null() {
@@ -611,7 +611,7 @@ impl Frame {
         }
     }
 
-    pub fn get_video_format<'a>(&'a self) -> Option<VideoFormat<'a>> {
+    pub fn get_video_format(&self) -> Option<VideoFormat<'_>> {
         let api = get_api();
         let vf = unsafe { (*api).getVideoFrameFormat.unwrap()(self.frame) };
         if vf.is_null() {
@@ -639,7 +639,7 @@ impl Frame {
         unsafe { (*api).getStride.unwrap()(self.frame, plane) }
     }
 
-    pub fn get_read_ptr<'a>(&'a self, plane: i32) -> &'a [u8] {
+    pub fn get_read_ptr(&self, plane: i32) -> &[u8] {
         let api = get_api();
         let ptr: *const u8 = unsafe { (*api).getReadPtr.unwrap()(self.frame, plane) };
         let len = self.get_height(plane) as isize * self.get_stride(plane);
@@ -728,7 +728,7 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
         return "Unknown".to_string();
     }
 
-    return ret;
+    ret
 }
 
 pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
@@ -770,14 +770,14 @@ pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
 
     if !props
         .get_int(CString::new("_ColorRange").unwrap(), 0)
-        .is_ok_and(|x| x != -1 as i64)
+        .is_ok_and(|x| x != -1_i64)
     {
-        args.append_int(CString::new("range_in").unwrap(), 0 as i64);
+        args.append_int(CString::new("range_in").unwrap(), 0_i64);
     }
 
     if !props
         .get_int(CString::new("_ChromaLocation").unwrap(), 0)
-        .is_ok_and(|x| x != -1 as i64)
+        .is_ok_and(|x| x != -1_i64)
     {
         args.append_int(
             CString::new("chromaloc_in").unwrap(),

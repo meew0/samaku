@@ -65,7 +65,7 @@ impl<H> ImageStack<H> {
 pub fn layout<R, H>(
     renderer: &R,
     limits: &layout::Limits,
-    images: &Vec<StackedImage<H>>,
+    images: &[StackedImage<H>],
     width: Length,
     height: Length,
     content_fit: ContentFit,
@@ -105,7 +105,7 @@ where
 pub fn draw<R, H>(
     renderer: &mut R,
     layout: Layout<'_>,
-    images: &Vec<StackedImage<H>>,
+    images: &[StackedImage<H>],
     content_fit: ContentFit,
 ) where
     R: image::Renderer<Handle = H>,

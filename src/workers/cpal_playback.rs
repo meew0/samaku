@@ -28,7 +28,7 @@ pub fn spawn(
     let playback_state = Arc::clone(&shared_state.playback_state);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
-    let handle = thread::spawn(move || -> () {
+    let handle = thread::spawn(move || {
         use cpal::traits::StreamTrait;
         let mut stream_opt: Option<cpal::Stream> = None;
 
@@ -159,12 +159,12 @@ pub fn spawn(
                     }
                     self::Message::Play => {
                         if let Some(ref stream) = stream_opt {
-                            let _ = stream.play().expect("Failed to play audio stream");
+                            stream.play().expect("Failed to play audio stream");
                         }
                     }
                     self::Message::Pause => {
                         if let Some(ref stream) = stream_opt {
-                            let _ = stream.pause().expect("Failed to pause audio stream");
+                            stream.pause().expect("Failed to pause audio stream");
                         }
                     }
                 },

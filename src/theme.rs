@@ -34,11 +34,11 @@ const SAMAKU_TEXT: Color = Color::from_rgb(
 );
 
 pub fn samaku_theme() -> Theme {
-    return Theme::custom(Palette {
+    Theme::custom(Palette {
         background: SAMAKU_BACKGROUND,
         text: SAMAKU_TEXT,
         primary: SAMAKU_PRIMARY,
         danger: SAMAKU_DESTRUCTIVE,
         success: SAMAKU_SUCCESS,
-    });
+    })
 }

@@ -32,7 +32,7 @@ pub type GlobalReceiver = iced::futures::channel::mpsc::UnboundedReceiver<messag
 pub type GlobalSender = iced::futures::channel::mpsc::UnboundedSender<message::Message>;
 
 pub struct Workers {
-    sender: GlobalSender,
+    _sender: GlobalSender,
     pub receiver: RefCell<Option<GlobalReceiver>>,
 
     video_decoder: Worker<video_decoder::Message>,
@@ -48,7 +48,7 @@ impl Workers {
             video_decoder: video_decoder::spawn(sender.clone(), shared_state),
             cpal_playback: cpal_playback::spawn(sender.clone(), shared_state),
 
-            sender: sender,
+            _sender: sender,
             receiver: RefCell::new(Some(receiver)),
         }
     }

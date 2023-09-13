@@ -9,7 +9,6 @@ mod theme;
 mod view;
 mod workers;
 
-use std::path;
 use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
@@ -109,7 +108,7 @@ impl Application for Samaku {
             }
             Self::Message::ClosePane => {
                 if let Some(pane) = self.focus {
-                    if let Some(_) = self.panes.get(&pane) {
+                    if self.panes.get(&pane).is_some() {
                         if let Some((_, sibling)) = self.panes.close(&pane) {
                             self.focus = Some(sibling);
                         }
@@ -165,7 +164,7 @@ impl Application for Samaku {
                 self.workers.emit_restart_audio();
             }
             Self::Message::SelectSubtitleFile => {
-                if let Some(_) = &self.video_metadata {
+                if self.video_metadata.is_some() {
                     let future = async {
                         match rfd::AsyncFileDialog::new().pick_file().await {
                             Some(handle) => {

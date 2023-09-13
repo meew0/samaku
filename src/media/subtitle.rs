@@ -73,7 +73,7 @@ pub fn ass_image_to_iced(
     let r: u8 = ((color & 0xff000000) >> 24).try_into().unwrap();
     let g: u8 = ((color & 0x00ff0000) >> 16).try_into().unwrap();
     let b: u8 = ((color & 0x0000ff00) >> 8).try_into().unwrap();
-    let transparency: u8 = ((color & 0x000000ff) >> 0).try_into().unwrap();
+    let transparency: u8 = (color & 0x000000ff).try_into().unwrap();
     let a: u16 = 255 - transparency as u16;
 
     for row in 0..height {

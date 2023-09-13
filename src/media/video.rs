@@ -83,16 +83,15 @@ impl Video {
             let mut resize = script.get_core().get_resize_plugin().unwrap();
 
             let mut args_owned = vapoursynth::OwnedMap::create_map().unwrap();
-            let mut args = args_owned.as_mut();
-            vapoursynth::init_resize(&vi, &mut args, &props);
+            let args = args_owned.as_mut();
+            vapoursynth::init_resize(&vi, args, &props);
             args.append_node(c_string("clip"), node);
 
             let mut result_owned = resize.invoke(c_string("Bicubic"), args.as_const());
             let result = result_owned.as_mut();
 
-            match result.as_const().get_error() {
-                Some(err) => panic!("Failed to convert to RGB24: {}", err),
-                None => (),
+            if let Some(err) = result.as_const().get_error() {
+                panic!("Failed to convert to RGB24: {}", err);
             }
 
             let new_node = result.as_const().get_node(c_string("clip"), 0).unwrap();

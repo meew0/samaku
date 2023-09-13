@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, pane, workers};
+use crate::{media, pane};
 
 #[derive(Debug, Clone)]
 pub enum Message {

@@ -1,13 +1,7 @@
 use crate::message;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct State {}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 // Elements to display if no video is loaded
 macro_rules! empty {

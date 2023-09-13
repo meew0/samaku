@@ -55,7 +55,7 @@ impl Library {
                 self.library,
                 buf.as_ptr() as *mut i8,
                 buf.len(),
-                codepage.map_or(0 as *mut i8, |cp| cp.as_ptr() as *mut i8),
+                codepage.map_or(std::ptr::null_mut::<i8>(), |cp| cp.as_ptr() as *mut i8),
             )
         };
         if track.is_null() {
@@ -122,7 +122,7 @@ impl Renderer {
         }
     }
 
-    fn render_frame_internal<F: FnMut(&Image) -> ()>(
+    fn render_frame_internal<F: FnMut(&Image)>(
         &self,
         track: &Track,
         now: i64,
@@ -154,7 +154,7 @@ impl Renderer {
         change
     }
 
-    pub fn render_frame_detect_change<F: FnMut(&Image) -> ()>(
+    pub fn render_frame_detect_change<F: FnMut(&Image)>(
         &self,
         track: &Track,
         now: i64,
@@ -168,7 +168,7 @@ impl Renderer {
         }
     }
 
-    pub fn render_frame<F: FnMut(&Image) -> ()>(&self, track: &Track, now: i64, callback: &mut F) {
+    pub fn render_frame<F: FnMut(&Image)>(&self, track: &Track, now: i64, callback: &mut F) {
         self.render_frame_internal(track, now, false, callback);
     }
 }
@@ -187,24 +187,24 @@ pub struct Track {
 }
 
 impl Track {
-    pub fn events_mut(&self) -> &mut [RawEvent] {
+    pub fn events_mut(&mut self) -> &mut [RawEvent] {
         unsafe {
             std::slice::from_raw_parts_mut((*self.track).events, (*self.track).n_events as usize)
         }
     }
 
     pub fn events(&self) -> &[RawEvent] {
-        self.events_mut()
+        unsafe { std::slice::from_raw_parts((*self.track).events, (*self.track).n_events as usize) }
     }
 
-    pub fn styles_mut(&self) -> &mut [RawStyle] {
+    pub fn styles_mut(&mut self) -> &mut [RawStyle] {
         unsafe {
             std::slice::from_raw_parts_mut((*self.track).styles, (*self.track).n_styles as usize)
         }
     }
 
     pub fn styles(&self) -> &[RawStyle] {
-        self.styles_mut()
+        unsafe { std::slice::from_raw_parts((*self.track).styles, (*self.track).n_styles as usize) }
     }
 }
 
