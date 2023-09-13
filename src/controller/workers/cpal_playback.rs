@@ -93,10 +93,6 @@ pub fn spawn(
                         "Could not find a suitable system audio configuration that matches the loaded audio file",
                         );
 
-                        if sample_format != cpal::SampleFormat::F32 {
-                            todo!();
-                        }
-
                         playback_state
                             .rate
                             .store(audio_properties.sample_rate as u32, Ordering::Relaxed);
@@ -105,24 +101,50 @@ pub fn spawn(
                         let playback_state2 = Arc::clone(&playback_state);
                         let tx_out2 = tx_out.clone();
 
-                        let stream = device
-                            .build_output_stream(
+                        if let Some(stream) = match sample_format {
+                            cpal::SampleFormat::F32 => Some(build_stream::<f32>(
+                                &device,
                                 &config.into(),
-                                move |data: &mut [f32], _| {
-                                    data_callback::<f32>(data, &audio_mutex2, &playback_state2);
-                                    for message in message::playback_step_all().into_iter() {
-                                        tx_out2
-                                            .unbounded_send(message)
-                                            .expect("Error while emitting PlaybackStep");
-                                    }
-                                },
-                                move |err| println!("Audio stream error: {}", err),
-                                None,
-                            )
-                            .expect("Failed to build audio stream");
-
-                        stream.play().expect("Failed to play audio stream");
-                        stream_opt = Some(stream);
+                                audio_mutex2,
+                                playback_state2,
+                                tx_out2,
+                            )),
+                            cpal::SampleFormat::F64 => Some(build_stream::<f64>(
+                                &device,
+                                &config.into(),
+                                audio_mutex2,
+                                playback_state2,
+                                tx_out2,
+                            )),
+                            cpal::SampleFormat::U8 => Some(build_stream::<u8>(
+                                &device,
+                                &config.into(),
+                                audio_mutex2,
+                                playback_state2,
+                                tx_out2,
+                            )),
+                            cpal::SampleFormat::I16 => Some(build_stream::<i16>(
+                                &device,
+                                &config.into(),
+                                audio_mutex2,
+                                playback_state2,
+                                tx_out2,
+                            )),
+                            cpal::SampleFormat::I32 => Some(build_stream::<i32>(
+                                &device,
+                                &config.into(),
+                                audio_mutex2,
+                                playback_state2,
+                                tx_out2,
+                            )),
+                            other => {
+                                println!("Unsupported sample format for playback: {}", other);
+                                None
+                            }
+                        } {
+                            stream.play().expect("Failed to play audio stream");
+                            stream_opt = Some(stream);
+                        }
                     }
                     message::CpalPlaybackMessage::Play => {
                         if let Some(ref stream) = stream_opt {
@@ -147,10 +169,35 @@ pub fn spawn(
     }
 }
 
+fn build_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    audio_mutex: Arc<Mutex<Option<media::Audio>>>,
+    playback_state: Arc<model::playback::PlaybackState>,
+    tx_out: super::GlobalSender,
+) -> cpal::Stream
+where
+    T: cpal::SizedSample + Default,
+{
+    use cpal::traits::DeviceTrait;
+
+    device
+        .build_output_stream(
+            config,
+            move |data: &mut [T], _| {
+                data_callback::<T>(data, &audio_mutex, &playback_state, &tx_out);
+            },
+            move |err| println!("Audio stream error: {}", err),
+            None,
+        )
+        .expect("Failed to build audio stream")
+}
+
 fn data_callback<T>(
     data: &mut [T],
     audio_mutex: &Arc<Mutex<Option<media::Audio>>>,
-    state: &Arc<model::playback::PlaybackState>,
+    playback_state: &Arc<model::playback::PlaybackState>,
+    tx_out: &super::GlobalSender,
 ) where
     T: Default,
 {
@@ -158,7 +205,7 @@ fn data_callback<T>(
     let mut audio_lock = audio_mutex.lock().unwrap();
 
     // If playback is paused, zero the array and return
-    if !state.playing.load(Ordering::Relaxed) {
+    if !playback_state.playing.load(Ordering::Relaxed) {
         for i in data.iter_mut() {
             *i = Default::default();
         }
@@ -168,7 +215,7 @@ fn data_callback<T>(
     if let Some(audio) = audio_lock.as_mut() {
         // Lock the position mutex, so nothing tries to change the position
         // between now and when we get the audio.
-        let mut auth_pos = state.authoritative_position.lock().unwrap();
+        let mut auth_pos = playback_state.authoritative_position.lock().unwrap();
 
         // cpal expects packed audio. The buffer length refers to the
         // number of samples (so frames * channels)
@@ -183,6 +230,13 @@ fn data_callback<T>(
 
         println!("read {} frames", num_frames);
         *auth_pos += num_frames;
-        state.position.store(*auth_pos, Ordering::Relaxed);
+        playback_state.position.store(*auth_pos, Ordering::Relaxed);
+
+        // Emit PlaybackStep
+        for message in message::playback_step_all().into_iter() {
+            tx_out
+                .unbounded_send(message)
+                .expect("Error while emitting PlaybackStep");
+        }
     }
 }
