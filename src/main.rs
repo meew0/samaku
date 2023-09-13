@@ -5,6 +5,7 @@ mod keyboard;
 mod media;
 mod message;
 mod model;
+mod pane;
 mod theme;
 mod view;
 
@@ -12,7 +13,6 @@ use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
-use model::pane::{PaneData, PaneState};
 
 pub fn main() -> iced::Result {
     Samaku::run(Settings::default())
@@ -21,8 +21,7 @@ pub fn main() -> iced::Result {
 struct Samaku {
     global_state: model::GlobalState,
     workers: controller::workers::Workers,
-    panes: pane_grid::State<model::pane::PaneData>,
-    panes_created: u64,
+    panes: pane_grid::State<pane::PaneState>,
     focus: Option<pane_grid::Pane>,
 }
 
@@ -33,7 +32,7 @@ impl Application for Samaku {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
-        let (panes, _) = pane_grid::State::new(model::pane::PaneData::new(0));
+        let (panes, _) = pane_grid::State::new(pane::PaneState::Unassigned);
 
         let global_state = model::GlobalState::default();
         let mut workers = controller::workers::Workers::default();
@@ -44,7 +43,6 @@ impl Application for Samaku {
         (
             Samaku {
                 panes,
-                panes_created: 1,
                 focus: None,
                 global_state: global_state,
                 workers: workers,
@@ -66,17 +64,11 @@ impl Application for Samaku {
             Self::Message::None => {}
             Self::Message::SplitPane(axis) => {
                 if let Some(pane) = self.focus {
-                    let result = self.panes.split(
-                        axis,
-                        &pane,
-                        model::pane::PaneData::new(self.panes_created),
-                    );
+                    let result = self.panes.split(axis, &pane, pane::PaneState::Unassigned);
 
                     if let Some((pane, _)) = result {
                         self.focus = Some(pane);
                     }
-
-                    self.panes_created += 1;
                 }
             }
             Self::Message::ClosePane => {
@@ -97,8 +89,8 @@ impl Application for Samaku {
                 self.panes.resize(&split, ratio)
             }
             Self::Message::SetPaneState(pane, new_state) => {
-                if let Some(data) = self.panes.get_mut(&pane) {
-                    data.state = *new_state;
+                if let Some(pane_state) = self.panes.get_mut(&pane) {
+                    *pane_state = *new_state;
                 }
             }
             Self::Message::Global(global_message) => {
@@ -106,8 +98,8 @@ impl Application for Samaku {
             }
             Self::Message::Pane(pane_message) => {
                 if let Some(pane) = self.focus {
-                    if let Some(data) = self.panes.get_mut(&pane) {
-                        return controller::pane::dispatch_update(&mut data.state, pane_message);
+                    if let Some(pane_state) = self.panes.get_mut(&pane) {
+                        return pane::dispatch_update(pane_state, pane_message);
                     }
                 }
             }
@@ -154,18 +146,19 @@ impl Application for Samaku {
         // let focus = self.focus;
         // let total_panes = self.panes.len();
 
-        let pane_grid = PaneGrid::new::<PaneData>(&self.panes, |pane, data, _is_maximized| {
-            // let is_focused = focus == Some(pane);
+        let pane_grid =
+            PaneGrid::new::<pane::PaneState>(&self.panes, |pane, pane_state, _is_maximized| {
+                // let is_focused = focus == Some(pane);
 
-            let pane_view = view::pane::dispatch_view(pane, &self.global_state, &data.state);
-            let title_bar = pane_grid::TitleBar::new(pane_view.title);
-            pane_grid::Content::new(pane_view.content).title_bar(title_bar)
-        })
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .on_click(Self::Message::FocusPane)
-        .on_drag(Self::Message::DragPane)
-        .on_resize(0, Self::Message::ResizePane);
+                let pane_view = pane::dispatch_view(pane, &self.global_state, pane_state);
+                let title_bar = pane_grid::TitleBar::new(pane_view.title);
+                pane_grid::Content::new(pane_view.content).title_bar(title_bar)
+            })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .on_click(Self::Message::FocusPane)
+            .on_drag(Self::Message::DragPane)
+            .on_resize(0, Self::Message::ResizePane);
 
         container(pane_grid)
             .width(Length::Fill)

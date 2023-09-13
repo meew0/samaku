@@ -1,5 +1,15 @@
-use crate::model;
+use crate::{message, model};
 
+#[derive(Debug, Clone)]
+pub struct State {}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+// Elements to display if no video is loaded
 macro_rules! empty {
     () => {
         iced::widget::scrollable(iced::widget::row![iced::widget::text(
@@ -10,7 +20,7 @@ macro_rules! empty {
 
 pub fn view<'a>(
     global_state: &'a model::GlobalState,
-    _video_state: &'a model::pane::video::State,
+    _video_state: &'a State,
 ) -> super::PaneView<'a> {
     let scroll = match &global_state.actual_frame {
         None => empty!(),
@@ -39,4 +49,8 @@ pub fn view<'a>(
             .center_y()
             .into(),
     }
+}
+
+pub fn update(_video_state: &mut State, pane_message: message::PaneMessage) {
+    match pane_message {}
 }

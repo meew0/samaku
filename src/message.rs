@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{controller, media, model};
+use crate::{controller, media, model, pane};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -16,7 +16,7 @@ pub enum Message {
 
     // Set the given pane to contain the given state.
     // Can be used to change its type or possibly more
-    SetPaneState(pane_grid::Pane, Box<model::pane::PaneState>),
+    SetPaneState(pane_grid::Pane, Box<pane::PaneState>),
 
     // Spawn a worker.
     // Guaranteed to be idempotent — does nothing if the specified worker

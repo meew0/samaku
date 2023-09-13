@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::media;
 
-pub mod pane;
 pub mod playback;
 
 pub struct GlobalState {
