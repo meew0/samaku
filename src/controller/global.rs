@@ -70,6 +70,10 @@ pub fn global_update(
                 ));
             }
         }
+        GlobalMessage::VideoFrameAvailable(new_frame, handle) => {
+            println!("frame {} available", new_frame);
+            global_state.actual_frame = Some((new_frame, handle));
+        }
         GlobalMessage::PlaybackAdvanceFrames(delta_frames) => {
             if let Some(video_metadata) = &global_state.video_metadata {
                 global_state

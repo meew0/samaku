@@ -62,6 +62,8 @@ pub enum GlobalMessage {
 
     VideoLoaded(Box<media::VideoMetadata>),
 
+    VideoFrameAvailable(i32, iced::widget::image::Handle),
+
     AudioFileSelected(std::path::PathBuf),
     SubtitleFileRead(String),
 
@@ -71,9 +73,7 @@ pub enum GlobalMessage {
 }
 
 #[derive(Debug, Clone)]
-pub enum PaneMessage {
-    VideoFrameAvailable(i32, iced::widget::image::Handle),
-}
+pub enum PaneMessage {}
 
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {

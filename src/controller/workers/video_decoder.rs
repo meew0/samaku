@@ -25,8 +25,8 @@ pub fn spawn(
                             if new_frame != last_frame {
                                 last_frame = new_frame;
                                 let handle = video.get_frame(new_frame);
-                                if let Err(_) = tx_out.unbounded_send(message::Message::Pane(
-                                    message::PaneMessage::VideoFrameAvailable(new_frame, handle),
+                                if let Err(_) = tx_out.unbounded_send(message::Message::Global(
+                                    message::GlobalMessage::VideoFrameAvailable(new_frame, handle),
                                 )) {
                                     return;
                                 }
