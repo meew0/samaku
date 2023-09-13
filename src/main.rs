@@ -9,6 +9,7 @@ mod theme;
 mod view;
 mod workers;
 
+use std::path;
 use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
@@ -72,15 +73,11 @@ impl Application for Samaku {
             playback_state: Arc::new(model::playback::PlaybackState::default()),
         };
 
-        let mut workers = workers::Workers::new();
-        workers.spawn(workers::Type::VideoDecoder, &shared_state);
-        workers.spawn(workers::Type::CpalPlayback, &shared_state);
-
         (
             Samaku {
                 panes,
                 focus: None,
-                workers: workers,
+                workers: workers::Workers::spawn_all(&shared_state),
                 actual_frame: None,
                 video_metadata: None,
                 subtitles: None,
@@ -139,27 +136,20 @@ impl Application for Samaku {
                     }
                 }
             }
-            Self::Message::Worker(worker_message) => {
-                self.workers.dispatch_update(worker_message);
-            }
-            Self::Message::SpawnWorker(worker_type) => {
-                self.workers.spawn(worker_type, &self.shared);
-            }
             Self::Message::SelectVideoFile => {
                 return iced::Command::perform(
                     rfd::AsyncFileDialog::new().pick_file(),
                     Self::Message::map_option(|handle: rfd::FileHandle| {
-                        Self::Message::Worker(message::WorkerMessage::VideoDecoder(
-                            message::VideoDecoderMessage::LoadVideo(handle.path().to_path_buf()),
-                        ))
+                        Self::Message::VideoFileSelected(handle.path().to_path_buf())
                     }),
                 );
             }
+            Self::Message::VideoFileSelected(path_buf) => {
+                self.workers.emit_load_video(path_buf);
+            }
             Self::Message::VideoLoaded(metadata) => {
                 self.video_metadata = Some(*metadata);
-
-                // Emit a playback step, such that the frame gets shown immediately
-                return Self::Message::command_all(message::playback_step_all());
+                self.workers.emit_playback_step();
             }
             Self::Message::SelectAudioFile => {
                 return iced::Command::perform(
@@ -172,10 +162,7 @@ impl Application for Samaku {
             Self::Message::AudioFileSelected(path_buf) => {
                 let mut audio_lock = self.shared.audio.lock().unwrap();
                 *audio_lock = Some(media::Audio::load(path_buf));
-
-                return Self::Message::command(Self::Message::Worker(
-                    message::WorkerMessage::CpalPlayback(message::CpalPlaybackMessage::TryRestart),
-                ));
+                self.workers.emit_restart_audio();
             }
             Self::Message::SelectSubtitleFile => {
                 if let Some(_) = &self.video_metadata {
@@ -208,17 +195,20 @@ impl Application for Samaku {
                 println!("frame {} available", new_frame);
                 self.actual_frame = Some((new_frame, handle));
             }
+            Self::Message::PlaybackStep => {
+                self.workers.emit_playback_step();
+            }
             Self::Message::PlaybackAdvanceFrames(delta_frames) => {
                 if let Some(video_metadata) = &self.video_metadata {
                     self.shared
                         .playback_state
                         .add_frames(delta_frames, video_metadata.frame_rate);
                 }
-                return Self::Message::command_all(message::playback_step_all());
+                self.workers.emit_playback_step();
             }
             Self::Message::PlaybackAdvanceSeconds(delta_seconds) => {
                 self.shared.playback_state.add_seconds(delta_seconds);
-                return Self::Message::command_all(message::playback_step_all());
+                self.workers.emit_playback_step();
             }
             Self::Message::TogglePlayback => {
                 // For some reason `fetch_not`, which would perform a toggle in place,

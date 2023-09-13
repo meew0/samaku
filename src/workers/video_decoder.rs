@@ -2,11 +2,17 @@ use std::{sync::Arc, thread};
 
 use crate::{media, message};
 
+#[derive(Debug, Clone)]
+pub enum Message {
+    PlaybackStep,
+    LoadVideo(std::path::PathBuf),
+}
+
 pub fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
-) -> super::Worker<message::VideoDecoderMessage> {
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<message::VideoDecoderMessage>();
+) -> super::Worker<self::Message> {
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
 
     let playback_state = Arc::clone(&shared_state.playback_state);
 
@@ -16,7 +22,7 @@ pub fn spawn(
         loop {
             match rx_in.recv() {
                 Ok(message) => match message {
-                    message::VideoDecoderMessage::PlaybackStep => {
+                    self::Message::PlaybackStep => {
                         // The frame might have changed. Check whether we have a video
                         // and whether the frame has actually changed, and if it has,
                         // decode the new frame
@@ -33,7 +39,7 @@ pub fn spawn(
                             }
                         }
                     }
-                    message::VideoDecoderMessage::LoadVideo(path_buf) => {
+                    self::Message::LoadVideo(path_buf) => {
                         // Load new video
                         let video = media::Video::load(path_buf);
                         let metadata_box = Box::new(video.metadata);

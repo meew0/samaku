@@ -6,13 +6,24 @@ use std::{
 
 use crate::{media, message, model};
 
+#[derive(Debug, Clone)]
+pub enum Message {
+    TryRestart,
+
+    // These are NOT for playing and pausing video/audio playback
+    // at the application level (use global_state.playback_state.playing),
+    // but for the stream level
+    Play,
+    Pause,
+}
+
 pub fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
-) -> super::Worker<message::CpalPlaybackMessage> {
+) -> super::Worker<self::Message> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<message::CpalPlaybackMessage>();
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
 
     let playback_state = Arc::clone(&shared_state.playback_state);
     let audio_mutex = Arc::clone(&shared_state.audio);
@@ -24,7 +35,7 @@ pub fn spawn(
         loop {
             match rx_in.recv() {
                 Ok(message) => match message {
-                    message::CpalPlaybackMessage::TryRestart => {
+                    self::Message::TryRestart => {
                         // This drops the existing stream, which is supposedly guaranteed to
                         // close it (https://github.com/RustAudio/cpal/issues/652)
                         stream_opt = None;
@@ -146,12 +157,12 @@ pub fn spawn(
                             stream_opt = Some(stream);
                         }
                     }
-                    message::CpalPlaybackMessage::Play => {
+                    self::Message::Play => {
                         if let Some(ref stream) = stream_opt {
                             let _ = stream.play().expect("Failed to play audio stream");
                         }
                     }
-                    message::CpalPlaybackMessage::Pause => {
+                    self::Message::Pause => {
                         if let Some(ref stream) = stream_opt {
                             let _ = stream.pause().expect("Failed to pause audio stream");
                         }
@@ -232,11 +243,8 @@ fn data_callback<T>(
         *auth_pos += num_frames;
         playback_state.position.store(*auth_pos, Ordering::Relaxed);
 
-        // Emit PlaybackStep
-        for message in message::playback_step_all().into_iter() {
-            tx_out
-                .unbounded_send(message)
-                .expect("Error while emitting PlaybackStep");
-        }
+        tx_out
+            .unbounded_send(message::Message::PlaybackStep)
+            .expect("Error while emitting PlaybackStep");
     }
 }

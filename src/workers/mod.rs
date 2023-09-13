@@ -5,7 +5,7 @@ use std::{cell::RefCell, thread};
 
 use crate::message;
 
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone)]
 pub enum Type {
     VideoDecoder,
     CpalPlayback,
@@ -17,6 +17,17 @@ pub struct Worker<M> {
     message_in: std::sync::mpsc::Sender<M>,
 }
 
+impl<M> Worker<M> {
+    fn dispatch(&self, message: M) {
+        self.message_in.send(message).unwrap_or_else(|err| {
+            panic!(
+                "Failed to send message to {:?} worker (error: {})",
+                self.worker_type, err
+            )
+        });
+    }
+}
+
 pub type GlobalReceiver = iced::futures::channel::mpsc::UnboundedReceiver<message::Message>;
 pub type GlobalSender = iced::futures::channel::mpsc::UnboundedSender<message::Message>;
 
@@ -24,69 +35,36 @@ pub struct Workers {
     sender: GlobalSender,
     pub receiver: RefCell<Option<GlobalReceiver>>,
 
-    video_decoder: Option<Worker<message::VideoDecoderMessage>>,
-    cpal_playback: Option<Worker<message::CpalPlaybackMessage>>,
-}
-
-fn try_dispatch<M>(worker_opt: &Option<Worker<M>>, message: M) {
-    if let Some(worker) = worker_opt {
-        // Can fail if the channel is closed.
-        // For now, just ignore.
-        // TODO: possibly drop the worker or something in this case
-        let _ = worker.message_in.send(message);
-    }
-}
-
-fn try_spawn<M, F: FnOnce(GlobalSender, &crate::SharedState) -> Worker<M>>(
-    worker_opt: &mut Option<Worker<M>>,
-    spawn_func: F,
-    sender: GlobalSender,
-    shared_state: &crate::SharedState,
-) {
-    if let Some(_) = worker_opt {
-        return;
-    }
-
-    let worker = spawn_func(sender, shared_state);
-    *worker_opt = Some(worker);
+    video_decoder: Worker<video_decoder::Message>,
+    cpal_playback: Worker<cpal_playback::Message>,
 }
 
 impl Workers {
-    /// Construct a new `Workers` instance that is ready to spawn workers.
-    pub fn new() -> Self {
+    /// Construct a new `Workers` instance with all workers spawned.
+    pub fn spawn_all(shared_state: &crate::SharedState) -> Self {
         let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
 
         Self {
+            video_decoder: video_decoder::spawn(sender.clone(), shared_state),
+            cpal_playback: cpal_playback::spawn(sender.clone(), shared_state),
+
             sender: sender,
             receiver: RefCell::new(Some(receiver)),
-            video_decoder: None,
-            cpal_playback: None,
         }
     }
 
-    pub fn dispatch_update(&self, message: message::WorkerMessage) {
-        match message {
-            message::WorkerMessage::VideoDecoder(inner) => try_dispatch(&self.video_decoder, inner),
-            message::WorkerMessage::CpalPlayback(inner) => try_dispatch(&self.cpal_playback, inner),
-        }
+    pub fn emit_playback_step(&self) {
+        self.video_decoder
+            .dispatch(video_decoder::Message::PlaybackStep);
     }
 
-    pub fn spawn(&mut self, worker_type: Type, shared_state: &crate::SharedState) {
-        let sender = self.sender.clone();
+    pub fn emit_load_video(&self, path_buf: std::path::PathBuf) {
+        self.video_decoder
+            .dispatch(video_decoder::Message::LoadVideo(path_buf));
+    }
 
-        match worker_type {
-            Type::VideoDecoder => try_spawn(
-                &mut self.video_decoder,
-                video_decoder::spawn,
-                sender,
-                shared_state,
-            ),
-            Type::CpalPlayback => try_spawn(
-                &mut self.cpal_playback,
-                cpal_playback::spawn,
-                sender,
-                shared_state,
-            ),
-        }
+    pub fn emit_restart_audio(&self) {
+        self.cpal_playback
+            .dispatch(cpal_playback::Message::TryRestart);
     }
 }
