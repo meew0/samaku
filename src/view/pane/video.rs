@@ -10,7 +10,7 @@ macro_rules! empty {
 
 pub fn view<'a>(
     global_state: &'a model::GlobalState,
-    video_state: &'a model::pane::video::State,
+    _video_state: &'a model::pane::video::State,
 ) -> super::PaneView<'a> {
     let scroll = match &global_state.actual_frame {
         None => empty!(),
@@ -35,6 +35,7 @@ pub fn view<'a>(
         content: iced::widget::container(scroll)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
+            .center_x()
             .center_y()
             .into(),
     }
