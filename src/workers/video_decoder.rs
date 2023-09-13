@@ -1,14 +1,14 @@
 use std::{sync::Arc, thread};
 
-use crate::{media, message, model};
+use crate::{media, message};
 
 pub fn spawn(
     tx_out: super::GlobalSender,
-    global_state: &model::GlobalState,
+    shared_state: &crate::SharedState,
 ) -> super::Worker<message::VideoDecoderMessage> {
     let (tx_in, rx_in) = std::sync::mpsc::channel::<message::VideoDecoderMessage>();
 
-    let playback_state = Arc::clone(&global_state.playback_state);
+    let playback_state = Arc::clone(&shared_state.playback_state);
 
     let handle = thread::spawn(move || {
         let mut video_opt: Option<media::Video> = None;
@@ -25,9 +25,9 @@ pub fn spawn(
                             if new_frame != last_frame {
                                 last_frame = new_frame;
                                 let handle = video.get_frame(new_frame);
-                                if let Err(_) = tx_out.unbounded_send(message::Message::Global(
-                                    message::GlobalMessage::VideoFrameAvailable(new_frame, handle),
-                                )) {
+                                if let Err(_) = tx_out.unbounded_send(
+                                    message::Message::VideoFrameAvailable(new_frame, handle),
+                                ) {
                                     return;
                                 }
                             }
@@ -37,9 +37,9 @@ pub fn spawn(
                         // Load new video
                         let video = media::Video::load(path_buf);
                         let metadata_box = Box::new(video.metadata);
-                        if let Err(_) = tx_out.unbounded_send(message::Message::Global(
-                            message::GlobalMessage::VideoLoaded(metadata_box),
-                        )) {
+                        if let Err(_) =
+                            tx_out.unbounded_send(message::Message::VideoLoaded(metadata_box))
+                        {
                             return;
                         }
                         video_opt = Some(video);

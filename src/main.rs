@@ -1,6 +1,5 @@
 #![feature(int_roundings)]
 
-mod controller;
 mod keyboard;
 mod media;
 mod message;
@@ -8,6 +7,9 @@ mod model;
 mod pane;
 mod theme;
 mod view;
+mod workers;
+
+use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
@@ -18,11 +20,42 @@ pub fn main() -> iced::Result {
     Samaku::run(Settings::default())
 }
 
+/// Global application state.
 struct Samaku {
-    global_state: model::GlobalState,
-    workers: controller::workers::Workers,
+    workers: workers::Workers,
+
+    shared: SharedState,
+
+    /// The current state of the global pane grid.
+    /// Includes all state for the individual panes themselves.
     panes: pane_grid::State<pane::PaneState>,
+
+    /// Currently focused pane, if one exists.
     focus: Option<pane_grid::Pane>,
+
+    /// Metadata of the currently loaded video, if and only if any is loaded.
+    pub video_metadata: Option<media::VideoMetadata>,
+
+    /// Currently loaded subtitles, if present.
+    pub subtitles: Option<media::Subtitles>,
+
+    /// The number of the frame that is actually being displayed right now,
+    /// together with the image it represents.
+    /// Will be slightly different from the information in
+    /// `playback_state` due to decoding latency etc.
+    pub actual_frame: Option<(i32, iced::widget::image::Handle)>,
+}
+
+/// Data that needs to be shared with workers.
+struct SharedState {
+    /// Currently loaded audio, if present.
+    /// Can be shared into workers etc., but be sure not to hold the mutex for
+    /// too long, otherwise the playback worker will stall.
+    pub audio: Arc<Mutex<Option<media::Audio>>>,
+
+    /// Authoritative playback position and state.
+    /// Set this to seek/pause/resume etc.
+    pub playback_state: Arc<model::playback::PlaybackState>,
 }
 
 impl Application for Samaku {
@@ -34,18 +67,24 @@ impl Application for Samaku {
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
         let (panes, _) = pane_grid::State::new(pane::PaneState::Unassigned);
 
-        let global_state = model::GlobalState::default();
-        let mut workers = controller::workers::Workers::default();
+        let shared_state = SharedState {
+            audio: Arc::new(Mutex::new(None)),
+            playback_state: Arc::new(model::playback::PlaybackState::default()),
+        };
 
-        workers.spawn(controller::workers::Type::VideoDecoder, &global_state);
-        workers.spawn(controller::workers::Type::CpalPlayback, &global_state);
+        let mut workers = workers::Workers::new();
+        workers.spawn(workers::Type::VideoDecoder, &shared_state);
+        workers.spawn(workers::Type::CpalPlayback, &shared_state);
 
         (
             Samaku {
                 panes,
                 focus: None,
-                global_state: global_state,
                 workers: workers,
+                actual_frame: None,
+                video_metadata: None,
+                subtitles: None,
+                shared: shared_state,
             },
             Command::none(),
         )
@@ -93,9 +132,6 @@ impl Application for Samaku {
                     *pane_state = *new_state;
                 }
             }
-            Self::Message::Global(global_message) => {
-                return controller::global::global_update(&mut self.global_state, global_message);
-            }
             Self::Message::Pane(pane_message) => {
                 if let Some(pane) = self.focus {
                     if let Some(pane_state) = self.panes.get_mut(&pane) {
@@ -107,7 +143,90 @@ impl Application for Samaku {
                 self.workers.dispatch_update(worker_message);
             }
             Self::Message::SpawnWorker(worker_type) => {
-                self.workers.spawn(worker_type, &self.global_state);
+                self.workers.spawn(worker_type, &self.shared);
+            }
+            Self::Message::SelectVideoFile => {
+                return iced::Command::perform(
+                    rfd::AsyncFileDialog::new().pick_file(),
+                    Self::Message::map_option(|handle: rfd::FileHandle| {
+                        Self::Message::Worker(message::WorkerMessage::VideoDecoder(
+                            message::VideoDecoderMessage::LoadVideo(handle.path().to_path_buf()),
+                        ))
+                    }),
+                );
+            }
+            Self::Message::VideoLoaded(metadata) => {
+                self.video_metadata = Some(*metadata);
+
+                // Emit a playback step, such that the frame gets shown immediately
+                return Self::Message::command_all(message::playback_step_all());
+            }
+            Self::Message::SelectAudioFile => {
+                return iced::Command::perform(
+                    rfd::AsyncFileDialog::new().pick_file(),
+                    Self::Message::map_option(|handle: rfd::FileHandle| {
+                        Self::Message::AudioFileSelected(handle.path().to_path_buf())
+                    }),
+                );
+            }
+            Self::Message::AudioFileSelected(path_buf) => {
+                let mut audio_lock = self.shared.audio.lock().unwrap();
+                *audio_lock = Some(media::Audio::load(path_buf));
+
+                return Self::Message::command(Self::Message::Worker(
+                    message::WorkerMessage::CpalPlayback(message::CpalPlaybackMessage::TryRestart),
+                ));
+            }
+            Self::Message::SelectSubtitleFile => {
+                if let Some(_) = &self.video_metadata {
+                    let future = async {
+                        match rfd::AsyncFileDialog::new().pick_file().await {
+                            Some(handle) => {
+                                Some(smol::fs::read_to_string(handle.path()).await.unwrap())
+                            }
+                            None => None,
+                        }
+                    };
+                    return iced::Command::perform(
+                        future,
+                        Self::Message::map_option(|content| {
+                            Self::Message::SubtitleFileRead(content)
+                        }),
+                    );
+                }
+            }
+            Self::Message::SubtitleFileRead(content) => {
+                if let Some(video_metadata) = &self.video_metadata {
+                    self.subtitles = Some(media::Subtitles::load_utf8(
+                        content,
+                        video_metadata.width,
+                        video_metadata.height,
+                    ));
+                }
+            }
+            Self::Message::VideoFrameAvailable(new_frame, handle) => {
+                println!("frame {} available", new_frame);
+                self.actual_frame = Some((new_frame, handle));
+            }
+            Self::Message::PlaybackAdvanceFrames(delta_frames) => {
+                if let Some(video_metadata) = &self.video_metadata {
+                    self.shared
+                        .playback_state
+                        .add_frames(delta_frames, video_metadata.frame_rate);
+                }
+                return Self::Message::command_all(message::playback_step_all());
+            }
+            Self::Message::PlaybackAdvanceSeconds(delta_seconds) => {
+                self.shared.playback_state.add_seconds(delta_seconds);
+                return Self::Message::command_all(message::playback_step_all());
+            }
+            Self::Message::TogglePlayback => {
+                // For some reason `fetch_not`, which would perform a toggle in place,
+                // is unstable. `fetch_xor` with true should be equivalent.
+                self.shared
+                    .playback_state
+                    .playing
+                    .fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
             }
         }
 
@@ -131,7 +250,7 @@ impl Application for Samaku {
 
         use iced::futures::StreamExt;
         let worker_messages = subscription::unfold(
-            std::any::TypeId::of::<controller::workers::Workers>(),
+            std::any::TypeId::of::<workers::Workers>(),
             self.workers.receiver.take(),
             move |mut receiver| async move {
                 let message = receiver.as_mut().unwrap().next().await.unwrap();
@@ -150,7 +269,7 @@ impl Application for Samaku {
             PaneGrid::new::<pane::PaneState>(&self.panes, |pane, pane_state, _is_maximized| {
                 // let is_focused = focus == Some(pane);
 
-                let pane_view = pane::dispatch_view(pane, &self.global_state, pane_state);
+                let pane_view = pane::dispatch_view(pane, self, pane_state);
                 let title_bar = pane_grid::TitleBar::new(pane_view.title);
                 pane_grid::Content::new(pane_view.content).title_bar(title_bar)
             })

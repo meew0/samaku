@@ -8,14 +8,14 @@ use crate::{media, message, model};
 
 pub fn spawn(
     tx_out: super::GlobalSender,
-    global_state: &model::GlobalState,
+    shared_state: &crate::SharedState,
 ) -> super::Worker<message::CpalPlaybackMessage> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let (tx_in, rx_in) = std::sync::mpsc::channel::<message::CpalPlaybackMessage>();
 
-    let playback_state = Arc::clone(&global_state.playback_state);
-    let audio_mutex = Arc::clone(&global_state.audio);
+    let playback_state = Arc::clone(&shared_state.playback_state);
+    let audio_mutex = Arc::clone(&shared_state.audio);
 
     let handle = thread::spawn(move || -> () {
         use cpal::traits::StreamTrait;

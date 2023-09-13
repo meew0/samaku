@@ -3,7 +3,7 @@ mod video_decoder;
 
 use std::{cell::RefCell, thread};
 
-use crate::{message, model};
+use crate::message;
 
 #[derive(Debug, Clone, Copy, Hash)]
 pub enum Type {
@@ -37,21 +37,33 @@ fn try_dispatch<M>(worker_opt: &Option<Worker<M>>, message: M) {
     }
 }
 
-fn try_spawn<M, F: FnOnce(GlobalSender, &model::GlobalState) -> Worker<M>>(
+fn try_spawn<M, F: FnOnce(GlobalSender, &crate::SharedState) -> Worker<M>>(
     worker_opt: &mut Option<Worker<M>>,
     spawn_func: F,
     sender: GlobalSender,
-    global_state: &model::GlobalState,
+    shared_state: &crate::SharedState,
 ) {
     if let Some(_) = worker_opt {
         return;
     }
 
-    let worker = spawn_func(sender, global_state);
+    let worker = spawn_func(sender, shared_state);
     *worker_opt = Some(worker);
 }
 
 impl Workers {
+    /// Construct a new `Workers` instance that is ready to spawn workers.
+    pub fn new() -> Self {
+        let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
+
+        Self {
+            sender: sender,
+            receiver: RefCell::new(Some(receiver)),
+            video_decoder: None,
+            cpal_playback: None,
+        }
+    }
+
     pub fn dispatch_update(&self, message: message::WorkerMessage) {
         match message {
             message::WorkerMessage::VideoDecoder(inner) => try_dispatch(&self.video_decoder, inner),
@@ -59,7 +71,7 @@ impl Workers {
         }
     }
 
-    pub fn spawn(&mut self, worker_type: Type, global_state: &model::GlobalState) {
+    pub fn spawn(&mut self, worker_type: Type, shared_state: &crate::SharedState) {
         let sender = self.sender.clone();
 
         match worker_type {
@@ -67,27 +79,14 @@ impl Workers {
                 &mut self.video_decoder,
                 video_decoder::spawn,
                 sender,
-                global_state,
+                shared_state,
             ),
             Type::CpalPlayback => try_spawn(
                 &mut self.cpal_playback,
                 cpal_playback::spawn,
                 sender,
-                global_state,
+                shared_state,
             ),
-        }
-    }
-}
-
-impl Default for Workers {
-    fn default() -> Self {
-        let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
-
-        Self {
-            sender,
-            receiver: RefCell::new(Some(receiver)),
-            video_decoder: None,
-            cpal_playback: None,
         }
     }
 }

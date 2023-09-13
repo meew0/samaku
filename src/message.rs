@@ -1,11 +1,21 @@
 use iced::widget::pane_grid;
 
-use crate::{controller, media, model, pane};
+use crate::{media, pane, workers};
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    // Empty message
+    /// Empty message. Does nothing.
+    /// Useful when you need to return a Message from something,
+    /// but don't want anything to happen
     None,
+
+    /// Message pertaining to a specific pane (PaneState)
+    /// Will be dispatched to the currently focused pane.
+    /// For example changing video display settings, or scrolling the timeline
+    Pane(PaneMessage),
+
+    /// Message pertaining to a specific worker. Will be dispatched to it
+    Worker(WorkerMessage),
 
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),
@@ -14,26 +24,30 @@ pub enum Message {
     DragPane(pane_grid::DragEvent),
     ResizePane(pane_grid::ResizeEvent),
 
-    // Set the given pane to contain the given state.
-    // Can be used to change its type or possibly more
+    /// Set the given pane to contain the given state.
+    /// Can be used to change its type or possibly more
     SetPaneState(pane_grid::Pane, Box<pane::PaneState>),
 
-    // Spawn a worker.
-    // Guaranteed to be idempotent — does nothing if the specified worker
-    // is already spawned
-    SpawnWorker(controller::workers::Type),
+    /// Spawn a worker.
+    /// Guaranteed to be idempotent — does nothing if the specified worker
+    /// is already spawned
+    SpawnWorker(workers::Type),
 
-    // Messages pertaining to the state of the entire application (GlobalState)
-    // For example loading/saving media
-    Global(GlobalMessage),
+    // Open a dialog to select the respective type of file.
+    SelectVideoFile,
+    SelectAudioFile,
+    SelectSubtitleFile,
 
-    // Message pertaining to a specific pane (PaneState)
-    // Will be dispatched to the currently focused pane.
-    // For example changing video display settings, or scrolling the timeline
-    Pane(PaneMessage),
+    VideoLoaded(Box<media::VideoMetadata>),
 
-    // Message pertaining to a specific worker. Will be dispatched to it
-    Worker(WorkerMessage),
+    VideoFrameAvailable(i32, iced::widget::image::Handle),
+
+    AudioFileSelected(std::path::PathBuf),
+    SubtitleFileRead(String),
+
+    PlaybackAdvanceFrames(i32),
+    PlaybackAdvanceSeconds(f64),
+    TogglePlayback,
 }
 
 impl Message {
@@ -54,25 +68,6 @@ impl Message {
             None => Self::None,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum GlobalMessage {
-    // Open a dialog to select the respective type of file.
-    SelectVideoFile,
-    SelectAudioFile,
-    SelectSubtitleFile,
-
-    VideoLoaded(Box<media::VideoMetadata>),
-
-    VideoFrameAvailable(i32, iced::widget::image::Handle),
-
-    AudioFileSelected(std::path::PathBuf),
-    SubtitleFileRead(String),
-
-    PlaybackAdvanceFrames(i32),
-    PlaybackAdvanceSeconds(f64),
-    TogglePlayback,
 }
 
 #[derive(Debug, Clone)]

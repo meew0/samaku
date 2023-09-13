@@ -1,7 +1,7 @@
 pub mod unassigned;
 pub mod video;
 
-use crate::{message, model};
+use crate::message;
 
 /// The state information contained by a pane: what type of pane it is, as well as any
 /// extra data that is specific to the pane itself, like the state of control elements.
@@ -18,7 +18,7 @@ pub struct PaneView<'a> {
 
 pub fn dispatch_view<'a>(
     self_pane: iced::widget::pane_grid::Pane,
-    global_state: &'a model::GlobalState,
+    global_state: &'a crate::Samaku,
     state: &'a PaneState,
 ) -> PaneView<'a> {
     match state {
