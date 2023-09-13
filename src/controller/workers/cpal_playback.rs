@@ -1,6 +1,7 @@
 use std::{
     mem::size_of,
     sync::{atomic::Ordering, Arc, Mutex},
+    thread,
 };
 
 use crate::{media, message, model};
@@ -8,103 +9,142 @@ use crate::{media, message, model};
 pub fn spawn(
     tx_out: super::GlobalSender,
     global_state: &model::GlobalState,
-) -> Option<super::Worker<cpal::Stream, ()>> {
+) -> super::Worker<message::CpalPlaybackMessage> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
-    // currently unused
-    let (tx_in, _rx_in) = std::sync::mpsc::channel::<()>();
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<message::CpalPlaybackMessage>();
 
     let playback_state = Arc::clone(&global_state.playback_state);
     let audio_mutex = Arc::clone(&global_state.audio);
 
-    let audio_properties = {
-        let audio_lock = audio_mutex.lock().unwrap();
-        if let Some(audio) = audio_lock.as_ref() {
-            audio.properties
-        } else {
-            return None;
+    let handle = thread::spawn(move || -> () {
+        use cpal::traits::StreamTrait;
+        let mut stream_opt: Option<cpal::Stream> = None;
+
+        loop {
+            match rx_in.recv() {
+                Ok(message) => match message {
+                    message::CpalPlaybackMessage::TryRestart => {
+                        // This drops the existing stream, which is supposedly guaranteed to
+                        // close it (https://github.com/RustAudio/cpal/issues/652)
+                        stream_opt = None;
+
+                        let audio_properties = {
+                            let audio_lock = audio_mutex.lock().unwrap();
+                            if let Some(audio) = audio_lock.as_ref() {
+                                audio.properties
+                            } else {
+                                continue;
+                            }
+                        };
+
+                        // Find the cpal sample format that matches the audio properties
+                        let sample_format_opt: Option<cpal::SampleFormat> =
+                            if audio_properties.is_float {
+                                const F32_SIZE: i32 = size_of::<f32>() as i32;
+                                const F64_SIZE: i32 = size_of::<f64>() as i32;
+                                match audio_properties.bytes_per_sample {
+                                    F32_SIZE => Some(cpal::SampleFormat::F32),
+                                    F64_SIZE => Some(cpal::SampleFormat::F64),
+                                    _ => None,
+                                }
+                            } else {
+                                const U8_SIZE: i32 = size_of::<u8>() as i32;
+                                const I16_SIZE: i32 = size_of::<i16>() as i32;
+                                const I32_SIZE: i32 = size_of::<i32>() as i32;
+                                match audio_properties.bytes_per_sample {
+                                    U8_SIZE => Some(cpal::SampleFormat::U8),
+                                    I16_SIZE => Some(cpal::SampleFormat::I16),
+                                    I32_SIZE => Some(cpal::SampleFormat::I32),
+                                    _ => None,
+                                }
+                            };
+
+                        let sample_format = sample_format_opt
+                            .expect("Audio sample format not representable by cpal");
+
+                        let mut config_opt: Option<cpal::SupportedStreamConfig> = None;
+
+                        let host = cpal::default_host();
+                        let device = host
+                            .default_output_device()
+                            .expect("No audio output device available");
+
+                        // Try to find a cpal playback config that matches the audio_properties
+                        for supported_config in device
+                            .supported_output_configs()
+                            .expect("Error while querying audio output configurations")
+                        {
+                            if audio_properties.channels == supported_config.channels().into()
+                                && audio_properties.sample_rate
+                                    >= supported_config.min_sample_rate().0 as i32
+                                && audio_properties.sample_rate
+                                    <= supported_config.max_sample_rate().0 as i32
+                                && sample_format == supported_config.sample_format()
+                            {
+                                config_opt =
+                                    Some(supported_config.with_sample_rate(cpal::SampleRate(
+                                        audio_properties.sample_rate.try_into().unwrap(),
+                                    )))
+                            }
+                        }
+
+                        let config = config_opt.expect(
+                        "Could not find a suitable system audio configuration that matches the loaded audio file",
+                        );
+
+                        if sample_format != cpal::SampleFormat::F32 {
+                            todo!();
+                        }
+
+                        playback_state
+                            .rate
+                            .store(audio_properties.sample_rate as u32, Ordering::Relaxed);
+
+                        let audio_mutex2 = Arc::clone(&audio_mutex);
+                        let playback_state2 = Arc::clone(&playback_state);
+                        let tx_out2 = tx_out.clone();
+
+                        let stream = device
+                            .build_output_stream(
+                                &config.into(),
+                                move |data: &mut [f32], _| {
+                                    data_callback::<f32>(data, &audio_mutex2, &playback_state2);
+                                    for message in message::playback_step_all().into_iter() {
+                                        tx_out2
+                                            .unbounded_send(message)
+                                            .expect("Error while emitting PlaybackStep");
+                                    }
+                                },
+                                move |err| println!("Audio stream error: {}", err),
+                                None,
+                            )
+                            .expect("Failed to build audio stream");
+
+                        stream.play().expect("Failed to play audio stream");
+                        stream_opt = Some(stream);
+                    }
+                    message::CpalPlaybackMessage::Play => {
+                        if let Some(ref stream) = stream_opt {
+                            let _ = stream.play().expect("Failed to play audio stream");
+                        }
+                    }
+                    message::CpalPlaybackMessage::Pause => {
+                        if let Some(ref stream) = stream_opt {
+                            let _ = stream.pause().expect("Failed to pause audio stream");
+                        }
+                    }
+                },
+                Err(_) => return,
+            }
         }
-    };
+    });
 
-    // Find the cpal sample format that matches the audio properties
-    let sample_format_opt: Option<cpal::SampleFormat> = if audio_properties.is_float {
-        const F32_SIZE: i32 = size_of::<f32>() as i32;
-        const F64_SIZE: i32 = size_of::<f64>() as i32;
-        match audio_properties.bytes_per_sample {
-            F32_SIZE => Some(cpal::SampleFormat::F32),
-            F64_SIZE => Some(cpal::SampleFormat::F64),
-            _ => None,
-        }
-    } else {
-        const U8_SIZE: i32 = size_of::<u8>() as i32;
-        const I16_SIZE: i32 = size_of::<i16>() as i32;
-        const I32_SIZE: i32 = size_of::<i32>() as i32;
-        match audio_properties.bytes_per_sample {
-            U8_SIZE => Some(cpal::SampleFormat::U8),
-            I16_SIZE => Some(cpal::SampleFormat::I16),
-            I32_SIZE => Some(cpal::SampleFormat::I32),
-            _ => None,
-        }
-    };
-
-    let sample_format = sample_format_opt.expect("Audio sample format not representable by cpal");
-
-    let mut config_opt: Option<cpal::SupportedStreamConfig> = None;
-
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .expect("No audio output device available");
-
-    // Try to find a cpal playback config that matches the audio_properties
-    for supported_config in device
-        .supported_output_configs()
-        .expect("Error while querying audio output configurations")
-    {
-        if audio_properties.channels == supported_config.channels().into()
-            && audio_properties.sample_rate >= supported_config.min_sample_rate().0 as i32
-            && audio_properties.sample_rate <= supported_config.max_sample_rate().0 as i32
-            && sample_format == supported_config.sample_format()
-        {
-            config_opt = Some(supported_config.with_sample_rate(cpal::SampleRate(
-                audio_properties.sample_rate.try_into().unwrap(),
-            )))
-        }
-    }
-
-    let config = config_opt.expect(
-        "Could not find a suitable system audio configuration that matches the loaded audio file",
-    );
-
-    if sample_format != cpal::SampleFormat::F32 {
-        todo!();
-    }
-
-    playback_state
-        .rate
-        .store(audio_properties.sample_rate as u32, Ordering::Relaxed);
-
-    let stream = device
-        .build_output_stream(
-            &config.into(),
-            move |data: &mut [f32], _| {
-                data_callback::<f32>(data, &audio_mutex, &playback_state);
-                for message in message::playback_step_all().into_iter() {
-                    tx_out
-                        .unbounded_send(message)
-                        .expect("Error while emitting PlaybackStep");
-                }
-            },
-            move |err| println!("Audio stream error: {}", err),
-            None,
-        )
-        .expect("Failed to build audio stream");
-
-    Some(super::Worker {
+    super::Worker {
         worker_type: super::Type::CpalPlayback,
-        _handle: stream,
+        _handle: handle,
         message_in: tx_in,
-    })
+    }
 }
 
 fn data_callback<T>(

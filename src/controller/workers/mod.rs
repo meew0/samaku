@@ -11,9 +11,9 @@ pub enum Type {
     CpalPlayback,
 }
 
-pub struct Worker<H, M> {
+pub struct Worker<M> {
     worker_type: Type,
-    _handle: H,
+    _handle: thread::JoinHandle<()>,
     message_in: std::sync::mpsc::Sender<M>,
 }
 
@@ -21,13 +21,14 @@ pub type GlobalReceiver = iced::futures::channel::mpsc::UnboundedReceiver<messag
 pub type GlobalSender = iced::futures::channel::mpsc::UnboundedSender<message::Message>;
 
 pub struct Workers {
-    pub receiver: RefCell<Option<GlobalReceiver>>,
     sender: GlobalSender,
-    video_decoder: Option<Worker<thread::JoinHandle<()>, message::VideoDecoderMessage>>,
-    cpal_playback: Option<Worker<cpal::Stream, ()>>,
+    pub receiver: RefCell<Option<GlobalReceiver>>,
+
+    video_decoder: Option<Worker<message::VideoDecoderMessage>>,
+    cpal_playback: Option<Worker<message::CpalPlaybackMessage>>,
 }
 
-fn try_dispatch<H, M>(worker_opt: &Option<Worker<H, M>>, message: M) {
+fn try_dispatch<M>(worker_opt: &Option<Worker<M>>, message: M) {
     if let Some(worker) = worker_opt {
         // Can fail if the channel is closed.
         // For now, just ignore.
@@ -36,8 +37,8 @@ fn try_dispatch<H, M>(worker_opt: &Option<Worker<H, M>>, message: M) {
     }
 }
 
-fn try_spawn<H, M, F: FnOnce(GlobalSender, &model::GlobalState) -> Option<Worker<H, M>>>(
-    worker_opt: &mut Option<Worker<H, M>>,
+fn try_spawn<M, F: FnOnce(GlobalSender, &model::GlobalState) -> Worker<M>>(
+    worker_opt: &mut Option<Worker<M>>,
     spawn_func: F,
     sender: GlobalSender,
     global_state: &model::GlobalState,
@@ -46,13 +47,15 @@ fn try_spawn<H, M, F: FnOnce(GlobalSender, &model::GlobalState) -> Option<Worker
         return;
     }
 
-    *worker_opt = spawn_func(sender, global_state);
+    let worker = spawn_func(sender, global_state);
+    *worker_opt = Some(worker);
 }
 
 impl Workers {
     pub fn dispatch_update(&self, message: message::WorkerMessage) {
         match message {
             message::WorkerMessage::VideoDecoder(inner) => try_dispatch(&self.video_decoder, inner),
+            message::WorkerMessage::CpalPlayback(inner) => try_dispatch(&self.cpal_playback, inner),
         }
     }
 

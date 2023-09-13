@@ -39,6 +39,7 @@ impl Application for Samaku {
         let mut workers = controller::workers::Workers::default();
 
         workers.spawn(controller::workers::Type::VideoDecoder, &global_state);
+        workers.spawn(controller::workers::Type::CpalPlayback, &global_state);
 
         (
             Samaku {

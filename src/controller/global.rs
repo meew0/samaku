@@ -1,5 +1,5 @@
 use crate::{
-    controller, media,
+    media,
     message::{self, GlobalMessage, Message},
     model,
 };
@@ -39,9 +39,9 @@ pub fn global_update(
             let mut audio_lock = global_state.audio.lock().unwrap();
             *audio_lock = Some(media::Audio::load(path_buf));
 
-            return message::Message::command(message::Message::SpawnWorker(
-                controller::workers::Type::CpalPlayback,
-            ));
+            return Message::command(Message::Worker(message::WorkerMessage::CpalPlayback(
+                message::CpalPlaybackMessage::TryRestart,
+            )));
         }
         GlobalMessage::SelectSubtitleFile => {
             if let Some(_) = &global_state.video_metadata {

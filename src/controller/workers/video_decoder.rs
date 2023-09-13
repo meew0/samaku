@@ -5,9 +5,10 @@ use crate::{media, message, model};
 pub fn spawn(
     tx_out: super::GlobalSender,
     global_state: &model::GlobalState,
-) -> Option<super::Worker<thread::JoinHandle<()>, message::VideoDecoderMessage>> {
-    let playback_state = Arc::clone(&global_state.playback_state);
+) -> super::Worker<message::VideoDecoderMessage> {
     let (tx_in, rx_in) = std::sync::mpsc::channel::<message::VideoDecoderMessage>();
+
+    let playback_state = Arc::clone(&global_state.playback_state);
 
     let handle = thread::spawn(move || {
         let mut video_opt: Option<media::Video> = None;
@@ -55,5 +56,5 @@ pub fn spawn(
         message_in: tx_in,
     };
 
-    Some(worker)
+    worker
 }

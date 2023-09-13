@@ -78,12 +78,24 @@ pub enum PaneMessage {
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
     VideoDecoder(VideoDecoderMessage),
+    CpalPlayback(CpalPlaybackMessage),
 }
 
 #[derive(Debug, Clone)]
 pub enum VideoDecoderMessage {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
+}
+
+#[derive(Debug, Clone)]
+pub enum CpalPlaybackMessage {
+    TryRestart,
+
+    // These are NOT for playing and pausing video/audio playback
+    // at the application level (use global_state.playback_state.playing),
+    // but for the stream level
+    Play,
+    Pause,
 }
 
 // Returns all PlaybackStep messages. For now, there's only 1
