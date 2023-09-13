@@ -10,7 +10,6 @@ pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Opti
         KeyCode::F2 => Some(Message::SplitPane(Axis::Vertical)),
         KeyCode::F3 => Some(Message::SplitPane(Axis::Horizontal)),
         KeyCode::F4 => Some(Message::ClosePane),
-        KeyCode::F6 => Some(Message::CyclePaneType),
         KeyCode::V => Some(Message::Global(GlobalMessage::SelectVideoFile)),
         KeyCode::B => Some(Message::Global(GlobalMessage::SelectSubtitleFile)),
         KeyCode::N => Some(Message::Global(GlobalMessage::SelectAudioFile)),

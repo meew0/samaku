@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{controller, media};
+use crate::{controller, media, model};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -13,7 +13,10 @@ pub enum Message {
     FocusPane(pane_grid::Pane),
     DragPane(pane_grid::DragEvent),
     ResizePane(pane_grid::ResizeEvent),
-    CyclePaneType,
+
+    // Set the given pane to contain the given state.
+    // Can be used to change its type or possibly more
+    SetPaneState(pane_grid::Pane, Box<model::pane::PaneState>),
 
     // Spawn a worker.
     // Guaranteed to be idempotent — does nothing if the specified worker

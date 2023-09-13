@@ -1,5 +1,6 @@
 use crate::{message::Message, model};
 
+mod unassigned;
 mod video;
 
 pub struct PaneView<'a> {
@@ -8,20 +9,12 @@ pub struct PaneView<'a> {
 }
 
 pub fn dispatch_view<'a>(
+    self_pane: iced::widget::pane_grid::Pane,
     global_state: &'a model::GlobalState,
     state: &'a model::pane::PaneState,
 ) -> PaneView<'a> {
     match state {
-        model::pane::PaneState::Unassigned => PaneView {
-            title: iced::widget::text("Unassigned pane").into(),
-            content: iced::widget::container(iced::widget::scrollable(iced::widget::text(
-                format!("Unassigned pane"),
-            )))
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_y()
-            .into(),
-        },
+        model::pane::PaneState::Unassigned => unassigned::view(self_pane),
         model::pane::PaneState::Video(video_state) => video::view(global_state, video_state),
     }
 }

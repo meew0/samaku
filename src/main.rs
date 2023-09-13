@@ -96,16 +96,9 @@ impl Application for Samaku {
             Self::Message::ResizePane(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(&split, ratio)
             }
-            Self::Message::CyclePaneType => {
-                if let Some(pane) = self.focus {
-                    if let Some(data) = self.panes.get_mut(&pane) {
-                        data.state = match data.state {
-                            PaneState::Unassigned => {
-                                PaneState::Video(model::pane::video::State::default())
-                            }
-                            PaneState::Video(_) => PaneState::Unassigned,
-                        }
-                    }
+            Self::Message::SetPaneState(pane, new_state) => {
+                if let Some(data) = self.panes.get_mut(&pane) {
+                    data.state = *new_state;
                 }
             }
             Self::Message::Global(global_message) => {
@@ -161,10 +154,10 @@ impl Application for Samaku {
         // let focus = self.focus;
         // let total_panes = self.panes.len();
 
-        let pane_grid = PaneGrid::new::<PaneData>(&self.panes, |_pane, data, _is_maximized| {
+        let pane_grid = PaneGrid::new::<PaneData>(&self.panes, |pane, data, _is_maximized| {
             // let is_focused = focus == Some(pane);
 
-            let pane_view = view::pane::dispatch_view(&self.global_state, &data.state);
+            let pane_view = view::pane::dispatch_view(pane, &self.global_state, &data.state);
             let title_bar = pane_grid::TitleBar::new(pane_view.title);
             pane_grid::Content::new(pane_view.content).title_bar(title_bar)
         })
