@@ -76,11 +76,7 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
 
 pub fn update(
     _video_state: &mut State,
-    pane_message: message::PaneMessage,
+    _pane_message: message::PaneMessage,
 ) -> iced::Command<message::Message> {
-    match pane_message {
-        _ => (),
-    }
-
     iced::Command::none()
 }

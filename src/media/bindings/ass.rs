@@ -379,18 +379,18 @@ impl Track {
                 libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::ass::YCbCrMatrix::Default,
                 libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::ass::YCbCrMatrix::Unknown,
                 libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::ass::YCbCrMatrix::None,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::ass::YCbCrMatrix::BT601TV,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::ass::YCbCrMatrix::BT601PC,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::ass::YCbCrMatrix::BT709TV,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => subtitle::ass::YCbCrMatrix::BT709PC,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::ass::YCbCrMatrix::Bt601Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::ass::YCbCrMatrix::Bt601Pc,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::ass::YCbCrMatrix::Bt709Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => subtitle::ass::YCbCrMatrix::Bt709Pc,
                 libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => {
-                    subtitle::ass::YCbCrMatrix::SMTPE240MTV
+                    subtitle::ass::YCbCrMatrix::Smtpe240MPc
                 }
                 libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => {
-                    subtitle::ass::YCbCrMatrix::SMTPE240MPC
+                    subtitle::ass::YCbCrMatrix::Smtpe240MTv
                 }
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => subtitle::ass::YCbCrMatrix::FCCTV,
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => subtitle::ass::YCbCrMatrix::FCCPC,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => subtitle::ass::YCbCrMatrix::FccTv,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => subtitle::ass::YCbCrMatrix::FccPc,
 
                 // Honestly, it's debatable if we should even support tracks
                 // that use a matrix other than `NONE`.

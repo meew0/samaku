@@ -74,7 +74,7 @@ impl OpaqueTrack {
         self.internal
             .events()
             .iter()
-            .map(|raw_event| ass::raw_event_to_sline(raw_event))
+            .map(ass::raw_event_to_sline)
             .collect::<Vec<_>>()
     }
 
@@ -82,7 +82,7 @@ impl OpaqueTrack {
         self.internal
             .styles()
             .iter()
-            .map(|raw_style| ass::style_from_raw(raw_style))
+            .map(ass::style_from_raw)
             .collect::<Vec<_>>()
     }
 }

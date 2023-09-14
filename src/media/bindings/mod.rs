@@ -5,7 +5,7 @@ pub mod bestsource;
 pub mod vapoursynth;
 
 pub fn c_string<T: Into<Vec<u8>>>(rust_str: T) -> CString {
-    std::ffi::CString::new(rust_str).unwrap()
+    CString::new(rust_str).unwrap()
 }
 
 pub fn path_to_cstring<P: AsRef<Path>>(p: P) -> CString {

@@ -87,9 +87,9 @@ impl Samaku {
 }
 
 impl Application for Samaku {
+    type Executor = executor::Default;
     type Message = message::Message;
     type Theme = iced::Theme;
-    type Executor = executor::Default;
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
@@ -120,10 +120,6 @@ impl Application for Samaku {
 
     fn title(&self) -> String {
         String::from("samaku")
-    }
-
-    fn theme(&self) -> Self::Theme {
-        style::samaku_theme()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -168,7 +164,7 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SelectVideoFile => {
-                return iced::Command::perform(
+                return Command::perform(
                     rfd::AsyncFileDialog::new().pick_file(),
                     Self::Message::map_option(|handle: rfd::FileHandle| {
                         Self::Message::VideoFileSelected(handle.path().to_path_buf())
@@ -183,7 +179,7 @@ impl Application for Samaku {
                 self.workers.emit_playback_step();
             }
             Self::Message::SelectAudioFile => {
-                return iced::Command::perform(
+                return Command::perform(
                     rfd::AsyncFileDialog::new().pick_file(),
                     Self::Message::map_option(|handle: rfd::FileHandle| {
                         Self::Message::AudioFileSelected(handle.path().to_path_buf())
@@ -205,7 +201,7 @@ impl Application for Samaku {
                             None => None,
                         }
                     };
-                    return iced::Command::perform(
+                    return Command::perform(
                         future,
                         Self::Message::map_option(|content| {
                             Self::Message::SubtitleFileRead(content)
@@ -254,33 +250,6 @@ impl Application for Samaku {
         Command::none()
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
-        let events = subscription::events_with(|event, status| {
-            if let event::Status::Captured = status {
-                return None;
-            }
-
-            match event {
-                Event::Keyboard(iced::keyboard::Event::KeyPressed {
-                    modifiers,
-                    key_code,
-                }) => keyboard::handle_key_press(modifiers, key_code),
-                _ => None,
-            }
-        });
-
-        use iced::futures::StreamExt;
-        let worker_messages = subscription::unfold(
-            std::any::TypeId::of::<workers::Workers>(),
-            self.workers.receiver.take(),
-            move |mut receiver| async move {
-                let message = receiver.as_mut().unwrap().next().await.unwrap();
-                (message, receiver)
-            },
-        );
-
-        Subscription::batch(vec![events, worker_messages])
-    }
     fn view(&self) -> Element<Self::Message> {
         let focus = self.focus;
         // let total_panes = self.panes.len();
@@ -318,5 +287,36 @@ impl Application for Samaku {
             .height(Length::Fill)
             .padding(5)
             .into()
+    }
+
+    fn theme(&self) -> Self::Theme {
+        style::samaku_theme()
+    }
+    fn subscription(&self) -> Subscription<Self::Message> {
+        let events = subscription::events_with(|event, status| {
+            if let event::Status::Captured = status {
+                return None;
+            }
+
+            match event {
+                Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                    modifiers,
+                    key_code,
+                }) => keyboard::handle_key_press(modifiers, key_code),
+                _ => None,
+            }
+        });
+
+        use iced::futures::StreamExt;
+        let worker_messages = subscription::unfold(
+            std::any::TypeId::of::<workers::Workers>(),
+            self.workers.receiver.take(),
+            move |mut receiver| async move {
+                let message = receiver.as_mut().unwrap().next().await.unwrap();
+                (message, receiver)
+            },
+        );
+
+        Subscription::batch(vec![events, worker_messages])
     }
 }

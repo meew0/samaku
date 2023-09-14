@@ -75,7 +75,7 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
 
     fn header(
         &'b self,
-        col_index: usize,
+        _col_index: usize,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
         iced::widget::container(iced::widget::text(format!("{}", self.field)))
             .height(24)
@@ -85,7 +85,7 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
 
     fn cell(
         &'b self,
-        col_index: usize,
+        _col_index: usize,
         row_index: usize,
         row: &'b Self::Row,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
@@ -95,7 +95,7 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
                 .into(),
             ColumnField::Start => iced::widget::text(format!("{}", row.start.0)).into(),
             ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
-            ColumnField::Text => iced::widget::text(format!("{}", row.text)).into(),
+            ColumnField::Text => iced::widget::text(row.text.to_string()).into(),
         };
         iced::widget::container(cell_content)
             .height(24)
@@ -167,5 +167,5 @@ pub fn update(
         }
     }
 
-    return iced::Command::none();
+    iced::Command::none()
 }

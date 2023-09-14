@@ -6,7 +6,7 @@ use super::bindings::bestsource;
 
 pub struct Audio {
     source: bestsource::BestAudioSource,
-    pub properties: bestsource::AudioProperties,
+    pub properties: AudioProperties,
 }
 
 impl Audio {

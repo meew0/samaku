@@ -8,8 +8,6 @@ use iced::{ContentFit, Element, Length, Rectangle, Size, Vector};
 
 use std::hash::Hash;
 
-pub use image::Handle;
-
 #[derive(Debug)]
 pub struct StackedImage<H> {
     pub handle: H,

@@ -127,13 +127,10 @@ impl Alignment {
         };
 
         match vertical_opt {
-            Some(vertical) => match horizontal_opt {
-                Some(horizontal) => Some(Self {
+            Some(vertical) => horizontal_opt.map(|horizontal| Self {
                     vertical,
                     horizontal,
                 }),
-                None => None,
-            },
             None => None,
         }
     }
@@ -294,7 +291,7 @@ impl SlineTrack {
 
         self.slines
             .iter()
-            .map(|sline| self::compile::trivial(sline, &mut counter))
+            .map(|sline| compile::trivial(sline, &mut counter))
             .collect()
     }
 }

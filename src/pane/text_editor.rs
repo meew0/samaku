@@ -1,17 +1,9 @@
-use iced::advanced::Widget;
-
 use crate::message;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct State {}
 
-impl Default for State {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-pub fn view<'a>(global_state: &'a crate::Samaku, pane_state: &'a State) -> super::PaneView<'a> {
+pub fn view<'a>(global_state: &'a crate::Samaku, _editor_state: &'a State) -> super::PaneView<'a> {
     let content: iced::Element<message::Message> = match global_state.active_sline() {
         Some(active_sline) => iced::widget::responsive(|size| {
             iced::widget::text_input("Enter subtitle text...", &active_sline.text)
@@ -36,12 +28,8 @@ pub fn view<'a>(global_state: &'a crate::Samaku, pane_state: &'a State) -> super
 }
 
 pub fn update(
-    grid_state: &mut State,
-    pane_message: message::PaneMessage,
+    _editor_state: &mut State,
+    _pane_message: message::PaneMessage,
 ) -> iced::Command<message::Message> {
-    match pane_message {
-        _ => (),
-    }
-
-    return iced::Command::none();
+    iced::Command::none()
 }
