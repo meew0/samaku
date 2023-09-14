@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-use crate::message::PaneMessage;
 use crate::{message, subtitle};
 
 #[derive(Debug, Clone)]
@@ -137,22 +136,24 @@ pub fn update(
     pane_message: message::PaneMessage,
 ) -> iced::Command<message::Message> {
     match pane_message {
-        PaneMessage::GridSyncHeader(offset) => {
+        message::PaneMessage::GridSyncHeader(offset) => {
             return iced::widget::scrollable::scroll_to(
                 grid_state.header_scrollable_id.clone(),
                 offset,
             );
         }
-        PaneMessage::GridColumnResizing(index, offset) => {
+        message::PaneMessage::GridColumnResizing(index, offset) => {
             if let Some(column) = grid_state.columns.get_mut(index) {
                 column.resize_offset = Some(offset);
             }
         }
-        PaneMessage::GridColumnResized => grid_state.columns.iter_mut().for_each(|column| {
-            if let Some(offset) = column.resize_offset.take() {
-                column.width += offset;
-            }
-        }),
+        message::PaneMessage::GridColumnResized => {
+            grid_state.columns.iter_mut().for_each(|column| {
+                if let Some(offset) = column.resize_offset.take() {
+                    column.width += offset;
+                }
+            })
+        }
     }
 
     return iced::Command::none();
