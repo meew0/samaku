@@ -1,20 +1,22 @@
 #![feature(int_roundings)]
 
-mod keyboard;
-mod media;
-mod message;
-mod model;
-mod pane;
-mod theme;
-mod view;
-mod workers;
-
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
+
+mod keyboard;
+mod media;
+mod message;
+mod model;
+mod pane;
+mod subtitle;
+mod theme;
+mod view;
+mod workers;
 
 pub fn main() -> iced::Result {
     Samaku::run(Settings::default())
@@ -25,6 +27,7 @@ struct Samaku {
     workers: workers::Workers,
 
     shared: SharedState,
+    view: RefCell<ViewState>,
 
     /// The current state of the global pane grid.
     /// Includes all state for the individual panes themselves.
@@ -37,7 +40,7 @@ struct Samaku {
     pub video_metadata: Option<media::VideoMetadata>,
 
     /// Currently loaded subtitles, if present.
-    pub subtitles: Option<media::Subtitles>,
+    pub subtitles: subtitle::SlineTrack,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -56,6 +59,11 @@ struct SharedState {
     /// Authoritative playback position and state.
     /// Set this to seek/pause/resume etc.
     pub playback_state: Arc<model::playback::PlaybackState>,
+}
+
+/// More-or-less temporary data, that needs to be mutable within View functions.
+struct ViewState {
+    pub subtitle_renderer: media::subtitle::Renderer,
 }
 
 impl Application for Samaku {
@@ -79,8 +87,11 @@ impl Application for Samaku {
                 workers: workers::Workers::spawn_all(&shared_state),
                 actual_frame: None,
                 video_metadata: None,
-                subtitles: None,
+                subtitles: subtitle::SlineTrack::default(),
                 shared: shared_state,
+                view: RefCell::new(ViewState {
+                    subtitle_renderer: media::subtitle::Renderer::new(),
+                }),
             },
             Command::none(),
         )
@@ -182,13 +193,8 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SubtitleFileRead(content) => {
-                if let Some(video_metadata) = &self.video_metadata {
-                    self.subtitles = Some(media::Subtitles::load_utf8(
-                        content,
-                        video_metadata.width,
-                        video_metadata.height,
-                    ));
-                }
+                let ass = media::subtitle::OpaqueTrack::parse(content);
+                self.subtitles = subtitle::SlineTrack::wrap(ass.slines(), ass.styles());
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
                 println!("frame {} available", new_frame);
@@ -249,7 +255,6 @@ impl Application for Samaku {
 
         Subscription::batch(vec![events, worker_messages])
     }
-
     fn view(&self) -> Element<Self::Message> {
         // let focus = self.focus;
         // let total_panes = self.panes.len();

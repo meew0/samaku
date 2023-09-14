@@ -1,43 +1,91 @@
-use crate::view;
+use crate::{subtitle, view};
 
 use super::bindings::{ass, c_string};
 
-pub struct Subtitles {
-    renderer: ass::Renderer,
-    track: ass::Track,
+pub struct OpaqueTrack {
+    internal: ass::Track,
 }
 
-pub fn init_renderer(width: i32, height: i32) -> ass::Renderer {
-    let mut renderer = ass::LIBRARY.renderer_init().unwrap();
-    renderer.set_frame_size(width, height);
-    renderer.set_storage_size(width, height);
-    renderer.set_fonts(
-        Some(c_string(
-            "/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf",
-        )),
-        c_string("Alegreya Sans"),
-        ass::FontProvider::Autodetect,
-        None,
-        false,
-    );
-    renderer
-}
-
-impl Subtitles {
-    pub fn load_utf8(data: String, width: i32, height: i32) -> Subtitles {
+/// Represents an opaque ASS subtitle track.
+/// Can be converted as a whole to and from some other formats,
+/// but does not provide a way to inspect or modify its interior.
+impl OpaqueTrack {
+    /// Parse subtitles represented in the text-based ASS format.
+    /// Beyond the individual events, the string must also contain
+    /// all the metadata libass needs to correctly parse them.
+    pub fn parse(data: String) -> OpaqueTrack {
         let track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
 
-        Subtitles {
-            track,
-            renderer: init_renderer(width, height),
-        }
+        OpaqueTrack { internal: track }
     }
 
-    pub fn render_onto(
-        &self,
+    /// Convert data from our representation into libass'.
+    pub fn from_events_and_styles<'a, 'b>(
+        events: impl IntoIterator<Item = &'a subtitle::ass::Event<'a>>,
+        styles: impl IntoIterator<Item = &'b subtitle::Style>,
+    ) -> OpaqueTrack {
+        let mut track = ass::LIBRARY
+            .new_track()
+            .expect("failed to construct new track");
+
+        for event in events.into_iter() {
+            track.alloc_event();
+            *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
+        }
+
+        for style in styles.into_iter() {
+            track.alloc_style();
+            *track.styles_mut().last_mut().unwrap() = ass::style_to_raw(style);
+        }
+
+        OpaqueTrack { internal: track }
+    }
+
+    pub fn num_events(&self) -> usize {
+        self.internal.events().len()
+    }
+
+    pub fn num_styles(&self) -> usize {
+        self.internal.styles().len()
+    }
+
+    pub fn slines(&self) -> Vec<subtitle::Sline> {
+        self.internal
+            .events()
+            .iter()
+            .map(|raw_event| ass::raw_event_to_sline(raw_event))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn styles(&self) -> Vec<subtitle::Style> {
+        self.internal
+            .styles()
+            .iter()
+            .map(|raw_style| ass::style_from_raw(raw_style))
+            .collect::<Vec<_>>()
+    }
+}
+
+#[derive(Debug)]
+pub struct Renderer {
+    internal: ass::Renderer,
+}
+
+impl Renderer {
+    pub fn new() -> Renderer {
+        let mut renderer = ass::LIBRARY.renderer_init().unwrap();
+        renderer_set_fonts_default(&mut renderer);
+        Renderer { internal: renderer }
+    }
+
+    pub fn render_subtitles_onto_base(
+        &mut self,
+        subtitles: OpaqueTrack,
         base: iced::widget::image::Handle,
         frame: i32,
         frame_rate: super::video::FrameRate,
+        frame_size: subtitle::Resolution,
+        storage_size: subtitle::Resolution,
     ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
         let now: i64 = ass::frame_to_ms(frame, frame_rate.into());
 
@@ -48,14 +96,31 @@ impl Subtitles {
             y: 0,
         });
 
-        self.renderer.render_frame(&self.track, now, &mut |image| {
-            result.push(ass_image_to_iced(image))
-        });
+        self.internal.set_frame_size(frame_size.x, frame_size.y);
+        self.internal
+            .set_storage_size(storage_size.x, storage_size.y);
+
+        self.internal
+            .render_frame(&subtitles.internal, now, &mut |image| {
+                result.push(ass_image_to_iced(image))
+            });
 
         println!("Rendered {} subtitle images", result.len() - 1);
 
         result
     }
+}
+
+pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
+    renderer.set_fonts(
+        Some(c_string(
+            "/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf",
+        )),
+        c_string("Alegreya Sans"),
+        ass::FontProvider::Autodetect,
+        None,
+        false,
+    );
 }
 
 pub fn ass_image_to_iced(
@@ -69,12 +134,13 @@ pub fn ass_image_to_iced(
     // Potential optimisation: allocate as 32-bit, transmute to 8-bit later
     let mut out = vec![0; out_len];
 
-    let color: u32 = ass_image.metadata.color;
-    let r: u8 = ((color & 0xff000000) >> 24).try_into().unwrap();
-    let g: u8 = ((color & 0x00ff0000) >> 16).try_into().unwrap();
-    let b: u8 = ((color & 0x0000ff00) >> 8).try_into().unwrap();
-    let transparency: u8 = (color & 0x000000ff).try_into().unwrap();
-    let a: u16 = 255 - transparency as u16;
+    let subtitle::Colour {
+        red,
+        green,
+        blue,
+        transparency,
+    } = subtitle::Colour::unpack(ass_image.metadata.color);
+    let alpha: u16 = 255 - transparency as u16;
 
     for row in 0..height {
         let row_read_start = row * ass_image.metadata.stride as usize;
@@ -84,10 +150,10 @@ pub fn ass_image_to_iced(
         let row_write_ptr = &mut out[row_write_start..(row_write_start + width * 4)];
 
         for col in 0..width {
-            row_write_ptr[col * 4] = r;
-            row_write_ptr[col * 4 + 1] = g;
-            row_write_ptr[col * 4 + 2] = b;
-            row_write_ptr[col * 4 + 3] = ((a * row_read_ptr[col] as u16) >> 8) as u8;
+            row_write_ptr[col * 4] = red;
+            row_write_ptr[col * 4 + 1] = green;
+            row_write_ptr[col * 4 + 2] = blue;
+            row_write_ptr[col * 4 + 3] = ((alpha * row_read_ptr[col] as u16) >> 8) as u8;
         }
     }
 
