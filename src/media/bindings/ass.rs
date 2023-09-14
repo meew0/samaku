@@ -18,11 +18,20 @@ pub fn frame_to_ms(frame: i32, fps: f64) -> i64 {
     (ass_seconds * 1000.0) as i64
 }
 
-fn string_from_libass(ptr: *const i8) -> String {
-    unsafe { CStr::from_ptr(ptr) }
-        .to_str()
-        .expect("text data returned from libass should be UTF-8")
-        .to_owned()
+unsafe fn str_from_libass<'a>(ptr: *const i8) -> Option<&'a str> {
+    if ptr.is_null() {
+        return None;
+    }
+
+    Some(
+        unsafe { CStr::from_ptr(ptr) }
+            .to_str()
+            .expect("text data returned from libass should be UTF-8"),
+    )
+}
+
+fn string_from_libass(ptr: *const i8) -> Option<String> {
+    unsafe { str_from_libass(ptr) }.map(|str| str.to_owned())
 }
 
 /// Allocate an empty string of required length with libc's malloc specifically,
@@ -229,7 +238,7 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
             right: raw_event.MarginR,
             vertical: raw_event.MarginV,
         },
-        text: string_from_libass(raw_event.Text),
+        text: string_from_libass(raw_event.Text).expect("event text should never be null"),
     }
 }
 
@@ -252,8 +261,9 @@ pub fn event_to_raw(event: &subtitle::ass::Event) -> RawEvent {
 
 pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
     subtitle::Style {
-        name: string_from_libass(raw_style.Name),
-        font_name: string_from_libass(raw_style.FontName),
+        name: string_from_libass(raw_style.Name).expect("style name should never be null"),
+        font_name: string_from_libass(raw_style.FontName)
+            .expect("style font name should never be null"),
         font_size: raw_style.FontSize,
         primary_colour: subtitle::Colour::unpack(raw_style.PrimaryColour),
         secondary_colour: subtitle::Colour::unpack(raw_style.SecondaryColour),
@@ -351,6 +361,42 @@ impl Track {
     pub fn alloc_style(&mut self) {
         unsafe {
             libass::ass_alloc_style(self.track);
+        }
+    }
+
+    pub fn header(&self) -> subtitle::ass::TrackHeader {
+        subtitle::ass::TrackHeader {
+            play_res: subtitle::Resolution {
+                x: unsafe { (*self.track).PlayResX },
+                y: unsafe { (*self.track).PlayResY },
+            },
+            timer: unsafe { (*self.track).Timer },
+            wrap_style: subtitle::WrapStyle::from(unsafe { (*self.track).WrapStyle }),
+            scaled_border_and_shadow: unsafe { (*self.track).ScaledBorderAndShadow } != 0,
+            kerning: unsafe { (*self.track).Kerning } != 0,
+            language: unsafe { str_from_libass((*self.track).Language) },
+            ycbcr_matrix: match unsafe { (*self.track).YCbCrMatrix } {
+                libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::ass::YCbCrMatrix::Default,
+                libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::ass::YCbCrMatrix::Unknown,
+                libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::ass::YCbCrMatrix::None,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::ass::YCbCrMatrix::BT601TV,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::ass::YCbCrMatrix::BT601PC,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::ass::YCbCrMatrix::BT709TV,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => subtitle::ass::YCbCrMatrix::BT709PC,
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => {
+                    subtitle::ass::YCbCrMatrix::SMTPE240MTV
+                }
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => {
+                    subtitle::ass::YCbCrMatrix::SMTPE240MPC
+                }
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => subtitle::ass::YCbCrMatrix::FCCTV,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => subtitle::ass::YCbCrMatrix::FCCPC,
+
+                // Honestly, it's debatable if we should even support tracks
+                // that use a matrix other than `NONE`.
+                _ => subtitle::ass::YCbCrMatrix::None,
+            },
+            name: unsafe { str_from_libass((*self.track).name) },
         }
     }
 

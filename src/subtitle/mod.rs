@@ -210,6 +210,27 @@ impl From<i32> for BorderStyle {
     }
 }
 
+/// See http://www.tcax.org/docs/ass-specs.htm
+#[derive(Debug, Clone, Copy)]
+pub enum WrapStyle {
+    SmartEven = 0,
+    EndOfLine = 1,
+    None = 2,
+    SmartLower = 3,
+}
+
+impl From<i32> for WrapStyle {
+    fn from(value: i32) -> Self {
+        match value {
+            x if x == Self::SmartEven as i32 => Self::SmartEven,
+            x if x == Self::EndOfLine as i32 => Self::EndOfLine,
+            x if x == Self::None as i32 => Self::None,
+            x if x == Self::SmartLower as i32 => Self::SmartLower,
+            _ => Self::SmartEven,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Style {
     pub name: String,
@@ -252,13 +273,10 @@ pub struct Style {
 pub struct SlineTrack {
     pub slines: Vec<Sline>,
     pub styles: Vec<Style>,
+    pub playback_resolution: Resolution,
 }
 
 impl SlineTrack {
-    pub fn wrap(slines: Vec<Sline>, styles: Vec<Style>) -> Self {
-        Self { slines, styles }
-    }
-
     /// Returns true if and only if there are no slines in this track
     /// (there may still be some styles)
     pub fn is_empty(&self) -> bool {
@@ -286,6 +304,10 @@ impl Default for SlineTrack {
         Self {
             slines: vec![],
             styles: vec![],
+
+            // This is not the default libass uses (which is 324x288),
+            // but it seems like a reasonable default for a modern age.
+            playback_resolution: Resolution { x: 1920, y: 1080 },
         }
     }
 }

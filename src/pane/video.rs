@@ -25,9 +25,9 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
                         global_state
                             .subtitles
                             .compile(0, 1000000, video_metadata.frame_rate); // TODO give actual frame range values here
-                    let ass = media::subtitle::OpaqueTrack::from_events_and_styles(
+                    let ass = media::subtitle::OpaqueTrack::from_compiled(
                         &compiled,
-                        &global_state.subtitles.styles,
+                        &global_state.subtitles,
                     );
                     println!(
                         "# events: compiled {}, ass {}; # styles: ass {}",

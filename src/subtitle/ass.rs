@@ -33,21 +33,12 @@ pub struct Event<'a> {
 pub struct TrackHeader<'a> {
     pub play_res: super::Resolution,
     pub timer: f64,
-    pub wrap_style: WrapStyle,
+    pub wrap_style: super::WrapStyle,
     pub scaled_border_and_shadow: bool,
     pub kerning: bool,
     pub language: Option<&'a str>,
     pub ycbcr_matrix: YCbCrMatrix,
     pub name: Option<&'a str>,
-}
-
-/// See http://www.tcax.org/docs/ass-specs.htm
-#[derive(Debug, Clone, Copy)]
-pub enum WrapStyle {
-    SmartEven = 0,
-    EndOfLine = 1,
-    None = 2,
-    SmartLower = 3,
 }
 
 /// See https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152

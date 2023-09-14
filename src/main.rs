@@ -194,7 +194,7 @@ impl Application for Samaku {
             }
             Self::Message::SubtitleFileRead(content) => {
                 let ass = media::subtitle::OpaqueTrack::parse(content);
-                self.subtitles = subtitle::SlineTrack::wrap(ass.slines(), ass.styles());
+                self.subtitles = ass.to_sline_track();
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
                 println!("frame {} available", new_frame);

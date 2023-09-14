@@ -20,25 +20,46 @@ impl OpaqueTrack {
     }
 
     /// Convert data from our representation into libass'.
-    pub fn from_events_and_styles<'a, 'b>(
+    pub fn from_compiled<'a>(
         events: impl IntoIterator<Item = &'a subtitle::ass::Event<'a>>,
-        styles: impl IntoIterator<Item = &'b subtitle::Style>,
+        metadata: &subtitle::SlineTrack,
     ) -> OpaqueTrack {
         let mut track = ass::LIBRARY
             .new_track()
             .expect("failed to construct new track");
+
+        track.set_header(&subtitle::ass::TrackHeader {
+            play_res: metadata.playback_resolution,
+            timer: 0.0,
+            wrap_style: subtitle::WrapStyle::SmartEven,
+            scaled_border_and_shadow: true,
+            kerning: false,
+            language: None,
+            ycbcr_matrix: subtitle::ass::YCbCrMatrix::None,
+            name: None,
+        });
 
         for event in events.into_iter() {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
         }
 
-        for style in styles.into_iter() {
+        for style in metadata.styles.iter() {
             track.alloc_style();
             *track.styles_mut().last_mut().unwrap() = ass::style_to_raw(style);
         }
 
         OpaqueTrack { internal: track }
+    }
+
+    pub fn to_sline_track(&self) -> subtitle::SlineTrack {
+        let header = self.internal.header();
+
+        subtitle::SlineTrack {
+            slines: self.slines(),
+            styles: self.styles(),
+            playback_resolution: header.play_res,
+        }
     }
 
     pub fn num_events(&self) -> usize {
@@ -49,7 +70,7 @@ impl OpaqueTrack {
         self.internal.styles().len()
     }
 
-    pub fn slines(&self) -> Vec<subtitle::Sline> {
+    fn slines(&self) -> Vec<subtitle::Sline> {
         self.internal
             .events()
             .iter()
@@ -57,7 +78,7 @@ impl OpaqueTrack {
             .collect::<Vec<_>>()
     }
 
-    pub fn styles(&self) -> Vec<subtitle::Style> {
+    fn styles(&self) -> Vec<subtitle::Style> {
         self.internal
             .styles()
             .iter()
