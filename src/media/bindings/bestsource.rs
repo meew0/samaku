@@ -31,13 +31,16 @@ impl BestAudioSource {
         cache_path: P2,
         drc_scale: f64,
     ) -> BestAudioSource {
+        let source_file_c = super::path_to_cstring(source_file);
+        let cache_path_c = super::path_to_cstring(cache_path);
+
         let w = unsafe {
             bs::BestAudioSource_new(
-                super::path_to_cstring(source_file).as_ptr(),
+                source_file_c.as_ptr(),
                 track,
                 ajust_delay,
                 threads,
-                super::path_to_cstring(cache_path).as_ptr(),
+                cache_path_c.as_ptr(),
                 drc_scale,
             )
         };

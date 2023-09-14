@@ -1,8 +1,8 @@
 use core::slice;
 
-use super::bindings::bestsource;
-
 pub use bestsource::AudioProperties;
+
+use super::bindings::bestsource;
 
 pub struct Audio {
     source: bestsource::BestAudioSource,
