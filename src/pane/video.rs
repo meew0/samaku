@@ -57,7 +57,7 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
     };
 
     super::PaneView {
-        title: iced::widget::text("Video pane").into(),
+        title: iced::widget::text("Video").into(),
         content: iced::widget::container(scroll)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
@@ -67,6 +67,13 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
     }
 }
 
-pub fn update(_video_state: &mut State, pane_message: message::PaneMessage) {
-    match pane_message {}
+pub fn update(
+    _video_state: &mut State,
+    pane_message: message::PaneMessage,
+) -> iced::Command<message::Message> {
+    match pane_message {
+        _ => (),
+    }
+
+    iced::Command::none()
 }

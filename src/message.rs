@@ -57,4 +57,8 @@ impl Message {
 }
 
 #[derive(Debug, Clone)]
-pub enum PaneMessage {}
+pub enum PaneMessage {
+    GridSyncHeader(iced::widget::scrollable::AbsoluteOffset),
+    GridColumnResizing(usize, f32),
+    GridColumnResized,
+}
