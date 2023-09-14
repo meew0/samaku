@@ -2,7 +2,7 @@
 
 A subtitle editor, eventually, maybe.
 
-![Screenshot](https://github.com/meew0/samaku/blob/master/screenshot.jpg?raw=true)
+![Screenshot](https://github.com/meew0/samaku/blob/master/screenshot.png?raw=true)
 
 For a long time I have had a vision of a subtitle editor that allowed for non-destructive typesetting, where you could
 create complex signs using a Blender-style node editor instead of painfully re-running Lua macros over and over. I have
