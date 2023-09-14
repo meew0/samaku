@@ -8,6 +8,7 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 
+mod font;
 mod keyboard;
 mod media;
 mod message;
@@ -19,7 +20,20 @@ mod view;
 mod workers;
 
 pub fn main() -> iced::Result {
-    Samaku::run(Settings::default())
+    Samaku::run(Settings {
+        id: Some("samaku".to_owned()),
+        window: iced::window::Settings::default(),
+        flags: (),
+        default_font: iced::Font {
+            family: iced::font::Family::Name("Barlow"),
+            weight: iced::font::Weight::Normal,
+            stretch: iced::font::Stretch::Normal,
+            monospaced: false,
+        },
+        default_text_size: 16.0,
+        antialiasing: false,
+        exit_on_close_request: true,
+    })
 }
 
 /// Global application state.
@@ -114,7 +128,7 @@ impl Application for Samaku {
                     subtitle_renderer: media::subtitle::Renderer::new(),
                 }),
             },
-            Command::none(),
+            iced::font::load(font::BARLOW).map(|_| message::Message::None),
         )
     }
 
