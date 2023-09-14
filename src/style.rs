@@ -18,7 +18,7 @@ const SAMAKU_TEXT: Color = Color::from_rgb(
     0xee as f32 / 255.0,
 );
 
-const SAMAKU_PRIMARY: Color = Color::from_rgb(
+pub const SAMAKU_PRIMARY: Color = Color::from_rgb(
     0xff as f32 / 255.0,
     0xb6 as f32 / 255.0,
     0x0a as f32 / 255.0,

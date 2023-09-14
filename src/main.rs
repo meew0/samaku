@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::{event, executor, subscription, Event};
+use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 
 mod keyboard;
@@ -296,7 +296,18 @@ impl Application for Samaku {
             .on_drag(Self::Message::DragPane)
             .on_resize(0, Self::Message::ResizePane);
 
-        container(pane_grid)
+        let title_row = iced::widget::row![
+            iced::widget::svg(iced::widget::svg::Handle::from_memory(resources::LOGO))
+                .width(30)
+                .height(30),
+            iced::widget::text("samaku")
+                .size(25)
+                .style(iced::theme::Text::Color(style::SAMAKU_PRIMARY))
+        ]
+        .spacing(5)
+        .align_items(Alignment::Center);
+
+        container(iced::widget::column![title_row, pane_grid].spacing(10))
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(5)
