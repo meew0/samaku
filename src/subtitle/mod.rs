@@ -128,9 +128,9 @@ impl Alignment {
 
         match vertical_opt {
             Some(vertical) => horizontal_opt.map(|horizontal| Self {
-                    vertical,
-                    horizontal,
-                }),
+                vertical,
+                horizontal,
+            }),
             None => None,
         }
     }
