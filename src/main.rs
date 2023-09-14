@@ -8,12 +8,12 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 
-mod font;
 mod keyboard;
 mod media;
 mod message;
 mod model;
 mod pane;
+mod resources;
 mod style;
 mod subtitle;
 mod view;
@@ -128,7 +128,7 @@ impl Application for Samaku {
                     subtitle_renderer: media::subtitle::Renderer::new(),
                 }),
             },
-            iced::font::load(font::BARLOW).map(|_| message::Message::None),
+            iced::font::load(resources::BARLOW).map(|_| message::Message::None),
         )
     }
 
