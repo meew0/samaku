@@ -13,8 +13,8 @@ mod media;
 mod message;
 mod model;
 mod pane;
+mod style;
 mod subtitle;
-mod theme;
 mod view;
 mod workers;
 
@@ -102,7 +102,7 @@ impl Application for Samaku {
     }
 
     fn theme(&self) -> Self::Theme {
-        theme::samaku_theme()
+        style::samaku_theme()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -256,19 +256,33 @@ impl Application for Samaku {
         Subscription::batch(vec![events, worker_messages])
     }
     fn view(&self) -> Element<Self::Message> {
-        // let focus = self.focus;
+        let focus = self.focus;
         // let total_panes = self.panes.len();
 
         let pane_grid =
             PaneGrid::new::<pane::PaneState>(&self.panes, |pane, pane_state, _is_maximized| {
-                // let is_focused = focus == Some(pane);
+                let is_focused = focus == Some(pane);
 
                 let pane_view = pane::dispatch_view(pane, self, pane_state);
-                let title_bar = pane_grid::TitleBar::new(pane_view.title);
-                pane_grid::Content::new(pane_view.content).title_bar(title_bar)
+                let title_bar =
+                    pane_grid::TitleBar::new(pane_view.title)
+                        .padding(5)
+                        .style(if is_focused {
+                            style::title_bar_focused
+                        } else {
+                            style::title_bar_active
+                        });
+                pane_grid::Content::new(pane_view.content)
+                    .title_bar(title_bar)
+                    .style(if is_focused {
+                        style::pane_focused
+                    } else {
+                        style::pane_active
+                    })
             })
             .width(Length::Fill)
             .height(Length::Fill)
+            .spacing(5)
             .on_click(Self::Message::FocusPane)
             .on_drag(Self::Message::DragPane)
             .on_resize(0, Self::Message::ResizePane);
@@ -276,6 +290,7 @@ impl Application for Samaku {
         container(pane_grid)
             .width(Length::Fill)
             .height(Length::Fill)
+            .padding(5)
             .into()
     }
 }
