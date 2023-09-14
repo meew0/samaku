@@ -31,7 +31,7 @@ impl BestAudioSource {
         cache_path: P2,
         drc_scale: f64,
     ) -> BestAudioSource {
-        let internal: *mut c_void = unsafe {
+        let w = unsafe {
             bs::BestAudioSource_new(
                 super::path_to_cstring(source_file).as_ptr(),
                 track,
@@ -41,37 +41,63 @@ impl BestAudioSource {
                 drc_scale,
             )
         };
-        BestAudioSource { internal }
+
+        if w.error > 0 {
+            panic!("error while constructing BestAudioSource");
+        }
+
+        if w.value.is_null() {
+            panic!("got null pointer from BestAudioSource constructor");
+        }
+
+        BestAudioSource { internal: w.value }
     }
 
     pub fn get_track(&self) -> i32 {
-        unsafe { bs::BestAudioSource_GetTrack(self.internal) }
+        let w = unsafe { bs::BestAudioSource_GetTrack(self.internal) };
+        if w.error > 0 {
+            panic!("error in BestAudioSource::GetTrack");
+        }
+        w.value
     }
 
     pub fn set_max_cache_size(&mut self, bytes: usize) {
-        unsafe {
-            bs::BestAudioSource_SetMaxCacheSize(self.internal, bytes);
+        let err = unsafe { bs::BestAudioSource_SetMaxCacheSize(self.internal, bytes) };
+        if err > 0 {
+            panic!("error in BestAudioSource::SetMaxCacheSize");
         }
     }
 
     pub fn set_seek_pre_roll(&mut self, samples: i64) {
-        unsafe {
-            bs::BestAudioSource_SetSeekPreRoll(self.internal, samples);
+        let err = unsafe { bs::BestAudioSource_SetSeekPreRoll(self.internal, samples) };
+        if err > 0 {
+            panic!("error in BestAudioSource::SetSeekPreRoll");
         }
     }
 
     pub fn get_relative_start_time(&self, track: i32) -> f64 {
-        unsafe { bs::BestAudioSource_GetRelativeStartTime(self.internal, track) }
+        let w = unsafe { bs::BestAudioSource_GetRelativeStartTime(self.internal, track) };
+        if w.error > 0 {
+            panic!("error in BestAudioSource::GetRelativeStartTime");
+        }
+        w.value
     }
 
     // This is not declared as const in the c++ header file,
     // so I'm defining it as requiring a &mut self...
     pub fn get_exact_duration(&mut self) -> bool {
-        unsafe { bs::BestAudioSource_GetExactDuration(self.internal) != 0 }
+        let w = unsafe { bs::BestAudioSource_GetExactDuration(self.internal) };
+        if w.error > 0 {
+            panic!("error in BestAudioSource::GetExactDuration");
+        }
+        w.value != 0
     }
 
     pub fn get_audio_properties(&self) -> AudioProperties {
         let bas_ap = unsafe { bs::BestAudioSource_GetAudioProperties(self.internal) };
+        if bas_ap.error > 0 {
+            panic!("error in BestAudioSource::GetAudioProperties");
+        }
         AudioProperties {
             is_float: bas_ap.IsFloat != 0,
             bytes_per_sample: bas_ap.BytesPerSample,
@@ -87,14 +113,20 @@ impl BestAudioSource {
     // TODO: get_planar_audio
 
     pub fn get_packed_audio(&mut self, slice: &mut [u8], start: i64, count: i64) {
-        unsafe {
+        let err = unsafe {
             bs::BestAudioSource_GetPackedAudio(self.internal, slice.as_mut_ptr(), start, count)
         };
+        if err > 0 {
+            panic!("error in BestAudioSource::GetPackedAudio");
+        }
     }
 }
 
 impl Drop for BestAudioSource {
     fn drop(&mut self) {
-        unsafe { bs::BestAudioSource_delete(self.internal) }
+        let err = unsafe { bs::BestAudioSource_delete(self.internal) };
+        if err > 0 && !std::thread::panicking() {
+            panic!("error while freeing BestAudioSource");
+        }
     }
 }
