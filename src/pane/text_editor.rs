@@ -17,7 +17,7 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _editor_state: &'a State) -> su
     };
 
     super::PaneView {
-        title: iced::widget::text("Pane title").into(),
+        title: iced::widget::text("Text editor").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
