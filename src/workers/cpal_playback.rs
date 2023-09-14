@@ -28,7 +28,7 @@ pub fn spawn(
     let playback_state = Arc::clone(&shared_state.playback_state);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
-    let handle = thread::spawn(move || {
+    let handle = thread::Builder::new().name("samaku_cpal_playback".to_string()).spawn(move || {
         use cpal::traits::StreamTrait;
         let mut stream_opt: Option<cpal::Stream> = None;
 
@@ -88,9 +88,9 @@ pub fn spawn(
                         {
                             if audio_properties.channels == supported_config.channels().into()
                                 && audio_properties.sample_rate
-                                    >= supported_config.min_sample_rate().0 as i32
+                                >= supported_config.min_sample_rate().0 as i32
                                 && audio_properties.sample_rate
-                                    <= supported_config.max_sample_rate().0 as i32
+                                <= supported_config.max_sample_rate().0 as i32
                                 && sample_format == supported_config.sample_format()
                             {
                                 config_opt =
@@ -101,7 +101,7 @@ pub fn spawn(
                         }
 
                         let config = config_opt.expect(
-                        "Could not find a suitable system audio configuration that matches the loaded audio file",
+                            "Could not find a suitable system audio configuration that matches the loaded audio file",
                         );
 
                         playback_state
@@ -171,7 +171,7 @@ pub fn spawn(
                 Err(_) => return,
             }
         }
-    });
+    }).unwrap();
 
     super::Worker {
         worker_type: super::Type::CpalPlayback,
