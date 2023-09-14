@@ -11,18 +11,20 @@ pub fn view<'a>(self_pane: iced::widget::pane_grid::Pane) -> super::PaneView<'a>
             widget::column![
                     widget::text("Unassigned pane").size(20),
                     "Press F2 to split vertically, F3 to split horizontally, or click one of the buttons below to set the pane's type.",
-                    widget::button("Video").on_press(
-                        message::Message::SetPaneState(
-                            self_pane,
-                            Box::new(super::PaneState::Video(super::video::State::default()))
-                        )
-                    ),
-                    widget::button("Grid").on_press(
-                        message::Message::SetPaneState(
-                            self_pane,
-                            Box::new(super::PaneState::Grid(super::grid::State::default()))
-                        )
-                    ),
+                    widget::row![
+                        widget::button("Video").on_press(
+                            message::Message::SetPaneState(
+                                self_pane,
+                                Box::new(super::PaneState::Video(super::video::State::default()))
+                            )
+                        ),
+                        widget::button("Grid").on_press(
+                            message::Message::SetPaneState(
+                                self_pane,
+                                Box::new(super::PaneState::Grid(super::grid::State::default()))
+                            )
+                        ),
+                    ].spacing(10),
                 ]
                 .spacing(20)
         )
