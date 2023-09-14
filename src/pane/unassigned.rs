@@ -24,6 +24,12 @@ pub fn view<'a>(self_pane: iced::widget::pane_grid::Pane) -> super::PaneView<'a>
                                 Box::new(super::PaneState::Grid(super::grid::State::default()))
                             )
                         ),
+                        widget::button("Text editor").on_press(
+                            message::Message::SetPaneState(
+                                self_pane,
+                                Box::new(super::PaneState::TextEditor(super::text_editor::State::default()))
+                            )
+                        ),
                     ].spacing(10),
                 ]
                 .spacing(20)

@@ -44,6 +44,9 @@ pub enum Message {
     PlaybackAdvanceFrames(i32),
     PlaybackAdvanceSeconds(f64),
     TogglePlayback,
+
+    SelectSline(usize),
+    SetActiveSlineText(String),
 }
 
 impl Message {

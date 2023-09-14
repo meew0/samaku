@@ -1,6 +1,7 @@
 use crate::message;
 
 pub mod grid;
+pub mod text_editor;
 pub mod unassigned;
 pub mod video;
 
@@ -11,6 +12,7 @@ pub enum PaneState {
     Unassigned,
     Video(video::State),
     Grid(grid::State),
+    TextEditor(text_editor::State),
 }
 
 pub struct PaneView<'a> {
@@ -25,8 +27,9 @@ pub fn dispatch_view<'a>(
 ) -> PaneView<'a> {
     match state {
         PaneState::Unassigned => unassigned::view(self_pane),
-        PaneState::Video(video_state) => video::view(global_state, video_state),
-        PaneState::Grid(grid_state) => grid::view(global_state, grid_state),
+        PaneState::Video(local_state) => video::view(global_state, local_state),
+        PaneState::Grid(local_state) => grid::view(global_state, local_state),
+        PaneState::TextEditor(local_state) => text_editor::view(global_state, local_state),
     }
 }
 
@@ -36,7 +39,8 @@ pub fn dispatch_update(
 ) -> iced::Command<message::Message> {
     match state {
         PaneState::Unassigned => iced::Command::none(),
-        PaneState::Video(video_state) => video::update(video_state, pane_message),
-        PaneState::Grid(grid_state) => grid::update(grid_state, pane_message),
+        PaneState::Video(local_state) => video::update(local_state, pane_message),
+        PaneState::Grid(local_state) => grid::update(local_state, pane_message),
+        PaneState::TextEditor(local_state) => text_editor::update(local_state, pane_message),
     }
 }

@@ -16,6 +16,11 @@ impl Default for State {
             body_scrollable_id: iced::widget::scrollable::Id::unique(),
             columns: vec![
                 Column {
+                    field: ColumnField::SelectButton,
+                    width: 100.0,
+                    resize_offset: None,
+                },
+                Column {
                     field: ColumnField::Start,
                     width: 100.0,
                     resize_offset: None,
@@ -44,6 +49,7 @@ pub struct Column {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ColumnField {
+    SelectButton,
     Start,
     Duration,
     Text,
@@ -55,6 +61,7 @@ impl Display for ColumnField {
             f,
             "{}",
             match self {
+                ColumnField::SelectButton => "Select",
                 ColumnField::Start => "Start",
                 ColumnField::Duration => "Duration",
                 ColumnField::Text => "Text",
@@ -82,14 +89,18 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         row_index: usize,
         row: &'b Self::Row,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
-        iced::widget::container(iced::widget::text(match self.field {
-            ColumnField::Start => format!("{}", row.start.0),
-            ColumnField::Duration => format!("{}", row.duration.0),
-            ColumnField::Text => format!("{}", row.text),
-        }))
-        .height(24)
-        .center_y()
-        .into()
+        let cell_content: iced::Element<message::Message> = match self.field {
+            ColumnField::SelectButton => iced::widget::button(" ")
+                .on_press(message::Message::SelectSline(row_index))
+                .into(),
+            ColumnField::Start => iced::widget::text(format!("{}", row.start.0)).into(),
+            ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
+            ColumnField::Text => iced::widget::text(format!("{}", row.text)).into(),
+        };
+        iced::widget::container(cell_content)
+            .height(24)
+            .center_y()
+            .into()
     }
 
     fn width(&self) -> f32 {

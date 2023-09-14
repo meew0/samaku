@@ -42,6 +42,9 @@ struct Samaku {
     /// Currently loaded subtitles, if present.
     pub subtitles: subtitle::SlineTrack,
 
+    /// Index of currently active sline, if one exists.
+    pub active_sline_index: Option<usize>,
+
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
     /// Will be slightly different from the information in
@@ -66,6 +69,23 @@ struct ViewState {
     pub subtitle_renderer: media::subtitle::Renderer,
 }
 
+/// Utility methods for global state
+impl Samaku {
+    pub fn active_sline(&self) -> Option<&subtitle::Sline> {
+        match self.active_sline_index {
+            Some(active_sline_index) => Some(&self.subtitles.slines[active_sline_index]),
+            None => None,
+        }
+    }
+
+    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline> {
+        match self.active_sline_index {
+            Some(active_sline_index) => Some(&mut self.subtitles.slines[active_sline_index]),
+            None => None,
+        }
+    }
+}
+
 impl Application for Samaku {
     type Message = message::Message;
     type Theme = iced::Theme;
@@ -88,6 +108,7 @@ impl Application for Samaku {
                 actual_frame: None,
                 video_metadata: None,
                 subtitles: subtitle::SlineTrack::default(),
+                active_sline_index: None,
                 shared: shared_state,
                 view: RefCell::new(ViewState {
                     subtitle_renderer: media::subtitle::Renderer::new(),
@@ -222,6 +243,12 @@ impl Application for Samaku {
                     .playing
                     .fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
             }
+            Self::Message::SetActiveSlineText(new_text) => {
+                if let Some(sline) = self.active_sline_mut() {
+                    sline.text = new_text;
+                }
+            }
+            Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
         }
 
         Command::none()
