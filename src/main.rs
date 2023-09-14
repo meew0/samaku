@@ -197,7 +197,6 @@ impl Application for Samaku {
                 self.subtitles = ass.to_sline_track();
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
-                println!("frame {} available", new_frame);
                 self.actual_frame = Some((new_frame, handle));
             }
             Self::Message::PlaybackStep => {

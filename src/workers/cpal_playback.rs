@@ -239,7 +239,6 @@ fn data_callback<T>(
         // Get the actual data
         audio.fill_buffer_packed(data, *auth_pos as i64, num_frames as i64);
 
-        println!("read {} frames", num_frames);
         *auth_pos += num_frames;
         playback_state.position.store(*auth_pos, Ordering::Relaxed);
 

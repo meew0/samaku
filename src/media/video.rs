@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use super::bindings::{c_string, vapoursynth};
 pub use vapoursynth::FrameRate;
+
+use super::bindings::{c_string, vapoursynth};
 
 const DEFAULT_SCRIPT: &str = include_str!("default_scripts/video.py");
 
@@ -118,10 +119,8 @@ impl Video {
 
     pub fn get_frame(&self, n: i32) -> iced::widget::image::Handle {
         let instant = std::time::Instant::now();
-
         let vs_frame = self.node.get_frame(n).unwrap();
-
-        println!("Obtaining frame took {:.2?}", instant.elapsed());
+        let elapsed_obtain = instant.elapsed();
 
         let video_format = vs_frame.get_video_format().unwrap();
         if !video_format.is_rgb24() {
@@ -158,7 +157,11 @@ impl Video {
             }
         }
 
-        println!("Copying frame took {:.2?}", instant2.elapsed());
+        let elapsed_copy = instant2.elapsed();
+        println!(
+            "Frame profiling: obtaining frame {} took {:.2?}, copying it took {:.2?}",
+            n, elapsed_obtain, elapsed_copy
+        );
 
         // Alpha
         let write_ptr = &mut out[3..];

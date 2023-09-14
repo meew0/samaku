@@ -21,20 +21,21 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
                 if global_state.subtitles.is_empty() {
                     iced::widget::scrollable(iced::widget::image(handle.clone()))
                 } else {
+                    let instant = std::time::Instant::now();
                     let compiled =
                         global_state
                             .subtitles
                             .compile(0, 1000000, video_metadata.frame_rate); // TODO give actual frame range values here
+                    let elapsed_compile = instant.elapsed();
+
+                    let instant2 = std::time::Instant::now();
                     let ass = media::subtitle::OpaqueTrack::from_compiled(
                         &compiled,
                         &global_state.subtitles,
                     );
-                    println!(
-                        "# events: compiled {}, ass {}; # styles: ass {}",
-                        compiled.len(),
-                        ass.num_events(),
-                        ass.num_styles(),
-                    );
+                    let elapsed_copy = instant2.elapsed();
+
+                    let instant3 = std::time::Instant::now();
                     let storage_size = subtitle::Resolution {
                         x: video_metadata.width,
                         y: video_metadata.height,
@@ -50,6 +51,12 @@ pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> sup
                             storage_size,
                         )
                     };
+                    let elapsed_render = instant3.elapsed();
+                    println!(
+                        "Subtitle profiling: compiling {} slines to {} events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
+                        global_state.subtitles.slines.len(), compiled.len(), elapsed_compile, elapsed_copy, elapsed_render
+                    );
+
                     iced::widget::scrollable(crate::view::widget::ImageStack::new(stack))
                 }
             }

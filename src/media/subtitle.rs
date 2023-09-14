@@ -126,8 +126,6 @@ impl Renderer {
                 result.push(ass_image_to_iced(image))
             });
 
-        println!("Rendered {} subtitle images", result.len() - 1);
-
         result
     }
 }
