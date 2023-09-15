@@ -135,6 +135,27 @@ impl Alignment {
         }
     }
 
+    // Convert to a number to be used in the `\an` formatting tag.
+    pub fn as_an(&self) -> i32 {
+        match self.vertical {
+            VerticalAlignment::Sub => match self.horizontal {
+                HorizontalAlignment::Left => 1,
+                HorizontalAlignment::Center => 2,
+                HorizontalAlignment::Right => 3,
+            },
+            VerticalAlignment::Center => match self.horizontal {
+                HorizontalAlignment::Left => 4,
+                HorizontalAlignment::Center => 5,
+                HorizontalAlignment::Right => 6,
+            },
+            VerticalAlignment::Top => match self.horizontal {
+                HorizontalAlignment::Left => 7,
+                HorizontalAlignment::Center => 8,
+                HorizontalAlignment::Right => 9,
+            },
+        }
+    }
+
     pub fn pack(&self) -> i32 {
         self.vertical as i32 | self.horizontal as i32
     }

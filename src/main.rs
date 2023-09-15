@@ -12,6 +12,7 @@ mod keyboard;
 mod media;
 mod message;
 mod model;
+mod nde;
 mod pane;
 mod resources;
 mod style;
