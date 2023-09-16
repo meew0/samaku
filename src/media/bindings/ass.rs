@@ -227,7 +227,7 @@ impl Drop for Renderer {
 pub type RawEvent = libass::ASS_Event;
 pub type RawStyle = libass::ASS_Style;
 
-pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline<'static> {
+pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
     subtitle::Sline {
         start: subtitle::StartTime(raw_event.Start),
         duration: subtitle::Duration(raw_event.Duration),
@@ -239,7 +239,7 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline<'static> {
             vertical: raw_event.MarginV,
         },
         text: string_from_libass(raw_event.Text).expect("event text should never be null"),
-        nde_filter: None,
+        nde_filter_index: None,
     }
 }
 

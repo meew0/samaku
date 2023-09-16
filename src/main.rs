@@ -38,7 +38,7 @@ pub fn main() -> iced::Result {
 }
 
 /// Global application state.
-struct Samaku<'global> {
+struct Samaku {
     workers: workers::Workers,
 
     shared: SharedState,
@@ -55,12 +55,10 @@ struct Samaku<'global> {
     pub video_metadata: Option<media::VideoMetadata>,
 
     /// Currently loaded subtitles, if present.
-    pub subtitles: subtitle::SlineTrack<'global>,
+    pub subtitles: subtitle::SlineTrack,
 
     /// Index of currently active sline, if one exists.
     pub active_sline_index: Option<usize>,
-
-    pub nde_filters: Vec<nde::Filter>,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -87,15 +85,15 @@ struct ViewState {
 }
 
 /// Utility methods for global state
-impl<'global> Samaku<'global> {
-    pub fn active_sline(&self) -> Option<&subtitle::Sline<'global>> {
+impl Samaku {
+    pub fn active_sline(&self) -> Option<&subtitle::Sline> {
         match self.active_sline_index {
             Some(active_sline_index) => Some(&self.subtitles.slines[active_sline_index]),
             None => None,
         }
     }
 
-    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline<'global>> {
+    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline> {
         match self.active_sline_index {
             Some(active_sline_index) => Some(&mut self.subtitles.slines[active_sline_index]),
             None => None,
@@ -103,7 +101,7 @@ impl<'global> Samaku<'global> {
     }
 }
 
-impl<'global> Application for Samaku<'global> {
+impl Application for Samaku {
     type Executor = executor::Default;
     type Message = message::Message;
     type Theme = iced::Theme;
@@ -126,7 +124,6 @@ impl<'global> Application for Samaku<'global> {
                 video_metadata: None,
                 subtitles: subtitle::SlineTrack::default(),
                 active_sline_index: None,
-                nde_filters: vec![],
                 shared: shared_state,
                 view: RefCell::new(ViewState {
                     subtitle_renderer: media::subtitle::Renderer::new(),

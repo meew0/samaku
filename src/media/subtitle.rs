@@ -52,7 +52,7 @@ impl OpaqueTrack {
         OpaqueTrack { internal: track }
     }
 
-    pub fn to_sline_track(&self) -> subtitle::SlineTrack<'static> {
+    pub fn to_sline_track(&self) -> subtitle::SlineTrack {
         let header = self.internal.header();
 
         subtitle::SlineTrack {
@@ -70,7 +70,7 @@ impl OpaqueTrack {
         self.internal.styles().len()
     }
 
-    fn slines(&self) -> Vec<subtitle::Sline<'static>> {
+    fn slines(&self) -> Vec<subtitle::Sline> {
         self.internal
             .events()
             .iter()
