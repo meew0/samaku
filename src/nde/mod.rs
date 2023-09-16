@@ -7,6 +7,12 @@ pub mod node;
 mod tags;
 
 #[derive(Debug, Clone)]
+pub struct Filter {
+    pub name: String,
+    pub graph: graph::Graph,
+}
+
+#[derive(Debug, Clone)]
 pub struct Event {
     pub start: subtitle::StartTime,
     pub duration: subtitle::Duration,

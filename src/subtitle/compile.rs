@@ -19,13 +19,17 @@ pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Ev
     event
 }
 
+/// Run an NDE filter graph on the specified sline.
+///
+/// The filter inside of the sline is ignored, if present;
+/// only the `filter_graph` parameter is used.
 pub fn nde<'a>(
     sline: &'a super::Sline,
-    filter: &nde::graph::Graph,
+    filter_graph: &nde::graph::Graph,
     counter: &mut i32,
 ) -> Vec<super::ass::Event<'a>> {
-    let mut cache: Vec<Option<Vec<nde::node::SocketValue>>> = vec![None; filter.nodes.len()];
-    let mut process_queue = match filter.dfs() {
+    let mut cache: Vec<Option<Vec<nde::node::SocketValue>>> = vec![None; filter_graph.nodes.len()];
+    let mut process_queue = match filter_graph.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => panic!("there should be no cycles in NDE graphs"),
     };
@@ -33,7 +37,7 @@ pub fn nde<'a>(
 
     // Go through the process queue and process the individual nodes
     while let Some(node_index) = process_queue.pop_front() {
-        let node = &filter.nodes[node_index].node;
+        let node = &filter_graph.nodes[node_index].node;
         let desired_inputs = node.desired_inputs();
         let mut inputs: Vec<&nde::node::SocketValue> =
             vec![&nde::node::SocketValue::None; desired_inputs.len()];
@@ -49,7 +53,7 @@ pub fn nde<'a>(
             }
         }
 
-        for connector in filter.connectors[node_index].iter() {
+        for connector in filter_graph.connectors[node_index].iter() {
             let prev_cache = cache[connector.previous_node_index]
                 .as_ref()
                 .expect("results from previous node should have been cached");
@@ -91,7 +95,7 @@ mod tests {
 
     #[test]
     fn compile_nde() {
-        let filter = nde::graph::Graph {
+        let filter_graph = nde::graph::Graph {
             nodes: vec![
                 nde::graph::VisualNode {
                     node: nde::node::Node::Output,
@@ -129,7 +133,7 @@ mod tests {
         };
 
         assert_eq!(
-            filter.dfs(),
+            filter_graph.dfs(),
             nde::graph::DfsResult::ProcessQueue(VecDeque::from([2, 1, 0]))
         );
 
@@ -144,14 +148,12 @@ mod tests {
                 vertical: 0,
             },
             text: "This text will become italic".to_string(),
-
-            // This should not matter
-            nde_filter_index: Some(1234),
+            nde_filter: None,
         };
 
         let mut counter = 0;
 
-        let result = nde(&sline, &filter, &mut counter);
+        let result = nde(&sline, &filter_graph, &mut counter);
         assert_eq!(result.len(), 1);
 
         let first_event = &result[0];

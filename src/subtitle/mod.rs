@@ -3,6 +3,7 @@
 //! ones.
 
 use crate::media;
+use crate::nde;
 
 pub mod ass;
 mod compile;
@@ -12,7 +13,7 @@ mod compile;
 /// that is, a dialogue line, a complex sign, etc.
 /// It may compile to multiple underlying ASS [`Event`]s.
 #[derive(Debug, Clone)]
-pub struct Sline {
+pub struct Sline<'a> {
     /// The time in milliseconds when this line first appears.
     pub start: StartTime,
 
@@ -38,7 +39,7 @@ pub struct Sline {
     /// formatting tags.
     pub text: String,
 
-    pub nde_filter_index: Option<usize>,
+    pub nde_filter: Option<&'a nde::Filter>,
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
@@ -290,13 +291,13 @@ pub struct Style {
 /// Ordered collection of [`Sline`]s with associated data.
 /// For now, it's just a wrapper around [`Vec`].
 /// Might become more advanced in the future.
-pub struct SlineTrack {
-    pub slines: Vec<Sline>,
+pub struct SlineTrack<'a> {
+    pub slines: Vec<Sline<'a>>,
     pub styles: Vec<Style>,
     pub playback_resolution: Resolution,
 }
 
-impl SlineTrack {
+impl<'a> SlineTrack<'a> {
     /// Returns true if and only if there are no slines in this track
     /// (there may still be some styles)
     pub fn is_empty(&self) -> bool {
@@ -319,7 +320,7 @@ impl SlineTrack {
     }
 }
 
-impl Default for SlineTrack {
+impl<'a> Default for SlineTrack<'a> {
     fn default() -> Self {
         Self {
             slines: vec![],

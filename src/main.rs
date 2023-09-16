@@ -38,7 +38,7 @@ pub fn main() -> iced::Result {
 }
 
 /// Global application state.
-struct Samaku {
+struct Samaku<'global> {
     workers: workers::Workers,
 
     shared: SharedState,
@@ -55,10 +55,12 @@ struct Samaku {
     pub video_metadata: Option<media::VideoMetadata>,
 
     /// Currently loaded subtitles, if present.
-    pub subtitles: subtitle::SlineTrack,
+    pub subtitles: subtitle::SlineTrack<'global>,
 
     /// Index of currently active sline, if one exists.
     pub active_sline_index: Option<usize>,
+
+    pub nde_filters: Vec<nde::Filter>,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -85,15 +87,15 @@ struct ViewState {
 }
 
 /// Utility methods for global state
-impl Samaku {
-    pub fn active_sline(&self) -> Option<&subtitle::Sline> {
+impl<'global> Samaku<'global> {
+    pub fn active_sline(&self) -> Option<&subtitle::Sline<'global>> {
         match self.active_sline_index {
             Some(active_sline_index) => Some(&self.subtitles.slines[active_sline_index]),
             None => None,
         }
     }
 
-    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline> {
+    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline<'global>> {
         match self.active_sline_index {
             Some(active_sline_index) => Some(&mut self.subtitles.slines[active_sline_index]),
             None => None,
@@ -101,7 +103,7 @@ impl Samaku {
     }
 }
 
-impl Application for Samaku {
+impl<'global> Application for Samaku<'global> {
     type Executor = executor::Default;
     type Message = message::Message;
     type Theme = iced::Theme;
@@ -124,6 +126,7 @@ impl Application for Samaku {
                 video_metadata: None,
                 subtitles: subtitle::SlineTrack::default(),
                 active_sline_index: None,
+                nde_filters: vec![],
                 shared: shared_state,
                 view: RefCell::new(ViewState {
                     subtitle_renderer: media::subtitle::Renderer::new(),

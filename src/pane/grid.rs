@@ -71,7 +71,7 @@ impl Display for ColumnField {
 }
 
 impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer> for Column {
-    type Row = subtitle::Sline;
+    type Row = subtitle::Sline<'b>;
 
     fn header(
         &'b self,

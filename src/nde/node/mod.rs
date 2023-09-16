@@ -25,7 +25,7 @@ pub enum SocketValue<'a> {
     /// fields or the like.
     GenericEvents(Vec<super::Event>),
 
-    Sline(&'a subtitle::Sline),
+    Sline(&'a subtitle::Sline<'a>),
 
     /// Compiled events that are ready to copy into libass.
     CompiledEvents(Vec<subtitle::ass::Event<'static>>),
