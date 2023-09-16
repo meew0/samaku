@@ -18,6 +18,7 @@ pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Opti
         KeyCode::Left => Some(Message::PlaybackAdvanceSeconds(-1.0)),
         KeyCode::Right => Some(Message::PlaybackAdvanceSeconds(1.0)),
         KeyCode::Space => Some(Message::TogglePlayback),
+        KeyCode::E => Some(Message::NdeExample),
         _ => None,
     }
 }

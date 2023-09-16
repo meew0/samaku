@@ -47,6 +47,9 @@ pub enum Message {
 
     SelectSline(usize),
     SetActiveSlineText(String),
+
+    /// temporary, for testing the NDE backend without having a frontend in place
+    NdeExample,
 }
 
 impl Message {

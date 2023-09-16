@@ -260,6 +260,30 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
+            Self::Message::NdeExample => {
+                if self.subtitles.filters.is_empty() {
+                    self.subtitles.filters.push(nde::Filter {
+                        name: "Example filter".to_string(),
+                        graph: nde::Graph::from_single_intermediate(nde::Node::Italic),
+                    })
+                }
+                
+                let new_sline = subtitle::Sline {
+                    start: subtitle::StartTime(0),
+                    duration: subtitle::Duration(5000),
+                    layer_index: 0,
+                    style_index: 0,
+                    margins: subtitle::Margins {
+                        left: 50,
+                        right: 50,
+                        vertical: 50,
+                    },
+                    text: "Sphinx of black quartz, judge my vow".to_string(),
+                    nde_filter_index: Some(0),
+                };
+
+                self.subtitles.slines.push(new_sline);
+            }
         }
 
         Command::none()
