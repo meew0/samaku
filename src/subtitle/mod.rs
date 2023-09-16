@@ -2,7 +2,7 @@
 //! of subtitles, as well as the logic for compiling them to ASS
 //! ones.
 
-use crate::media;
+use crate::{media, nde};
 
 pub mod ass;
 mod compile;
@@ -293,6 +293,7 @@ pub struct Style {
 pub struct SlineTrack {
     pub slines: Vec<Sline>,
     pub styles: Vec<Style>,
+    pub filters: Vec<nde::Filter>,
     pub playback_resolution: Resolution,
 }
 
@@ -314,9 +315,10 @@ impl SlineTrack {
         let mut compiled: Vec<self::ass::Event> = vec![];
 
         for sline in self.slines.iter() {
-            match sline.nde_filter {
-                Some(filter) => {
-                    compiled.append(&mut compile::nde(sline, &filter.graph, &mut counter))
+            match sline.nde_filter_index {
+                Some(filter_index) => {
+                    let graph = &self.filters[filter_index].graph;
+                    compiled.append(&mut compile::nde(sline, graph, &mut counter))
                 }
                 None => compiled.push(compile::trivial(sline, &mut counter)),
             }
@@ -331,6 +333,7 @@ impl Default for SlineTrack {
         Self {
             slines: vec![],
             styles: vec![],
+            filters: vec![],
 
             // This is not the default libass uses (which is 324x288),
             // but it seems like a reasonable default for a modern age.

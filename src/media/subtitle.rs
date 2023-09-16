@@ -58,6 +58,7 @@ impl OpaqueTrack {
         subtitle::SlineTrack {
             slines: self.slines(),
             styles: self.styles(),
+            filters: vec![],
             playback_resolution: header.play_res,
         }
     }
