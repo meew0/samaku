@@ -6,10 +6,13 @@ pub mod graph;
 pub mod node;
 mod tags;
 
+pub use graph::Graph;
+pub use node::Node;
+
 #[derive(Debug, Clone)]
 pub struct Filter {
     pub name: String,
-    pub graph: graph::Graph,
+    pub graph: Graph,
 }
 
 #[derive(Debug, Clone)]

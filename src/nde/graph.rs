@@ -23,6 +23,47 @@ impl Default for Graph {
 }
 
 impl Graph {
+    /// Returns a basic graph that contains an input node, an intermediate filter node,
+    /// and an output node. Useful for testing.
+    pub fn from_single_intermediate(intermediate: Node) -> Self {
+        Self {
+            nodes: vec![
+                VisualNode {
+                    node: Node::Output,
+                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                },
+                VisualNode {
+                    node: intermediate,
+                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                },
+                VisualNode {
+                    node: Node::InputSline,
+                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                },
+            ],
+            connectors: vec![
+                vec![
+                    // <intermediate> → Output
+                    Connector {
+                        previous_node_index: 1,
+                        previous_socket_index: 0,
+                        next_socket_index: 0,
+                    },
+                ],
+                vec![
+                    // InputSline → <intermediate>
+                    Connector {
+                        previous_node_index: 2,
+                        previous_socket_index: 0,
+                        next_socket_index: 0,
+                    },
+                ],
+                // No connections into the input
+                vec![],
+            ],
+        }
+    }
+
     pub fn verify_output_node(&self) {
         let output_node = &self.nodes[0];
         if output_node.node != Node::Output {

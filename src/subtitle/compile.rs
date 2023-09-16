@@ -95,42 +95,7 @@ mod tests {
 
     #[test]
     fn compile_nde() {
-        let filter_graph = nde::graph::Graph {
-            nodes: vec![
-                nde::graph::VisualNode {
-                    node: nde::node::Node::Output,
-                    position: nde::graph::DisplayPosition { x: 0.0, y: 0.0 },
-                },
-                nde::graph::VisualNode {
-                    node: nde::node::Node::Italic,
-                    position: nde::graph::DisplayPosition { x: 0.0, y: 0.0 },
-                },
-                nde::graph::VisualNode {
-                    node: nde::node::Node::InputSline,
-                    position: nde::graph::DisplayPosition { x: 0.0, y: 0.0 },
-                },
-            ],
-            connectors: vec![
-                vec![
-                    // Italic → Output
-                    nde::graph::Connector {
-                        previous_node_index: 1,
-                        previous_socket_index: 0,
-                        next_socket_index: 0,
-                    },
-                ],
-                vec![
-                    // InputSline → Italic
-                    nde::graph::Connector {
-                        previous_node_index: 2,
-                        previous_socket_index: 0,
-                        next_socket_index: 0,
-                    },
-                ],
-                // No connections into the input
-                vec![],
-            ],
-        };
+        let filter_graph = nde::graph::Graph::from_single_intermediate(nde::node::Node::Italic);
 
         assert_eq!(
             filter_graph.dfs(),
