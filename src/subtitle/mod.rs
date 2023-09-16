@@ -37,6 +37,8 @@ pub struct Sline {
     /// The text shown for this line, potentially including ASS
     /// formatting tags.
     pub text: String,
+
+    pub nde_filter_index: Option<usize>,
 }
 
 /// The time at which an element starts to be shown, in milliseconds.

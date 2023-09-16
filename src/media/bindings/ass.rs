@@ -239,6 +239,7 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
             vertical: raw_event.MarginV,
         },
         text: string_from_libass(raw_event.Text).expect("event text should never be null"),
+        nde_filter_index: None,
     }
 }
 
@@ -249,12 +250,12 @@ pub fn event_to_raw(event: &subtitle::ass::Event) -> RawEvent {
         ReadOrder: event.read_order,
         Layer: event.layer_index,
         Style: event.style_index,
-        Name: malloc_string(event.name),
+        Name: malloc_string(event.name.as_ref()),
         MarginL: event.margins.left,
         MarginR: event.margins.right,
         MarginV: event.margins.vertical,
-        Effect: malloc_string(event.effect),
-        Text: malloc_string(event.text),
+        Effect: malloc_string(event.effect.as_ref()),
+        Text: malloc_string(event.text.as_ref()),
         render_priv: std::ptr::null_mut(),
     }
 }

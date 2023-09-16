@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// An event in true ASS terms, that is, one subtitle line
 /// as it would be found in e.g. Aegisub. Not to be used
 /// as the source for anything; only as an intermediate
@@ -12,7 +14,7 @@ pub struct Event<'a> {
     pub layer_index: i32,
     pub style_index: i32,
     pub margins: super::Margins,
-    pub text: &'a str,
+    pub text: Cow<'a, str>,
 
     /// Not really clear what this is,
     /// it seems to be used for duplicate checking within libass,
@@ -20,12 +22,12 @@ pub struct Event<'a> {
     pub read_order: i32,
 
     /// Name a.k.a. Actor (does nothing)
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
 
     /// Can be used to store arbitrary user data,
     /// but libass also parses this and has some special behaviour
     /// for certain values (e.g. `Banner;`)
-    pub effect: &'a str,
+    pub effect: Cow<'a, str>,
 }
 
 /// Header fields for an ASS script/track
