@@ -312,11 +312,18 @@ impl<'a> SlineTrack<'a> {
         frame_rate: media::FrameRate,
     ) -> Vec<self::ass::Event> {
         let mut counter = 0;
+        let mut compiled: Vec<self::ass::Event> = vec![];
 
-        self.slines
-            .iter()
-            .map(|sline| compile::trivial(sline, &mut counter))
-            .collect()
+        for sline in self.slines.iter() {
+            match sline.nde_filter {
+                Some(filter) => {
+                    compiled.append(&mut compile::nde(sline, &filter.graph, &mut counter))
+                }
+                None => compiled.push(compile::trivial(sline, &mut counter)),
+            }
+        }
+
+        compiled
     }
 }
 
