@@ -193,3 +193,20 @@ pub struct Connector {
     pub previous_socket_index: usize,
     pub next_socket_index: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cycle() {
+        let mut graph_with_cycle = Graph::from_single_intermediate(super::Node::Italic);
+        graph_with_cycle.connectors[2].push(Connector {
+            previous_node_index: 0,
+            previous_socket_index: 0,
+            next_socket_index: 0,
+        });
+        let dfs_result = graph_with_cycle.dfs();
+        assert_eq!(dfs_result, DfsResult::CycleFound);
+    }
+}
