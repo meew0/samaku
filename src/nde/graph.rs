@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use super::node::Node;
 
 /// A directed acyclic graph of nodes, representing a NDE filter as a whole.
-/// Stored as an adjacency
+/// Stored as an adjacency list.
 #[derive(Debug, Clone)]
 pub struct Graph {
     pub nodes: Vec<VisualNode>,
