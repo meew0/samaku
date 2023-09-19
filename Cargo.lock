@@ -1532,6 +1532,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_node_editor"
+version = "0.1.0"
+source = "git+https://github.com/meew0/iced-node-editor.git?branch=iced-v0.10#edd50938588344295de8a5703de9fcecd394f92e"
+dependencies = [
+ "iced",
+ "palette",
+]
+
+[[package]]
 name = "iced_renderer"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2961,6 +2970,7 @@ dependencies = [
  "bestsource-sys",
  "cpal",
  "iced",
+ "iced_node_editor",
  "iced_table",
  "libass-sys",
  "libc",

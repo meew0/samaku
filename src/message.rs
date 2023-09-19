@@ -50,6 +50,8 @@ pub enum Message {
 
     /// temporary, for testing the NDE backend without having a frontend in place
     NdeExample,
+
+    MoveNode(usize, f32, f32),
 }
 
 impl Message {
@@ -67,4 +69,6 @@ pub enum PaneMessage {
     GridSyncHeader(iced::widget::scrollable::AbsoluteOffset),
     GridColumnResizing(usize, f32),
     GridColumnResized,
+    NodeEditorScaleChanged(f32, f32, f32),
+    NodeEditorTranslationChanged(f32, f32),
 }

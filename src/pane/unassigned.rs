@@ -28,6 +28,12 @@ pub fn view<'a>(self_pane: iced::widget::pane_grid::Pane) -> super::PaneView<'a>
                                 Box::new(super::PaneState::TextEditor(super::text_editor::State::default()))
                             )
                         ),
+                        iced::widget::button("Node editor").on_press(
+                            message::Message::SetPaneState(
+                                self_pane,
+                                Box::new(super::PaneState::NodeEditor(super::node_editor::State::default()))
+                            )
+                        ),
                     ].spacing(10),
                 ]
                 .spacing(20)

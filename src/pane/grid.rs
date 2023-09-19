@@ -165,6 +165,7 @@ pub fn update(
                 }
             })
         }
+        _ => (),
     }
 
     iced::Command::none()

@@ -15,7 +15,7 @@ impl Default for Graph {
         Graph {
             nodes: vec![VisualNode {
                 node: Node::Output,
-                position: DisplayPosition { x: 0.0, y: 0.0 },
+                position: iced::Point { x: 0.0, y: 0.0 },
             }],
             connectors: vec![vec![]; 1],
         }
@@ -30,15 +30,15 @@ impl Graph {
             nodes: vec![
                 VisualNode {
                     node: Node::Output,
-                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                    position: iced::Point { x: 600.0, y: 0.0 },
                 },
                 VisualNode {
                     node: intermediate,
-                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                    position: iced::Point { x: 300.0, y: 0.0 },
                 },
                 VisualNode {
                     node: Node::InputSline,
-                    position: DisplayPosition { x: 0.0, y: 0.0 },
+                    position: iced::Point { x: 0.0, y: 0.0 },
                 },
             ],
             connectors: vec![
@@ -178,13 +178,7 @@ impl CycleFound {
 #[derive(Debug, Clone)]
 pub struct VisualNode {
     pub node: Node,
-    pub position: DisplayPosition,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct DisplayPosition {
-    pub x: f64,
-    pub y: f64,
+    pub position: iced::Point,
 }
 
 #[derive(Debug, Clone)]

@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 iced = { version = "0.10.0", features = ["lazy", "image", "advanced", "smol", "svg"] }
 iced_table = "0.1"
+iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", branch = "iced-v0.10" }
 rustsynth-sys = { version = "0.4.0", features = ["vapoursynth-functions", "vsscript-functions"] }
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }

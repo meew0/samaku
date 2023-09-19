@@ -91,6 +91,15 @@ pub enum Node {
 }
 
 impl Node {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Node::Output => "Output",
+            Node::InputSline => "Input: Subtitle line",
+            Node::Italic => "Italicize",
+            Node::TestNodeWithTwoInputs => "Test node with two inputs",
+        }
+    }
+
     pub fn desired_inputs(&self) -> &[SocketType] {
         match self {
             Node::Output => &[SocketType::GenericEvents],

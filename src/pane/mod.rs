@@ -1,6 +1,7 @@
 use crate::message;
 
 pub mod grid;
+pub mod node_editor;
 pub mod text_editor;
 pub mod unassigned;
 pub mod video;
@@ -13,6 +14,7 @@ pub enum PaneState {
     Video(video::State),
     Grid(grid::State),
     TextEditor(text_editor::State),
+    NodeEditor(node_editor::State),
 }
 
 pub struct PaneView<'a> {
@@ -30,6 +32,7 @@ pub fn dispatch_view<'a>(
         PaneState::Video(local_state) => video::view(global_state, local_state),
         PaneState::Grid(local_state) => grid::view(global_state, local_state),
         PaneState::TextEditor(local_state) => text_editor::view(global_state, local_state),
+        PaneState::NodeEditor(local_state) => node_editor::view(global_state, local_state),
     }
 }
 
@@ -42,5 +45,8 @@ pub fn dispatch_update(
         PaneState::Video(local_state) => video::update(local_state, pane_message),
         PaneState::Grid(local_state) => grid::update(local_state, pane_message),
         PaneState::TextEditor(local_state) => text_editor::update(local_state, pane_message),
+        PaneState::NodeEditor(local_state) => {
+            node_editor::update(local_state, pane_message)
+        }
     }
 }

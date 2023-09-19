@@ -99,6 +99,26 @@ impl Samaku {
             None => None,
         }
     }
+
+    pub fn active_nde_filter(&self) -> Option<&nde::Filter> {
+        match self.active_sline() {
+            Some(active_sline) => match active_sline.nde_filter_index {
+                Some(nde_filter_index) => Some(&self.subtitles.filters[nde_filter_index]),
+                None => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn active_nde_filter_mut(&mut self) -> Option<&mut nde::Filter> {
+        match self.active_sline_mut() {
+            Some(active_sline) => match active_sline.nde_filter_index {
+                Some(nde_filter_index) => Some(&mut self.subtitles.filters[nde_filter_index]),
+                None => None,
+            },
+            None => None,
+        }
+    }
 }
 
 impl Application for Samaku {
@@ -267,7 +287,7 @@ impl Application for Samaku {
                         graph: nde::Graph::from_single_intermediate(nde::Node::Italic),
                     })
                 }
-                
+
                 let new_sline = subtitle::Sline {
                     start: subtitle::StartTime(0),
                     duration: subtitle::Duration(5000),
@@ -283,6 +303,12 @@ impl Application for Samaku {
                 };
 
                 self.subtitles.slines.push(new_sline);
+            }
+            Self::Message::MoveNode(node_index, x, y) => {
+                if let Some(filter) = self.active_nde_filter_mut() {
+                    let node = &mut filter.graph.nodes[node_index];
+                    node.position = iced::Point::new(node.position.x + x, node.position.y + y);
+                }
             }
         }
 
