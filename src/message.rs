@@ -10,9 +10,10 @@ pub enum Message {
     None,
 
     /// Message pertaining to a specific pane (PaneState)
-    /// Will be dispatched to the currently focused pane.
+    /// Will be dispatched to the given pane (`Pane`) or the focused one (`FocusedPane`).
     /// For example changing video display settings, or scrolling the timeline
-    Pane(PaneMessage),
+    Pane(pane_grid::Pane, PaneMessage),
+    FocusedPane(PaneMessage),
 
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),

@@ -29,7 +29,11 @@ impl Default for State {
 const NODE_WIDTH: f32 = 200.0;
 const NODE_HEIGHT: f32 = 75.0;
 
-pub fn view<'a>(global_state: &'a crate::Samaku, pane_state: &'a State) -> super::PaneView<'a> {
+pub fn view<'a>(
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    pane_state: &'a State,
+) -> super::PaneView<'a> {
     let content: iced::Element<message::Message> = match global_state.active_sline_index {
         Some(active_sline_index) => {
             let active_sline = &global_state.subtitles.slines[active_sline_index];
@@ -78,15 +82,17 @@ pub fn view<'a>(global_state: &'a crate::Samaku, pane_state: &'a State) -> super
                     iced_node_editor::graph_container::<message::Message, iced::Renderer>(
                         graph_content,
                     )
-                    .on_translate(|p| {
-                        message::Message::Pane(message::PaneMessage::NodeEditorTranslationChanged(
-                            p.0, p.1,
-                        ))
+                    .on_translate(move |p| {
+                        message::Message::Pane(
+                            self_pane,
+                            message::PaneMessage::NodeEditorTranslationChanged(p.0, p.1),
+                        )
                     })
-                    .on_scale(|x, y, s| {
-                        message::Message::Pane(message::PaneMessage::NodeEditorScaleChanged(
-                            x, y, s,
-                        ))
+                    .on_scale(move |x, y, s| {
+                        message::Message::Pane(
+                            self_pane,
+                            message::PaneMessage::NodeEditorScaleChanged(x, y, s),
+                        )
                     })
                     .width(iced::Length::Fill)
                     .height(iced::Length::Fill)

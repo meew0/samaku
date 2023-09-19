@@ -14,8 +14,12 @@ impl Default for State {
     }
 }
 
-pub fn view<'a>(global_state: &'a crate::Samaku, pane_state: &'a State) -> super::PaneView<'a> {
-    let content = ...
+pub fn view<'a>(
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    pane_state: &'a State,
+) -> super::PaneView<'a> {
+    let content = todo!();
 
     super::PaneView {
         title: iced::widget::text("Pane title").into(),

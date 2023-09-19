@@ -3,7 +3,11 @@ use crate::message;
 #[derive(Debug, Clone, Default)]
 pub struct State {}
 
-pub fn view<'a>(global_state: &'a crate::Samaku, _editor_state: &'a State) -> super::PaneView<'a> {
+pub fn view<'a>(
+    _self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    _editor_state: &'a State,
+) -> super::PaneView<'a> {
     let content: iced::Element<message::Message> = match global_state.active_sline() {
         Some(active_sline) => iced::widget::responsive(|size| {
             iced::widget::text_input("Enter subtitle text...", &active_sline.text)

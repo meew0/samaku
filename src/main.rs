@@ -191,7 +191,12 @@ impl Application for Samaku {
                     *pane_state = *new_state;
                 }
             }
-            Self::Message::Pane(pane_message) => {
+            Self::Message::Pane(pane, pane_message) => {
+                if let Some(pane_state) = self.panes.get_mut(&pane) {
+                    return pane::dispatch_update(pane_state, pane_message);
+                }
+            }
+            Self::Message::FocusedPane(pane_message) => {
                 if let Some(pane) = self.focus {
                     if let Some(pane_state) = self.panes.get_mut(&pane) {
                         return pane::dispatch_update(pane_state, pane_message);

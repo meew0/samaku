@@ -12,7 +12,11 @@ macro_rules! empty {
     };
 }
 
-pub fn view<'a>(global_state: &'a crate::Samaku, _video_state: &'a State) -> super::PaneView<'a> {
+pub fn view<'a>(
+    _self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    _video_state: &'a State,
+) -> super::PaneView<'a> {
     let scroll = match &global_state.actual_frame {
         None => empty!(),
         Some((num_frame, handle)) => match &global_state.video_metadata {

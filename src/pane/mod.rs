@@ -1,3 +1,5 @@
+pub use iced::widget::pane_grid::Pane;
+
 use crate::message;
 
 pub mod grid;
@@ -23,16 +25,20 @@ pub struct PaneView<'a> {
 }
 
 pub fn dispatch_view<'a>(
-    self_pane: iced::widget::pane_grid::Pane,
+    self_pane: Pane,
     global_state: &'a crate::Samaku,
     state: &'a PaneState,
 ) -> PaneView<'a> {
     match state {
         PaneState::Unassigned => unassigned::view(self_pane),
-        PaneState::Video(local_state) => video::view(global_state, local_state),
-        PaneState::Grid(local_state) => grid::view(global_state, local_state),
-        PaneState::TextEditor(local_state) => text_editor::view(global_state, local_state),
-        PaneState::NodeEditor(local_state) => node_editor::view(global_state, local_state),
+        PaneState::Video(local_state) => video::view(self_pane, global_state, local_state),
+        PaneState::Grid(local_state) => grid::view(self_pane, global_state, local_state),
+        PaneState::TextEditor(local_state) => {
+            text_editor::view(self_pane, global_state, local_state)
+        }
+        PaneState::NodeEditor(local_state) => {
+            node_editor::view(self_pane, global_state, local_state)
+        }
     }
 }
 
@@ -45,8 +51,6 @@ pub fn dispatch_update(
         PaneState::Video(local_state) => video::update(local_state, pane_message),
         PaneState::Grid(local_state) => grid::update(local_state, pane_message),
         PaneState::TextEditor(local_state) => text_editor::update(local_state, pane_message),
-        PaneState::NodeEditor(local_state) => {
-            node_editor::update(local_state, pane_message)
-        }
+        PaneState::NodeEditor(local_state) => node_editor::update(local_state, pane_message),
     }
 }

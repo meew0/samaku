@@ -112,20 +112,29 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     }
 }
 
-pub fn view<'a>(global_state: &'a crate::Samaku, grid_state: &'a State) -> super::PaneView<'a> {
-    let table = iced::widget::responsive(|size| {
+pub fn view<'a>(
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    grid_state: &'a State,
+) -> super::PaneView<'a> {
+    let table = iced::widget::responsive(move |size| {
         iced_table::table(
             grid_state.header_scrollable_id.clone(),
             grid_state.body_scrollable_id.clone(),
             &grid_state.columns,
             &global_state.subtitles.slines,
-            |offset| message::Message::Pane(message::PaneMessage::GridSyncHeader(offset)),
+            // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
+            // does not support passing a closure here.
+            // TODO: Make a PR to support this?
+            |offset| message::Message::FocusedPane(message::PaneMessage::GridSyncHeader(offset)),
         )
         .on_column_resize(
             |index, offset| {
-                message::Message::Pane(message::PaneMessage::GridColumnResizing(index, offset))
+                message::Message::FocusedPane(message::PaneMessage::GridColumnResizing(
+                    index, offset,
+                ))
             },
-            message::Message::Pane(message::PaneMessage::GridColumnResized),
+            message::Message::Pane(self_pane, message::PaneMessage::GridColumnResized),
         )
         .min_width(size.width)
         .into()
