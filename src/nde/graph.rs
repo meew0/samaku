@@ -1,13 +1,13 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use super::node;
 
 /// A directed acyclic graph of nodes, representing a NDE filter as a whole.
-/// Stored as an adjacency list.
+/// Stored as an adjacency map.
 #[derive(Debug)]
 pub struct Graph {
     pub nodes: Vec<VisualNode>,
-    pub connectors: Vec<Vec<Connector>>,
+    pub connections: HashMap<NextEndpoint, PreviousEndpoint>,
 }
 
 impl Default for Graph {
@@ -17,7 +17,7 @@ impl Default for Graph {
                 node: Box::new(node::Output {}),
                 position: iced::Point { x: 0.0, y: 0.0 },
             }],
-            connectors: vec![vec![]; 1],
+            connections: HashMap::new(),
         }
     }
 }
@@ -26,6 +26,28 @@ impl Graph {
     /// Returns a basic graph that contains an input node, an intermediate filter node,
     /// and an output node. Useful for testing.
     pub fn from_single_intermediate(intermediate: Box<dyn node::Node>) -> Self {
+        let mut connections = HashMap::new();
+        connections.insert(
+            NextEndpoint {
+                node_index: 0,
+                socket_index: 0,
+            },
+            PreviousEndpoint {
+                node_index: 1,
+                socket_index: 0,
+            },
+        );
+        connections.insert(
+            NextEndpoint {
+                node_index: 1,
+                socket_index: 0,
+            },
+            PreviousEndpoint {
+                node_index: 2,
+                socket_index: 0,
+            },
+        );
+
         Self {
             nodes: vec![
                 VisualNode {
@@ -41,26 +63,7 @@ impl Graph {
                     position: iced::Point { x: 0.0, y: 0.0 },
                 },
             ],
-            connectors: vec![
-                vec![
-                    // <intermediate> → Output
-                    Connector {
-                        previous_node_index: 1,
-                        previous_socket_index: 0,
-                        next_socket_index: 0,
-                    },
-                ],
-                vec![
-                    // InputSline → <intermediate>
-                    Connector {
-                        previous_node_index: 2,
-                        previous_socket_index: 0,
-                        next_socket_index: 0,
-                    },
-                ],
-                // No connections into the input
-                vec![],
-            ],
+            connections,
         }
     }
 
@@ -95,17 +98,23 @@ impl Graph {
     ) -> CycleFound {
         seen[next] = true;
 
-        for connector in self.connectors[next].iter() {
-            let prev = connector.previous_node_index;
-            if cycle_detector.set_parent(next, prev).cycle_found() {
-                return CycleFound(true);
-            }
-            if !seen[prev]
-                && self
-                    .dfs_internal(prev, process_queue, seen, cycle_detector)
-                    .cycle_found()
-            {
-                return CycleFound(true);
+        let num_inputs = self.nodes[next].node.desired_inputs().len();
+        for socket_index in 0..num_inputs {
+            if let Some(previous) = self.connections.get(&NextEndpoint {
+                node_index: next,
+                socket_index,
+            }) {
+                let prev = previous.node_index;
+                if cycle_detector.set_parent(next, prev).cycle_found() {
+                    return CycleFound(true);
+                }
+                if !seen[prev]
+                    && self
+                        .dfs_internal(prev, process_queue, seen, cycle_detector)
+                        .cycle_found()
+                {
+                    return CycleFound(true);
+                }
             }
         }
 
@@ -181,11 +190,16 @@ pub struct VisualNode {
     pub position: iced::Point,
 }
 
-#[derive(Debug, Clone)]
-pub struct Connector {
-    pub previous_node_index: usize,
-    pub previous_socket_index: usize,
-    pub next_socket_index: usize,
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct NextEndpoint {
+    pub node_index: usize,
+    pub socket_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PreviousEndpoint {
+    pub node_index: usize,
+    pub socket_index: usize,
 }
 
 #[cfg(test)]
@@ -195,11 +209,16 @@ mod tests {
     #[test]
     fn cycle() {
         let mut graph_with_cycle = Graph::from_single_intermediate(Box::new(node::Italic {}));
-        graph_with_cycle.connectors[2].push(Connector {
-            previous_node_index: 0,
-            previous_socket_index: 0,
-            next_socket_index: 0,
-        });
+        graph_with_cycle.connections.insert(
+            NextEndpoint {
+                node_index: 2,
+                socket_index: 0,
+            },
+            PreviousEndpoint {
+                node_index: 0,
+                socket_index: 0,
+            },
+        );
         let dfs_result = graph_with_cycle.dfs();
         assert_eq!(dfs_result, DfsResult::CycleFound);
     }

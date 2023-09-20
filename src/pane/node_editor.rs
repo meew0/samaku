@@ -58,25 +58,23 @@ pub fn view<'a>(
                         );
                     }
 
-                    for (node_index, connectors) in nde_filter.graph.connectors.iter().enumerate() {
-                        for connector in connectors.iter() {
-                            let from = &nde_filter.graph.nodes[connector.previous_node_index];
-                            let to = &nde_filter.graph.nodes[node_index];
+                    for (next_endpoint, previous_endpoint) in nde_filter.graph.connections.iter() {
+                        let from = &nde_filter.graph.nodes[previous_endpoint.node_index];
+                        let to = &nde_filter.graph.nodes[next_endpoint.node_index];
 
-                            graph_content.push(
-                                iced_node_editor::connection(
-                                    iced::Point::new(
-                                        from.position.x + NODE_WIDTH,
-                                        from.position.y + (NODE_HEIGHT / 2.0),
-                                    ),
-                                    iced::Point::new(
-                                        to.position.x,
-                                        to.position.y + (NODE_HEIGHT / 2.0),
-                                    ),
-                                )
-                                .into(),
-                            );
-                        }
+                        graph_content.push(
+                            iced_node_editor::connection(
+                                iced::Point::new(
+                                    from.position.x + NODE_WIDTH,
+                                    from.position.y + (NODE_HEIGHT / 2.0),
+                                ),
+                                iced::Point::new(
+                                    to.position.x,
+                                    to.position.y + (NODE_HEIGHT / 2.0),
+                                ),
+                            )
+                            .into(),
+                        );
                     }
 
                     iced_node_editor::graph_container::<message::Message, iced::Renderer>(

@@ -49,11 +49,16 @@ pub fn nde<'a>(
             }
         }
 
-        for connector in filter.connectors[node_index].iter() {
-            let prev_cache = cache[connector.previous_node_index]
-                .as_ref()
-                .expect("results from previous node should have been cached");
-            inputs[connector.next_socket_index] = &prev_cache[connector.previous_socket_index];
+        for socket_index in 0..(desired_inputs.len()) {
+            if let Some(previous) = filter.connections.get(&nde::graph::NextEndpoint {
+                node_index,
+                socket_index,
+            }) {
+                let prev_cache = cache[previous.node_index]
+                    .as_ref()
+                    .expect("results from previous node should have been cached");
+                inputs[socket_index] = &prev_cache[previous.socket_index];
+            }
         }
 
         // Run the node
@@ -91,7 +96,7 @@ mod tests {
 
     #[test]
     fn compile_nde() {
-        let filter = nde::graph::Graph::from_single_intermediate(nde::node::Node::Italic);
+        let filter = nde::graph::Graph::from_single_intermediate(Box::new(nde::node::Italic {}));
 
         assert_eq!(
             filter.dfs(),
