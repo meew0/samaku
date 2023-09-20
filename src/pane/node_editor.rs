@@ -1,13 +1,12 @@
-// Basic template for new panes, so I don't need to skeletonize one of the existing ones every time...
-// The pane must also be registered in `PaneState`, and consequently in the dispatch methods.
-
 use std::fmt::{Debug, Formatter};
 
-use crate::message;
+use crate::{message, nde};
 
 #[derive(Clone)]
 pub struct State {
-    pub(crate) matrix: iced_node_editor::Matrix,
+    matrix: iced_node_editor::Matrix,
+    pub dangling_source: Option<iced_node_editor::LogicalEndpoint>,
+    pub dangling_connection: Option<iced_node_editor::Link>,
 }
 
 // `iced_node_editor::Matrix` doesn't implement `Debug`.
@@ -22,6 +21,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             matrix: iced_node_editor::Matrix::identity(),
+            dangling_connection: None,
+            dangling_source: None,
         }
     }
 }
@@ -44,8 +45,31 @@ pub fn view<'a>(
                     let mut graph_content = vec![];
 
                     for (i, visual_node) in nde_filter.graph.nodes.iter().enumerate() {
+                        let node = &visual_node.node;
+                        let in_sockets = node.desired_inputs();
+                        let out_sockets = node.predicted_outputs();
+                        let mut node_sockets = vec![];
+                        for (role, sockets) in [
+                            (iced_node_editor::SocketRole::In, in_sockets),
+                            (iced_node_editor::SocketRole::Out, out_sockets),
+                        ] {
+                            for socket_type in sockets {
+                                // Call our own utility function to create the socket
+                                if let Some(new_socket) =
+                                    make_socket::<message::Message, iced::Renderer>(
+                                        role,
+                                        socket_type,
+                                    )
+                                {
+                                    node_sockets.push(new_socket);
+                                }
+                            }
+                        }
+
                         graph_content.push(
                             iced_node_editor::node(iced::widget::text(visual_node.node.name()))
+                                .sockets(node_sockets)
+                                .padding(iced::Padding::from(12.0))
                                 .center_x()
                                 .center_y()
                                 .on_translate(move |(x, y)| {
@@ -58,28 +82,37 @@ pub fn view<'a>(
                         );
                     }
 
-                    for (next_endpoint, previous_endpoint) in nde_filter.graph.connections.iter() {
-                        let from = &nde_filter.graph.nodes[previous_endpoint.node_index];
-                        let to = &nde_filter.graph.nodes[next_endpoint.node_index];
-
+                    for (next, previous) in nde_filter.graph.connections.iter() {
                         graph_content.push(
-                            iced_node_editor::connection(
-                                iced::Point::new(
-                                    from.position.x + NODE_WIDTH,
-                                    from.position.y + (NODE_HEIGHT / 2.0),
+                            iced_node_editor::Connection::between(
+                                iced_node_editor::Endpoint::Socket(
+                                    iced_node_editor::LogicalEndpoint {
+                                        node_index: previous.node_index,
+                                        role: iced_node_editor::SocketRole::Out,
+                                        socket_index: previous.socket_index,
+                                    },
                                 ),
-                                iced::Point::new(
-                                    to.position.x,
-                                    to.position.y + (NODE_HEIGHT / 2.0),
+                                iced_node_editor::Endpoint::Socket(
+                                    iced_node_editor::LogicalEndpoint {
+                                        node_index: next.node_index,
+                                        role: iced_node_editor::SocketRole::In,
+                                        socket_index: next.socket_index,
+                                    },
                                 ),
                             )
                             .into(),
                         );
                     }
 
+                    // Append the dangling connection, if one exists
+                    if let Some(link) = &pane_state.dangling_connection {
+                        graph_content.push(iced_node_editor::Connection::new(link.clone()).into())
+                    }
+
                     iced_node_editor::graph_container::<message::Message, iced::Renderer>(
                         graph_content,
                     )
+                    .dangling_source(pane_state.dangling_source)
                     .on_translate(move |p| {
                         message::Message::Pane(
                             self_pane,
@@ -90,6 +123,20 @@ pub fn view<'a>(
                         message::Message::Pane(
                             self_pane,
                             message::PaneMessage::NodeEditorScaleChanged(x, y, s),
+                        )
+                    })
+                    .on_connect(message::Message::ConnectNodes)
+                    .on_disconnect(move |endpoint, new_dangling_end_position| {
+                        message::Message::DisconnectNodes(
+                            endpoint,
+                            new_dangling_end_position,
+                            self_pane,
+                        )
+                    })
+                    .on_dangling(move |maybe_dangling| {
+                        message::Message::Pane(
+                            self_pane,
+                            message::PaneMessage::NodeEditorDangling(maybe_dangling),
                         )
                     })
                     .width(iced::Length::Fill)
@@ -107,7 +154,7 @@ pub fn view<'a>(
     };
 
     super::PaneView {
-        title: iced::widget::text("Pane title").into(),
+        title: iced::widget::text("Node editor").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
@@ -115,6 +162,52 @@ pub fn view<'a>(
             .center_y()
             .into(),
     }
+}
+
+fn make_socket<'a, Message, Renderer>(
+    role: iced_node_editor::SocketRole,
+    socket_type: &nde::node::SocketType,
+) -> Option<iced_node_editor::Socket<'a, Message, Renderer>>
+where
+    Renderer: iced::advanced::text::Renderer + 'a,
+    <Renderer as iced::advanced::Renderer>::Theme: iced::widget::text::StyleSheet,
+{
+    let (blob_side, content_alignment) = match role {
+        iced_node_editor::SocketRole::In => (
+            iced_node_editor::SocketSide::Left,
+            iced::alignment::Horizontal::Left,
+        ),
+        iced_node_editor::SocketRole::Out => (
+            iced_node_editor::SocketSide::Right,
+            iced::alignment::Horizontal::Right,
+        ),
+    };
+
+    const BLOB_RADIUS: f32 = 7.0;
+
+    // The style of the blob is not determined by a style sheet, but by properties of the `Socket`
+    // itself.
+    let (blob_border_radius, blob_color, label) = match socket_type {
+        nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
+        nde::node::SocketType::MonotonicEvents => (0.0, crate::style::SAMAKU_PRIMARY, ""),
+        nde::node::SocketType::GenericEvents => (0.0, crate::style::SAMAKU_BACKGROUND, ""),
+        nde::node::SocketType::LeafInput(_) => return None,
+    };
+
+    Some(iced_node_editor::Socket {
+        role,
+        blob_side,
+        content_alignment,
+
+        blob_radius: BLOB_RADIUS,
+        blob_border_radius,
+        blob_color,
+        content: iced::widget::text(label).into(), // Arbitrary widgets can be used here.
+
+        min_height: 0.0,
+        max_height: f32::INFINITY,
+        blob_border_color: None, // If `None`, the one from the style sheet will be used.
+    })
 }
 
 pub fn update(
@@ -131,6 +224,14 @@ pub fn update(
         }
         message::PaneMessage::NodeEditorTranslationChanged(x, y) => {
             node_editor_state.matrix = node_editor_state.matrix.translate(x, y);
+        }
+        message::PaneMessage::NodeEditorDangling(Some((source, link))) => {
+            node_editor_state.dangling_source = Some(source);
+            node_editor_state.dangling_connection = Some(link);
+        }
+        message::PaneMessage::NodeEditorDangling(None) => {
+            node_editor_state.dangling_source = None;
+            node_editor_state.dangling_connection = None;
         }
         _ => (),
     }

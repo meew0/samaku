@@ -74,6 +74,14 @@ impl Graph {
         }
     }
 
+    pub fn connect(&mut self, next: NextEndpoint, previous: PreviousEndpoint) {
+        self.connections.insert(next, previous);
+    }
+
+    pub fn disconnect(&mut self, next: NextEndpoint) -> Option<PreviousEndpoint> {
+        self.connections.remove(&next)
+    }
+
     pub fn dfs(&self) -> DfsResult {
         let mut process_queue: VecDeque<usize> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];

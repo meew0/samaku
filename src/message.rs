@@ -53,6 +53,12 @@ pub enum Message {
     NdeExample,
 
     MoveNode(usize, f32, f32),
+    ConnectNodes(iced_node_editor::Link),
+    DisconnectNodes(
+        iced_node_editor::LogicalEndpoint,
+        iced::Point,
+        pane_grid::Pane,
+    ),
 }
 
 impl Message {
@@ -72,4 +78,5 @@ pub enum PaneMessage {
     GridColumnResized,
     NodeEditorScaleChanged(f32, f32, f32),
     NodeEditorTranslationChanged(f32, f32),
+    NodeEditorDangling(Option<(iced_node_editor::LogicalEndpoint, iced_node_editor::Link)>),
 }

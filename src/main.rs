@@ -315,6 +315,52 @@ impl Application for Samaku {
                     node.position = iced::Point::new(node.position.x + x, node.position.y + y);
                 }
             }
+            Self::Message::ConnectNodes(link) => {
+                if let Some(filter) = self.active_nde_filter_mut() {
+                    let (start, end) = link.unwrap_sockets();
+                    filter.graph.connect(
+                        nde::graph::NextEndpoint {
+                            node_index: end.node_index,
+                            socket_index: end.socket_index,
+                        },
+                        nde::graph::PreviousEndpoint {
+                            node_index: start.node_index,
+                            socket_index: start.socket_index,
+                        },
+                    )
+                }
+            }
+            Self::Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
+                if let Some(filter) = self.active_nde_filter_mut() {
+                    let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
+                        node_index: endpoint.node_index,
+                        socket_index: endpoint.socket_index,
+                    });
+
+                    if let Some(previous) = maybe_previous {
+                        if let Some(pane_state) = self.panes.get_mut(&source_pane) {
+                            match pane_state {
+                                pane::PaneState::NodeEditor(node_editor_state) => {
+                                    let new_dangling_source = iced_node_editor::LogicalEndpoint {
+                                        node_index: previous.node_index,
+                                        role: iced_node_editor::SocketRole::Out,
+                                        socket_index: previous.socket_index,
+                                    };
+                                    node_editor_state.dangling_source = Some(new_dangling_source);
+                                    node_editor_state.dangling_connection =
+                                        Some(iced_node_editor::Link::from_unordered(
+                                            iced_node_editor::Endpoint::Socket(new_dangling_source),
+                                            iced_node_editor::Endpoint::Absolute(
+                                                new_dangling_end_position,
+                                            ),
+                                        ));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Command::none()
