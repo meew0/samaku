@@ -289,7 +289,7 @@ impl Application for Samaku {
                 if self.subtitles.filters.is_empty() {
                     self.subtitles.filters.push(nde::Filter {
                         name: "Example filter".to_string(),
-                        graph: nde::Graph::from_single_intermediate(nde::Node::Italic),
+                        graph: nde::Graph::from_single_intermediate(Box::new(nde::node::Italic {})),
                     })
                 }
 

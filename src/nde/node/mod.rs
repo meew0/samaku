@@ -1,6 +1,14 @@
+use std::fmt::Debug;
+
+pub use input::InputSline;
+pub use output::Output;
+pub use style_basic::Italic;
+
 use crate::subtitle;
 
-use super::tags;
+mod input;
+mod output;
+mod style_basic;
 
 /// Represents a value passed into a socket.
 ///
@@ -66,7 +74,7 @@ impl<'a> SocketValue<'a> {
 }
 
 /// Represents a type of socket, as in, what kind of value a node would like to have passed into it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum SocketType {
     IndividualEvent,
     MonotonicEvents,
@@ -77,71 +85,25 @@ pub enum SocketType {
     LeafInput(LeafInputType),
 }
 
+impl SocketType {
+    pub fn is_event(&self) -> bool {
+        match self {
+            SocketType::IndividualEvent => true,
+            SocketType::MonotonicEvents => true,
+            SocketType::GenericEvents => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum LeafInputType {
     Sline,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Node {
-    Output,
-    InputSline,
-    Italic,
-    TestNodeWithTwoInputs,
-}
-
-impl Node {
-    pub fn name(&self) -> &'static str {
-        match self {
-            Node::Output => "Output",
-            Node::InputSline => "Input: Subtitle line",
-            Node::Italic => "Italicize",
-            Node::TestNodeWithTwoInputs => "Test node with two inputs",
-        }
-    }
-
-    pub fn desired_inputs(&self) -> &[SocketType] {
-        match self {
-            Node::Output => &[SocketType::GenericEvents],
-            Node::InputSline => &[SocketType::LeafInput(LeafInputType::Sline)],
-            Node::Italic => &[SocketType::GenericEvents],
-            Node::TestNodeWithTwoInputs => {
-                &[SocketType::IndividualEvent, SocketType::IndividualEvent]
-            }
-        }
-    }
-
-    pub fn run(&self, inputs: &[&SocketValue]) -> Vec<SocketValue> {
-        match self {
-            Node::Output => {
-                let compiled = inputs[0].map_events_into(super::Event::to_ass_event);
-                vec![SocketValue::CompiledEvents(compiled)]
-            }
-            Node::InputSline => {
-                let sline = match inputs[0] {
-                    SocketValue::Sline(sline) => sline,
-                    _ => panic!("expected sline"),
-                };
-                let event = super::Event {
-                    start: sline.start,
-                    duration: sline.duration,
-                    layer_index: sline.layer_index,
-                    style_index: sline.style_index,
-                    margins: sline.margins,
-                    global_tags: tags::Global::empty(),
-                    overrides: tags::Local::empty(),
-
-                    // TODO in the far future: parse ASS tags into span?
-                    text: vec![super::Span::Tags(tags::Local::empty(), sline.text.clone())],
-                };
-                vec![SocketValue::IndividualEvent(Box::new(event))]
-            }
-            Node::Italic => vec![inputs[0].map_events(|event| {
-                let mut new_event = event.clone();
-                new_event.overrides.italic = Some(true);
-                new_event
-            })],
-            Node::TestNodeWithTwoInputs => todo!(),
-        }
-    }
+pub trait Node: Debug {
+    fn name(&self) -> &'static str;
+    fn desired_inputs(&self) -> &[SocketType];
+    fn predicted_outputs(&self) -> &[SocketType];
+    fn run(&self, inputs: &[&SocketValue]) -> Vec<SocketValue>;
 }

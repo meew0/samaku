@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
-use super::node::Node;
+use super::node;
 
 /// A directed acyclic graph of nodes, representing a NDE filter as a whole.
 /// Stored as an adjacency list.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Graph {
     pub nodes: Vec<VisualNode>,
     pub connectors: Vec<Vec<Connector>>,
@@ -14,7 +14,7 @@ impl Default for Graph {
     fn default() -> Self {
         Graph {
             nodes: vec![VisualNode {
-                node: Node::Output,
+                node: Box::new(node::Output {}),
                 position: iced::Point { x: 0.0, y: 0.0 },
             }],
             connectors: vec![vec![]; 1],
@@ -25,11 +25,11 @@ impl Default for Graph {
 impl Graph {
     /// Returns a basic graph that contains an input node, an intermediate filter node,
     /// and an output node. Useful for testing.
-    pub fn from_single_intermediate(intermediate: Node) -> Self {
+    pub fn from_single_intermediate(intermediate: Box<dyn node::Node>) -> Self {
         Self {
             nodes: vec![
                 VisualNode {
-                    node: Node::Output,
+                    node: Box::new(node::Output {}),
                     position: iced::Point { x: 600.0, y: 0.0 },
                 },
                 VisualNode {
@@ -37,7 +37,7 @@ impl Graph {
                     position: iced::Point { x: 300.0, y: 0.0 },
                 },
                 VisualNode {
-                    node: Node::InputSline,
+                    node: Box::new(node::InputSline {}),
                     position: iced::Point { x: 0.0, y: 0.0 },
                 },
             ],
@@ -66,8 +66,8 @@ impl Graph {
 
     pub fn verify_output_node(&self) {
         let output_node = &self.nodes[0];
-        if output_node.node != Node::Output {
-            panic!("first node in graph must be the output node");
+        if output_node.node.predicted_outputs().len() > 0 {
+            panic!("first node in graph must be an output node");
         }
     }
 
@@ -175,9 +175,9 @@ impl CycleFound {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VisualNode {
-    pub node: Node,
+    pub node: Box<dyn node::Node>,
     pub position: iced::Point,
 }
 
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn cycle() {
-        let mut graph_with_cycle = Graph::from_single_intermediate(super::Node::Italic);
+        let mut graph_with_cycle = Graph::from_single_intermediate(Box::new(node::Italic {}));
         graph_with_cycle.connectors[2].push(Connector {
             previous_node_index: 0,
             previous_socket_index: 0,

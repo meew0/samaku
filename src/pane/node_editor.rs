@@ -45,7 +45,7 @@ pub fn view<'a>(
 
                     for (i, visual_node) in nde_filter.graph.nodes.iter().enumerate() {
                         graph_content.push(
-                            iced_node_editor::node(iced::widget::text(&visual_node.node.name()))
+                            iced_node_editor::node(iced::widget::text(visual_node.node.name()))
                                 .center_x()
                                 .center_y()
                                 .on_translate(move |(x, y)| {

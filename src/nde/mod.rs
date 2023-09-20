@@ -1,15 +1,15 @@
 use std::borrow::Cow;
 
+pub use graph::Graph;
+pub use node::Node;
+
 use crate::subtitle;
 
 pub mod graph;
 pub mod node;
 mod tags;
 
-pub use graph::Graph;
-pub use node::Node;
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Filter {
     pub name: String,
     pub graph: Graph,
