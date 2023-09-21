@@ -287,9 +287,16 @@ impl Application for Samaku {
             Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
             Self::Message::NdeExample => {
                 if self.subtitles.filters.is_empty() {
+                    let mut graph =
+                        nde::Graph::from_single_intermediate(Box::new(nde::node::Italic {}));
+                    // Add another italic node to be able to test out graph cycles
+                    graph.nodes.push(nde::graph::VisualNode {
+                        node: Box::new(nde::node::Italic {}),
+                        position: iced::Point::new(300.0, 300.0),
+                    });
                     self.subtitles.filters.push(nde::Filter {
                         name: "Example filter".to_string(),
-                        graph: nde::Graph::from_single_intermediate(Box::new(nde::node::Italic {})),
+                        graph,
                     })
                 }
 

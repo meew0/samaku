@@ -40,6 +40,17 @@ pub enum SocketValue<'a> {
 }
 
 impl<'a> SocketValue<'a> {
+    pub fn as_type(&self) -> Option<SocketType> {
+        match self {
+            SocketValue::None => None,
+            SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
+            SocketValue::MonotonicEvents(_) => Some(SocketType::MonotonicEvents),
+            SocketValue::GenericEvents(_) => Some(SocketType::GenericEvents),
+            SocketValue::Sline(_) => None,
+            SocketValue::CompiledEvents(_) => None,
+        }
+    }
+
     pub fn map_events<F>(&self, callback: F) -> Result<SocketValue<'static>, NodeError>
     where
         F: Fn(&super::Event) -> super::Event,
@@ -72,7 +83,7 @@ impl<'a> SocketValue<'a> {
 }
 
 /// Represents a type of socket, as in, what kind of value a node would like to have passed into it.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SocketType {
     IndividualEvent,
     MonotonicEvents,

@@ -24,6 +24,12 @@ pub const SAMAKU_PRIMARY: Color = Color::from_rgb(
     0x0a as f32 / 255.0,
 );
 
+pub const SAMAKU_INACTIVE: Color = Color::from_rgb(
+    0x66 as f32 / 255.0,
+    0x75 as f32 / 255.0,
+    0x74 as f32 / 255.0,
+);
+
 pub const SAMAKU_SUCCESS: Color = Color::from_rgb(
     0x06 as f32 / 255.0,
     0xb1 as f32 / 255.0,
