@@ -52,6 +52,21 @@ impl iced_node_editor::styles::node::StyleSheet for NodeStyle {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ConnectionStyle {
+    colour: iced::Color,
+}
+
+impl iced_node_editor::styles::connection::StyleSheet for ConnectionStyle {
+    type Style = iced::Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> iced_node_editor::styles::connection::Appearance {
+        iced_node_editor::styles::connection::Appearance {
+            color: Some(self.colour),
+        }
+    }
+}
+
 pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
@@ -222,6 +237,15 @@ pub fn view<'a>(
                         );
                     }
 
+                    let connection_style = match nde_result_or_error {
+                        Ok(_) => ConnectionStyle {
+                            colour: style::SAMAKU_PRIMARY,
+                        },
+                        Err(_) => ConnectionStyle {
+                            colour: style::SAMAKU_DESTRUCTIVE,
+                        },
+                    };
+
                     for (next, previous) in nde_filter.graph.connections.iter() {
                         graph_content.push(
                             iced_node_editor::Connection::between(
@@ -240,6 +264,9 @@ pub fn view<'a>(
                                     },
                                 ),
                             )
+                            .style(iced_node_editor::styles::connection::Node::Custom(
+                                Box::new(connection_style),
+                            ))
                             .into(),
                         );
                     }
