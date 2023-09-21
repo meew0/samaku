@@ -5,7 +5,7 @@
 use crate::{media, nde};
 
 pub mod ass;
-mod compile;
+pub mod compile;
 
 /// An `Sline` (“samaku line”/“subtitle line”/“sign or line”/etc.),
 /// in samaku terms, is one conceptual individual “subtitle”,
