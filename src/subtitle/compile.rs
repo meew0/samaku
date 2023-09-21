@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use crate::nde;
-use crate::subtitle::compile::NodeState::Inactive;
 
 pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Event<'a> {
     let event = super::ass::Event {
@@ -20,13 +19,12 @@ pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Ev
     event
 }
 
-pub fn nde<'a>(
+pub fn nde<'a, 'b>(
     sline: &'a super::Sline,
-    filter: &nde::graph::Graph,
+    filter: &'b nde::graph::Graph,
     counter: &mut i32,
-) -> Result<NdeResult<'a>, NdeError> {
-    let mut cache: Vec<Option<Vec<nde::node::SocketValue>>> = vec![None; filter.nodes.len()];
-    let mut node_states: Vec<NodeState> = vec![Inactive; filter.nodes.len()];
+) -> Result<NdeResult<'a, 'b>, NdeError> {
+    let mut intermediates: Vec<NodeState> = vec![NodeState::Inactive; filter.nodes.len()];
     let mut process_queue = match filter.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
@@ -51,37 +49,31 @@ pub fn nde<'a>(
             }
         }
 
+        // Find connections that would theoretically supply inputs to the current node,
+        // check whether those nodes are active, and if they are, supply the inputs
         for (socket_index, _) in desired_inputs.iter().enumerate() {
             if let Some(previous) = filter.connections.get(&nde::graph::NextEndpoint {
                 node_index,
                 socket_index,
             }) {
-                if node_states[previous.node_index] == NodeState::Active {
-                    let prev_cache = cache[previous.node_index]
-                        .as_ref()
-                        .expect("results from previous active node should have been cached");
+                if let NodeState::Active(prev_cache) = &intermediates[previous.node_index] {
                     inputs[socket_index] = &prev_cache[previous.socket_index];
                 }
             }
         }
 
-        // Run the node
-        match node.run(&inputs) {
-            Ok(outputs) => {
-                // Cache results and set node as active
-                cache[node_index] = Some(outputs);
-                node_states[node_index] = NodeState::Active;
-            }
-            Err(_) => {
-                node_states[node_index] = NodeState::Error;
-            }
+        // Run the node and store the results.
+        // Note that this is still done even if some of the previous nodes are inactive/errored.
+        // This means that the current node will likely error as well, but that is ok
+        intermediates[node_index] = match node.run(&inputs) {
+            Ok(outputs) => NodeState::Active(outputs),
+            Err(_) => NodeState::Error,
         }
     }
 
     // Get the “output” of the output node
-    match cache[0].as_mut() {
-        None => return Err(NdeError::NoOutput),
-        Some(output_node_outputs) => {
+    match &mut intermediates[0] {
+        NodeState::Active(ref mut output_node_outputs) => {
             let first_output = output_node_outputs.swap_remove(0);
 
             match first_output {
@@ -93,7 +85,7 @@ pub fn nde<'a>(
 
                     Ok(NdeResult {
                         events,
-                        node_states,
+                        intermediates,
                     })
                 }
                 _ => {
@@ -101,12 +93,13 @@ pub fn nde<'a>(
                 }
             }
         }
+        _ => Err(NdeError::NoOutput),
     }
 }
 
-pub struct NdeResult<'a> {
+pub struct NdeResult<'a, 'b> {
     pub events: Vec<super::ass::Event<'a>>,
-    pub node_states: Vec<NodeState>,
+    pub intermediates: Vec<NodeState<'b>>,
 }
 
 #[derive(Debug)]
@@ -115,10 +108,10 @@ pub enum NdeError {
     NoOutput,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeState {
+#[derive(Debug, Clone)]
+pub enum NodeState<'a> {
     Inactive,
-    Active,
+    Active(Vec<nde::node::SocketValue<'a>>),
     Error,
 }
 
@@ -158,8 +151,8 @@ mod tests {
 
         let result = nde(&sline, &filter, &mut counter).expect("there should be no error");
 
-        for node_state in result.node_states {
-            assert_eq!(node_state, NodeState::Active);
+        for node_state in result.intermediates {
+            assert!(matches!(node_state, NodeState::Active { .. }));
         }
 
         assert_eq!(result.events.len(), 1);
