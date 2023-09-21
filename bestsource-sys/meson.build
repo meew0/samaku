@@ -52,10 +52,8 @@ deps = [
     dependency('libswscale', version: '>=6.7.0', static: false)
 ]
 
-shared_module('bestsourcew', sources,
+static_library('bestsourcew', sources,
     dependencies: deps,
     gnu_symbol_visibility: 'default',
-    install: true,
-    install_dir: vapoursynth_dep.get_variable(pkgconfig: 'libdir') / 'vapoursynth',
     link_with: libs
 )
