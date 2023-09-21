@@ -151,8 +151,15 @@ mod tests {
 
         let result = nde(&sline, &filter, &mut counter).expect("there should be no error");
 
-        for node_state in result.intermediates {
+        for node_state in &result.intermediates {
             assert!(matches!(node_state, NodeState::Active { .. }));
+        }
+
+        if let NodeState::Active(socket_values) = &result.intermediates[1] {
+            assert!(matches!(
+                socket_values[0],
+                nde::node::SocketValue::IndividualEvent { .. }
+            ))
         }
 
         assert_eq!(result.events.len(), 1);
