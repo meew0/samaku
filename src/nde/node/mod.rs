@@ -87,12 +87,10 @@ pub enum SocketType {
 
 impl SocketType {
     pub fn is_event(&self) -> bool {
-        match self {
-            SocketType::IndividualEvent => true,
-            SocketType::MonotonicEvents => true,
-            SocketType::GenericEvents => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            SocketType::IndividualEvent | SocketType::MonotonicEvents | SocketType::GenericEvents
+        )
     }
 }
 

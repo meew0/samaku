@@ -338,25 +338,20 @@ impl Application for Samaku {
                     });
 
                     if let Some(previous) = maybe_previous {
-                        if let Some(pane_state) = self.panes.get_mut(&source_pane) {
-                            match pane_state {
-                                pane::PaneState::NodeEditor(node_editor_state) => {
-                                    let new_dangling_source = iced_node_editor::LogicalEndpoint {
-                                        node_index: previous.node_index,
-                                        role: iced_node_editor::SocketRole::Out,
-                                        socket_index: previous.socket_index,
-                                    };
-                                    node_editor_state.dangling_source = Some(new_dangling_source);
-                                    node_editor_state.dangling_connection =
-                                        Some(iced_node_editor::Link::from_unordered(
-                                            iced_node_editor::Endpoint::Socket(new_dangling_source),
-                                            iced_node_editor::Endpoint::Absolute(
-                                                new_dangling_end_position,
-                                            ),
-                                        ));
-                                }
-                                _ => {}
-                            }
+                        if let Some(pane::PaneState::NodeEditor(node_editor_state)) =
+                            self.panes.get_mut(&source_pane)
+                        {
+                            let new_dangling_source = iced_node_editor::LogicalEndpoint {
+                                node_index: previous.node_index,
+                                role: iced_node_editor::SocketRole::Out,
+                                socket_index: previous.socket_index,
+                            };
+                            node_editor_state.dangling_source = Some(new_dangling_source);
+                            node_editor_state.dangling_connection =
+                                Some(iced_node_editor::Link::from_unordered(
+                                    iced_node_editor::Endpoint::Socket(new_dangling_source),
+                                    iced_node_editor::Endpoint::Absolute(new_dangling_end_position),
+                                ));
                         }
                     }
                 }

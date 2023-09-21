@@ -69,7 +69,7 @@ impl Graph {
 
     pub fn verify_output_node(&self) {
         let output_node = &self.nodes[0];
-        if output_node.node.predicted_outputs().len() > 0 {
+        if !output_node.node.predicted_outputs().is_empty() {
             panic!("first node in graph must be an output node");
         }
     }

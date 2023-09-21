@@ -49,7 +49,7 @@ pub fn nde<'a>(
             }
         }
 
-        for socket_index in 0..(desired_inputs.len()) {
+        for (socket_index, _) in desired_inputs.iter().enumerate() {
             if let Some(previous) = filter.connections.get(&nde::graph::NextEndpoint {
                 node_index,
                 socket_index,
