@@ -66,7 +66,7 @@ impl<'a> SocketValue<'a> {
             SocketValue::IndividualEvent(event) => Ok(vec![callback(event.as_ref())]),
             SocketValue::MonotonicEvents(events) => Ok(events.iter().map(callback).collect()),
             SocketValue::GenericEvents(events) => Ok(events.iter().map(callback).collect()),
-            _ => panic!("expected events"),
+            _ => Err(NodeError::MismatchedTypes),
         }
     }
 }
