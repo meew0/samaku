@@ -1,4 +1,4 @@
-use super::{Node, SocketType, SocketValue};
+use super::{Node, NodeError, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Italic {}
@@ -16,11 +16,12 @@ impl Node for Italic {
         &[SocketType::GenericEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Vec<SocketValue> {
-        vec![inputs[0].map_events(|event| {
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError> {
+        let socket_value = inputs[0].map_events(|event| {
             let mut new_event = event.clone();
             new_event.overrides.italic = Some(true);
             new_event
-        })]
+        })?;
+        Ok(vec![socket_value])
     }
 }

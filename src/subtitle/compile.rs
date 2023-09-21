@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::nde;
+use crate::subtitle::compile::NodeState::Inactive;
 
 pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Event<'a> {
     let event = super::ass::Event {
@@ -25,6 +26,7 @@ pub fn nde<'a>(
     counter: &mut i32,
 ) -> Vec<super::ass::Event<'a>> {
     let mut cache: Vec<Option<Vec<nde::node::SocketValue>>> = vec![None; filter.nodes.len()];
+    let mut node_states: Vec<NodeState> = vec![Inactive; filter.nodes.len()];
     let mut process_queue = match filter.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => panic!("there should be no cycles in NDE graphs"),
@@ -54,18 +56,26 @@ pub fn nde<'a>(
                 node_index,
                 socket_index,
             }) {
-                let prev_cache = cache[previous.node_index]
-                    .as_ref()
-                    .expect("results from previous node should have been cached");
-                inputs[socket_index] = &prev_cache[previous.socket_index];
+                if node_states[previous.node_index] == NodeState::Active {
+                    let prev_cache = cache[previous.node_index]
+                        .as_ref()
+                        .expect("results from previous active node should have been cached");
+                    inputs[socket_index] = &prev_cache[previous.socket_index];
+                }
             }
         }
 
         // Run the node
-        let outputs = node.run(&inputs);
-
-        // Cache results
-        cache[node_index] = Some(outputs);
+        match node.run(&inputs) {
+            Ok(outputs) => {
+                // Cache results and set node as active
+                cache[node_index] = Some(outputs);
+                node_states[node_index] = NodeState::Active;
+            }
+            Err(_) => {
+                node_states[node_index] = NodeState::Error;
+            }
+        }
     }
 
     // Get the “output” of the output node
@@ -85,6 +95,13 @@ pub fn nde<'a>(
         }
         _ => panic!("the output of the output node should be a CompiledEvents socket value"),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NodeState {
+    Inactive,
+    Active,
+    Error,
 }
 
 #[cfg(test)]

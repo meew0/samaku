@@ -40,34 +40,32 @@ pub enum SocketValue<'a> {
 }
 
 impl<'a> SocketValue<'a> {
-    pub fn map_events<F>(&self, callback: F) -> SocketValue<'static>
+    pub fn map_events<F>(&self, callback: F) -> Result<SocketValue<'static>, NodeError>
     where
         F: Fn(&super::Event) -> super::Event,
     {
         match self {
-            SocketValue::IndividualEvent(event) => {
-                SocketValue::IndividualEvent(Box::new(callback(event.as_ref())))
-            }
-            SocketValue::MonotonicEvents(events) => {
-                SocketValue::MonotonicEvents(events.iter().map(callback).collect())
-            }
-            SocketValue::GenericEvents(events) => {
-                SocketValue::GenericEvents(events.iter().map(callback).collect())
-            }
-            _ => panic!("expected events"),
+            SocketValue::IndividualEvent(event) => Ok(SocketValue::IndividualEvent(Box::new(
+                callback(event.as_ref()),
+            ))),
+            SocketValue::MonotonicEvents(events) => Ok(SocketValue::MonotonicEvents(
+                events.iter().map(callback).collect(),
+            )),
+            SocketValue::GenericEvents(events) => Ok(SocketValue::GenericEvents(
+                events.iter().map(callback).collect(),
+            )),
+            _ => Err(NodeError::MismatchedTypes),
         }
     }
 
-    pub fn map_events_into<T, F>(&self, callback: F) -> Vec<T>
+    pub fn map_events_into<T, F>(&self, callback: F) -> Result<Vec<T>, NodeError>
     where
         F: Fn(&super::Event) -> T,
     {
         match self {
-            SocketValue::IndividualEvent(event) => {
-                vec![callback(event.as_ref())]
-            }
-            SocketValue::MonotonicEvents(events) => events.iter().map(callback).collect(),
-            SocketValue::GenericEvents(events) => events.iter().map(callback).collect(),
+            SocketValue::IndividualEvent(event) => Ok(vec![callback(event.as_ref())]),
+            SocketValue::MonotonicEvents(events) => Ok(events.iter().map(callback).collect()),
+            SocketValue::GenericEvents(events) => Ok(events.iter().map(callback).collect()),
             _ => panic!("expected events"),
         }
     }
@@ -103,5 +101,9 @@ pub trait Node: Debug {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
     fn predicted_outputs(&self) -> &[SocketType];
-    fn run(&self, inputs: &[&SocketValue]) -> Vec<SocketValue>;
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError>;
+}
+
+pub enum NodeError {
+    MismatchedTypes,
 }
