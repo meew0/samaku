@@ -82,6 +82,27 @@ impl Graph {
         self.connections.remove(&next)
     }
 
+    /// Iterate over the sockets connecting into the specified node.
+    /// Returns tuples `(previous_endpoint, next_socket_index)`
+    pub fn iter_previous(
+        &self,
+        next_node_index: usize,
+    ) -> impl Iterator<Item = (&PreviousEndpoint, usize)> {
+        self.nodes[next_node_index]
+            .node
+            .desired_inputs()
+            .iter()
+            .enumerate()
+            .flat_map(move |(socket_index, _)| {
+                self.connections
+                    .get(&NextEndpoint {
+                        node_index: next_node_index,
+                        socket_index,
+                    })
+                    .map(|previous_endpoint| (previous_endpoint, socket_index))
+            })
+    }
+
     pub fn dfs(&self) -> DfsResult {
         let mut process_queue: VecDeque<usize> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];
@@ -106,23 +127,17 @@ impl Graph {
     ) -> CycleFound {
         seen[next] = true;
 
-        let num_inputs = self.nodes[next].node.desired_inputs().len();
-        for socket_index in 0..num_inputs {
-            if let Some(previous) = self.connections.get(&NextEndpoint {
-                node_index: next,
-                socket_index,
-            }) {
-                let prev = previous.node_index;
-                if cycle_detector.set_parent(next, prev).cycle_found() {
-                    return CycleFound(true);
-                }
-                if !seen[prev]
-                    && self
-                        .dfs_internal(prev, process_queue, seen, cycle_detector)
-                        .cycle_found()
-                {
-                    return CycleFound(true);
-                }
+        for (previous, _) in self.iter_previous(next) {
+            let prev = previous.node_index;
+            if cycle_detector.set_parent(next, prev).cycle_found() {
+                return CycleFound(true);
+            }
+            if !seen[prev]
+                && self
+                    .dfs_internal(prev, process_queue, seen, cycle_detector)
+                    .cycle_found()
+            {
+                return CycleFound(true);
             }
         }
 

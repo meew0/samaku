@@ -51,14 +51,9 @@ pub fn nde<'a, 'b>(
 
         // Find connections that would theoretically supply inputs to the current node,
         // check whether those nodes are active, and if they are, supply the inputs
-        for (socket_index, _) in desired_inputs.iter().enumerate() {
-            if let Some(previous) = filter.connections.get(&nde::graph::NextEndpoint {
-                node_index,
-                socket_index,
-            }) {
-                if let NodeState::Active(prev_cache) = &intermediates[previous.node_index] {
-                    inputs[socket_index] = &prev_cache[previous.socket_index];
-                }
+        for (previous, next_socket_index) in filter.iter_previous(node_index) {
+            if let NodeState::Active(prev_cache) = &intermediates[previous.node_index] {
+                inputs[next_socket_index] = &prev_cache[previous.socket_index];
             }
         }
 
