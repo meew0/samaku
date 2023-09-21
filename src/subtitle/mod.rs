@@ -318,7 +318,12 @@ impl SlineTrack {
             match sline.nde_filter_index {
                 Some(filter_index) => {
                     let graph = &self.filters[filter_index].graph;
-                    compiled.append(&mut compile::nde(sline, graph, &mut counter))
+                    match compile::nde(sline, graph, &mut counter) {
+                        Ok(mut nde_result) => compiled.append(&mut nde_result.events),
+                        Err(error) => {
+                            println!("Got NdeError while running NDE filter: {:?}", error);
+                        }
+                    }
                 }
                 None => compiled.push(compile::trivial(sline, &mut counter)),
             }

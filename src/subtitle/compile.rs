@@ -24,12 +24,12 @@ pub fn nde<'a>(
     sline: &'a super::Sline,
     filter: &nde::graph::Graph,
     counter: &mut i32,
-) -> Vec<super::ass::Event<'a>> {
+) -> Result<NdeResult<'a>, NdeError> {
     let mut cache: Vec<Option<Vec<nde::node::SocketValue>>> = vec![None; filter.nodes.len()];
     let mut node_states: Vec<NodeState> = vec![Inactive; filter.nodes.len()];
     let mut process_queue = match filter.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
-        nde::graph::DfsResult::CycleFound => panic!("there should be no cycles in NDE graphs"),
+        nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
     };
     let sline_value = nde::node::SocketValue::Sline(sline);
 
@@ -79,26 +79,44 @@ pub fn nde<'a>(
     }
 
     // Get the “output” of the output node
-    let output_node_outputs = cache[0]
-        .as_mut()
-        .expect("the output node should have created a result");
-    let first_output = output_node_outputs.swap_remove(0);
+    match cache[0].as_mut() {
+        None => return Err(NdeError::NoOutput),
+        Some(output_node_outputs) => {
+            let first_output = output_node_outputs.swap_remove(0);
 
-    match first_output {
-        nde::node::SocketValue::CompiledEvents(mut events) => {
-            for event in events.iter_mut() {
-                event.read_order = *counter;
+            match first_output {
+                nde::node::SocketValue::CompiledEvents(mut events) => {
+                    for event in events.iter_mut() {
+                        event.read_order = *counter;
+                        *counter += 1;
+                    }
+
+                    Ok(NdeResult {
+                        events,
+                        node_states,
+                    })
+                }
+                _ => {
+                    panic!("the output of the output node should be a CompiledEvents socket value")
+                }
             }
-
-            *counter += 1;
-            events
         }
-        _ => panic!("the output of the output node should be a CompiledEvents socket value"),
     }
 }
 
+pub struct NdeResult<'a> {
+    pub events: Vec<super::ass::Event<'a>>,
+    pub node_states: Vec<NodeState>,
+}
+
+#[derive(Debug)]
+pub enum NdeError {
+    CycleInGraph,
+    NoOutput,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum NodeState {
+pub enum NodeState {
     Inactive,
     Active,
     Error,
@@ -138,10 +156,15 @@ mod tests {
 
         let mut counter = 0;
 
-        let result = nde(&sline, &filter, &mut counter);
-        assert_eq!(result.len(), 1);
+        let result = nde(&sline, &filter, &mut counter).expect("there should be no error");
 
-        let first_event = &result[0];
+        for node_state in result.node_states {
+            assert_eq!(node_state, NodeState::Active);
+        }
+
+        assert_eq!(result.events.len(), 1);
+
+        let first_event = &result.events[0];
         assert_eq!(first_event.text, "{\\i1}This text will become italic");
     }
 }
