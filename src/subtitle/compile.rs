@@ -84,7 +84,7 @@ pub fn nde<'a, 'b>(
                     }
 
                     Ok(NdeResult {
-                        events,
+                        events: Some(events),
                         intermediates,
                     })
                 }
@@ -93,19 +93,21 @@ pub fn nde<'a, 'b>(
                 }
             }
         }
-        _ => Err(NdeError::NoOutput),
+        _ => Ok(NdeResult {
+            events: None,
+            intermediates,
+        }),
     }
 }
 
 pub struct NdeResult<'a, 'b> {
-    pub events: Vec<super::ass::Event<'a>>,
+    pub events: Option<Vec<super::ass::Event<'a>>>,
     pub intermediates: Vec<NodeState<'b>>,
 }
 
 #[derive(Debug)]
 pub enum NdeError {
     CycleInGraph,
-    NoOutput,
 }
 
 #[derive(Debug, Clone)]
@@ -162,9 +164,10 @@ mod tests {
             ))
         }
 
-        assert_eq!(result.events.len(), 1);
+        let events = result.events.expect("there should be output events");
+        assert_eq!(events.len(), 1);
 
-        let first_event = &result.events[0];
+        let first_event = &events[0];
         assert_eq!(first_event.text, "{\\i1}This text will become italic");
     }
 }
