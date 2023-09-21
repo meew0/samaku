@@ -385,13 +385,20 @@ impl Application for Samaku {
                         } else {
                             style::title_bar_active
                         });
-                pane_grid::Content::new(pane_view.content)
-                    .title_bar(title_bar)
-                    .style(if is_focused {
-                        style::pane_focused
-                    } else {
-                        style::pane_active
-                    })
+
+                let pane_style = if is_focused {
+                    style::pane_focused
+                } else {
+                    style::pane_active
+                };
+
+                pane_grid::Content::new(
+                    view::widget::BorderAboveContainer::new(pane_view.content)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(pane_style),
+                )
+                .title_bar(title_bar)
             })
             .width(Length::Fill)
             .height(Length::Fill)
