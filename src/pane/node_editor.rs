@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
-use crate::subtitle::compile::NodeState;
+use crate::subtitle::compile::{NdeError, NodeState};
 use crate::{message, nde, style, subtitle, view};
 
 #[derive(Clone)]
@@ -315,8 +315,21 @@ pub fn view<'a>(
                         .item_width(iced_aw::menu::ItemWidth::Uniform(180))
                         .item_height(iced_aw::menu::ItemHeight::Uniform(32));
 
-                    let bottom_bar =
-                        iced::widget::container(iced::widget::row![menu_bar]).padding(5.0);
+                    let error_message = iced::widget::text(match nde_result_or_error {
+                        Ok(_) => "",
+                        Err(NdeError::CycleInGraph) => "Cycle detected!",
+                    })
+                    .style(style::SAMAKU_DESTRUCTIVE);
+
+                    let bottom_bar = iced::widget::container(
+                        iced::widget::row![
+                            menu_bar,
+                            iced::widget::horizontal_space(iced::Length::Fill),
+                            error_message
+                        ]
+                        .align_items(iced::Alignment::Center),
+                    )
+                    .padding(5.0);
 
                     let separator = iced_aw::quad::Quad {
                         width: iced::Length::Fill,
