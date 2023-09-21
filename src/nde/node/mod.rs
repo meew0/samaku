@@ -118,3 +118,20 @@ pub trait Node: Debug {
 pub enum NodeError {
     MismatchedTypes,
 }
+
+/// An “empty shell” representation of the operation performed by a node. Used to represent the
+/// idea of a node e.g. in the `AddNode` message.
+#[derive(Debug, Clone)]
+pub enum NodeShell {
+    InputSline,
+    Italic,
+}
+
+impl NodeShell {
+    pub fn instantiate(&self) -> Box<dyn Node> {
+        match self {
+            NodeShell::InputSline => Box::new(InputSline {}),
+            NodeShell::Italic => Box::new(Italic {}),
+        }
+    }
+}

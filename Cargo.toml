@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.10.0", features = ["lazy", "image", "advanced", "smol", "svg"] }
+iced_aw = { version = "0.7.0", features = ["menu"] }
 iced_table = "0.1"
 iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", branch = "sockets" }
 #iced_node_editor = { path = "../iced-node-editor/iced_node_editor" }

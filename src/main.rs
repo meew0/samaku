@@ -316,6 +316,15 @@ impl Application for Samaku {
 
                 self.subtitles.slines.push(new_sline);
             }
+            Self::Message::AddNode(node_shell) => {
+                if let Some(filter) = self.active_nde_filter_mut() {
+                    let visual_node = nde::graph::VisualNode {
+                        node: node_shell.instantiate(),
+                        position: iced::Point::new(0.0, 0.0),
+                    };
+                    filter.graph.nodes.push(visual_node);
+                }
+            }
             Self::Message::MoveNode(node_index, x, y) => {
                 if let Some(filter) = self.active_nde_filter_mut() {
                     let node = &mut filter.graph.nodes[node_index];

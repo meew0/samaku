@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, pane};
+use crate::{media, nde, pane};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -52,6 +52,7 @@ pub enum Message {
     /// temporary, for testing the NDE backend without having a frontend in place
     NdeExample,
 
+    AddNode(nde::node::NodeShell),
     MoveNode(usize, f32, f32),
     ConnectNodes(iced_node_editor::Link),
     DisconnectNodes(

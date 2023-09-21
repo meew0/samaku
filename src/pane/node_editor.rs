@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
 use crate::subtitle::compile::NodeState;
-use crate::{message, nde, style, subtitle};
+use crate::{message, nde, style, subtitle, view};
 
 #[derive(Clone)]
 pub struct State {
@@ -249,9 +249,10 @@ pub fn view<'a>(
                         graph_content.push(iced_node_editor::Connection::new(link.clone()).into())
                     }
 
-                    iced_node_editor::graph_container::<message::Message, iced::Renderer>(
-                        graph_content,
-                    )
+                    let graph_container = iced_node_editor::graph_container::<
+                        message::Message,
+                        iced::Renderer,
+                    >(graph_content)
                     .dangling_source(pane_state.dangling_source)
                     .on_translate(move |p| {
                         message::Message::Pane(
@@ -281,8 +282,28 @@ pub fn view<'a>(
                     })
                     .width(iced::Length::Fill)
                     .height(iced::Length::Fill)
-                    .matrix(pane_state.matrix)
-                    .into()
+                    .matrix(pane_state.matrix);
+
+                    let menu_bar = iced_aw::menu_bar!(add_menu())
+                        .item_width(iced_aw::menu::ItemWidth::Uniform(180))
+                        .item_height(iced_aw::menu::ItemHeight::Uniform(32));
+
+                    let bottom_bar =
+                        iced::widget::container(iced::widget::row![menu_bar]).padding(5.0);
+
+                    let separator = iced_aw::quad::Quad {
+                        width: iced::Length::Fill,
+                        height: iced::Length::Fixed(0.5),
+                        color: style::samaku_theme()
+                            .extended_palette()
+                            .background
+                            .weak
+                            .color,
+                        inner_bounds: iced_aw::quad::InnerBounds::Ratio(1.0, 1.0),
+                        ..Default::default()
+                    };
+
+                    iced::widget::column![graph_container, separator, bottom_bar].into()
                 }
                 None => {
                     iced::widget::text("Currently selected subtitle does not have an NDE filter.")
@@ -348,6 +369,37 @@ where
         max_height: f32::INFINITY,
         blob_border_color: None, // If `None`, the one from the style sheet will be used.
     })
+}
+
+fn menu_item(
+    label: &str,
+    node_shell: nde::node::NodeShell,
+) -> iced_aw::menu::MenuTree<message::Message, iced::Renderer> {
+    iced_aw::menu_tree!(
+        view::menu::labeled_button(label, message::Message::AddNode(node_shell))
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+    )
+}
+
+fn sub_menu<'a>(
+    label: &str,
+    children: Vec<iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer>>,
+) -> iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer> {
+    view::menu::sub_menu(label, message::Message::None, children)
+}
+
+fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer> {
+    iced_aw::helpers::menu_tree(
+        iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
+        vec![
+            sub_menu(
+                "Input",
+                vec![menu_item("Input", nde::node::NodeShell::InputSline)],
+            ),
+            menu_item("Italicise", nde::node::NodeShell::Italic),
+        ],
+    )
 }
 
 pub fn update(
