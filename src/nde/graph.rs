@@ -23,6 +23,36 @@ impl Default for Graph {
 }
 
 impl Graph {
+    /// Returns a graph that contains an input node connected to an output node, with no further
+    /// processing done.
+    pub fn identity() -> Self {
+        let mut connections = HashMap::new();
+        connections.insert(
+            NextEndpoint {
+                node_index: 0,
+                socket_index: 0,
+            },
+            PreviousEndpoint {
+                node_index: 1,
+                socket_index: 0,
+            },
+        );
+
+        Self {
+            nodes: vec![
+                VisualNode {
+                    node: Box::new(node::Output {}),
+                    position: iced::Point { x: 400.0, y: 100.0 },
+                },
+                VisualNode {
+                    node: Box::new(node::InputSline {}),
+                    position: iced::Point { x: 100.0, y: 100.0 },
+                },
+            ],
+            connections,
+        }
+    }
+
     /// Returns a basic graph that contains an input node, an intermediate filter node,
     /// and an output node. Useful for testing.
     pub fn from_single_intermediate(intermediate: Box<dyn node::Node>) -> Self {

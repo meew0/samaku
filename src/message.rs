@@ -49,7 +49,10 @@ pub enum Message {
     SelectSline(usize),
     SetActiveSlineText(String),
 
+    CreateEmptyFilter,
+    AssignFilterToActiveSline(usize),
     SetActiveFilterName(String),
+    DeleteFilter(usize),
     /// temporary, for testing the NDE backend without having a frontend in place
     NdeExample,
 
@@ -81,4 +84,5 @@ pub enum PaneMessage {
     NodeEditorScaleChanged(f32, f32, f32),
     NodeEditorTranslationChanged(f32, f32),
     NodeEditorDangling(Option<(iced_node_editor::LogicalEndpoint, iced_node_editor::Link)>),
+    NodeEditorFilterSelected(usize, pane::node_editor::FilterReference),
 }

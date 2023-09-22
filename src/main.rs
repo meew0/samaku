@@ -8,6 +8,8 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 
+use crate::pane::PaneState;
+
 mod keyboard;
 mod media;
 mod message;
@@ -117,6 +119,16 @@ impl Samaku {
                 None => None,
             },
             None => None,
+        }
+    }
+
+    /// Notifies all entities (like node editor panes) that keep some internal copy of the
+    /// NDE filter list to update their internal representations
+    pub fn update_filter_lists(&mut self) {
+        for pane in self.panes.panes.values_mut() {
+            if let PaneState::NodeEditor(node_editor_state) = pane {
+                node_editor_state.update_filter_names(&self.subtitles)
+            }
         }
     }
 }
@@ -285,10 +297,26 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
+            Self::Message::CreateEmptyFilter => {
+                self.subtitles.filters.push(nde::Filter {
+                    name: "".to_string(),
+                    graph: nde::graph::Graph::identity(),
+                });
+                self.update_filter_lists();
+            }
+            Self::Message::AssignFilterToActiveSline(filter_index) => {
+                if let Some(active_sline) = self.active_sline_mut() {
+                    active_sline.nde_filter_index = Some(filter_index);
+                }
+            }
             Self::Message::SetActiveFilterName(new_name) => {
                 if let Some(filter) = self.active_nde_filter_mut() {
                     filter.name = new_name;
+                    self.update_filter_lists();
                 }
+            }
+            Self::Message::DeleteFilter(filter_index) => {
+                todo!()
             }
             Self::Message::NdeExample => {
                 if self.subtitles.filters.is_empty() {
@@ -320,6 +348,7 @@ impl Application for Samaku {
                 };
 
                 self.subtitles.slines.push(new_sline);
+                self.update_filter_lists();
             }
             Self::Message::AddNode(node_shell) => {
                 if let Some(filter) = self.active_nde_filter_mut() {

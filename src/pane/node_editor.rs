@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use crate::subtitle::compile::{NdeError, NodeState};
 use crate::{message, nde, style, subtitle, view};
@@ -7,8 +7,26 @@ use crate::{message, nde, style, subtitle, view};
 #[derive(Clone)]
 pub struct State {
     matrix: iced_node_editor::Matrix,
+    filters: Vec<FilterReference>,
+    selection_index: Option<usize>,
+    selected_filter: Option<FilterReference>,
     pub dangling_source: Option<iced_node_editor::LogicalEndpoint>,
     pub dangling_connection: Option<iced_node_editor::Link>,
+}
+
+impl State {
+    pub fn update_filter_names(&mut self, subtitles: &subtitle::SlineTrack) {
+        self.filters.clear();
+        for (i, filter) in subtitles.filters.iter().enumerate() {
+            self.filters.push(FilterReference {
+                name: filter.name.clone(),
+                index: i,
+            });
+        }
+
+        self.selection_index = None;
+        self.selected_filter = None;
+    }
 }
 
 // `iced_node_editor::Matrix` doesn't implement `Debug`.
@@ -23,8 +41,27 @@ impl Default for State {
     fn default() -> Self {
         Self {
             matrix: iced_node_editor::Matrix::identity(),
+            filters: vec![],
+            selection_index: None,
+            selected_filter: None,
             dangling_connection: None,
             dangling_source: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct FilterReference {
+    pub name: String,
+    pub index: usize,
+}
+
+impl Display for FilterReference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.name.is_empty() {
+            f.write_str("(unnamed filter)")
+        } else {
+            f.write_str(self.name.as_str())
         }
     }
 }
@@ -353,8 +390,43 @@ pub fn view<'a>(
                     iced::widget::column![graph_container, separator, bottom_bar].into()
                 }
                 None => {
-                    iced::widget::text("Currently selected subtitle does not have an NDE filter.")
-                        .into()
+                    let selection_list = iced_aw::selection_list(
+                        pane_state.filters.as_slice(),
+                        move |selection_index, filter_ref| {
+                            message::Message::Pane(
+                                self_pane,
+                                message::PaneMessage::NodeEditorFilterSelected(
+                                    selection_index,
+                                    filter_ref,
+                                ),
+                            )
+                        },
+                    )
+                    .width(iced::Length::Fixed(200.0))
+                    .height(iced::Length::Fixed(200.0));
+
+                    let assign_button = iced::widget::button(iced::widget::text("Assign"))
+                        .on_press_maybe(pane_state.selected_filter.as_ref().map(|filter_ref| {
+                            message::Message::AssignFilterToActiveSline(filter_ref.index)
+                        }));
+
+                    let create_button = iced::widget::button(iced::widget::text("Create new"))
+                        .on_press(message::Message::CreateEmptyFilter);
+                    let delete_button = iced::widget::button(iced::widget::text("Delete"))
+                        .on_press_maybe(
+                            pane_state
+                                .selected_filter
+                                .as_ref()
+                                .map(|filter_ref| message::Message::DeleteFilter(filter_ref.index)),
+                        );
+
+                    iced::widget::column![
+                        iced::widget::text("Filters").size(20),
+                        selection_list,
+                        iced::widget::row![assign_button, create_button, delete_button].spacing(5)
+                    ]
+                    .spacing(5)
+                    .into()
                 }
             }
         }
@@ -471,6 +543,10 @@ pub fn update(
         message::PaneMessage::NodeEditorDangling(None) => {
             node_editor_state.dangling_source = None;
             node_editor_state.dangling_connection = None;
+        }
+        message::PaneMessage::NodeEditorFilterSelected(selection_index, filter_ref) => {
+            node_editor_state.selection_index = Some(selection_index);
+            node_editor_state.selected_filter = Some(filter_ref);
         }
         _ => (),
     }
