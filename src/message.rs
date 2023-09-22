@@ -51,6 +51,7 @@ pub enum Message {
 
     CreateEmptyFilter,
     AssignFilterToActiveSline(usize),
+    UnassignFilterFromActiveSline,
     SetActiveFilterName(String),
     DeleteFilter(usize),
     /// temporary, for testing the NDE backend without having a frontend in place

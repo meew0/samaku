@@ -305,6 +305,11 @@ impl Application for Samaku {
                     active_sline.nde_filter_index = Some(filter_index);
                 }
             }
+            Self::Message::UnassignFilterFromActiveSline => {
+                if let Some(active_sline) = self.active_sline_mut() {
+                    active_sline.nde_filter_index = None;
+                }
+            }
             Self::Message::SetActiveFilterName(new_name) => {
                 if let Some(filter) = self.active_nde_filter_mut() {
                     filter.name = new_name;

@@ -352,6 +352,9 @@ pub fn view<'a>(
                         .item_width(iced_aw::menu::ItemWidth::Uniform(180))
                         .item_height(iced_aw::menu::ItemHeight::Uniform(32));
 
+                    let unassign_button = iced::widget::button(iced::widget::text("Unassign"))
+                        .on_press(message::Message::UnassignFilterFromActiveSline);
+
                     let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
                         .on_input(message::Message::SetActiveFilterName)
                         .padding(5.0)
@@ -366,6 +369,7 @@ pub fn view<'a>(
                     let bottom_bar = iced::widget::container(
                         iced::widget::row![
                             menu_bar,
+                            unassign_button,
                             name_box,
                             iced::widget::horizontal_space(iced::Length::Fill),
                             error_message
@@ -409,7 +413,6 @@ pub fn view<'a>(
                         .on_press_maybe(pane_state.selected_filter.as_ref().map(|filter_ref| {
                             message::Message::AssignFilterToActiveSline(filter_ref.index)
                         }));
-
                     let create_button = iced::widget::button(iced::widget::text("Create new"))
                         .on_press(message::Message::CreateEmptyFilter);
                     let delete_button = iced::widget::button(iced::widget::text("Delete"))
