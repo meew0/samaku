@@ -244,22 +244,18 @@ impl Application for Samaku {
                 self.workers.emit_restart_audio();
             }
             Self::Message::SelectSubtitleFile => {
-                if self.video_metadata.is_some() {
-                    let future = async {
-                        match rfd::AsyncFileDialog::new().pick_file().await {
-                            Some(handle) => {
-                                Some(smol::fs::read_to_string(handle.path()).await.unwrap())
-                            }
-                            None => None,
+                let future = async {
+                    match rfd::AsyncFileDialog::new().pick_file().await {
+                        Some(handle) => {
+                            Some(smol::fs::read_to_string(handle.path()).await.unwrap())
                         }
-                    };
-                    return Command::perform(
-                        future,
-                        Self::Message::map_option(|content| {
-                            Self::Message::SubtitleFileRead(content)
-                        }),
-                    );
-                }
+                        None => None,
+                    }
+                };
+                return Command::perform(
+                    future,
+                    Self::Message::map_option(Self::Message::SubtitleFileRead),
+                );
             }
             Self::Message::SubtitleFileRead(content) => {
                 let ass = media::subtitle::OpaqueTrack::parse(content);
