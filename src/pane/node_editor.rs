@@ -315,6 +315,11 @@ pub fn view<'a>(
                         .item_width(iced_aw::menu::ItemWidth::Uniform(180))
                         .item_height(iced_aw::menu::ItemHeight::Uniform(32));
 
+                    let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
+                        .on_input(message::Message::SetActiveFilterName)
+                        .padding(5.0)
+                        .width(iced::Length::Fixed(200.0));
+
                     let error_message = iced::widget::text(match nde_result_or_error {
                         Ok(_) => "",
                         Err(NdeError::CycleInGraph) => "Cycle detected!",
@@ -324,9 +329,11 @@ pub fn view<'a>(
                     let bottom_bar = iced::widget::container(
                         iced::widget::row![
                             menu_bar,
+                            name_box,
                             iced::widget::horizontal_space(iced::Length::Fill),
                             error_message
                         ]
+                        .spacing(5.0)
                         .align_items(iced::Alignment::Center),
                     )
                     .padding(5.0);

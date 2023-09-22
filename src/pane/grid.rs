@@ -21,6 +21,11 @@ impl Default for State {
                     resize_offset: None,
                 },
                 Column {
+                    field: ColumnField::FilterName,
+                    width: 200.0,
+                    resize_offset: None,
+                },
+                Column {
                     field: ColumnField::Start,
                     width: 100.0,
                     resize_offset: None,
@@ -50,6 +55,7 @@ pub struct Column {
 #[derive(Debug, Clone, Copy)]
 pub enum ColumnField {
     SelectButton,
+    FilterName,
     Start,
     Duration,
     Text,
@@ -62,6 +68,7 @@ impl Display for ColumnField {
             "{}",
             match self {
                 ColumnField::SelectButton => "Select",
+                ColumnField::FilterName => "Filter name",
                 ColumnField::Start => "Start",
                 ColumnField::Duration => "Duration",
                 ColumnField::Text => "Text",
@@ -70,14 +77,16 @@ impl Display for ColumnField {
     }
 }
 
-impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer> for Column {
+impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
+    for (&'a crate::Samaku, &'a Column)
+{
     type Row = subtitle::Sline;
 
     fn header(
         &'b self,
         _col_index: usize,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
-        iced::widget::container(iced::widget::text(format!("{}", self.field)))
+        iced::widget::container(iced::widget::text(format!("{}", self.1.field)))
             .height(24)
             .center_y()
             .into()
@@ -89,10 +98,22 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         row_index: usize,
         row: &'b Self::Row,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
-        let cell_content: iced::Element<message::Message> = match self.field {
+        let cell_content: iced::Element<message::Message> = match self.1.field {
             ColumnField::SelectButton => iced::widget::button(" ")
                 .on_press(message::Message::SelectSline(row_index))
                 .into(),
+            ColumnField::FilterName => iced::widget::text(match row.nde_filter_index {
+                Some(index) => {
+                    let stored_name = &self.0.subtitles.filters[index].name;
+                    if stored_name.is_empty() {
+                        "(unnamed filter)"
+                    } else {
+                        stored_name
+                    }
+                }
+                None => "",
+            })
+            .into(),
             ColumnField::Start => iced::widget::text(format!("{}", row.start.0)).into(),
             ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
             ColumnField::Text => iced::widget::text(row.text.to_string()).into(),
@@ -104,11 +125,11 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     }
 
     fn width(&self) -> f32 {
-        self.width
+        self.1.width
     }
 
     fn resize_offset(&self) -> Option<f32> {
-        self.resize_offset
+        self.1.resize_offset
     }
 }
 
@@ -117,11 +138,15 @@ pub fn view<'a>(
     global_state: &'a crate::Samaku,
     grid_state: &'a State,
 ) -> super::PaneView<'a> {
+    let columns_with_state: Vec<(&'a crate::Samaku, &Column)> = std::iter::repeat(global_state)
+        .zip(&grid_state.columns)
+        .collect();
+
     let table = iced::widget::responsive(move |size| {
         iced_table::table(
             grid_state.header_scrollable_id.clone(),
             grid_state.body_scrollable_id.clone(),
-            &grid_state.columns,
+            columns_with_state.as_slice(),
             &global_state.subtitles.slines,
             // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
             // does not support passing a closure here.

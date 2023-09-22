@@ -285,6 +285,11 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
+            Self::Message::SetActiveFilterName(new_name) => {
+                if let Some(filter) = self.active_nde_filter_mut() {
+                    filter.name = new_name;
+                }
+            }
             Self::Message::NdeExample => {
                 if self.subtitles.filters.is_empty() {
                     let mut graph =

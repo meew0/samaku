@@ -49,6 +49,7 @@ pub enum Message {
     SelectSline(usize),
     SetActiveSlineText(String),
 
+    SetActiveFilterName(String),
     /// temporary, for testing the NDE backend without having a frontend in place
     NdeExample,
 
