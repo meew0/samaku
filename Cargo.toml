@@ -14,6 +14,7 @@ iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", bran
 rustsynth-sys = { version = "0.4.0", features = ["vapoursynth-functions", "vsscript-functions"] }
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
+libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
 once_cell = "1.18.0"
 rfd = "0.12.0"
 smol = "1.3.0"

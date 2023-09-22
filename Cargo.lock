@@ -1940,6 +1940,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
 
 [[package]]
+name = "libmv-capi-sys"
+version = "0.1.0"
+source = "git+https://github.com/meew0/libmv-capi-sys.git#4cfa3ab50b50ef26940624cdeba67542ae782582"
+dependencies = [
+ "bindgen 0.68.1",
+ "cc",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3098,6 +3107,7 @@ dependencies = [
  "iced_table",
  "libass-sys",
  "libc",
+ "libmv-capi-sys",
  "once_cell",
  "rfd",
  "rustsynth-sys",
