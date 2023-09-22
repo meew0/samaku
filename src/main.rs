@@ -287,12 +287,28 @@ impl Application for Samaku {
                     .playing
                     .fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
             }
+            Self::Message::AddSline => {
+                let new_sline = subtitle::Sline {
+                    start: subtitle::StartTime(0),
+                    duration: subtitle::Duration(5000),
+                    layer_index: 0,
+                    style_index: 0,
+                    margins: subtitle::Margins {
+                        left: 50,
+                        right: 50,
+                        vertical: 50,
+                    },
+                    text: "Sphinx of black quartz, judge my vow".to_string(),
+                    nde_filter_index: None,
+                };
+                self.subtitles.slines.push(new_sline);
+            }
+            Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
             Self::Message::SetActiveSlineText(new_text) => {
                 if let Some(sline) = self.active_sline_mut() {
                     sline.text = new_text;
                 }
             }
-            Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
             Self::Message::CreateEmptyFilter => {
                 self.subtitles.filters.push(nde::Filter {
                     name: "".to_string(),
@@ -318,38 +334,6 @@ impl Application for Samaku {
             }
             Self::Message::DeleteFilter(filter_index) => {
                 todo!()
-            }
-            Self::Message::NdeExample => {
-                if self.subtitles.filters.is_empty() {
-                    let mut graph =
-                        nde::Graph::from_single_intermediate(Box::new(nde::node::Italic {}));
-                    // Add another italic node to be able to test out graph cycles
-                    graph.nodes.push(nde::graph::VisualNode {
-                        node: Box::new(nde::node::Italic {}),
-                        position: iced::Point::new(300.0, 300.0),
-                    });
-                    self.subtitles.filters.push(nde::Filter {
-                        name: "Example filter".to_string(),
-                        graph,
-                    })
-                }
-
-                let new_sline = subtitle::Sline {
-                    start: subtitle::StartTime(0),
-                    duration: subtitle::Duration(5000),
-                    layer_index: 0,
-                    style_index: 0,
-                    margins: subtitle::Margins {
-                        left: 50,
-                        right: 50,
-                        vertical: 50,
-                    },
-                    text: "Sphinx of black quartz, judge my vow".to_string(),
-                    nde_filter_index: Some(0),
-                };
-
-                self.subtitles.slines.push(new_sline);
-                self.update_filter_lists();
             }
             Self::Message::AddNode(node_shell) => {
                 if let Some(filter) = self.active_nde_filter_mut() {

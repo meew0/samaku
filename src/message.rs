@@ -46,6 +46,8 @@ pub enum Message {
     PlaybackAdvanceSeconds(f64),
     TogglePlayback,
 
+    AddSline,
+
     SelectSline(usize),
     SetActiveSlineText(String),
 
@@ -54,8 +56,6 @@ pub enum Message {
     UnassignFilterFromActiveSline,
     SetActiveFilterName(String),
     DeleteFilter(usize),
-    /// temporary, for testing the NDE backend without having a frontend in place
-    NdeExample,
 
     AddNode(nde::node::NodeShell),
     MoveNode(usize, f32, f32),
