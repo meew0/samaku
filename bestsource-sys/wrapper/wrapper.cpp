@@ -118,7 +118,6 @@ BSW_DoubleWithError BestAudioSource_GetRelativeStartTime(void *self, int Track)
     }
     catch (...)
     {
-        BSW_DoubleWithError ret;
         ret.error = 1;
     }
     return ret;
@@ -140,7 +139,6 @@ BSW_IntWithError BestAudioSource_GetExactDuration(void *self)
     }
     catch (...)
     {
-        BSW_IntWithError ret;
         ret.error = 1;
     }
     return ret;

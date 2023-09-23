@@ -133,3 +133,34 @@ impl Drop for BestAudioSource {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn audio_properties_and_decoding() {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let music_path = Path::new(&manifest_dir).join("test_files/music.mp3");
+        if !music_path.exists() {
+            panic!("Could not find test data (test_files/music.mp3)! Perhaps some relative-path problem?");
+        }
+
+        let mut bas = BestAudioSource::new(music_path, -1, -1, 0, Path::new(""), 0.0);
+        let properties = bas.get_audio_properties();
+
+        assert_eq!(properties.sample_rate, 44100);
+        assert_eq!(properties.channels, 2);
+
+        let mut slice = vec![0u8; 256 * properties.bytes_per_sample as usize];
+        bas.get_packed_audio(&mut slice, 88200, 128);
+        assert_ne!(
+            slice,
+            vec![0u8; 256 * properties.bytes_per_sample as usize],
+            "there should be some audio data"
+        );
+    }
+}

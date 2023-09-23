@@ -1,23 +1,84 @@
 extern crate cc;
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-fn main() {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let bestsource_library_dir = Path::new(&manifest_dir).join("build");
-    if !bestsource_library_dir.join("libbestsourcew.so").exists() {
-        panic!("Missing compiled libbestsourcew.so! Please build BestSource according to the instructions in the README.");
+fn libp2p_compiler() -> cc::Build {
+    let mut libp2p_compiler = cc::Build::new();
+    libp2p_compiler.cpp(true).include("libp2p");
+
+    // TODO: allow manually configuring whether to use SIMD or not
+    if cfg!(target_arch = "x86_64") {
+        libp2p_compiler.define("P2P_SIMD", Some(""));
     }
 
-    println!("cargo:rustc-link-lib=bestsourcew");
-    println!(
-        "cargo:rustc-link-search=native={}",
-        bestsource_library_dir.display()
-    );
-    println!("cargo:rerun-if-changed=meson.build");
-    println!("cargo:rerun-if-changed=wrapper/wrapper.cpp");
+    libp2p_compiler
+}
+
+fn main() {
+    // Compile BestSource itself, together with our C wrapper
+    let bestsourcew_sources = [
+        "bestsource/src/audiosource.cpp",
+        "bestsource/src/videosource.cpp",
+        "bestsource/src/SrcAttribCache.cpp",
+        "bestsource/src/BSRational.cpp",
+        "bestsource/src/vapoursynth.cpp",
+        "wrapper/wrapper.cpp",
+    ];
+
+    // TODO: make this portable
+    let vapoursynth_include_path = env::var("VAPOURSYNTH_INCLUDE_PATH")
+        .unwrap_or_else(|_| "/usr/include/vapoursynth".to_string());
+
+    cc::Build::new()
+        .cpp(true)
+        .include("bestsource/src")
+        .include("libp2p")
+        .include(vapoursynth_include_path)
+        .files(bestsourcew_sources.iter())
+        .flag_if_supported("-Wno-sign-compare")
+        .flag_if_supported("-Wno-missing-field-initializers")
+        .flag_if_supported("-Wno-reorder")
+        .flag_if_supported("-Wno-unused-parameter")
+        .compile("bestsourcew");
+
+    // Compile libp2p as well. BestSource only uses this for video decoding,
+    // so it is not strictly necessary for our purposes,
+    // but we might consider using it as well in the future
+    let libp2p_sources = vec![
+        "libp2p/p2p_api.cpp",
+        "libp2p/v210.cpp",
+        "libp2p/simd/cpuinfo_x86.cpp",
+        "libp2p/simd/p2p_simd.cpp",
+    ];
+
+    libp2p_compiler()
+        .files(libp2p_sources.iter())
+        .flag_if_supported("-Wno-missing-field-initializers")
+        .flag_if_supported("-Wno-unused-parameter")
+        .compile("p2p_main");
+
+    // TODO: allow manually configuring whether to use SIMD or not
+    if cfg!(target_arch = "x86_64") {
+        let libp2p_sse41_source = "libp2p/simd/p2p_sse41.cpp";
+        libp2p_compiler()
+            .flag("-msse4.1")
+            .file(libp2p_sse41_source)
+            .compile("p2p_sse41");
+        println!("cargo:rerun-if-changed={}", libp2p_sse41_source);
+    }
+
+    for source in bestsourcew_sources.iter().chain(libp2p_sources.iter()) {
+        println!("cargo:rerun-if-changed={}", source);
+    }
     println!("cargo:rerun-if-changed=wrapper/wrapper.h");
+
+    // BestSource dependencies
+    println!("cargo:rustc-link-lib=jansson");
+    println!("cargo:rustc-link-lib=avcodec");
+    println!("cargo:rustc-link-lib=avformat");
+    println!("cargo:rustc-link-lib=avutil");
+    println!("cargo:rustc-link-lib=swscale");
 
     let bindings = bindgen::Builder::default()
         .header("wrapper/wrapper.h")
