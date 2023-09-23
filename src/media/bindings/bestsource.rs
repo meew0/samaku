@@ -136,20 +136,13 @@ impl Drop for BestAudioSource {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::path::Path;
-
     use super::*;
 
     #[test]
     fn audio_properties_and_decoding() {
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let music_path = Path::new(&manifest_dir).join("test_files/music.mp3");
-        if !music_path.exists() {
-            panic!("Could not find test data (test_files/music.mp3)! Perhaps some relative-path problem?");
-        }
+        let music_path = crate::test_utils::test_file("test_files/music.mp3");
 
-        let mut bas = BestAudioSource::new(music_path, -1, -1, 0, Path::new(""), 0.0);
+        let mut bas = BestAudioSource::new(music_path, -1, -1, 0, std::path::Path::new(""), 0.0);
         let properties = bas.get_audio_properties();
 
         assert_eq!(properties.sample_rate, 44100);

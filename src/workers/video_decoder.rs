@@ -33,7 +33,7 @@ pub fn spawn(
                                     playback_state.current_frame(video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
-                                    let handle = video.get_frame(new_frame);
+                                    let handle = video.get_iced_frame(new_frame);
                                     if tx_out
                                         .unbounded_send(message::Message::VideoFrameAvailable(
                                             new_frame, handle,

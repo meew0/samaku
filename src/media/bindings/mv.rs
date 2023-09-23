@@ -20,17 +20,17 @@ pub fn set_logging_verbosity(verbosity: i32) {
 }
 
 pub struct TrackRegionOptions {
-    direction: TrackRegionDirection,
-    motion_model: MotionModel,
+    pub direction: TrackRegionDirection,
+    pub motion_model: MotionModel,
 
     /// `[libmv]` Maximum number of Ceres iterations to run for the inner minimization.
-    num_iterations: i32,
+    pub num_iterations: i32,
 
     /// `[libmv]` If true, apply a brute-force translation-only search before attempting the
     /// full search. This is not enabled if the destination image ("image2") is
     /// too small; in that case either the basin of attraction is close enough
     /// that the nearby minima is correct, or the search area is too small.
-    use_brute: bool,
+    pub use_brute: bool,
 
     /// `[libmv]` If true, normalize the image patches by their mean before doing the sum of
     /// squared error calculation. This is reasonable since the effect of
@@ -38,22 +38,22 @@ pub struct TrackRegionOptions {
     ///
     /// Note: This does nearly double the solving time, so it is not advised to
     /// turn this on all the time.
-    use_normalization: bool,
+    pub use_normalization: bool,
 
     /// `[libmv]` Minimum normalized cross-correlation necessary between the final tracked
     /// position of the patch on the destination image and the reference patch
     /// needed to declare tracking success. If the minimum correlation is not met,
     /// then TrackResult::termination is INSUFFICIENT_CORRELATION.
-    minimum_correlation: f64,
+    pub minimum_correlation: f64,
 
     /// `[libmv]` The size in pixels of the blur kernel used to both smooth the image and
     /// take the image derivative.
-    sigma: f64,
+    pub sigma: f64,
 
     /// `[libmv]` If non-null, this is used as the pattern mask. It should match the size of
     /// image1, even though only values inside the image1 quad are examined. The
     /// values must be in the range 0.0 to 0.1.
-    image1_mask: Option<Vec<f32>>,
+    pub image1_mask: Option<Vec<f32>>,
 }
 
 pub enum TrackRegionDirection {
@@ -106,6 +106,15 @@ impl<'a> MonochromeImage<'a> {
 pub struct Point {
     pub x: f64,
     pub y: f64,
+}
+
+impl Point {
+    pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
+        Self {
+            x: self.x + x_offset,
+            y: self.y + y_offset,
+        }
+    }
 }
 
 /// Essentially what is shown as a “marker” in Blender's motion tracking UI,
@@ -168,6 +177,16 @@ impl Region {
             self.center.y,
         ];
         (x, y)
+    }
+
+    pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
+        Self {
+            top_left: self.top_left.offset(x_offset, y_offset),
+            top_right: self.top_right.offset(x_offset, y_offset),
+            bottom_right: self.bottom_right.offset(x_offset, y_offset),
+            bottom_left: self.bottom_left.offset(x_offset, y_offset),
+            center: self.center.offset(x_offset, y_offset),
+        }
     }
 }
 

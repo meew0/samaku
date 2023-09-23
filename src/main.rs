@@ -477,3 +477,24 @@ impl Application for Samaku {
         Subscription::batch(vec![events, worker_messages])
     }
 }
+
+#[cfg(test)]
+pub mod test_utils {
+    use std::env;
+    use std::path::{Path, PathBuf};
+
+    pub fn test_file<P>(join_path: P) -> PathBuf
+    where
+        P: AsRef<Path>,
+    {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join(&join_path);
+        if !path.exists() {
+            panic!(
+                "Could not find test data ({})! Perhaps some relative-path problem?",
+                join_path.as_ref().display()
+            );
+        }
+        path
+    }
+}

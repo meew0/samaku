@@ -117,18 +117,25 @@ impl Video {
         }
     }
 
-    pub fn get_frame(&self, n: i32) -> iced::widget::image::Handle {
-        let instant = std::time::Instant::now();
+    fn get_frame_internal(&self, n: i32) -> vapoursynth::Frame {
         let vs_frame = self.node.get_frame(n).unwrap();
-        let elapsed_obtain = instant.elapsed();
 
         let video_format = vs_frame.get_video_format().unwrap();
         if !video_format.is_rgb24() {
             panic!("Frame is not in RGB24 format");
         }
 
+        vs_frame
+    }
+
+    pub fn get_iced_frame(&self, n: i32) -> iced::widget::image::Handle {
+        let instant = std::time::Instant::now();
+        let vs_frame = self.get_frame_internal(n);
+        let elapsed_obtain = instant.elapsed();
+
         let width = vs_frame.get_width(0);
         let height = vs_frame.get_height(0);
+
         let pitch = width as usize * 4;
         let out_len = pitch * height as usize;
         let mut out = vec![0; out_len];
@@ -168,10 +175,68 @@ impl Video {
 
         let elapsed_copy = instant2.elapsed();
         println!(
-            "Frame profiling: obtaining frame {} took {:.2?}, copying it took {:.2?}",
+            "Frame profiling [display]: obtaining frame {} took {:.2?}, packing it took {:.2?}",
             n, elapsed_obtain, elapsed_copy
         );
 
         iced::widget::image::Handle::from_pixels(width as u32, height as u32, out)
+    }
+
+    pub fn get_libmv_patch(
+        &self,
+        n: i32,
+        request: super::motion::PatchRequest,
+    ) -> super::motion::PatchResponse {
+        let instant = std::time::Instant::now();
+        let vs_frame = self.get_frame_internal(n);
+        let elapsed_obtain = instant.elapsed();
+        let frame_width: usize = vs_frame.get_width(0).try_into().unwrap();
+        let frame_height: usize = vs_frame.get_height(0).try_into().unwrap();
+
+        // Fit request parameters into the frame bounds
+        let true_left = request.left.max(0.0).floor() as usize;
+        let true_top = request.top.max(0.0).floor() as usize;
+        let true_width = request.width.min((frame_width - true_left) as f64).ceil() as usize;
+        let true_height = request.height.min((frame_height - true_top) as f64).ceil() as usize;
+
+        let mut out = vec![0.0_f32; true_width * true_height];
+
+        let instant2 = std::time::Instant::now();
+
+        // The conversion coefficients used by Blender, divided by 255
+        const GREYSCALE_COEFFICIENTS: [f32; 3] = [0.000833373, 0.00280471, 0.00028314];
+
+        // Assumes all frames are the same size. They should be.
+        for plane in 0..3 {
+            let stride = vs_frame.get_stride(plane) as usize;
+            let read_ptr = vs_frame.get_read_ptr(plane);
+            let coefficient = GREYSCALE_COEFFICIENTS[plane as usize];
+
+            for row in 0..true_height {
+                let row_start_read = stride * (true_top + row) + true_left;
+                let row_read_ptr = &read_ptr[row_start_read..(row_start_read + true_width)];
+
+                let row_start_write = true_width * row;
+                let row_write_ptr = &mut out[row_start_write..(row_start_write + true_width)];
+
+                for col in 0..true_width {
+                    row_write_ptr[col] += coefficient * row_read_ptr[col] as f32;
+                }
+            }
+        }
+
+        let elapsed_copy = instant2.elapsed();
+        println!(
+            "Frame profiling [motion tracking]: obtaining frame {} took {:.2?}, converting it took {:.2?}",
+            n, elapsed_obtain, elapsed_copy
+        );
+
+        super::motion::PatchResponse {
+            data: out,
+            left: true_left,
+            top: true_top,
+            width: true_width,
+            height: true_height,
+        }
     }
 }
