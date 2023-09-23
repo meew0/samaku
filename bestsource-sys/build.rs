@@ -43,8 +43,8 @@ fn main() {
         .compile("bestsourcew");
 
     // Compile libp2p as well. BestSource only uses this for video decoding,
-    // so it is not strictly necessary for our purposes,
-    // but we might consider using it as well in the future
+    // so it is not strictly necessary to link it here (as we only use BestSource for audio).
+    // However, we can use it for our own video decoding purposes
     let libp2p_sources = vec![
         "libp2p/p2p_api.cpp",
         "libp2p/v210.cpp",
@@ -82,8 +82,8 @@ fn main() {
 
     let bindings = bindgen::Builder::default()
         .header("wrapper/wrapper.h")
+        .header("libp2p/p2p_api.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .layout_tests(false)
         .generate()
         .expect("Unable to generate bindings");
 
