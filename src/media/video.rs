@@ -135,26 +135,35 @@ impl Video {
 
         let instant2 = std::time::Instant::now();
 
-        // RGB
-        for plane in 0..3 {
-            let stride = vs_frame.get_stride(plane) as usize;
-            let read_ptr = vs_frame.get_read_ptr(plane);
-            let write_ptr = &mut out[(plane as usize)..];
-            let rows = vs_frame.get_height(plane) as usize;
-            let cols = vs_frame.get_width(plane) as usize;
+        // Use libp2p, which we are linking to anyway because of BestSource,
+        // for high performance (SIMD) packing
+        let p2p_params = bestsource_sys::p2p_buffer_param {
+            src: [
+                vs_frame.get_read_ptr(0).as_ptr() as *const std::ffi::c_void,
+                vs_frame.get_read_ptr(1).as_ptr() as *const std::ffi::c_void,
+                vs_frame.get_read_ptr(2).as_ptr() as *const std::ffi::c_void,
+                std::ptr::null(),
+            ],
+            dst: [
+                out.as_mut_ptr() as *mut std::ffi::c_void,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ],
+            src_stride: [
+                vs_frame.get_stride(0),
+                vs_frame.get_stride(1),
+                vs_frame.get_stride(2),
+                0,
+            ],
+            dst_stride: [pitch as isize, 0, 0, 0],
+            width: width as u32,
+            height: height as u32,
+            packing: bestsource_sys::p2p_packing_p2p_rgba32_be,
+        };
 
-            for row in 0..rows {
-                let row_start_read = stride * row;
-                let row_read_ptr = &read_ptr[row_start_read..(row_start_read + cols)];
-
-                let row_start_write = pitch * row;
-                let row_write_ptr =
-                    &mut write_ptr[row_start_write..(row_start_write + 4 * cols - 3)];
-
-                for col in 0..cols {
-                    row_write_ptr[4 * col] = row_read_ptr[col];
-                }
-            }
+        unsafe {
+            bestsource_sys::p2p_pack_frame(&p2p_params, bestsource_sys::P2P_ALPHA_SET_ONE as u64);
         }
 
         let elapsed_copy = instant2.elapsed();
@@ -162,10 +171,6 @@ impl Video {
             "Frame profiling: obtaining frame {} took {:.2?}, copying it took {:.2?}",
             n, elapsed_obtain, elapsed_copy
         );
-
-        // Alpha
-        let write_ptr = &mut out[3..];
-        write_ptr.chunks_mut(4).for_each(|chunk| chunk[0] = 0xff);
 
         iced::widget::image::Handle::from_pixels(width as u32, height as u32, out)
     }
