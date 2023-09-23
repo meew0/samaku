@@ -2,6 +2,7 @@ use std::{ffi::CString, path::Path};
 
 pub mod ass;
 pub mod bestsource;
+pub mod mv;
 pub mod vapoursynth;
 
 pub fn c_string<T: Into<Vec<u8>>>(rust_str: T) -> CString {
