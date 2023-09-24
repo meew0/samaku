@@ -1,16 +1,87 @@
+use std::fmt::Debug;
+
 use crate::subtitle;
 
 mod emit;
 mod parse;
+
+/// Like an `Option`, but also represents the possibility that an ASS tag can be specified
+/// in such a way that it is not set to a value defined by the tag, but to a default value.
+/// This default value comes either from the line style or is hardcoded within libass.
+/// For example, in a specific override tag block, the tag `\xshad` may:
+///  * not be present at all (corresponding to `Keep`, since the value from previous
+///    override tags will be kept),
+///  * be present without an argument — `{\xshad}` — meaning that the X shadow will be
+///    reset to the value specified in the style assigned to the line (corresponding to `Reset`),
+///  * or be present with an argument — `{\xshad5}` — meaning that the X shadow will be
+///    set to 5 pixels (corresponding to `Override(5.0)`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Resettable<T> {
+    /// Keep the value of this tag the way it was specified in the last tag of the same kind,
+    /// or as its default value if it was never specified before.
+    #[default]
+    Keep,
+
+    /// Reset the value of this tag to its default.
+    Reset,
+
+    /// Set the value of this tag to a specific value.
+    Override(T),
+}
+
+pub trait OverrideFrom<T> {
+    fn override_from(&mut self, b: &Self);
+    fn clear_from(&mut self, b: &Self);
+}
+
+impl<T> OverrideFrom<T> for Option<T>
+where
+    T: Clone,
+{
+    fn override_from(&mut self, b: &Self) {
+        if let Some(b_value) = b {
+            self.replace(b_value.clone());
+        }
+    }
+
+    fn clear_from(&mut self, b: &Self) {
+        if b.is_some() {
+            self.take();
+        }
+    }
+}
+
+impl<T> OverrideFrom<T> for Resettable<T>
+where
+    T: Clone,
+{
+    fn override_from(&mut self, b: &Self) {
+        match b {
+            Self::Keep => {}
+            _ => {
+                let _ = std::mem::replace(self, b.clone());
+            }
+        }
+    }
+
+    fn clear_from(&mut self, b: &Self) {
+        match b {
+            Self::Keep => {}
+            _ => {
+                let _ = std::mem::replace(self, Self::Keep);
+            }
+        }
+    }
+}
 
 /// Tags that apply to the entire line, may only be used once,
 /// and that only make sense to put at the beginning of the line.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Global {
     pub position: Option<PositionOrMove>,
-    pub origin: Option<Position>,
+    pub origin: Resettable<Position>,
     pub fade: Option<Fade>,
-    pub wrap_style: Option<subtitle::WrapStyle>,
+    pub wrap_style: Resettable<subtitle::WrapStyle>,
     pub animation: Option<Animation<GlobalAnimatable>>,
 }
 
@@ -25,7 +96,7 @@ impl Global {
     {
         // TODO: other global properties
 
-        emit::simple_tag(sink, "q", &self.wrap_style)?;
+        emit::simple_tag_resettable(sink, "q", &self.wrap_style)?;
 
         Ok(())
     }
@@ -52,29 +123,33 @@ pub struct Local {
     /// be drawn.
     pub shadow: Maybe2D,
 
-    pub blur: Option<Blur>,
+    /// Maps to `\be`
+    pub soften: Resettable<i32>,
 
-    pub font_name: Option<String>,
-    pub font_size: Option<f64>,
+    /// Maps to `\blur`
+    pub gaussian_blur: Resettable<f64>,
+
+    pub font_name: Resettable<String>,
+    pub font_size: Resettable<FontSize>,
     pub font_scale: Maybe2D,
-    pub letter_spacing: Option<f64>,
+    pub letter_spacing: Resettable<f64>,
 
     pub text_rotation: Maybe3D,
     pub text_shear: Maybe2D,
 
-    pub font_encoding: Option<i32>,
+    pub font_encoding: Resettable<i32>,
 
-    pub primary_colour: Option<Colour>,
-    pub secondary_colour: Option<Colour>,
-    pub border_colour: Option<Colour>,
-    pub shadow_colour: Option<Colour>,
+    pub primary_colour: Resettable<Colour>,
+    pub secondary_colour: Resettable<Colour>,
+    pub border_colour: Resettable<Colour>,
+    pub shadow_colour: Resettable<Colour>,
 
-    pub primary_transparency: Option<Transparency>,
-    pub secondary_transparency: Option<Transparency>,
-    pub border_transparency: Option<Transparency>,
-    pub shadow_transparency: Option<Transparency>,
+    pub primary_transparency: Resettable<Transparency>,
+    pub secondary_transparency: Resettable<Transparency>,
+    pub border_transparency: Resettable<Transparency>,
+    pub shadow_transparency: Resettable<Transparency>,
 
-    pub alignment: Option<subtitle::Alignment>,
+    pub alignment: Resettable<subtitle::Alignment>,
 
     pub karaoke_effect: Option<KaraokeEffect>,
 
@@ -97,106 +172,102 @@ impl Local {
     /// Sets all tags that are present in `other` to their value in `other`. Keeps all tags that
     /// are **not** present in `other` as they currently are.
     pub fn override_from(&mut self, other: &Local) {
-        option_override_from(&mut self.italic, &other.italic);
-        option_override_from(&mut self.font_weight, &other.font_weight);
-        option_override_from(&mut self.underline, &other.underline);
-        option_override_from(&mut self.strike_out, &other.strike_out);
+        self.italic.override_from(&other.italic);
+        self.font_weight.override_from(&other.font_weight);
+        self.underline.override_from(&other.underline);
+        self.strike_out.override_from(&other.strike_out);
 
         self.border.override_from(&other.border);
         self.shadow.override_from(&other.shadow);
 
-        option_override_from(&mut self.blur, &other.blur);
+        self.soften.override_from(&other.soften);
+        self.gaussian_blur.override_from(&other.gaussian_blur);
 
-        option_override_from(&mut self.font_name, &other.font_name);
-        option_override_from(&mut self.font_size, &other.font_size);
+        self.font_name.override_from(&other.font_name);
+        self.font_size.override_from(&other.font_size);
         self.font_scale.override_from(&other.font_scale);
-        option_override_from(&mut self.letter_spacing, &other.letter_spacing);
+        self.letter_spacing.override_from(&other.letter_spacing);
 
         self.text_rotation.override_from(&other.text_rotation);
         self.text_shear.override_from(&other.text_shear);
 
-        option_override_from(&mut self.font_encoding, &other.font_encoding);
+        self.font_encoding.override_from(&other.font_encoding);
 
-        option_override_from(&mut self.primary_colour, &other.primary_colour);
-        option_override_from(&mut self.secondary_colour, &other.secondary_colour);
-        option_override_from(&mut self.border_colour, &other.border_colour);
-        option_override_from(&mut self.shadow_colour, &other.shadow_colour);
+        self.primary_colour.override_from(&other.primary_colour);
+        self.secondary_colour.override_from(&other.secondary_colour);
+        self.border_colour.override_from(&other.border_colour);
+        self.shadow_colour.override_from(&other.shadow_colour);
 
-        option_override_from(&mut self.primary_transparency, &other.primary_transparency);
-        option_override_from(
-            &mut self.secondary_transparency,
-            &other.secondary_transparency,
-        );
-        option_override_from(&mut self.border_transparency, &other.border_transparency);
-        option_override_from(&mut self.shadow_transparency, &other.shadow_transparency);
+        self.primary_transparency
+            .override_from(&other.primary_transparency);
+        self.secondary_transparency
+            .override_from(&other.secondary_transparency);
+        self.border_transparency
+            .override_from(&other.border_transparency);
+        self.shadow_transparency
+            .override_from(&other.shadow_transparency);
 
-        option_override_from(&mut self.alignment, &other.alignment);
+        self.alignment.override_from(&other.alignment);
 
-        option_override_from(&mut self.karaoke_effect, &other.karaoke_effect);
+        self.karaoke_effect.override_from(&other.karaoke_effect);
 
-        option_override_from(
-            &mut self.karaoke_absolute_timing,
-            &other.karaoke_absolute_timing,
-        );
+        self.karaoke_absolute_timing
+            .override_from(&other.karaoke_absolute_timing);
 
-        option_override_from(
-            &mut self.drawing_baseline_offset,
-            &other.drawing_baseline_offset,
-        );
+        self.drawing_baseline_offset
+            .override_from(&other.drawing_baseline_offset);
 
-        option_override_from(&mut self.animation, &other.animation);
+        self.animation.override_from(&other.animation);
     }
 
     /// Clears all tags that are present in `other`.
     pub fn clear_from(&mut self, other: &Local) {
-        option_clear_from(&mut self.italic, &other.italic);
-        option_clear_from(&mut self.font_weight, &other.font_weight);
-        option_clear_from(&mut self.underline, &other.underline);
-        option_clear_from(&mut self.strike_out, &other.strike_out);
+        self.italic.clear_from(&other.italic);
+        self.font_weight.clear_from(&other.font_weight);
+        self.underline.clear_from(&other.underline);
+        self.strike_out.clear_from(&other.strike_out);
 
         self.border.clear_from(&other.border);
         self.shadow.clear_from(&other.shadow);
 
-        option_clear_from(&mut self.blur, &other.blur);
+        self.soften.clear_from(&other.soften);
+        self.gaussian_blur.clear_from(&other.gaussian_blur);
 
-        option_clear_from(&mut self.font_name, &other.font_name);
-        option_clear_from(&mut self.font_size, &other.font_size);
+        self.font_name.clear_from(&other.font_name);
+        self.font_size.clear_from(&other.font_size);
         self.font_scale.clear_from(&other.font_scale);
-        option_clear_from(&mut self.letter_spacing, &other.letter_spacing);
+        self.letter_spacing.clear_from(&other.letter_spacing);
 
         self.text_rotation.clear_from(&other.text_rotation);
         self.text_shear.clear_from(&other.text_shear);
 
-        option_clear_from(&mut self.font_encoding, &other.font_encoding);
+        self.font_encoding.clear_from(&other.font_encoding);
 
-        option_clear_from(&mut self.primary_colour, &other.primary_colour);
-        option_clear_from(&mut self.secondary_colour, &other.secondary_colour);
-        option_clear_from(&mut self.border_colour, &other.border_colour);
-        option_clear_from(&mut self.shadow_colour, &other.shadow_colour);
+        self.primary_colour.clear_from(&other.primary_colour);
+        self.secondary_colour.clear_from(&other.secondary_colour);
+        self.border_colour.clear_from(&other.border_colour);
+        self.shadow_colour.clear_from(&other.shadow_colour);
 
-        option_clear_from(&mut self.primary_transparency, &other.primary_transparency);
-        option_clear_from(
-            &mut self.secondary_transparency,
-            &other.secondary_transparency,
-        );
-        option_clear_from(&mut self.border_transparency, &other.border_transparency);
-        option_clear_from(&mut self.shadow_transparency, &other.shadow_transparency);
+        self.primary_transparency
+            .clear_from(&other.primary_transparency);
+        self.secondary_transparency
+            .clear_from(&other.secondary_transparency);
+        self.border_transparency
+            .clear_from(&other.border_transparency);
+        self.shadow_transparency
+            .clear_from(&other.shadow_transparency);
 
-        option_clear_from(&mut self.alignment, &other.alignment);
+        self.alignment.clear_from(&other.alignment);
 
-        option_clear_from(&mut self.karaoke_effect, &other.karaoke_effect);
+        self.karaoke_effect.clear_from(&other.karaoke_effect);
 
-        option_clear_from(
-            &mut self.karaoke_absolute_timing,
-            &other.karaoke_absolute_timing,
-        );
+        self.karaoke_absolute_timing
+            .clear_from(&other.karaoke_absolute_timing);
 
-        option_clear_from(
-            &mut self.drawing_baseline_offset,
-            &other.drawing_baseline_offset,
-        );
+        self.drawing_baseline_offset
+            .clear_from(&other.drawing_baseline_offset);
 
-        option_clear_from(&mut self.animation, &other.animation);
+        self.animation.clear_from(&other.animation);
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -211,29 +282,30 @@ impl Local {
         self.border.emit(sink, "", "bord")?;
         self.shadow.emit(sink, "", "shad")?;
 
-        emit::tag(sink, self.blur)?;
+        emit::simple_tag_resettable(sink, "be", &self.soften)?;
+        emit::simple_tag_resettable(sink, "blur", &self.gaussian_blur)?;
 
-        emit::simple_tag(sink, "fn", &self.font_name)?;
-        emit::simple_tag(sink, "fs", &self.font_size)?;
+        emit::simple_tag_resettable(sink, "fn", &self.font_name)?;
+        emit::simple_tag_resettable(sink, "fs", &self.font_size)?;
         self.font_scale.emit(sink, "fsc", "")?;
-        emit::simple_tag(sink, "fsp", &self.letter_spacing)?;
+        emit::simple_tag_resettable(sink, "fsp", &self.letter_spacing)?;
 
         self.text_rotation.emit(sink, "fr", "")?;
         self.text_shear.emit(sink, "fa", "")?;
 
-        emit::simple_tag(sink, "fe", &self.font_encoding)?;
+        emit::simple_tag_resettable(sink, "fe", &self.font_encoding)?;
 
-        emit::simple_tag(sink, "1c", &self.primary_colour)?;
-        emit::simple_tag(sink, "2c", &self.secondary_colour)?;
-        emit::simple_tag(sink, "3c", &self.border_colour)?;
-        emit::simple_tag(sink, "4c", &self.shadow_colour)?;
+        emit::simple_tag_resettable(sink, "1c", &self.primary_colour)?;
+        emit::simple_tag_resettable(sink, "2c", &self.secondary_colour)?;
+        emit::simple_tag_resettable(sink, "3c", &self.border_colour)?;
+        emit::simple_tag_resettable(sink, "4c", &self.shadow_colour)?;
 
-        emit::simple_tag(sink, "1a", &self.primary_transparency)?;
-        emit::simple_tag(sink, "2a", &self.secondary_transparency)?;
-        emit::simple_tag(sink, "3a", &self.border_transparency)?;
-        emit::simple_tag(sink, "4a", &self.shadow_transparency)?;
+        emit::simple_tag_resettable(sink, "1a", &self.primary_transparency)?;
+        emit::simple_tag_resettable(sink, "2a", &self.secondary_transparency)?;
+        emit::simple_tag_resettable(sink, "3a", &self.border_transparency)?;
+        emit::simple_tag_resettable(sink, "4a", &self.shadow_transparency)?;
 
-        emit::simple_tag(sink, "an", &self.alignment)?;
+        emit::simple_tag_resettable(sink, "an", &self.alignment)?;
 
         emit::tag(sink, self.karaoke_effect)?;
         emit::simple_tag(sink, "kt", &self.karaoke_absolute_timing)?;
@@ -246,28 +318,14 @@ impl Local {
     }
 }
 
-fn option_override_from<T>(a: &mut Option<T>, b: &Option<T>)
-where
-    T: Clone,
-{
-    if let Some(b_value) = b {
-        a.replace(b_value.clone());
-    }
-}
-
-fn option_clear_from<T>(a: &mut Option<T>, b: &Option<T>) {
-    if b.is_some() {
-        a.take();
-    }
-}
-
 /// Subset of local tags that are animatable.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LocalAnimatable {
     pub border: Maybe2D,
     pub shadow: Maybe2D,
 
-    pub blur: Option<Blur>,
+    pub soften: Resettable<i32>,
+    pub gaussian_blur: Resettable<f64>,
 
     pub font_size: Option<f64>,
     pub font_scale: Maybe2D,
@@ -338,26 +396,26 @@ pub struct Position {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Maybe2D {
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    pub x: Resettable<f64>,
+    pub y: Resettable<f64>,
 }
 
 impl Maybe2D {
     pub fn override_from(&mut self, other: &Maybe2D) {
-        option_override_from(&mut self.x, &other.x);
-        option_override_from(&mut self.y, &other.y);
+        self.x.override_from(&other.x);
+        self.y.override_from(&other.y);
     }
 
     pub fn clear_from(&mut self, other: &Maybe2D) {
-        option_clear_from(&mut self.x, &other.x);
-        option_clear_from(&mut self.y, &other.y);
+        self.x.clear_from(&other.x);
+        self.y.clear_from(&other.y);
     }
 
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
-        emit::simple_tag(
+        emit::simple_tag_resettable(
             sink,
             ThreePartTagName {
                 before,
@@ -366,7 +424,7 @@ impl Maybe2D {
             },
             &self.x,
         )?;
-        emit::simple_tag(
+        emit::simple_tag_resettable(
             sink,
             ThreePartTagName {
                 before,
@@ -401,29 +459,29 @@ impl emit::TagName for ThreePartTagName<'_> {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Maybe3D {
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub z: Option<f64>,
+    pub x: Resettable<f64>,
+    pub y: Resettable<f64>,
+    pub z: Resettable<f64>,
 }
 
 impl Maybe3D {
     pub fn override_from(&mut self, other: &Maybe3D) {
-        option_override_from(&mut self.x, &other.x);
-        option_override_from(&mut self.y, &other.y);
-        option_override_from(&mut self.z, &other.z);
+        self.x.override_from(&other.x);
+        self.y.override_from(&other.y);
+        self.z.override_from(&other.z);
     }
 
     pub fn clear_from(&mut self, other: &Maybe3D) {
-        option_clear_from(&mut self.x, &other.x);
-        option_clear_from(&mut self.y, &other.y);
-        option_clear_from(&mut self.z, &other.z);
+        self.x.clear_from(&other.x);
+        self.y.clear_from(&other.y);
+        self.z.clear_from(&other.z);
     }
 
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
-        emit::simple_tag(
+        emit::simple_tag_resettable(
             sink,
             ThreePartTagName {
                 before,
@@ -432,7 +490,7 @@ impl Maybe3D {
             },
             &self.x,
         )?;
-        emit::simple_tag(
+        emit::simple_tag_resettable(
             sink,
             ThreePartTagName {
                 before,
@@ -441,7 +499,7 @@ impl Maybe3D {
             },
             &self.y,
         )?;
-        emit::simple_tag(
+        emit::simple_tag_resettable(
             sink,
             ThreePartTagName {
                 before,
@@ -514,33 +572,26 @@ impl emit::EmitValue for FontWeight {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Blur {
-    /// Maps to `\be`.
-    /// libass parses the `\be` argument as a double, but then rounds it off after adding 0.5
-    /// to match certain VSFilter quirks, and clamps it to (0..127) inclusive.
-    /// So an integer value can represent all possible observable libass behaviours.
-    Soften(i32),
-
-    /// Maps to `\blur`.
-    Gaussian(f64),
-
-    /// In theory, it's possible to use both `\be` and `\blur` in a line,
-    /// although it's rarely desirable to do so.
-    Both(i32, f64),
+pub enum FontSize {
+    Set(f64),
+    Increase(f64),
+    Decrease(f64),
 }
 
-impl emit::EmitTag for Blur {
-    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+impl emit::EmitValue for FontSize {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
         match *self {
-            Blur::Soften(amount) => emit::simple_tag(sink, "be", &Some(amount)),
-            Blur::Gaussian(amount) => emit::simple_tag(sink, "blur", &Some(amount)),
-            Blur::Both(soften_amount, gaussian_amount) => {
-                emit::simple_tag(sink, "be", &Some(soften_amount))?;
-                emit::simple_tag(sink, "blur", &Some(gaussian_amount))?;
-                Ok(())
+            FontSize::Set(font_size) => font_size.emit_value(sink),
+            FontSize::Increase(delta) => {
+                sink.write_char('+')?;
+                delta.emit_value(sink)
+            }
+            FontSize::Decrease(delta) => {
+                sink.write_char('-')?;
+                delta.emit_value(sink)
             }
         }
     }
@@ -647,32 +698,34 @@ mod tests {
 
     #[test]
     fn override_from() {
+        use Resettable::*;
+
         let mut a = Local {
             italic: Some(true),
-            font_size: Some(50.0),
+            font_size: Override(FontSize::Set(50.0)),
             font_scale: Maybe2D {
-                x: Some(123.0),
-                y: None,
+                x: Override(123.0),
+                y: Keep,
             },
             text_rotation: Maybe3D {
-                x: Some(456.0),
-                y: None,
-                z: Some(789.0),
+                x: Override(456.0),
+                y: Keep,
+                z: Override(789.0),
             },
             ..Local::default()
         };
 
         let b = Local {
             underline: Some(true),
-            font_size: Some(70.0),
+            font_size: Override(FontSize::Set(70.0)),
             font_scale: Maybe2D {
-                x: Some(10.0),
-                y: None,
+                x: Override(10.0),
+                y: Keep,
             },
             text_rotation: Maybe3D {
-                x: None,
-                y: Some(20.0),
-                z: Some(30.0),
+                x: Keep,
+                y: Reset,
+                z: Override(30.0),
             },
             ..Local::default()
         };
@@ -682,12 +735,12 @@ mod tests {
         assert_eq!(a.italic, Some(true));
         assert_eq!(a.underline, Some(true));
         assert_eq!(a.strike_out, None); // untouched
-        assert_eq!(a.font_size, Some(70.0));
-        assert_eq!(a.font_scale.x, Some(10.0));
-        assert_eq!(a.font_scale.y, None);
-        assert_eq!(a.text_rotation.x, Some(456.0));
-        assert_eq!(a.text_rotation.y, Some(20.0));
-        assert_eq!(a.text_rotation.z, Some(30.0));
+        assert_eq!(a.font_size, Override(FontSize::Set(70.0)));
+        assert_eq!(a.font_scale.x, Override(10.0));
+        assert_eq!(a.font_scale.y, Keep);
+        assert_eq!(a.text_rotation.x, Override(456.0));
+        assert_eq!(a.text_rotation.y, Reset);
+        assert_eq!(a.text_rotation.z, Override(30.0));
     }
 
     #[test]
@@ -714,17 +767,18 @@ mod tests {
         let mut string = String::new();
 
         let local = Local {
-            primary_colour: Some(Colour {
+            primary_colour: Resettable::Override(Colour {
                 red: 255,
                 green: 127,
                 blue: 0,
             }),
+            font_size: Resettable::Reset,
             ..Local::default()
         };
 
         local.emit(&mut string)?;
 
-        assert_eq!(string, "\\1c&H007FFF&");
+        assert_eq!(string, "\\fs\\1c&H007FFF&");
 
         Ok(())
     }

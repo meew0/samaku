@@ -49,6 +49,30 @@ where
     Ok(())
 }
 
+pub fn simple_tag_resettable<W, N, V>(
+    sink: &mut W,
+    tag_name: N,
+    maybe_value: &super::Resettable<V>,
+) -> Result<(), std::fmt::Error>
+where
+    W: std::fmt::Write,
+    N: TagName,
+    V: EmitValue,
+{
+    match maybe_value {
+        super::Resettable::Keep => {}
+        _ => {
+            sink.write_str("\\")?;
+            tag_name.write_name(sink)?;
+            if let super::Resettable::Override(value) = maybe_value {
+                value.emit_value(sink)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn complex_tag<W, V>(
     sink: &mut W,
     tag_name: &str,
@@ -163,7 +187,7 @@ mod tests {
         let no_value: Option<i32> = None;
         simple_tag(&mut string, "blub", &no_value)?;
 
-        let no_tag: Option<crate::nde::tags::Blur> = None;
+        let no_tag: Option<crate::nde::tags::KaraokeEffect> = None;
         tag(&mut string, no_tag)?;
 
         assert_eq!(string, "");
@@ -181,10 +205,12 @@ mod tests {
         let some_values: Vec<i32> = vec![1, 2, 3];
         complex_tag(&mut string, "blubblub", some_values)?;
 
-        let some_tag: Option<crate::nde::tags::Blur> = Some(crate::nde::tags::Blur::Soften(5));
+        let some_tag: Option<crate::nde::tags::KaraokeEffect> = Some(
+            crate::nde::tags::KaraokeEffect::FillInstant(crate::nde::tags::Centiseconds(123.0)),
+        );
         tag(&mut string, some_tag)?;
 
-        assert_eq!(string, "\\blub123\\blubblub(1,2,3)\\be5");
+        assert_eq!(string, "\\blub123\\blubblub(1,2,3)\\k123");
 
         Ok(())
     }
