@@ -68,7 +68,7 @@ impl Event {
                 }
                 Span::Reset => todo!(),
                 Span::ResetToStyle(_) => todo!(),
-                Span::Drawing(_) => todo!(),
+                Span::Drawing(_, _) => todo!(),
             }
         }
 
@@ -107,5 +107,5 @@ pub enum Span {
     ResetToStyle(String),
 
     /// Vector drawing
-    Drawing(tags::Drawing),
+    Drawing(tags::Local, tags::Drawing),
 }

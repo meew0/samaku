@@ -42,18 +42,18 @@ pub struct Sline {
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StartTime(pub i64);
 
 /// The duration for which an element is shown, in milliseconds.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Duration(pub i64);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Angle(pub f64);
 
 /// 1.0 represents 100%
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scale {
     pub x: f64,
     pub y: f64,
@@ -61,20 +61,20 @@ pub struct Scale {
 
 /// Element- or style-specific left, right, and vertical margins
 /// in pixels, corresponding to ASS `MarginL` etc.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Margins {
     pub left: i32,
     pub right: i32,
     pub vertical: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Resolution {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Colour {
     pub red: u8,
     pub green: u8,
@@ -106,7 +106,7 @@ impl Colour {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Alignment {
     pub vertical: VerticalAlignment,
     pub horizontal: HorizontalAlignment,
@@ -172,21 +172,21 @@ impl Default for Alignment {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerticalAlignment {
     Sub = 0,
     Center = 4,
     Top = 8,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HorizontalAlignment {
     Left = 1,
     Center = 2,
     Right = 3,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JustifyMode {
     Auto = 0,
     Left = 1,
@@ -205,7 +205,7 @@ impl From<i32> for JustifyMode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BorderStyle {
     /// Normal border style, with outline and shadow.
     Default = 1,
@@ -231,7 +231,7 @@ impl From<i32> for BorderStyle {
 }
 
 /// See http://www.tcax.org/docs/ass-specs.htm
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapStyle {
     SmartEven = 0,
     EndOfLine = 1,

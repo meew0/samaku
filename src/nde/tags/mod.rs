@@ -1,10 +1,11 @@
 use crate::subtitle;
 
 mod emit;
+mod parse;
 
 /// Tags that apply to the entire line, may only be used once,
 /// and that only make sense to put at the beginning of the line.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Global {
     pub position: Option<PositionOrMove>,
     pub origin: Option<Position>,
@@ -31,13 +32,13 @@ impl Global {
 }
 
 /// Subset of global tags that are animatable.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GlobalAnimatable {
     pub clip: Option<AnimatableClip>,
 }
 
 /// Tags that modify the text following it.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Local {
     pub italic: Option<bool>,
     pub font_weight: Option<FontWeight>,
@@ -81,6 +82,9 @@ pub struct Local {
     /// Must be combined with `karaoke_effect`.
     /// See https://aegisub.org/blog/vsfilter-hacks/
     pub karaoke_absolute_timing: Option<Centiseconds>,
+
+    /// Baseline offset for following drawings.
+    pub drawing_baseline_offset: Option<f64>,
 
     pub animation: Option<Animation<LocalAnimatable>>,
 }
@@ -135,6 +139,11 @@ impl Local {
             &other.karaoke_absolute_timing,
         );
 
+        option_override_from(
+            &mut self.drawing_baseline_offset,
+            &other.drawing_baseline_offset,
+        );
+
         option_override_from(&mut self.animation, &other.animation);
     }
 
@@ -182,6 +191,11 @@ impl Local {
             &other.karaoke_absolute_timing,
         );
 
+        option_clear_from(
+            &mut self.drawing_baseline_offset,
+            &other.drawing_baseline_offset,
+        );
+
         option_clear_from(&mut self.animation, &other.animation);
     }
 
@@ -224,6 +238,8 @@ impl Local {
         emit::tag(sink, self.karaoke_effect)?;
         emit::simple_tag(sink, "kt", &self.karaoke_absolute_timing)?;
 
+        emit::simple_tag(sink, "pbo", &self.drawing_baseline_offset)?;
+
         // TODO: animations
 
         Ok(())
@@ -246,7 +262,7 @@ fn option_clear_from<T>(a: &mut Option<T>, b: &Option<T>) {
 }
 
 /// Subset of local tags that are animatable.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LocalAnimatable {
     pub border: Maybe2D,
     pub shadow: Maybe2D,
@@ -271,7 +287,7 @@ pub struct LocalAnimatable {
     pub shadow_transparency: Option<Transparency>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Milliseconds(i32);
 
 impl emit::EmitValue for Milliseconds {
@@ -283,7 +299,7 @@ impl emit::EmitValue for Milliseconds {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Centiseconds(f64);
 
 impl emit::EmitValue for Centiseconds {
@@ -295,32 +311,32 @@ impl emit::EmitValue for Centiseconds {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Animation<A> {
     pub modifiers: A,
     pub acceleration: Option<f64>,
     pub interval: Option<AnimationInterval>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnimationInterval {
     pub start: Milliseconds,
     pub end: Milliseconds,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PositionOrMove {
     Position(Position),
     Move(Move),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Maybe2D {
     pub x: Option<f64>,
     pub y: Option<f64>,
@@ -383,7 +399,7 @@ impl emit::TagName for ThreePartTagName<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Maybe3D {
     pub x: Option<f64>,
     pub y: Option<f64>,
@@ -439,7 +455,7 @@ impl Maybe3D {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Colour {
     pub red: u8,
     pub green: u8,
@@ -459,7 +475,7 @@ impl emit::EmitValue for Colour {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transparency(u8);
 
 impl emit::EmitValue for Transparency {
@@ -471,7 +487,7 @@ impl emit::EmitValue for Transparency {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Move {
     pub initial_position: Position,
     pub final_position: Position,
@@ -479,7 +495,7 @@ pub struct Move {
     pub end_time: Milliseconds,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontWeight {
     BoldToggle(bool),
     Numeric(u32),
@@ -497,7 +513,7 @@ impl emit::EmitValue for FontWeight {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Blur {
     /// Maps to `\be`.
     /// libass parses the `\be` argument as a double, but then rounds it off after adding 0.5
@@ -530,7 +546,7 @@ impl emit::EmitTag for Blur {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum KaraokeEffect {
     /// Maps to `\k`.
     FillInstant(Centiseconds),
@@ -559,7 +575,7 @@ impl emit::EmitTag for KaraokeEffect {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fade {
     /// Maps to `\fad`.
     Simple(SimpleFade),
@@ -568,13 +584,13 @@ pub enum Fade {
     Complex(ComplexFade),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SimpleFade {
     pub fade_in_duration: Milliseconds,
     pub fade_out_duration: Milliseconds,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComplexFade {
     pub transparency_before: u8,
     pub transparency_main: u8,
@@ -585,7 +601,7 @@ pub struct ComplexFade {
     pub fade_out_end: Milliseconds,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Clip {
     Rectangle(ClipRectangle),
     InverseRectangle(ClipRectangle),
@@ -593,13 +609,13 @@ pub enum Clip {
     InverseVector(ClipDrawing),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimatableClip {
     Rectangle(ClipRectangle),
     InverseRectangle(ClipRectangle),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClipRectangle {
     pub x1: i32,
     pub x2: i32,
@@ -607,17 +623,22 @@ pub struct ClipRectangle {
     pub y2: i32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClipDrawing {
     pub scale: Option<f64>,
     pub commands: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Drawing {
-    pub scale: Option<f64>,
-    pub baseline_offset: Option<f64>,
+    pub scale: f64,
     pub commands: String,
+}
+
+impl Drawing {
+    pub fn empty() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(test)]
