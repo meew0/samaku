@@ -79,6 +79,7 @@ where
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Global {
     pub position: Option<PositionOrMove>,
+    pub clip: Option<Clip>,
     pub origin: Resettable<Position>,
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<subtitle::WrapStyle>,
@@ -549,6 +550,11 @@ impl emit::EmitValue for Transparency {
 pub struct Move {
     pub initial_position: Position,
     pub final_position: Position,
+    pub timing: Option<MoveTiming>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MoveTiming {
     pub start_time: Milliseconds,
     pub end_time: Milliseconds,
 }
@@ -676,7 +682,7 @@ pub struct ClipRectangle {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClipDrawing {
-    pub scale: Option<f64>,
+    pub scale: i32,
     pub commands: String,
 }
 

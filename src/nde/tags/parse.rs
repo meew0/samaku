@@ -1,4 +1,7 @@
-use crate::nde::tags::parse::ParenArgsParseState::BeforeArgument;
+use crate::nde::tags::{
+    Clip, ClipDrawing, ClipRectangle, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position,
+    PositionOrMove, Resettable,
+};
 use crate::nde::Span;
 
 use super::{Drawing, Global, Local};
@@ -211,43 +214,103 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
         parse_paren_args(&tag[(paren_pos + 1)..], &mut twa);
     }
 
+    let local = &mut block.new_local;
+
     if twa.tag::<false>("xbord") {
+        local.border.x = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("ybord") {
-        todo!()
+        local.border.y = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("xshad") {
-        todo!()
+        local.shadow.x = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("yshad") {
-        todo!()
+        local.shadow.y = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fax") {
-        todo!()
+        local.text_shear.x = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fay") {
-        todo!()
+        local.text_shear.y = resettable(twa.float_arg(0));
     } else if twa.tag::<true>("iclip") {
-        todo!()
+        parse_clip(global, &twa, Clip::InverseRectangle, Clip::InverseVector);
     } else if twa.tag::<false>("blur") {
-        todo!()
+        local.gaussian_blur = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fscx") {
-        todo!()
+        local.font_scale.x = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fscy") {
-        todo!()
+        local.font_scale.y = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fsc") {
-        todo!()
+        local.font_scale = Maybe2D {
+            x: Resettable::Reset,
+            y: Resettable::Reset,
+        }
     } else if twa.tag::<false>("fsp") {
-        todo!()
+        local.letter_spacing = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fs") {
-        todo!()
+        local.font_size = match twa.float_arg(0) {
+            Some(parsed) => {
+                let str_arg = twa.string_arg(0).unwrap();
+                // Only the first character is checked — `\fs+10` increases the font size by 10,
+                // whereas `\fs +10` sets it to 10.
+                match str_arg.chars().next().unwrap() {
+                    '+' => Resettable::Override(FontSize::Increase(parsed)),
+                    '-' => Resettable::Override(FontSize::Decrease(-parsed)),
+                    _ => {
+                        // libass has the additional behaviour that if a font size ever becomes 0
+                        // or negative, through e.g. `\fs -10` or `\fs10\fs-20`, it gets reset to
+                        // its default value.
+                        // We can do this in the first case, where an absolute non-positive value
+                        // is specified, but not in the second case.
+                        if parsed <= 0.0 {
+                            Resettable::Reset
+                        } else {
+                            Resettable::Override(FontSize::Set(parsed))
+                        }
+                    }
+                }
+            }
+            None => Resettable::Reset,
+        }
     } else if twa.tag::<false>("bord") {
-        todo!()
+        local.border = maybe_both_dimensions(twa.float_arg(0));
     } else if twa.tag::<true>("move") {
-        todo!()
+        if global.position.is_none() && (twa.nargs() == 4 || twa.nargs() == 6) {
+            let timing = if twa.nargs() == 6 {
+                let t1 = twa.int_arg(4).unwrap();
+                let t2 = twa.int_arg(5).unwrap();
+
+                Some(if t1 < t2 {
+                    MoveTiming {
+                        start_time: Milliseconds(t1),
+                        end_time: Milliseconds(t2),
+                    }
+                } else {
+                    MoveTiming {
+                        start_time: Milliseconds(t2),
+                        end_time: Milliseconds(t1),
+                    }
+                })
+            } else {
+                None
+            };
+
+            global.position = Some(PositionOrMove::Move(Move {
+                initial_position: Position {
+                    x: twa.float_arg(0).unwrap(),
+                    y: twa.float_arg(1).unwrap(),
+                },
+                final_position: Position {
+                    x: twa.float_arg(2).unwrap(),
+                    y: twa.float_arg(3).unwrap(),
+                },
+                timing,
+            }));
+        }
     } else if twa.tag::<false>("frx") {
-        todo!()
+        local.text_rotation.x = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fry") {
-        todo!()
+        local.text_rotation.y = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("frz") || twa.tag::<false>("fr") {
-        todo!()
+        local.text_rotation.z = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fn") {
-        todo!()
+        local.font_name = resettable(twa.string_arg(0).map(|name| lstrip(name).to_string()));
     } else if twa.tag::<false>("alpha") {
         todo!()
     } else if twa.tag::<false>("an") {
@@ -263,7 +326,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
     } else if twa.tag::<true>("t") {
         todo!()
     } else if twa.tag::<true>("clip") {
-        todo!()
+        parse_clip(global, &twa, Clip::Rectangle, Clip::Vector);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
         todo!()
     } else if twa.tag::<false>("2c") {
@@ -313,6 +376,34 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
     }
 }
 
+/// Convert a potentially present argument into an `Override` if it is present,
+/// or into a `Reset` if it is not, matching the behaviour of most ASS tags.
+fn resettable<T>(option: Option<T>) -> Resettable<T> {
+    match option {
+        Some(value) => Resettable::Override(value),
+        None => Resettable::Reset,
+    }
+}
+
+fn maybe_both_dimensions(option: Option<f64>) -> Maybe2D {
+    match option {
+        Some(value) => Maybe2D {
+            x: Resettable::Override(value),
+            y: Resettable::Override(value),
+        },
+        None => Maybe2D {
+            x: Resettable::Reset,
+            y: Resettable::Reset,
+        },
+    }
+}
+
+fn lstrip(str: &str) -> &str {
+    &str[str
+        .find(|char| char != ' ' && char != '\\')
+        .unwrap_or(str.len())..]
+}
+
 fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
     if paren_args.is_empty() {
         return;
@@ -339,7 +430,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
             },
             Argument => match next_char {
                 ',' => {
-                    twa.arguments.push(&paren_args[arg_start_bytes..byte_index]);
+                    twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
                     BeforeArgument
                 }
                 _ => Argument,
@@ -347,7 +438,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
         }
     }
 
-    twa.arguments.push(&paren_args[arg_start_bytes..]);
+    twa.push_argument(&paren_args[arg_start_bytes..]);
 }
 
 enum ParenArgsParseState {
@@ -366,6 +457,16 @@ struct TagWithArguments<'a> {
 }
 
 impl<'a> TagWithArguments<'a> {
+    fn push_argument(&mut self, arg_str: &'a str) {
+        if let Some(last_non_space) = arg_str.rfind(|char| char != ' ' && char != '\t') {
+            self.arguments.push(&arg_str[0..(last_non_space + 1)]);
+        }
+    }
+
+    fn nargs(&self) -> usize {
+        self.arguments.len()
+    }
+
     fn tag<const COMPLEX: bool>(&mut self, tag_name: &str) -> bool {
         if self.tag_found {
             panic!("tried to call tag(), but the tag has already been found");
@@ -374,8 +475,7 @@ impl<'a> TagWithArguments<'a> {
         if self.first_part.starts_with(tag_name) {
             self.tag_found = true;
             if !COMPLEX {
-                self.arguments
-                    .push(&self.first_part[tag_name.bytes().len()..]);
+                self.push_argument(&self.first_part[tag_name.bytes().len()..]);
             }
             true
         } else {
@@ -384,10 +484,12 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn float_arg(&self, index: usize) -> Option<f64> {
-        self.arguments.get(index).and_then(|arg_str| {
+        self.arguments.get(index).map(|arg_str| {
+            assert!(!arg_str.is_empty());
             fast_float::parse_partial::<f64, _>(arg_str)
                 .ok()
                 .map(|(value, _digits)| value)
+                .unwrap_or(0.0) // default value if parsing fails
         })
     }
 
@@ -406,12 +508,53 @@ impl<'a> TagWithArguments<'a> {
                 -1
             }
             Some(_) => 1,
-            None => return None,
+            None => panic!("argument string should not be empty"),
         };
         let num_end = slice
             .find(|char: char| !char.is_numeric())
             .unwrap_or(slice.len());
-        slice[0..num_end].parse::<i32>().ok().map(|num| num * sign)
+        let maybe_parsed = slice[0..num_end].parse::<i32>().ok().map(|num| num * sign);
+        Some(maybe_parsed.unwrap_or(0)) // default value if parsing fails
+    }
+
+    fn string_arg(&self, index: usize) -> Option<&'a str> {
+        match self.arguments.get(index) {
+            Some(slice) => {
+                assert!(!slice.is_empty());
+                Some(*slice)
+            }
+            None => None,
+        }
+    }
+}
+
+fn parse_clip<R, V>(global: &mut Global, twa: &TagWithArguments, rect_clip: R, vector_clip: V)
+where
+    R: FnOnce(ClipRectangle) -> Clip,
+    V: FnOnce(ClipDrawing) -> Clip,
+{
+    if twa.nargs() == 4 {
+        let rect = ClipRectangle {
+            x1: twa.int_arg(0).unwrap(),
+            x2: twa.int_arg(1).unwrap(),
+            y1: twa.int_arg(2).unwrap(),
+            y2: twa.int_arg(3).unwrap(),
+        };
+        global.clip = Some(rect_clip(rect));
+    } else {
+        let scale: i32 = match twa.nargs() {
+            2 => twa.int_arg(0).unwrap(),
+            1 => 1,
+            _ => return,
+        };
+
+        let commands = twa.string_arg(twa.nargs() - 1).unwrap();
+        let drawing = ClipDrawing {
+            scale,
+            commands: commands.to_string(),
+        };
+
+        global.clip = Some(vector_clip(drawing));
     }
 }
 
@@ -484,6 +627,8 @@ mod tests {
         }
     }
 
+    fn all_tags() {}
+
     #[test]
     fn tag_with_arguments_simple() {
         let mut twa = TagWithArguments {
@@ -504,7 +649,7 @@ mod tests {
         let twa = TagWithArguments {
             first_part: "",
             arguments: vec![
-                "",
+                "0",
                 "aa",
                 "+",
                 "1234",
@@ -521,9 +666,9 @@ mod tests {
             tag_found: true,
         };
 
-        assert_eq!(twa.int_arg(0), None);
-        assert_eq!(twa.int_arg(1), None);
-        assert_eq!(twa.int_arg(2), None);
+        assert_eq!(twa.int_arg(0), Some(0));
+        assert_eq!(twa.int_arg(1), Some(0));
+        assert_eq!(twa.int_arg(2), Some(0));
         assert_eq!(twa.int_arg(3), Some(1234));
         assert_eq!(twa.int_arg(4), Some(1234));
         assert_eq!(twa.int_arg(5), Some(1234));
@@ -532,12 +677,12 @@ mod tests {
         assert_eq!(twa.int_arg(8), Some(1234));
         assert_eq!(twa.int_arg(9), Some(-1234));
         assert_eq!(twa.int_arg(10), Some(1234));
-        assert_eq!(twa.int_arg(11), None);
+        assert_eq!(twa.int_arg(11), Some(0));
         assert_eq!(twa.int_arg(12), None); // out of bounds
 
-        assert_eq!(twa.float_arg(0), None);
-        assert_eq!(twa.float_arg(1), None);
-        assert_eq!(twa.float_arg(2), None);
+        assert_eq!(twa.float_arg(0), Some(0.0));
+        assert_eq!(twa.float_arg(1), Some(0.0));
+        assert_eq!(twa.float_arg(2), Some(0.0));
         assert_eq!(twa.float_arg(3), Some(1234.0));
         assert_eq!(twa.float_arg(4), Some(1234.0));
         assert_eq!(twa.float_arg(5), Some(1234.0));
@@ -546,7 +691,14 @@ mod tests {
         assert_eq!(twa.float_arg(8), Some(1234.56));
         assert_eq!(twa.float_arg(9), Some(-1234.56));
         assert_eq!(twa.float_arg(10), Some(1234.56));
-        assert_eq!(twa.float_arg(11), None);
+        assert_eq!(twa.float_arg(11), Some(0.0));
         assert_eq!(twa.float_arg(12), None);
+    }
+
+    #[test]
+    fn utility() {
+        assert_eq!(lstrip("  abc "), "abc ");
+        assert_eq!(lstrip("abc"), "abc");
+        assert_eq!(lstrip(""), "");
     }
 }
