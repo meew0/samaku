@@ -11,7 +11,7 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut last_local = Box::new(Local::empty());
     let mut global = Box::new(Global::empty());
 
-    let mut drawing: Option<Drawing> = Some(Drawing::empty());
+    let mut drawing: Option<Drawing> = None;
 
     let mut slice = text;
 
@@ -646,6 +646,7 @@ struct State {}
 mod tests {
     use super::*;
 
+    #[test]
     fn no_tags() {
         let text = "this text has no tags";
         let (global, spans) = parse(text);
