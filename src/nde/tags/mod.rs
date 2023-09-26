@@ -29,6 +29,16 @@ pub enum Resettable<T> {
     Override(T),
 }
 
+impl<T> Resettable<T> {
+    fn is_set(&self) -> bool {
+        matches!(self, Self::Reset | Self::Override(_))
+    }
+
+    fn is_keep(&self) -> bool {
+        matches!(self, Self::Keep)
+    }
+}
+
 pub trait OverrideFrom<T> {
     fn override_from(&mut self, b: &Self);
     fn clear_from(&mut self, b: &Self);
@@ -83,6 +93,7 @@ pub struct Global {
     pub origin: Resettable<Position>,
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<subtitle::WrapStyle>,
+    pub alignment: Resettable<subtitle::Alignment>,
     pub animation: Option<Animation<GlobalAnimatable>>,
 }
 
@@ -98,6 +109,7 @@ impl Global {
         // TODO: other global properties
 
         emit::simple_tag_resettable(sink, "q", &self.wrap_style)?;
+        emit::simple_tag_resettable(sink, "an", &self.alignment)?;
 
         Ok(())
     }
@@ -149,8 +161,6 @@ pub struct Local {
     pub secondary_transparency: Resettable<Transparency>,
     pub border_transparency: Resettable<Transparency>,
     pub shadow_transparency: Resettable<Transparency>,
-
-    pub alignment: Resettable<subtitle::Alignment>,
 
     pub karaoke_effect: Option<KaraokeEffect>,
 
@@ -208,8 +218,6 @@ impl Local {
         self.shadow_transparency
             .override_from(&other.shadow_transparency);
 
-        self.alignment.override_from(&other.alignment);
-
         self.karaoke_effect.override_from(&other.karaoke_effect);
 
         self.karaoke_absolute_timing
@@ -258,8 +266,6 @@ impl Local {
         self.shadow_transparency
             .clear_from(&other.shadow_transparency);
 
-        self.alignment.clear_from(&other.alignment);
-
         self.karaoke_effect.clear_from(&other.karaoke_effect);
 
         self.karaoke_absolute_timing
@@ -305,8 +311,6 @@ impl Local {
         emit::simple_tag_resettable(sink, "2a", &self.secondary_transparency)?;
         emit::simple_tag_resettable(sink, "3a", &self.border_transparency)?;
         emit::simple_tag_resettable(sink, "4a", &self.shadow_transparency)?;
-
-        emit::simple_tag_resettable(sink, "an", &self.alignment)?;
 
         emit::tag(sink, self.karaoke_effect)?;
         emit::simple_tag(sink, "kt", &self.karaoke_absolute_timing)?;

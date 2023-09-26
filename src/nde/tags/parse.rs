@@ -3,6 +3,7 @@ use crate::nde::tags::{
     PositionOrMove, Resettable,
 };
 use crate::nde::Span;
+use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment};
 
 use super::{Drawing, Global, Local, Transparency};
 
@@ -318,9 +319,93 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         local.border_transparency = resettable_transparency;
         local.shadow_transparency = resettable_transparency;
     } else if twa.tag::<false>("an") {
-        todo!()
+        // Don't set the alignment more than once
+        if global.alignment.is_keep() {
+            use Resettable::*;
+            global.alignment = match twa.int_arg(0) {
+                Some(1) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(2) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(3) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                Some(4) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(5) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(6) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                Some(7) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(8) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(9) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                Some(_) | None => Reset,
+            }
+        }
     } else if twa.tag::<false>("a") {
-        todo!()
+        if global.alignment.is_keep() {
+            use Resettable::*;
+            global.alignment = match twa.int_arg(0) {
+                Some(1) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(2) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(3) => Override(Alignment {
+                    vertical: VerticalAlignment::Sub,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                // “vsfilter quirk: handle illegal \a8 and \a4 like \a5”
+                Some(5) | Some(4) | Some(8) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(6) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(7) => Override(Alignment {
+                    vertical: VerticalAlignment::Top,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                Some(9) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Left,
+                }),
+                Some(10) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Center,
+                }),
+                Some(11) => Override(Alignment {
+                    vertical: VerticalAlignment::Center,
+                    horizontal: HorizontalAlignment::Right,
+                }),
+                Some(_) | None => Reset,
+            }
+        }
     } else if twa.tag::<true>("pos") {
         todo!()
     } else if twa.tag::<true>("fade") || twa.tag::<true>("fad") {
@@ -696,6 +781,22 @@ mod tests {
             alpha_override.shadow_transparency,
             Override(Transparency(0x34))
         );
+
+        assert_eq!(test_single_global("an").alignment, Reset);
+        assert_eq!(
+            test_single_global("an5").alignment,
+            Override(Alignment {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Center
+            })
+        );
+        assert_eq!(
+            test_single_global("a10").alignment,
+            Override(Alignment {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Center
+            })
+        );
     }
 
     fn test_single_local(tag: &str) -> Local {
@@ -710,6 +811,20 @@ mod tests {
         }
 
         block.new_local
+    }
+
+    fn test_single_global(tag: &str) -> Global {
+        let mut global = Global::empty();
+        let mut block = TagBlock::empty();
+
+        if !parse_tag(tag, &mut global, &mut block) {
+            panic!(
+                "should have parsed a tag in test_single_global -- input: {}",
+                tag
+            );
+        }
+
+        global
     }
 
     #[test]
