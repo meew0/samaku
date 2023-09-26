@@ -4,7 +4,7 @@ use crate::nde::tags::{
 };
 use crate::nde::Span;
 
-use super::{Drawing, Global, Local};
+use super::{Drawing, Global, Local, Transparency};
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
@@ -193,9 +193,9 @@ enum TagBlockParseState {
     Parenthesis,
 }
 
-fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
+fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     if tag.is_empty() {
-        return;
+        return false;
     }
 
     let paren_pos = tag.find('(');
@@ -312,7 +312,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
     } else if twa.tag::<false>("fn") {
         local.font_name = resettable(twa.string_arg(0).map(|name| lstrip(name).to_string()));
     } else if twa.tag::<false>("alpha") {
-        todo!()
+        let resettable_transparency = resettable(twa.transparency_arg(0));
+        local.primary_transparency = resettable_transparency;
+        local.secondary_transparency = resettable_transparency;
+        local.border_transparency = resettable_transparency;
+        local.shadow_transparency = resettable_transparency;
     } else if twa.tag::<false>("an") {
         todo!()
     } else if twa.tag::<false>("a") {
@@ -373,7 +377,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) {
         todo!()
     } else if twa.tag::<false>("fe") {
         todo!()
+    } else {
+        return false;
     }
+
+    true
 }
 
 /// Convert a potentially present argument into an `Override` if it is present,
@@ -494,27 +502,7 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn int_arg(&self, index: usize) -> Option<i32> {
-        let mut slice = match self.arguments.get(index) {
-            Some(slice) => *slice,
-            None => return None,
-        };
-        let sign = match slice.chars().next() {
-            Some('+') => {
-                slice = &slice[1..]; // consume sign
-                1
-            }
-            Some('-') => {
-                slice = &slice[1..];
-                -1
-            }
-            Some(_) => 1,
-            None => panic!("argument string should not be empty"),
-        };
-        let num_end = slice
-            .find(|char: char| !char.is_numeric())
-            .unwrap_or(slice.len());
-        let maybe_parsed = slice[0..num_end].parse::<i32>().ok().map(|num| num * sign);
-        Some(maybe_parsed.unwrap_or(0)) // default value if parsing fails
+        self.string_arg(index).map(|arg| parse_prefix_i32(arg, 10))
     }
 
     fn string_arg(&self, index: usize) -> Option<&'a str> {
@@ -526,6 +514,40 @@ impl<'a> TagWithArguments<'a> {
             None => None,
         }
     }
+
+    fn transparency_arg(&self, index: usize) -> Option<Transparency> {
+        self.string_arg(index).map(|arg| {
+            arg.find(|char| char != '&' && char != 'H')
+                .map(|first_value_char| {
+                    Transparency(parse_prefix_i32(&arg[first_value_char..], 16) as u8)
+                })
+                .unwrap_or(Transparency(0))
+        })
+    }
+}
+
+/// Equivalent to libass' `mystrtoi32`.
+/// Tries to parse as many numeric characters as possible
+/// from the beginning of `str`, and returns 0 if parsing fails entirely.
+/// Also handles i32 overflows gracefully by first parsing as i64.
+fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
+    let (slice, sign) = match str.chars().next() {
+        Some('+') => {
+            (&str[1..], 1) // consume sign
+        }
+        Some('-') => (&str[1..], -1),
+        Some(_) => (str, 1),
+        None => return 0,
+    };
+    let num_end = slice
+        .find(|char: char| !char.is_digit(radix))
+        .unwrap_or(slice.len());
+    let maybe_parsed = i64::from_str_radix(&slice[0..num_end], radix)
+        .ok()
+        .map(|num| num * sign);
+    maybe_parsed
+        .unwrap_or(0i64)
+        .clamp(i32::MIN.into(), i32::MAX.into()) as i32
 }
 
 fn parse_clip<R, V>(global: &mut Global, twa: &TagWithArguments, rect_clip: R, vector_clip: V)
@@ -602,6 +624,17 @@ struct TagBlock {
     end_previous_drawing: bool,
 }
 
+impl TagBlock {
+    fn empty() -> Self {
+        Self {
+            reset: None,
+            new_local: Local::empty(),
+            new_drawing_scale: None,
+            end_previous_drawing: false,
+        }
+    }
+}
+
 enum Reset {
     Reset,
     ResetToStyle(String),
@@ -627,7 +660,56 @@ mod tests {
         }
     }
 
-    fn all_tags() {}
+    #[test]
+    fn resettable_helper() {
+        use Resettable::*;
+
+        assert_eq!(resettable(Some(123)), Override(123));
+        assert_eq!(resettable::<i32>(None), Reset);
+    }
+
+    #[test]
+    fn individual_tags() {
+        use Resettable::*;
+
+        let alpha_reset = test_single_local("alpha");
+        assert_eq!(alpha_reset.primary_transparency, Reset);
+        assert_eq!(alpha_reset.secondary_transparency, Reset);
+        assert_eq!(alpha_reset.border_transparency, Reset);
+        assert_eq!(alpha_reset.shadow_transparency, Reset);
+
+        let alpha_override = test_single_local("alpha&H34&");
+        assert_eq!(
+            alpha_override.primary_transparency,
+            Override(Transparency(0x34))
+        );
+        assert_eq!(
+            alpha_override.secondary_transparency,
+            Override(Transparency(0x34))
+        );
+        assert_eq!(
+            alpha_override.border_transparency,
+            Override(Transparency(0x34))
+        );
+        assert_eq!(
+            alpha_override.shadow_transparency,
+            Override(Transparency(0x34))
+        );
+    }
+
+    fn test_single_local(tag: &str) -> Local {
+        let mut global = Global::empty();
+        let mut block = TagBlock::empty();
+
+        if !parse_tag(tag, &mut global, &mut block) {
+            panic!(
+                "should have parsed a tag in test_single_local -- input: {}",
+                tag
+            );
+        }
+
+        block.new_local
+    }
 
     #[test]
     fn tag_with_arguments_simple() {
@@ -661,6 +743,11 @@ mod tests {
                 "-1234.56aa",
                 "1234.56.78",
                 "++123",
+                "100000000000000",
+                "-100000000000000",
+                "&HFF&",
+                "&HFFFFF&",
+                "H",
             ],
             has_backslash_arg: false,
             tag_found: true,
@@ -678,7 +765,9 @@ mod tests {
         assert_eq!(twa.int_arg(9), Some(-1234));
         assert_eq!(twa.int_arg(10), Some(1234));
         assert_eq!(twa.int_arg(11), Some(0));
-        assert_eq!(twa.int_arg(12), None); // out of bounds
+        assert_eq!(twa.int_arg(12), Some(i32::MAX));
+        assert_eq!(twa.int_arg(13), Some(i32::MIN));
+        assert_eq!(twa.int_arg(twa.arguments.len()), None); // out of bounds
 
         assert_eq!(twa.float_arg(0), Some(0.0));
         assert_eq!(twa.float_arg(1), Some(0.0));
@@ -692,7 +781,18 @@ mod tests {
         assert_eq!(twa.float_arg(9), Some(-1234.56));
         assert_eq!(twa.float_arg(10), Some(1234.56));
         assert_eq!(twa.float_arg(11), Some(0.0));
-        assert_eq!(twa.float_arg(12), None);
+        assert_eq!(twa.float_arg(12), Some(100000000000000.0));
+        assert_eq!(twa.float_arg(13), Some(-100000000000000.0));
+        assert_eq!(twa.float_arg(twa.arguments.len()), None);
+
+        assert_eq!(twa.transparency_arg(0), Some(Transparency(0)));
+        assert_eq!(twa.transparency_arg(1), Some(Transparency(0xaa)));
+        assert_eq!(twa.transparency_arg(2), Some(Transparency(0)));
+        assert_eq!(twa.transparency_arg(3), Some(Transparency(0x34)));
+        assert_eq!(twa.transparency_arg(4), Some(Transparency(0xaa)));
+        assert_eq!(twa.transparency_arg(14), Some(Transparency(0xff)));
+        assert_eq!(twa.transparency_arg(15), Some(Transparency(0xff)));
+        assert_eq!(twa.transparency_arg(16), Some(Transparency(0)));
     }
 
     #[test]
