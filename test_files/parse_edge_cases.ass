@@ -14,8 +14,8 @@ Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
 Scroll Position: 6
-Active Line: 16
-Video Position: 888
+Active Line: 17
+Video Position: 1108
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -40,3 +40,5 @@ Dialogue: 0,0:00:29.00,0:00:31.00,Default,,0,0,0,,{\fax1}aaaaa
 Dialogue: 0,0:00:31.00,0:00:34.00,Default,,0,0,0,,{\alphadd}aaa{\alpha&H&}a
 Dialogue: 0,0:00:34.00,0:00:37.00,Default,,0,0,0,,{\an\an5}aaa
 Dialogue: 0,0:00:37.00,0:00:40.00,Default,,0,0,0,,{\a8}asd
+Dialogue: 0,0:00:40.00,0:00:42.00,Default,,0,0,0,,{\fad(1065,-1065,1065,0,1000,1000,2000)}text
+Dialogue: 0,0:00:42.00,0:00:45.00,Default,,0,0,0,,{\fade(500,500)}aaaaa

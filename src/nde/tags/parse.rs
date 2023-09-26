@@ -5,7 +5,7 @@ use crate::nde::tags::{
 use crate::nde::Span;
 use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment};
 
-use super::{Drawing, Global, Local, Transparency};
+use super::{ComplexFade, Drawing, Fade, Global, Local, SimpleFade, Transparency};
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
@@ -407,11 +407,40 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
             }
         }
     } else if twa.tag::<true>("pos") {
-        todo!()
+        if global.position.is_none() {
+            global.position = twa.position_args().map(|pos| PositionOrMove::Position(pos));
+        }
     } else if twa.tag::<true>("fade") || twa.tag::<true>("fad") {
-        todo!()
+        if global.fade.is_none() {
+            // libass does not differentiate the two fade types by name,
+            // only by argument count.
+            global.fade = match twa.nargs() {
+                2 => {
+                    // fad
+                    Some(Fade::Simple(SimpleFade {
+                        fade_in_duration: Milliseconds(twa.int_arg(0).unwrap()),
+                        fade_out_duration: Milliseconds(twa.int_arg(1).unwrap()),
+                    }))
+                }
+                7 => {
+                    // fade
+                    Some(Fade::Complex(ComplexFade {
+                        transparency_before: twa.int_arg(0).unwrap(),
+                        transparency_main: twa.int_arg(1).unwrap(),
+                        transparency_after: twa.int_arg(2).unwrap(),
+                        fade_in_start: Milliseconds(twa.int_arg(3).unwrap()),
+                        fade_in_end: Milliseconds(twa.int_arg(4).unwrap()),
+                        fade_out_start: Milliseconds(twa.int_arg(5).unwrap()),
+                        fade_out_end: Milliseconds(twa.int_arg(6).unwrap()),
+                    }))
+                }
+                _ => None,
+            }
+        }
     } else if twa.tag::<true>("org") {
-        todo!()
+        if global.origin.is_none() {
+            global.origin = twa.position_args();
+        }
     } else if twa.tag::<true>("t") {
         todo!()
     } else if twa.tag::<true>("clip") {
@@ -609,6 +638,17 @@ impl<'a> TagWithArguments<'a> {
                 .unwrap_or(Transparency(0))
         })
     }
+
+    fn position_args(&self) -> Option<Position> {
+        if self.nargs() == 2 {
+            Some(Position {
+                x: self.float_arg(0).unwrap(),
+                y: self.float_arg(1).unwrap(),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Equivalent to libass' `mystrtoi32`.
@@ -751,7 +791,10 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        parse_tag_block("\\an5\\an8\\clip(1,2,3,4)\\iclip(aaa)", &mut global);
+        parse_tag_block(
+            "\\an5\\an8\\clip(1,2,3,4)\\iclip(aaa)\\pos(123,456)\\move(1,2,3,4)\\fad(1,2)\\fade(1,2,3,4,5,6,7)\\org(1,2)\\org(3,4)",
+            &mut global,
+        );
 
         // These tags should NOT override their predecessors.
         assert_eq!(
@@ -761,6 +804,9 @@ mod tests {
                 horizontal: HorizontalAlignment::Center
             })
         );
+        assert!(matches!(global.position, Some(PositionOrMove::Position(_))));
+        assert!(matches!(global.fade, Some(Fade::Simple(_))));
+        assert_eq!(global.origin, Some(Position { x: 1.0, y: 2.0 }));
 
         // These tags SHOULD override their predecessors.
         assert!(matches!(global.clip, Some(Clip::InverseVector(_))));
@@ -817,6 +863,23 @@ mod tests {
                 horizontal: HorizontalAlignment::Center
             })
         );
+
+        assert!(matches!(
+            test_single_global("fad(1,2)").fade,
+            Some(Fade::Simple(_))
+        ));
+        assert!(matches!(
+            test_single_global("fade(1,2)").fade,
+            Some(Fade::Simple(_))
+        ));
+        assert!(matches!(
+            test_single_global("fad(1,2,3,4,5,6,7)").fade,
+            Some(Fade::Complex(_))
+        ));
+        assert!(matches!(
+            test_single_global("fade(1,2,3,4,5,6,7)").fade,
+            Some(Fade::Complex(_))
+        ));
     }
 
     fn test_single_local(tag: &str) -> Local {
@@ -929,6 +992,27 @@ mod tests {
         assert_eq!(twa.transparency_arg(14), Some(Transparency(0xff)));
         assert_eq!(twa.transparency_arg(15), Some(Transparency(0xff)));
         assert_eq!(twa.transparency_arg(16), Some(Transparency(0)));
+    }
+
+    #[test]
+    fn argument_parse_position() {
+        let twa = TagWithArguments {
+            first_part: "",
+            arguments: vec!["123", "456"],
+            has_backslash_arg: false,
+            tag_found: true,
+        };
+
+        assert_eq!(twa.position_args(), Some(Position { x: 123.0, y: 456.0 }));
+
+        let twa2 = TagWithArguments {
+            first_part: "",
+            arguments: vec!["123"],
+            has_backslash_arg: false,
+            tag_found: true,
+        };
+
+        assert_eq!(twa2.position_args(), None);
     }
 
     #[test]

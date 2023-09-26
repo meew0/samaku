@@ -90,7 +90,7 @@ where
 pub struct Global {
     pub position: Option<PositionOrMove>,
     pub clip: Option<Clip>,
-    pub origin: Resettable<Position>,
+    pub origin: Option<Position>,
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<subtitle::WrapStyle>,
     pub alignment: Resettable<subtitle::Alignment>,
@@ -651,11 +651,23 @@ pub struct SimpleFade {
     pub fade_out_duration: Milliseconds,
 }
 
+/// Before `fade_in_start`, the line will have transparency
+/// `transparency_before`; between `fade_in_end` and `fade_out_start`,
+/// it will have transparency `transparency_main`; and after
+/// `fade_out_end`, it will have transparency `transparency_after`.
+/// Between those times, it will transition linearly between
+/// the respective transparency values.
+///
+/// Note that the transparency values have type `i32`
+/// instead of the usual `u8`. They will be truncated to size `u8`,
+/// but only *after* interpolation, which means that specifying
+/// far larger values than 255 (or far smaller ones than 0)
+/// will produce a fun wrapping effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComplexFade {
-    pub transparency_before: u8,
-    pub transparency_main: u8,
-    pub transparency_after: u8,
+    pub transparency_before: i32,
+    pub transparency_main: i32,
+    pub transparency_after: i32,
     pub fade_in_start: Milliseconds,
     pub fade_in_end: Milliseconds,
     pub fade_out_start: Milliseconds,
