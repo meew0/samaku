@@ -747,6 +747,26 @@ mod tests {
     }
 
     #[test]
+    fn global_override() {
+        use Resettable::*;
+
+        let mut global = Global::empty();
+        parse_tag_block("\\an5\\an8\\clip(1,2,3,4)\\iclip(aaa)", &mut global);
+
+        // These tags should NOT override their predecessors.
+        assert_eq!(
+            global.alignment,
+            Override(Alignment {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Center
+            })
+        );
+
+        // These tags SHOULD override their predecessors.
+        assert!(matches!(global.clip, Some(Clip::InverseVector(_))));
+    }
+
+    #[test]
     fn resettable_helper() {
         use Resettable::*;
 
