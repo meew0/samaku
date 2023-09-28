@@ -94,12 +94,18 @@ pub struct Global {
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<subtitle::WrapStyle>,
     pub alignment: Resettable<subtitle::Alignment>,
-    pub animation: Option<Animation<GlobalAnimatable>>,
+    pub animations: Vec<Animation<GlobalAnimatable>>,
 }
 
 impl Global {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    pub fn animatable(&self) -> GlobalAnimatable {
+        GlobalAnimatable {
+            clip: self.clip.clone().and_then(Clip::into_animatable),
+        }
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -119,6 +125,12 @@ impl Global {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GlobalAnimatable {
     pub clip: Option<AnimatableClip>,
+}
+
+impl GlobalAnimatable {
+    pub fn empty() -> Self {
+        Self::default()
+    }
 }
 
 /// Tags that modify the text following it.
@@ -172,12 +184,34 @@ pub struct Local {
     /// Baseline offset for following drawings.
     pub drawing_baseline_offset: Option<f64>,
 
-    pub animation: Option<Animation<LocalAnimatable>>,
+    pub animations: Vec<Animation<LocalAnimatable>>,
 }
 
 impl Local {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    pub fn animatable(&self) -> LocalAnimatable {
+        LocalAnimatable {
+            border: self.border,
+            shadow: self.shadow,
+            soften: self.soften,
+            gaussian_blur: self.gaussian_blur,
+            font_size: self.font_size,
+            font_scale: self.font_scale,
+            letter_spacing: self.letter_spacing,
+            text_rotation: self.text_rotation,
+            text_shear: self.text_shear,
+            primary_colour: self.primary_colour,
+            secondary_colour: self.secondary_colour,
+            border_colour: self.border_colour,
+            shadow_colour: self.shadow_colour,
+            primary_transparency: self.primary_transparency,
+            secondary_transparency: self.secondary_transparency,
+            border_transparency: self.border_transparency,
+            shadow_transparency: self.shadow_transparency,
+        }
     }
 
     /// Sets all tags that are present in `other` to their value in `other`. Keeps all tags that
@@ -226,7 +260,9 @@ impl Local {
         self.drawing_baseline_offset
             .override_from(&other.drawing_baseline_offset);
 
-        self.animation.override_from(&other.animation);
+        // TODO: how should animations work in override_from /
+        // clear_from?
+        // self.animation.override_from(&other.animation);
     }
 
     /// Clears all tags that are present in `other`.
@@ -274,7 +310,7 @@ impl Local {
         self.drawing_baseline_offset
             .clear_from(&other.drawing_baseline_offset);
 
-        self.animation.clear_from(&other.animation);
+        // self.animation.clear_from(&other.animation);
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -332,22 +368,28 @@ pub struct LocalAnimatable {
     pub soften: Resettable<i32>,
     pub gaussian_blur: Resettable<f64>,
 
-    pub font_size: Option<f64>,
+    pub font_size: Resettable<FontSize>,
     pub font_scale: Maybe2D,
-    pub letter_spacing: Option<f64>,
+    pub letter_spacing: Resettable<f64>,
 
     pub text_rotation: Maybe3D,
     pub text_shear: Maybe2D,
 
-    pub primary_colour: Option<Colour>,
-    pub secondary_colour: Option<Colour>,
-    pub border_colour: Option<Colour>,
-    pub shadow_colour: Option<Colour>,
+    pub primary_colour: Resettable<Colour>,
+    pub secondary_colour: Resettable<Colour>,
+    pub border_colour: Resettable<Colour>,
+    pub shadow_colour: Resettable<Colour>,
 
-    pub primary_transparency: Option<Transparency>,
-    pub secondary_transparency: Option<Transparency>,
-    pub border_transparency: Option<Transparency>,
-    pub shadow_transparency: Option<Transparency>,
+    pub primary_transparency: Resettable<Transparency>,
+    pub secondary_transparency: Resettable<Transparency>,
+    pub border_transparency: Resettable<Transparency>,
+    pub shadow_transparency: Resettable<Transparency>,
+}
+
+impl LocalAnimatable {
+    pub fn empty() -> Self {
+        Self::default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -377,7 +419,7 @@ impl emit::EmitValue for Centiseconds {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Animation<A> {
     pub modifiers: A,
-    pub acceleration: Option<f64>,
+    pub acceleration: f64,
     pub interval: Option<AnimationInterval>,
 }
 
@@ -680,6 +722,16 @@ pub enum Clip {
     InverseRectangle(ClipRectangle),
     Vector(ClipDrawing),
     InverseVector(ClipDrawing),
+}
+
+impl Clip {
+    pub fn into_animatable(self) -> Option<AnimatableClip> {
+        match self {
+            Clip::Rectangle(rect) => Some(AnimatableClip::Rectangle(rect)),
+            Clip::InverseRectangle(rect) => Some(AnimatableClip::InverseRectangle(rect)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

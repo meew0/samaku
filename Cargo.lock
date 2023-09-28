@@ -168,6 +168,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_matches2"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af2f0d0b12ad8a519db313659cbd5e8757633f75d77ac5df1f8644f38f9c5946"
+
+[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3104,6 +3110,7 @@ dependencies = [
 name = "samaku"
 version = "0.1.0"
 dependencies = [
+ "assert_matches2",
  "bestsource-sys",
  "cpal",
  "fast-float",

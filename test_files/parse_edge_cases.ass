@@ -13,9 +13,9 @@ PlayResY: 108
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Scroll Position: 6
-Active Line: 17
-Video Position: 1108
+Scroll Position: 19
+Active Line: 32
+Video Position: 1871
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -42,3 +42,17 @@ Dialogue: 0,0:00:34.00,0:00:37.00,Default,,0,0,0,,{\an\an5}aaa
 Dialogue: 0,0:00:37.00,0:00:40.00,Default,,0,0,0,,{\a8}asd
 Dialogue: 0,0:00:40.00,0:00:42.00,Default,,0,0,0,,{\fad(1065,-1065,1065,0,1000,1000,2000)}text
 Dialogue: 0,0:00:42.00,0:00:45.00,Default,,0,0,0,,{\fade(500,500)}aaaaa
+Dialogue: 0,0:00:45.00,0:00:48.00,Default,,0,0,0,,{\clip(50,50,100,100)}aaa{\t(\clip(50,50,150,100)}aa{\clip(100,50,150,100)}
+Dialogue: 0,0:00:48.00,0:00:51.00,Default,,0,0,0,,{\c&HFF0000&}bbb{\t(\c&H0000FF&)}bb{\c&H00FF00&}bbb
+Dialogue: 0,0:00:51.00,0:00:54.00,Default,,0,0,0,,{\c&HFF0000&\alpha&HDD&}ccc{\t(0,1000,\alpha&H00&)\t(0,2000,\c&H0000FF&)}cccc
+Dialogue: 0,0:00:54.00,0:00:57.00,Default,,0,0,0,,{\pbo50\t(\pbo0)\p1}m 0 0 s 100 0 100 100 0 100 c
+Dialogue: 0,0:00:57.00,0:01:00.00,Default,,0,0,0,,{\t(0,1000,\t(1000,2000,\xshad10)}aaaaaa
+Dialogue: 0,0:01:00.00,0:01:03.00,Default,,0,0,0,,{\pos(100,70)\clip(50,50,100,100)}{\t(\clip(50,50,150,100)}{\t(\clip(100,50,150,100)}aaaaaaaaaaaaaaaaaaa
+Dialogue: 0,0:01:00.00,0:01:03.00,Default,,0,0,0,,{\pos(100,85)\clip(50,50,100,100)}{\t(\clip(50,50,150,100)}{only first clip animation}bbbbbbbbbbbbbbbb
+Dialogue: 0,0:01:00.00,0:01:03.00,Default,,0,0,0,,{\pos(100,100)\clip(50,50,100,100)}{only second clip animation}{\t(\clip(100,50,150,100)}cccccccccccccccccccccc
+Dialogue: 0,0:01:03.00,0:01:06.00,Default,,0,0,0,,00000{\pos(100,70)\clip(50,50,100,100)}aaaaa{\t(\clip(50,50,150,100)}bbbbb{\t(\clip(100,50,150,100)}ccccc
+Dialogue: 0,0:01:06.00,0:01:09.00,Default,,0,0,0,,{\t(\clip(m 118.4 86.4 l 68.8 72 58.8 98 91.2 99.6)}aaaaaaaaaaaa
+Dialogue: 0,0:01:09.00,0:01:12.00,Default,,0,0,0,,{\clip(m 118.4 86.4 l 68.8 72 58.8 98 91.2 99.6)}{\t(\clip(75,75,100,100)}aaaaaaaaaaaaaaa
+Dialogue: 0,0:01:12.00,0:01:15.00,Default,,0,0,0,,{\clip(0,0,100,\100)}aaa
+Dialogue: 0,0:01:15.00,0:01:18.00,Default,,0,0,0,,{\clip(50,50,100,100)\t(\clip(50,50,150,100\}aaaaaa
+Dialogue: 0,0:01:18.00,0:01:21.00,Default,,0,0,0,,{\xshad10\t(\xshad)}aaaa

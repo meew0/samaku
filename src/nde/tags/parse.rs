@@ -5,7 +5,10 @@ use crate::nde::tags::{
 use crate::nde::Span;
 use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment};
 
-use super::{ComplexFade, Drawing, Fade, Global, Local, SimpleFade, Transparency};
+use super::{
+    Animation, AnimationInterval, ComplexFade, Drawing, Fade, Global, GlobalAnimatable, Local,
+    LocalAnimatable, SimpleFade, Transparency,
+};
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
@@ -24,7 +27,7 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
             if let Some(block_end) = slice.find('}') {
                 // We found a tag block.
                 // We first need to parse it, to find out whether we must end the current drawing
-                let tag_block = parse_tag_block(&slice[1..block_end], &mut global);
+                let tag_block = parse_tag_block(&slice[1..block_end], &mut global, false);
                 let TagBlock {
                     reset,
                     new_local,
@@ -131,7 +134,7 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     (global, spans)
 }
 
-fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
+fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
     let mut tag_block = TagBlock {
         reset: None,
         new_local: Local::empty(),
@@ -145,8 +148,20 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
 
     for (byte_index, next_char) in block.char_indices() {
         state = match state {
-            Comment => match next_char {
+            Initial => match next_char {
                 '\\' => TagStart,
+                _ => Comment,
+            },
+            Comment => match next_char {
+                '\\' => {
+                    parse_tag(
+                        &block[tag_start_bytes..byte_index],
+                        global,
+                        &mut tag_block,
+                        nested,
+                    );
+                    TagStart
+                }
                 _ => Comment,
             },
             // Skip spaces between the backslash and the actual tag name
@@ -160,7 +175,12 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
             },
             Tag => match next_char {
                 '\\' => {
-                    parse_tag(&block[tag_start_bytes..byte_index], global, &mut tag_block);
+                    parse_tag(
+                        &block[tag_start_bytes..byte_index],
+                        global,
+                        &mut tag_block,
+                        nested,
+                    );
                     TagStart
                 }
                 '(' => Parenthesis,
@@ -169,32 +189,26 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
             // We need a separate state here because a parenthesis could contain more
             // backslash-initiated tags (like in `\t`)
             Parenthesis => match next_char {
-                ')' => {
-                    parse_tag(
-                        &block[tag_start_bytes..(byte_index + 1)],
-                        global,
-                        &mut tag_block,
-                    );
-                    Comment
-                }
+                ')' => Comment,
                 _ => Parenthesis,
             },
         }
     }
 
-    parse_tag(&block[tag_start_bytes..], global, &mut tag_block);
+    parse_tag(&block[tag_start_bytes..], global, &mut tag_block, nested);
 
     tag_block
 }
 
 enum TagBlockParseState {
+    Initial,
     Comment,
     TagStart,
     Tag,
     Parenthesis,
 }
 
-fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
+fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool) -> bool {
     if tag.is_empty() {
         return false;
     }
@@ -230,7 +244,13 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     } else if twa.tag::<false>("fay") {
         local.text_shear.y = resettable(twa.float_arg(0));
     } else if twa.tag::<true>("iclip") {
-        parse_clip(global, &twa, Clip::InverseRectangle, Clip::InverseVector);
+        parse_clip(
+            global,
+            &twa,
+            nested,
+            Clip::InverseRectangle,
+            Clip::InverseVector,
+        );
     } else if twa.tag::<false>("blur") {
         local.gaussian_blur = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fscx") {
@@ -442,9 +462,65 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
             global.origin = twa.position_args();
         }
     } else if twa.tag::<true>("t") {
-        todo!()
+        // This implementation of animation parsing makes no attempt
+        // at matching obscure libass edge cases (like nested \t).
+        if nested {
+            println!("Detected nested \\t, this is not supported by samaku!");
+        } else {
+            let (interval, acceleration) = match twa.nargs() {
+                4 => (
+                    Some(AnimationInterval {
+                        start: Milliseconds(twa.int_arg(0).unwrap()),
+                        end: Milliseconds(twa.int_arg(1).unwrap()),
+                    }),
+                    twa.float_arg(2).unwrap(),
+                ),
+                3 => {
+                    // Although we do match *this* obscure edge case...
+                    // “VSFilter compatibility (because we can): parse the
+                    // timestamps differently depending on argument count”
+                    (
+                        Some(AnimationInterval {
+                            start: Milliseconds(twa.float_arg(0).unwrap() as i32),
+                            end: Milliseconds(twa.float_arg(1).unwrap() as i32),
+                        }),
+                        1.0,
+                    )
+                }
+                2 => (None, twa.float_arg(0).unwrap()),
+                1 => (None, 1.0),
+                _ => return true,
+            };
+
+            if twa.has_backslash_arg {
+                let mut inner_global = Global::empty();
+                let animated_tags = twa.string_arg(twa.arguments.len() - 1).unwrap();
+                let inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
+
+                let global_animatable = inner_global.animatable();
+                if global_animatable != GlobalAnimatable::empty() {
+                    // It is in fact possible to have multiple global (clip)
+                    // animations, with different behaviour than if only one
+                    // of them were specified.
+                    global.animations.push(Animation {
+                        modifiers: global_animatable,
+                        acceleration,
+                        interval,
+                    })
+                }
+
+                let local_animatable = inner_block.new_local.animatable();
+                if local_animatable != LocalAnimatable::empty() {
+                    local.animations.push(Animation {
+                        modifiers: local_animatable,
+                        acceleration,
+                        interval,
+                    })
+                }
+            }
+        }
     } else if twa.tag::<true>("clip") {
-        parse_clip(global, &twa, Clip::Rectangle, Clip::Vector);
+        parse_clip(global, &twa, nested, Clip::Rectangle, Clip::Vector);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
         todo!()
     } else if twa.tag::<false>("2c") {
@@ -534,38 +610,75 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
     use ParenArgsParseState::*;
     let mut state = BeforeArgument;
     let mut arg_start_bytes = 0;
+    let mut arg_end_bytes: Option<usize> = None;
 
     for (byte_index, next_char) in paren_args.char_indices() {
         state = match state {
             BeforeArgument => match next_char {
                 // Skip spaces, like above
                 ' ' | '\t' => BeforeArgument,
+                ',' => {
+                    twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
+                    arg_start_bytes = byte_index;
+                    BeforeArgument
+                }
                 '\\' => {
                     twa.has_backslash_arg = true;
-                    arg_start_bytes = byte_index;
-                    Argument
+
+                    // Consume the rest of the argument,
+                    // disregarding commas
+                    BackslashArgument
+                }
+                ')' => {
+                    arg_end_bytes = Some(byte_index);
+                    break;
                 }
                 _ => {
                     arg_start_bytes = byte_index;
-                    Argument
+                    GenericArgument
                 }
             },
-            Argument => match next_char {
+            GenericArgument => match next_char {
                 ',' => {
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
+                    arg_start_bytes = byte_index;
                     BeforeArgument
                 }
-                _ => Argument,
+                '\\' => {
+                    twa.has_backslash_arg = true;
+                    BackslashArgument
+                }
+                ')' => {
+                    arg_end_bytes = Some(byte_index);
+                    break;
+                }
+                _ => GenericArgument,
+            },
+            BackslashArgument => match next_char {
+                ')' => {
+                    arg_end_bytes = Some(byte_index);
+                    break;
+                }
+                _ => BackslashArgument,
             },
         }
     }
 
-    twa.push_argument(&paren_args[arg_start_bytes..]);
+    let mut end = arg_end_bytes.unwrap_or(paren_args.len());
+
+    // Try to include closing parenthesis
+    if end < paren_args.len() {
+        assert_eq!(paren_args.as_bytes()[end], b')');
+        end += 1
+    }
+
+    twa.push_argument(&paren_args[arg_start_bytes..end]);
 }
 
 enum ParenArgsParseState {
     BeforeArgument,
-    Argument,
+    GenericArgument,
+    BackslashArgument,
 }
 
 struct TagWithArguments<'a> {
@@ -675,8 +788,13 @@ fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
         .clamp(i32::MIN.into(), i32::MAX.into()) as i32
 }
 
-fn parse_clip<R, V>(global: &mut Global, twa: &TagWithArguments, rect_clip: R, vector_clip: V)
-where
+fn parse_clip<R, V>(
+    global: &mut Global,
+    twa: &TagWithArguments,
+    nested: bool,
+    rect_clip: R,
+    vector_clip: V,
+) where
     R: FnOnce(ClipRectangle) -> Clip,
     V: FnOnce(ClipDrawing) -> Clip,
 {
@@ -694,6 +812,14 @@ where
             1 => 1,
             _ => return,
         };
+
+        if nested {
+            // While libass lacks the capability to *animate* vector clips,
+            // if a vector clip is specified within a \t before any other clips,
+            // it is applied as the event-wide clip (without being animated).
+            // We do not support this behaviour.
+            println!("Detected vector clip in \\t, this is not supported by samaku!");
+        }
 
         let commands = twa.string_arg(twa.nargs() - 1).unwrap();
         let drawing = ClipDrawing {
@@ -769,6 +895,9 @@ struct State {}
 
 #[cfg(test)]
 mod tests {
+    use crate::nde::tags::AnimatableClip;
+    use assert_matches2::assert_matches;
+
     use super::*;
 
     #[test]
@@ -794,6 +923,7 @@ mod tests {
         parse_tag_block(
             "\\an5\\an8\\clip(1,2,3,4)\\iclip(aaa)\\pos(123,456)\\move(1,2,3,4)\\fad(1,2)\\fade(1,2,3,4,5,6,7)\\org(1,2)\\org(3,4)",
             &mut global,
+            false,
         );
 
         // These tags should NOT override their predecessors.
@@ -804,12 +934,12 @@ mod tests {
                 horizontal: HorizontalAlignment::Center
             })
         );
-        assert!(matches!(global.position, Some(PositionOrMove::Position(_))));
-        assert!(matches!(global.fade, Some(Fade::Simple(_))));
+        assert_matches!(global.position, Some(PositionOrMove::Position(_)));
+        assert_matches!(global.fade, Some(Fade::Simple(_)));
         assert_eq!(global.origin, Some(Position { x: 1.0, y: 2.0 }));
 
         // These tags SHOULD override their predecessors.
-        assert!(matches!(global.clip, Some(Clip::InverseVector(_))));
+        assert_matches!(global.clip, Some(Clip::InverseVector(_)));
     }
 
     #[test]
@@ -864,29 +994,54 @@ mod tests {
             })
         );
 
-        assert!(matches!(
-            test_single_global("fad(1,2)").fade,
-            Some(Fade::Simple(_))
-        ));
-        assert!(matches!(
-            test_single_global("fade(1,2)").fade,
-            Some(Fade::Simple(_))
-        ));
-        assert!(matches!(
+        assert_matches!(test_single_global("fad(1,2)").fade, Some(Fade::Simple(_)));
+        assert_matches!(test_single_global("fade(1,2)").fade, Some(Fade::Simple(_)));
+        assert_matches!(
             test_single_global("fad(1,2,3,4,5,6,7)").fade,
             Some(Fade::Complex(_))
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             test_single_global("fade(1,2,3,4,5,6,7)").fade,
             Some(Fade::Complex(_))
-        ));
+        );
+    }
+
+    #[test]
+    fn animation() {
+        let local = test_single_local("t(1,2,3,\\fsp10)");
+        assert_eq!(local.animations.len(), 1);
+        let anim = &local.animations[0];
+        assert_eq!(
+            anim.interval,
+            Some(AnimationInterval {
+                start: Milliseconds(1),
+                end: Milliseconds(2)
+            })
+        );
+        assert_eq!(anim.acceleration, 3.0);
+        assert_eq!(anim.modifiers.letter_spacing, Resettable::Override(10.0));
+
+        assert_matches!(
+            test_single_global("t(\\clip(1,2,3,4))").animations[0]
+                .modifiers
+                .clip,
+            Some(AnimatableClip::Rectangle(_))
+        );
+
+        let mut global = Global::empty();
+        parse_tag_block(
+            "\\t(\\clip(1,2,3,4))\\t(\\clip(5,6,7,8))",
+            &mut global,
+            false,
+        );
+        assert_eq!(global.animations.len(), 2);
     }
 
     fn test_single_local(tag: &str) -> Local {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
 
-        if !parse_tag(tag, &mut global, &mut block) {
+        if !parse_tag(tag, &mut global, &mut block, false) {
             panic!(
                 "should have parsed a tag in test_single_local -- input: {}",
                 tag
@@ -900,7 +1055,7 @@ mod tests {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
 
-        if !parse_tag(tag, &mut global, &mut block) {
+        if !parse_tag(tag, &mut global, &mut block, false) {
             panic!(
                 "should have parsed a tag in test_single_global -- input: {}",
                 tag
