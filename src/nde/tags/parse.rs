@@ -143,7 +143,7 @@ fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
     };
 
     use TagBlockParseState::*;
-    let mut state = Comment;
+    let mut state = Initial;
     let mut tag_start_bytes = 0;
 
     for (byte_index, next_char) in block.char_indices() {
