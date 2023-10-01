@@ -6,8 +6,9 @@ use crate::nde::Span;
 use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment, WrapStyle};
 
 use super::{
-    Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, Drawing, Fade, FontWeight,
-    Global, GlobalAnimatable, KaraokeEffect, Local, LocalAnimatable, SimpleFade, Transparency,
+    Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, Drawing, Fade, FontSizeDelta,
+    FontWeight, Global, GlobalAnimatable, KaraokeEffect, Local, LocalAnimatable, SimpleFade,
+    Transparency,
 };
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
@@ -276,8 +277,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
                 // Only the first character is checked — `\fs+10` increases the font size by 10,
                 // whereas `\fs +10` sets it to 10.
                 match str_arg.chars().next().unwrap() {
-                    '+' => Resettable::Override(FontSize::Increase(parsed)),
-                    '-' => Resettable::Override(FontSize::Decrease(-parsed)),
+                    '+' | '-' => FontSize::Delta(FontSizeDelta(parsed)),
                     _ => {
                         // libass has the additional behaviour that if a font size ever becomes 0
                         // or negative, through e.g. `\fs -10` or `\fs10\fs-20`, it gets reset to
@@ -285,14 +285,14 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
                         // We can do this in the first case, where an absolute non-positive value
                         // is specified, but not in the second case.
                         if parsed <= 0.0 {
-                            Resettable::Reset
+                            FontSize::Reset(FontSizeDelta::ZERO)
                         } else {
-                            Resettable::Override(FontSize::Set(parsed))
+                            FontSize::Set(parsed)
                         }
                     }
                 }
             }
-            None => Resettable::Reset,
+            None => FontSize::Reset(FontSizeDelta::ZERO),
         }
     } else if twa.tag::<false>("bord") {
         local.border = maybe_both_dimensions(twa.float_arg(0));
@@ -1108,7 +1108,10 @@ mod tests {
         assert_matches!(block.new_local.font_scale.x, Reset);
         assert_matches!(block.new_local.font_scale.y, Reset);
         assert_matches!(block.new_local.letter_spacing, Reset);
-        assert_matches!(block.new_local.font_size, Reset);
+        assert_eq!(
+            block.new_local.font_size,
+            FontSize::Reset(FontSizeDelta::ZERO)
+        );
         assert_matches!(block.new_local.text_rotation.x, Reset);
         assert_matches!(block.new_local.text_rotation.y, Reset);
         assert_matches!(block.new_local.text_rotation.z, Reset);
@@ -1218,7 +1221,7 @@ mod tests {
         assert_eq!(block.new_local.font_scale.x, Override(12.0));
         assert_eq!(block.new_local.font_scale.y, Override(13.0));
         assert_eq!(block.new_local.letter_spacing, Override(14.0));
-        assert_eq!(block.new_local.font_size, Override(FontSize::Set(15.0)));
+        assert_eq!(block.new_local.font_size, FontSize::Set(15.0));
         assert_eq!(block.new_local.text_rotation.x, Override(16.0));
         assert_eq!(block.new_local.text_rotation.y, Override(17.0));
         assert_eq!(block.new_local.text_rotation.z, Override(18.0));
@@ -1412,7 +1415,7 @@ mod tests {
         );
         assert_eq!(
             block.new_local.font_size,
-            Override(FontSize::Increase(10.0))
+            FontSize::Delta(FontSizeDelta(10.0))
         );
 
         let mut global = Global::empty();
@@ -1426,7 +1429,7 @@ mod tests {
         );
         assert_eq!(
             block.new_local.font_size,
-            Override(FontSize::Decrease(11.0))
+            FontSize::Delta(FontSizeDelta(-11.0))
         );
     }
 

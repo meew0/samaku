@@ -173,7 +173,7 @@ pub struct Local {
     pub gaussian_blur: Resettable<f64>,
 
     pub font_name: Resettable<String>,
-    pub font_size: Resettable<FontSize>,
+    pub font_size: FontSize,
     pub font_scale: Maybe2D,
     pub letter_spacing: Resettable<f64>,
 
@@ -232,8 +232,15 @@ impl Local {
     ///
     /// “Present” is defined as `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
     ///
+    /// The `merge` argument controls the behaviour of this method with respect to incrementally
+    /// specifiable tags (i.e. `font_size`). With `merge: true`, it will behave as if merging two
+    /// subsequent tag blocks into one — that is, the effects of `other` will always be added onto
+    /// `self`, if applicable. With `merge: false`, it will behave as if modifying the `self`
+    /// value using a globally specified override tag — that is, if `other` specifies a relative
+    /// value, `self` will only be modified if it specifies an absolute one.
+    ///
     /// Does not modify animations and karaoke effects.
-    pub fn override_from(&mut self, other: &Local) {
+    pub fn override_from(&mut self, other: &Local, merge: bool) {
         self.italic.override_from(&other.italic);
         self.font_weight.override_from(&other.font_weight);
         self.underline.override_from(&other.underline);
@@ -246,7 +253,7 @@ impl Local {
         self.gaussian_blur.override_from(&other.gaussian_blur);
 
         self.font_name.override_from(&other.font_name);
-        self.font_size.override_from(&other.font_size);
+        self.font_size.override_from(&other.font_size, merge);
         self.font_scale.override_from(&other.font_scale);
         self.letter_spacing.override_from(&other.letter_spacing);
 
@@ -333,7 +340,7 @@ impl Local {
         emit::simple_tag_resettable(sink, "blur", &self.gaussian_blur)?;
 
         emit::simple_tag_resettable(sink, "fn", &self.font_name)?;
-        emit::simple_tag_resettable(sink, "fs", &self.font_size)?;
+        self.font_size.emit(sink)?;
         self.font_scale.emit(sink, "fsc", "")?;
         emit::simple_tag_resettable(sink, "fsp", &self.letter_spacing)?;
 
@@ -408,7 +415,7 @@ pub struct LocalAnimatable {
     pub soften: Resettable<i32>,
     pub gaussian_blur: Resettable<f64>,
 
-    pub font_size: Resettable<FontSize>,
+    pub font_size: FontSize,
     pub font_scale: Maybe2D,
     pub letter_spacing: Resettable<f64>,
 
@@ -689,23 +696,124 @@ impl emit::EmitValue for FontWeight {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FontSize {
+    /// Apply the given delta to the previously set font size. If the delta
+    Delta(FontSizeDelta),
+
+    /// Reset the font size to the style default, then apply the given delta.
+    /// The delta may be zero, in order to only reset the font size.
+    Reset(FontSizeDelta),
+
+    /// Set the font size to a specific value. The value must be strictly positive; otherwise,
+    /// it will have the same effect as `Reset` with a zero delta.
+    Set(f64),
+}
+
+impl FontSize {
+    pub const KEEP: FontSize = FontSize::Delta(FontSizeDelta::ZERO);
+
+    fn override_from(&mut self, other: &Self, merge: bool) {
+        use FontSize::*;
+
+        // See the `font_size_override` test for a detailed specification of this method's
+        // behaviour.
+        *self = match *other {
+            Delta(delta2) => match *self {
+                Delta(delta1) => {
+                    if merge {
+                        Delta(delta1 + delta2)
+                    } else {
+                        Delta(delta1)
+                    }
+                }
+                Reset(delta1) => Reset(delta1 + delta2),
+                Set(val) => Set(val + delta2.0),
+            },
+            reset_or_set => reset_or_set,
+        }
+    }
+
+    fn clear_from(&mut self, other: &Self) {
+        if !other.is_empty() {
+            *self = Self::KEEP;
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match *self {
+            Self::Delta(delta) if delta == FontSizeDelta::ZERO => true,
+            _ => false,
+        }
+    }
+
+    fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        let mut delta_value: f64 = 0.0;
+
+        match *self {
+            FontSize::Delta(delta) => {
+                delta_value = delta.0;
+                Ok(()) // tag will be emitted in the next step
+            }
+            FontSize::Reset(delta) => {
+                delta_value = delta.0;
+                emit::simple_tag_resettable(sink, "fs", &Resettable::Reset::<EmitFontSize>)
+            }
+            FontSize::Set(font_size) => {
+                let emit_value = EmitFontSize::Set(font_size.max(0.0));
+                emit::simple_tag(sink, "fs", &Some(emit_value))
+            }
+        }?;
+
+        let emit_value = match delta_value {
+            negative if negative < 0.0 => EmitFontSize::Decrease(-negative),
+            positive if positive > 0.0 => EmitFontSize::Increase(positive),
+            _ => return Ok(()), // do not emit any other tag for a delta of zero
+        };
+        emit::simple_tag(sink, "fs", &Some(emit_value))
+    }
+}
+
+impl Default for FontSize {
+    fn default() -> Self {
+        Self::KEEP
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FontSizeDelta(f64);
+
+impl FontSizeDelta {
+    pub const ZERO: FontSizeDelta = FontSizeDelta(0.0);
+}
+
+impl Add for FontSizeDelta {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+enum EmitFontSize {
     Set(f64),
     Increase(f64),
     Decrease(f64),
 }
 
-impl emit::EmitValue for FontSize {
+impl emit::EmitValue for EmitFontSize {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
         match *self {
-            FontSize::Set(font_size) => font_size.emit_value(sink),
-            FontSize::Increase(delta) => {
+            Self::Set(font_size) => font_size.emit_value(sink),
+            Self::Increase(delta) => {
                 sink.write_char('+')?;
                 delta.emit_value(sink)
             }
-            FontSize::Decrease(delta) => {
+            Self::Decrease(delta) => {
                 sink.write_char('-')?;
                 delta.emit_value(sink)
             }
@@ -934,7 +1042,7 @@ mod tests {
         use Resettable::*;
 
         let mut a = Local {
-            font_size: Override(FontSize::Set(50.0)),
+            font_size: FontSize::Set(50.0),
             font_scale: Maybe2D {
                 x: Override(123.0),
                 y: Keep,
@@ -949,7 +1057,7 @@ mod tests {
 
         let b = Local {
             drawing_baseline_offset: Some(2.0),
-            font_size: Override(FontSize::Set(70.0)),
+            font_size: FontSize::Set(70.0),
             font_scale: Maybe2D {
                 x: Override(10.0),
                 y: Keep,
@@ -962,16 +1070,56 @@ mod tests {
             ..Local::default()
         };
 
-        a.override_from(&b);
+        a.override_from(&b, false);
 
         assert_eq!(a.drawing_baseline_offset, Some(2.0));
         assert_eq!(a.strike_out, Keep); // untouched
-        assert_eq!(a.font_size, Override(FontSize::Set(70.0)));
+        assert_eq!(a.font_size, FontSize::Set(70.0));
         assert_eq!(a.font_scale.x, Override(10.0));
         assert_eq!(a.font_scale.y, Keep);
         assert_eq!(a.text_rotation.x, Override(456.0));
         assert_eq!(a.text_rotation.y, Reset);
         assert_eq!(a.text_rotation.z, Override(30.0));
+    }
+
+    macro_rules! fsot {
+        ($merge:expr, $a:expr, $b:expr, $res:expr) => {
+            let mut _a = $a;
+            _a.override_from(&$b, $merge);
+            assert_eq!(_a, $res);
+        };
+    }
+
+    #[test]
+    fn font_size_override() {
+        use FontSize::*;
+        const ZERO: FontSizeDelta = FontSizeDelta(0.0);
+        const ONE: FontSizeDelta = FontSizeDelta(1.0);
+        const TWO: FontSizeDelta = FontSizeDelta(2.0);
+
+        fsot!(false, Delta(ZERO), Delta(ONE), Delta(ZERO));
+        fsot!(false, Delta(ZERO), Reset(ONE), Reset(ONE));
+        fsot!(false, Delta(ZERO), Set(1.0), Set(1.0));
+
+        fsot!(false, Reset(ONE), Delta(ONE), Reset(TWO));
+        fsot!(false, Reset(ONE), Reset(ONE), Reset(ONE));
+        fsot!(false, Reset(ONE), Set(1.0), Set(1.0));
+
+        fsot!(false, Set(1.0), Delta(ONE), Set(2.0));
+        fsot!(false, Set(1.0), Reset(ONE), Reset(ONE));
+        fsot!(false, Set(1.0), Set(1.0), Set(1.0));
+
+        fsot!(true, Delta(ZERO), Delta(ONE), Delta(ONE)); // !
+        fsot!(true, Delta(ZERO), Reset(ONE), Reset(ONE));
+        fsot!(true, Delta(ZERO), Set(1.0), Set(1.0));
+
+        fsot!(true, Reset(ONE), Delta(ONE), Reset(TWO));
+        fsot!(true, Reset(ONE), Reset(ONE), Reset(ONE));
+        fsot!(true, Reset(ONE), Set(1.0), Set(1.0));
+
+        fsot!(true, Set(1.0), Delta(ONE), Set(2.0));
+        fsot!(true, Set(1.0), Reset(ONE), Reset(ONE));
+        fsot!(true, Set(1.0), Set(1.0), Set(1.0));
     }
 
     #[test]
@@ -1005,7 +1153,7 @@ mod tests {
                 green: 127,
                 blue: 0,
             }),
-            font_size: Resettable::Reset,
+            font_size: FontSize::Reset(FontSizeDelta::ZERO),
             ..Local::default()
         };
 
@@ -1024,13 +1172,19 @@ mod tests {
         assert_eq!(colour.blue, 0xff);
     }
 
+    macro_rules! assert_emits {
+        ($a:expr, $b:expr) => {
+            let mut _str = String::new();
+            $a.emit(&mut _str)?;
+            assert_eq!(_str, $b);
+        };
+    }
+
     #[test]
     fn karaoke() -> Result<(), std::fmt::Error> {
         let mut k = Karaoke::default();
         assert_eq!(k.effect, None);
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "");
+        assert_emits!(k, "");
 
         k.add_relative(KaraokeEffect::FillInstant, Centiseconds(10.0));
         assert_eq!(
@@ -1038,9 +1192,7 @@ mod tests {
             Some((KaraokeEffect::FillInstant, Centiseconds(10.0)))
         );
         assert_eq!(k.onset, KaraokeOnset::NoDelay);
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\k10");
+        assert_emits!(k, "\\k10");
 
         k.add_relative(KaraokeEffect::FillSweep, Centiseconds(20.0));
         assert_eq!(
@@ -1048,9 +1200,7 @@ mod tests {
             Some((KaraokeEffect::FillSweep, Centiseconds(20.0)))
         );
         assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(10.0)));
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\k10\\kf20");
+        assert_emits!(k, "\\k10\\kf20");
 
         k.add_relative(KaraokeEffect::FillSweep, Centiseconds(5.0));
         assert_eq!(
@@ -1058,16 +1208,12 @@ mod tests {
             Some((KaraokeEffect::FillSweep, Centiseconds(5.0)))
         );
         assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(30.0)));
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\k30\\kf5");
+        assert_emits!(k, "\\k30\\kf5");
 
         k.set_absolute(Centiseconds(50.0));
         assert_eq!(k.effect, None);
         assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\kt50");
+        assert_emits!(k, "\\kt50");
 
         k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(30.0));
         assert_eq!(
@@ -1075,9 +1221,7 @@ mod tests {
             Some((KaraokeEffect::BorderInstant, Centiseconds(30.0)))
         );
         assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\kt50\\ko30");
+        assert_emits!(k, "\\kt50\\ko30");
 
         k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(40.0));
         assert_eq!(
@@ -1085,9 +1229,23 @@ mod tests {
             Some((KaraokeEffect::BorderInstant, Centiseconds(40.0)))
         );
         assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(80.0)));
-        let mut str = String::new();
-        k.emit(&mut str)?;
-        assert_eq!(str, "\\kt80\\ko40");
+        assert_emits!(k, "\\kt80\\ko40");
+
+        Ok(())
+    }
+
+    #[test]
+    fn font_size_emit() -> Result<(), std::fmt::Error> {
+        assert_emits!(FontSize::KEEP, "");
+        assert_emits!(FontSize::Delta(FontSizeDelta::ZERO), "");
+        assert_emits!(FontSize::Delta(FontSizeDelta(1.0)), "\\fs+1");
+        assert_emits!(FontSize::Delta(FontSizeDelta(-1.0)), "\\fs-1");
+        assert_emits!(FontSize::Reset(FontSizeDelta::ZERO), "\\fs");
+        assert_emits!(FontSize::Reset(FontSizeDelta(1.0)), "\\fs\\fs+1");
+        assert_emits!(FontSize::Reset(FontSizeDelta(-1.0)), "\\fs\\fs-1");
+        assert_emits!(FontSize::Set(1.0), "\\fs1");
+        assert_emits!(FontSize::Set(0.0), "\\fs0");
+        assert_emits!(FontSize::Set(-1.0), "\\fs0");
 
         Ok(())
     }

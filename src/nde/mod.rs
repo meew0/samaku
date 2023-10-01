@@ -54,7 +54,7 @@ impl Event {
                     let mut new_tags = tags.clone();
 
                     if i == 0 {
-                        new_tags.override_from(&self.overrides);
+                        new_tags.override_from(&self.overrides, false);
                     } else {
                         new_tags.clear_from(&self.overrides);
                     }
