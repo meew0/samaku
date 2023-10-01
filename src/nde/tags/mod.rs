@@ -229,6 +229,10 @@ impl Local {
 
     /// Sets all tags that are present in `other` to their value in `other`. Keeps all tags that
     /// are **not** present in `other` as they currently are.
+    ///
+    /// “Present” is defined as `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
+    ///
+    /// Does not modify animations and karaoke effects.
     pub fn override_from(&mut self, other: &Local) {
         self.italic.override_from(&other.italic);
         self.font_weight.override_from(&other.font_weight);
@@ -265,18 +269,14 @@ impl Local {
         self.shadow_transparency
             .override_from(&other.shadow_transparency);
 
-        // TODO: does it make any sense to override karaoke effects?
-        // self.karaoke.override_from(&other.karaoke);
-
         self.drawing_baseline_offset
             .override_from(&other.drawing_baseline_offset);
-
-        // TODO: how should animations work in override_from /
-        // clear_from?
-        // self.animation.override_from(&other.animation);
     }
 
-    /// Clears all tags that are present in `other`.
+    /// Clears all tags that are present in `other`. Does not modify animations and karaoke
+    /// effects.
+    ///
+    /// “Present” is defined as `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
     pub fn clear_from(&mut self, other: &Local) {
         self.italic.clear_from(&other.italic);
         self.font_weight.clear_from(&other.font_weight);
@@ -313,12 +313,8 @@ impl Local {
         self.shadow_transparency
             .clear_from(&other.shadow_transparency);
 
-        // self.karaoke.clear_from(&other.karaoke);
-
         self.drawing_baseline_offset
             .clear_from(&other.drawing_baseline_offset);
-
-        // self.animation.clear_from(&other.animation);
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
