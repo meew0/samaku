@@ -10,16 +10,20 @@ PlayResX: 192
 PlayResY: 108
 
 [Aegisub Project Garbage]
+Last Style Storage: Default
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Scroll Position: 19
-Active Line: 32
-Video Position: 1871
+Scroll Position: 51
+Active Line: 53
+Video Position: 3381
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Style),Arial,48,&H000000FF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Style,Arial,48,&H00FF9F00,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Bold,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -56,3 +60,24 @@ Dialogue: 0,0:01:09.00,0:01:12.00,Default,,0,0,0,,{\clip(m 118.4 86.4 l 68.8 72 
 Dialogue: 0,0:01:12.00,0:01:15.00,Default,,0,0,0,,{\clip(0,0,100,\100)}aaa
 Dialogue: 0,0:01:15.00,0:01:18.00,Default,,0,0,0,,{\clip(50,50,100,100)\t(\clip(50,50,150,100\}aaaaaa
 Dialogue: 0,0:01:18.00,0:01:21.00,Default,,0,0,0,,{\xshad10\t(\xshad)}aaaa
+Dialogue: 0,0:01:21.00,0:01:24.00,Default,,0,0,0,,{\1c&Hff0000&}aaaa{\1c&H}aaaaa
+Dialogue: 0,0:01:24.00,0:01:27.00,Default,,0,0,0,,aa{\rStyle}aa{\rStyle)}aa
+Dialogue: 0,0:01:27.00,0:01:30.00,Default,,0,0,0,,aa{\r(Style)}aa{\r(Style))}aa
+Dialogue: 0,0:01:30.00,0:01:33.00,Default,,0,0,0,,aa{\r Style}aa{\rStyle }aa
+Dialogue: 0,0:01:33.00,0:01:36.00,Default,,0,0,0,,a{\b0}a{\b1}a{\b2}a{\b700}a
+Dialogue: 0,0:01:36.00,0:01:39.00,Bold,,0,0,0,,a{\b0}a{\b}a{\b0}a{\b3}a{\ba}a
+Dialogue: 0,0:01:39.00,0:01:42.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\k10\k10\k10\k10\k10\k10\k10\k10\k10\kf10}ccc
+Dialogue: 0,0:01:42.00,0:01:45.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kf100}ccc
+Dialogue: 0,0:01:45.00,0:01:48.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\k10\kt100\kf10}ccc
+Dialogue: 0,0:01:48.00,0:01:51.00,Default,,0,0,0,,{\k10}aaa{\k100}bbb{\kf100}ccc
+Dialogue: 0,0:01:51.00,0:01:54.00,Default,,0,0,0,,{\k50}aaa{\kf50}bbb{\k0}ccc{\kf50}ddd
+Dialogue: 0,0:01:54.00,0:01:57.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kt100}ccc{\k10}ddd
+Dialogue: 0,0:01:57.00,0:02:00.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\r}ccc
+Dialogue: 0,0:02:00.00,0:02:03.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kt20\k80\kf10}ccc
+Dialogue: 0,0:02:03.00,0:02:06.00,Default,,0,0,0,,{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b
+Dialogue: 0,0:02:06.00,0:02:09.00,Default,,0,0,0,,{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k10}a{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b\N{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b{\k-10}b
+Dialogue: 0,0:02:09.00,0:02:12.00,Default,,0,0,0,,{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf10}a{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b{\kf-10}b
+Dialogue: 0,0:02:12.00,0:02:15.00,Default,,0,0,0,,{\k10}aaa{\k50\k0}bbb\Nccc
+Dialogue: 0,0:02:15.00,0:02:18.00,Default,,0,0,0,,{\xshad-10}aaa   {\shad}bbb   {\shad-10}ccc
+Dialogue: 0,0:02:18.00,0:02:21.00,Default,,0,0,0,,a{\pbo\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}
+Dialogue: 0,0:02:21.00,0:02:24.00,Default,,0,0,0,,a{\p1}m 0 0 s 100 0 100 100 0 100 c{\p0\p1\p0\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}

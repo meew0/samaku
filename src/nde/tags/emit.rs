@@ -12,24 +12,6 @@ pub trait EmitValue {
         W: std::fmt::Write;
 }
 
-pub trait EmitTag {
-    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write;
-}
-
-pub fn tag<W, T>(sink: &mut W, maybe_tag: Option<T>) -> Result<(), std::fmt::Error>
-where
-    W: std::fmt::Write,
-    T: EmitTag,
-{
-    if let Some(tag) = maybe_tag {
-        tag.emit_tag(sink)?;
-    }
-
-    Ok(())
-}
-
 pub fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,
@@ -186,10 +168,6 @@ mod tests {
 
         let no_value: Option<i32> = None;
         simple_tag(&mut string, "blub", &no_value)?;
-
-        let no_tag: Option<crate::nde::tags::KaraokeEffect> = None;
-        tag(&mut string, no_tag)?;
-
         assert_eq!(string, "");
 
         Ok(())
@@ -205,12 +183,7 @@ mod tests {
         let some_values: Vec<i32> = vec![1, 2, 3];
         complex_tag(&mut string, "blubblub", some_values)?;
 
-        let some_tag: Option<crate::nde::tags::KaraokeEffect> = Some(
-            crate::nde::tags::KaraokeEffect::FillInstant(crate::nde::tags::Centiseconds(123.0)),
-        );
-        tag(&mut string, some_tag)?;
-
-        assert_eq!(string, "\\blub123\\blubblub(1,2,3)\\k123");
+        assert_eq!(string, "\\blub123\\blubblub(1,2,3)");
 
         Ok(())
     }

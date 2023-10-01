@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Add};
 
 use crate::subtitle;
 
@@ -136,10 +136,10 @@ impl GlobalAnimatable {
 /// Tags that modify the text following it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Local {
-    pub italic: Option<bool>,
-    pub font_weight: Option<FontWeight>,
-    pub underline: Option<bool>,
-    pub strike_out: Option<bool>,
+    pub italic: Resettable<bool>,
+    pub font_weight: Resettable<FontWeight>,
+    pub underline: Resettable<bool>,
+    pub strike_out: Resettable<bool>,
 
     /// Set the size of the border around the line. Maps to `\xbord` and `\ybord`.
     pub border: Maybe2D,
@@ -174,12 +174,7 @@ pub struct Local {
     pub border_transparency: Resettable<Transparency>,
     pub shadow_transparency: Resettable<Transparency>,
 
-    pub karaoke_effect: Option<KaraokeEffect>,
-
-    /// Maps to `\kt` — sets the absolute time of a karaoke syllable.
-    /// Must be combined with `karaoke_effect`.
-    /// See https://aegisub.org/blog/vsfilter-hacks/
-    pub karaoke_absolute_timing: Option<Centiseconds>,
+    pub karaoke: Karaoke,
 
     /// Baseline offset for following drawings.
     pub drawing_baseline_offset: Option<f64>,
@@ -252,10 +247,8 @@ impl Local {
         self.shadow_transparency
             .override_from(&other.shadow_transparency);
 
-        self.karaoke_effect.override_from(&other.karaoke_effect);
-
-        self.karaoke_absolute_timing
-            .override_from(&other.karaoke_absolute_timing);
+        // TODO: does it make any sense to override karaoke effects?
+        // self.karaoke.override_from(&other.karaoke);
 
         self.drawing_baseline_offset
             .override_from(&other.drawing_baseline_offset);
@@ -302,10 +295,7 @@ impl Local {
         self.shadow_transparency
             .clear_from(&other.shadow_transparency);
 
-        self.karaoke_effect.clear_from(&other.karaoke_effect);
-
-        self.karaoke_absolute_timing
-            .clear_from(&other.karaoke_absolute_timing);
+        // self.karaoke.clear_from(&other.karaoke);
 
         self.drawing_baseline_offset
             .clear_from(&other.drawing_baseline_offset);
@@ -317,10 +307,10 @@ impl Local {
     where
         W: std::fmt::Write,
     {
-        emit::simple_tag(sink, "i", &self.italic)?;
-        emit::simple_tag(sink, "b", &self.font_weight)?;
-        emit::simple_tag(sink, "u", &self.underline)?;
-        emit::simple_tag(sink, "s", &self.strike_out)?;
+        emit::simple_tag_resettable(sink, "i", &self.italic)?;
+        emit::simple_tag_resettable(sink, "b", &self.font_weight)?;
+        emit::simple_tag_resettable(sink, "u", &self.underline)?;
+        emit::simple_tag_resettable(sink, "s", &self.strike_out)?;
 
         self.border.emit(sink, "", "bord")?;
         self.shadow.emit(sink, "", "shad")?;
@@ -348,8 +338,7 @@ impl Local {
         emit::simple_tag_resettable(sink, "3a", &self.border_transparency)?;
         emit::simple_tag_resettable(sink, "4a", &self.shadow_transparency)?;
 
-        emit::tag(sink, self.karaoke_effect)?;
-        emit::simple_tag(sink, "kt", &self.karaoke_absolute_timing)?;
+        self.karaoke.emit(sink)?;
 
         emit::simple_tag(sink, "pbo", &self.drawing_baseline_offset)?;
 
@@ -392,7 +381,7 @@ impl LocalAnimatable {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Milliseconds(i32);
 
 impl emit::EmitValue for Milliseconds {
@@ -404,8 +393,16 @@ impl emit::EmitValue for Milliseconds {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Centiseconds(f64);
+
+impl Add for Centiseconds {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
 
 impl emit::EmitValue for Centiseconds {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -567,6 +564,22 @@ pub struct Colour {
     pub blue: u8,
 }
 
+impl Colour {
+    const BLACK: Self = Self {
+        red: 0,
+        green: 0,
+        blue: 0,
+    };
+
+    fn from_bgr_packed(packed: u32) -> Self {
+        Self {
+            red: (packed & 0x0000FF) as u8,
+            green: ((packed & 0x00FF00) >> 8) as u8,
+            blue: ((packed & 0xFF0000) >> 16) as u8,
+        }
+    }
+}
+
 impl emit::EmitValue for Colour {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
@@ -649,33 +662,134 @@ impl emit::EmitValue for FontSize {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KaraokeEffect {
-    /// Maps to `\k`.
-    FillInstant(Centiseconds),
+/// Represents the effect and timing of a karaoke syllable.
+/// Note that it is invalid to have a karaoke syllable
+/// with no set effect (`effect: None`), but with
+/// a `KaraokeOnset::RelativeDelay` onset.
+/// In order to prevent this, this struct does not expose
+/// public fields, but instead only getter/setter methods
+/// that uphold this invariant.
+/// Negative durations are supported in principle, but
+/// there is no guarantee that they behave exactly as
+/// they do in libass.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Karaoke {
+    /// The way the syllable will be displayed, and the duration
+    /// the effect will take place over.
+    /// If `None`, the effect from the previous karaoke block
+    /// will be used, if one exists. Otherwise there will be
+    /// no effect.
+    /// There is no way to unset the karaoke effect in a line
+    /// after it has been set once, not even with `\r`.
+    effect: Option<(KaraokeEffect, Centiseconds)>,
 
-    /// Maps to `\kf`.
-    FillSweep(Centiseconds),
-
-    /// Maps to `\ko`.
-    BorderInstant(Centiseconds),
+    /// The time point at which the effect will start to be
+    /// displayed.
+    onset: KaraokeOnset,
 }
 
-impl emit::EmitTag for KaraokeEffect {
-    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+impl Karaoke {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn try_new(
+        effect: Option<(KaraokeEffect, Centiseconds)>,
+        onset: KaraokeOnset,
+    ) -> Result<Self, KaraokeError> {
+        if effect.is_none() && matches!(onset, KaraokeOnset::RelativeDelay(_)) {
+            Err(KaraokeError::EffectRequiredForRelativeOnset)
+        } else {
+            Ok(Self { effect, onset })
+        }
+    }
+
+    pub fn effect(&self) -> Option<(KaraokeEffect, Centiseconds)> {
+        self.effect
+    }
+
+    pub fn onset(&self) -> KaraokeOnset {
+        self.onset
+    }
+
+    pub fn add_relative(&mut self, effect: KaraokeEffect, duration: Centiseconds) {
+        use KaraokeOnset::*;
+
+        let old_effect = self.effect.replace((effect, duration));
+        let old_duration = old_effect.map(|(_, duration)| duration);
+
+        // Add previous duration to onset
+        self.onset = match self.onset {
+            NoDelay => match old_duration {
+                Some(val) => RelativeDelay(val),
+                None => NoDelay,
+            },
+            RelativeDelay(previous) => {
+                RelativeDelay(previous + old_duration.unwrap_or(Centiseconds(0.0)))
+            }
+            Absolute(previous) => Absolute(previous + old_duration.unwrap_or(Centiseconds(0.0))),
+        };
+    }
+
+    pub fn set_absolute(&mut self, absolute_delay: Centiseconds) {
+        self.effect = None;
+        self.onset = KaraokeOnset::Absolute(absolute_delay);
+    }
+
+    fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
-        match *self {
-            KaraokeEffect::FillInstant(syl_offset) => {
-                emit::simple_tag(sink, "k", &Some(syl_offset))
+        match self.onset {
+            KaraokeOnset::NoDelay => Ok(()),
+            KaraokeOnset::RelativeDelay(delay) => emit::simple_tag(sink, "k", &Some(delay)),
+            KaraokeOnset::Absolute(delay) => emit::simple_tag(sink, "kt", &Some(delay)),
+        }?;
+        match self.effect {
+            None => Ok(()),
+            Some((KaraokeEffect::FillInstant, duration)) => {
+                emit::simple_tag(sink, "k", &Some(duration))
             }
-            KaraokeEffect::FillSweep(syl_offset) => emit::simple_tag(sink, "kf", &Some(syl_offset)),
-            KaraokeEffect::BorderInstant(syl_offset) => {
-                emit::simple_tag(sink, "ko", &Some(syl_offset))
+            Some((KaraokeEffect::FillSweep, duration)) => {
+                emit::simple_tag(sink, "kf", &Some(duration))
+            }
+            Some((KaraokeEffect::BorderInstant, duration)) => {
+                emit::simple_tag(sink, "ko", &Some(duration))
             }
         }
     }
+}
+
+enum KaraokeError {
+    /// Creating a `Karaoke` object with relative-delay
+    /// onset requires specifying an effect. See
+    /// `Karaoke` docs for details
+    EffectRequiredForRelativeOnset,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum KaraokeOnset {
+    #[default]
+    NoDelay,
+
+    RelativeDelay(Centiseconds),
+
+    /// Maps to `\kt` — sets the absolute time of a karaoke syllable.
+    /// Must be combined with `karaoke_effect`.
+    /// See https://aegisub.org/blog/vsfilter-hacks/
+    Absolute(Centiseconds),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum KaraokeEffect {
+    /// Maps to `\k`.
+    FillInstant,
+
+    /// Maps to `\kf`.
+    FillSweep,
+
+    /// Maps to `\ko`.
+    BorderInstant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -720,8 +834,8 @@ pub struct ComplexFade {
 pub enum Clip {
     Rectangle(ClipRectangle),
     InverseRectangle(ClipRectangle),
-    Vector(ClipDrawing),
-    InverseVector(ClipDrawing),
+    Vector(Drawing),
+    InverseVector(Drawing),
 }
 
 impl Clip {
@@ -748,15 +862,9 @@ pub struct ClipRectangle {
     pub y2: i32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClipDrawing {
-    pub scale: i32,
-    pub commands: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Drawing {
-    pub scale: f64,
+    pub scale: i32,
     pub commands: String,
 }
 
@@ -775,7 +883,6 @@ mod tests {
         use Resettable::*;
 
         let mut a = Local {
-            italic: Some(true),
             font_size: Override(FontSize::Set(50.0)),
             font_scale: Maybe2D {
                 x: Override(123.0),
@@ -790,7 +897,7 @@ mod tests {
         };
 
         let b = Local {
-            underline: Some(true),
+            drawing_baseline_offset: Some(2.0),
             font_size: Override(FontSize::Set(70.0)),
             font_scale: Maybe2D {
                 x: Override(10.0),
@@ -806,9 +913,8 @@ mod tests {
 
         a.override_from(&b);
 
-        assert_eq!(a.italic, Some(true));
-        assert_eq!(a.underline, Some(true));
-        assert_eq!(a.strike_out, None); // untouched
+        assert_eq!(a.drawing_baseline_offset, Some(2.0));
+        assert_eq!(a.strike_out, Keep); // untouched
         assert_eq!(a.font_size, Override(FontSize::Set(70.0)));
         assert_eq!(a.font_scale.x, Override(10.0));
         assert_eq!(a.font_scale.y, Keep);
@@ -819,21 +925,23 @@ mod tests {
 
     #[test]
     fn clear_from() {
+        use Resettable::*;
+
         let mut a = Local {
-            italic: Some(true),
-            underline: Some(false),
+            italic: Override(true),
+            underline: Override(false),
             ..Local::default()
         };
 
         let b = Local {
-            underline: Some(true),
+            underline: Override(true),
             ..Local::default()
         };
 
         a.clear_from(&b);
 
-        assert_eq!(a.italic, Some(true));
-        assert_eq!(a.underline, None);
+        assert_eq!(a.italic, Override(true));
+        assert_eq!(a.underline, Keep);
     }
 
     #[test]
@@ -853,6 +961,82 @@ mod tests {
         local.emit(&mut string)?;
 
         assert_eq!(string, "\\fs\\1c&H007FFF&");
+
+        Ok(())
+    }
+
+    #[test]
+    fn colour() {
+        let colour = Colour::from_bgr_packed(0xffbb11);
+        assert_eq!(colour.red, 0x11);
+        assert_eq!(colour.green, 0xbb);
+        assert_eq!(colour.blue, 0xff);
+    }
+
+    #[test]
+    fn karaoke() -> Result<(), std::fmt::Error> {
+        let mut k = Karaoke::default();
+        assert_eq!(k.effect, None);
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "");
+
+        k.add_relative(KaraokeEffect::FillInstant, Centiseconds(10.0));
+        assert_eq!(
+            k.effect,
+            Some((KaraokeEffect::FillInstant, Centiseconds(10.0)))
+        );
+        assert_eq!(k.onset, KaraokeOnset::NoDelay);
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\k10");
+
+        k.add_relative(KaraokeEffect::FillSweep, Centiseconds(20.0));
+        assert_eq!(
+            k.effect,
+            Some((KaraokeEffect::FillSweep, Centiseconds(20.0)))
+        );
+        assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(10.0)));
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\k10\\kf20");
+
+        k.add_relative(KaraokeEffect::FillSweep, Centiseconds(5.0));
+        assert_eq!(
+            k.effect,
+            Some((KaraokeEffect::FillSweep, Centiseconds(5.0)))
+        );
+        assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(30.0)));
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\k30\\kf5");
+
+        k.set_absolute(Centiseconds(50.0));
+        assert_eq!(k.effect, None);
+        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\kt50");
+
+        k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(30.0));
+        assert_eq!(
+            k.effect,
+            Some((KaraokeEffect::BorderInstant, Centiseconds(30.0)))
+        );
+        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\kt50\\ko30");
+
+        k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(40.0));
+        assert_eq!(
+            k.effect,
+            Some((KaraokeEffect::BorderInstant, Centiseconds(40.0)))
+        );
+        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(80.0)));
+        let mut str = String::new();
+        k.emit(&mut str)?;
+        assert_eq!(str, "\\kt80\\ko40");
 
         Ok(())
     }

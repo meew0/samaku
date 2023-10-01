@@ -1,13 +1,13 @@
 use crate::nde::tags::{
-    Clip, ClipDrawing, ClipRectangle, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position,
+    Clip, ClipRectangle, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position,
     PositionOrMove, Resettable,
 };
 use crate::nde::Span;
-use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment};
+use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment, WrapStyle};
 
 use super::{
-    Animation, AnimationInterval, ComplexFade, Drawing, Fade, Global, GlobalAnimatable, Local,
-    LocalAnimatable, SimpleFade, Transparency,
+    Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, Drawing, Fade, FontWeight,
+    Global, GlobalAnimatable, KaraokeEffect, Local, LocalAnimatable, SimpleFade, Transparency,
 };
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
@@ -522,51 +522,85 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
     } else if twa.tag::<true>("clip") {
         parse_clip(global, &twa, nested, Clip::Rectangle, Clip::Vector);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
-        todo!()
+        local.primary_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("2c") {
-        todo!()
+        local.secondary_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("3c") {
-        todo!()
+        local.border_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("4c") {
-        todo!()
+        local.shadow_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("1a") {
-        todo!()
+        local.primary_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("2a") {
-        todo!()
+        local.secondary_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("3a") {
-        todo!()
+        local.border_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("4a") {
-        todo!()
+        local.shadow_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("r") {
-        todo!()
+        block.reset = if twa.nargs() > 0 {
+            Some(Reset::ResetToStyle(twa.string_arg(0).unwrap().to_owned()))
+        } else {
+            Some(Reset::Reset)
+        };
     } else if twa.tag::<false>("be") {
-        todo!()
+        local.soften = resettable(twa.int_arg(0))
     } else if twa.tag::<false>("b") {
-        todo!()
+        use Resettable::*;
+        local.font_weight = match twa.int_arg(0) {
+            Some(0) => Override(FontWeight::BoldToggle(false)),
+            Some(1) => Override(FontWeight::BoldToggle(true)),
+            Some(weight) if weight >= 100 => {
+                Override(FontWeight::Numeric(weight.try_into().unwrap()))
+            }
+            Some(_) | None => Reset,
+        }
     } else if twa.tag::<false>("i") {
-        todo!()
+        local.italic = resettable(twa.bool_arg(0));
     } else if twa.tag::<false>("kt") {
-        todo!()
+        local
+            .karaoke
+            .set_absolute(Centiseconds(twa.float_arg(0).unwrap_or(0.0)))
     } else if twa.tag::<false>("kf") || twa.tag::<false>("K") {
-        todo!()
+        local.karaoke.add_relative(
+            KaraokeEffect::FillSweep,
+            Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
+        )
     } else if twa.tag::<false>("ko") {
-        todo!()
+        local.karaoke.add_relative(
+            KaraokeEffect::BorderInstant,
+            Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
+        )
     } else if twa.tag::<false>("k") {
-        todo!()
+        local.karaoke.add_relative(
+            KaraokeEffect::FillInstant,
+            Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
+        )
     } else if twa.tag::<false>("shad") {
-        todo!()
+        // “VSFilter compatibility: clip for \shad but not for \[xy]shad”
+        let maybe_val = resettable(twa.float_arg(0).map(|val| val.max(0.0)));
+        local.shadow.x = maybe_val;
+        local.shadow.y = maybe_val;
     } else if twa.tag::<false>("s") {
-        todo!()
+        local.strike_out = resettable(twa.bool_arg(0));
     } else if twa.tag::<false>("u") {
-        todo!()
+        local.underline = resettable(twa.bool_arg(0));
     } else if twa.tag::<false>("pbo") {
-        todo!()
+        local.drawing_baseline_offset = Some(twa.float_arg(0).unwrap_or(0.0));
     } else if twa.tag::<false>("p") {
-        todo!()
+        let scale = twa.int_arg(0).unwrap_or(0).max(0);
+        if scale == 0 {
+            block.end_previous_drawing = true;
+        } else {
+            block.new_drawing_scale = Some(scale);
+        }
     } else if twa.tag::<false>("q") {
-        todo!()
+        global.wrap_style = match twa.int_arg(0) {
+            Some(x) if x >= 0 && x <= 3 => Resettable::Override(WrapStyle::from(x)),
+            Some(_) | None => Resettable::Reset,
+        };
     } else if twa.tag::<false>("fe") {
-        todo!()
+        local.font_encoding = resettable(twa.int_arg(0));
     } else {
         return false;
     }
@@ -666,12 +700,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
 
     let mut end = arg_end_bytes.unwrap_or(paren_args.len());
 
-    // Try to include closing parenthesis
-    if end < paren_args.len() {
-        assert_eq!(paren_args.as_bytes()[end], b')');
-        end += 1
-    }
-
+    // Don't include closing parenthesis
     twa.push_argument(&paren_args[arg_start_bytes..end]);
 }
 
@@ -742,13 +771,30 @@ impl<'a> TagWithArguments<'a> {
         }
     }
 
+    /// Note that this function returns `Some(false)` for present but
+    /// non-numeric arguments! This matches libass behaviour.
+    fn bool_arg(&self, index: usize) -> Option<bool> {
+        self.int_arg(index).and_then(|val: i32| match val {
+            0 => Some(false),
+            1 => Some(true),
+            _ => None,
+        })
+    }
+
     fn transparency_arg(&self, index: usize) -> Option<Transparency> {
+        self.hex_arg(index).map(|val: i32| Transparency(val as u8))
+    }
+
+    fn colour_arg(&self, index: usize) -> Option<Colour> {
+        self.hex_arg(index)
+            .map(|val: i32| Colour::from_bgr_packed(val as u32))
+    }
+
+    fn hex_arg(&self, index: usize) -> Option<i32> {
         self.string_arg(index).map(|arg| {
             arg.find(|char| char != '&' && char != 'H')
-                .map(|first_value_char| {
-                    Transparency(parse_prefix_i32(&arg[first_value_char..], 16) as u8)
-                })
-                .unwrap_or(Transparency(0))
+                .map(|first_value_char| parse_prefix_i32(&arg[first_value_char..], 16))
+                .unwrap_or(0)
         })
     }
 
@@ -796,7 +842,7 @@ fn parse_clip<R, V>(
     vector_clip: V,
 ) where
     R: FnOnce(ClipRectangle) -> Clip,
-    V: FnOnce(ClipDrawing) -> Clip,
+    V: FnOnce(Drawing) -> Clip,
 {
     if twa.nargs() == 4 {
         let rect = ClipRectangle {
@@ -822,7 +868,7 @@ fn parse_clip<R, V>(
         }
 
         let commands = twa.string_arg(twa.nargs() - 1).unwrap();
-        let drawing = ClipDrawing {
+        let drawing = Drawing {
             scale,
             commands: commands.to_string(),
         };
@@ -871,7 +917,7 @@ fn simplify(spans: Vec<Span>) -> Vec<Span> {
 struct TagBlock {
     reset: Option<Reset>,
     new_local: Local,
-    new_drawing_scale: Option<f64>,
+    new_drawing_scale: Option<i32>,
     end_previous_drawing: bool,
 }
 
@@ -886,16 +932,15 @@ impl TagBlock {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Reset {
     Reset,
     ResetToStyle(String),
 }
 
-struct State {}
-
 #[cfg(test)]
 mod tests {
-    use crate::nde::tags::AnimatableClip;
+    use crate::nde::tags::{AnimatableClip, Karaoke, KaraokeOnset};
     use assert_matches2::assert_matches;
 
     use super::*;
@@ -940,6 +985,346 @@ mod tests {
 
         // These tags SHOULD override their predecessors.
         assert_matches!(global.clip, Some(Clip::InverseVector(_)));
+    }
+
+    #[test]
+    fn default_values() {
+        use Resettable::*;
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\xbord\\ybord\\xshad\\yshad\\fax\\fay\\iclip\\blur\\fscx\\fscy\\fsp\\fs\\frx\\fry\\frz\\fn\\an\\pos\\fade\\org\\t\\1c\\2c\\3c\\4c\\1a\\2a\\3a\\4a\\be\\b\\i\\kt\\s\\u\\pbo\\p\\q\\fe", &mut global, false);
+
+        assert_matches!(block.new_local.border.x, Reset);
+        assert_matches!(block.new_local.border.y, Reset);
+        assert_matches!(block.new_local.shadow.x, Reset);
+        assert_matches!(block.new_local.shadow.y, Reset);
+        assert_matches!(block.new_local.text_shear.x, Reset);
+        assert_matches!(block.new_local.text_shear.y, Reset);
+        assert_matches!(global.clip, None);
+        assert_matches!(block.new_local.gaussian_blur, Reset);
+        assert_matches!(block.new_local.font_scale.x, Reset);
+        assert_matches!(block.new_local.font_scale.y, Reset);
+        assert_matches!(block.new_local.letter_spacing, Reset);
+        assert_matches!(block.new_local.font_size, Reset);
+        assert_matches!(block.new_local.text_rotation.x, Reset);
+        assert_matches!(block.new_local.text_rotation.y, Reset);
+        assert_matches!(block.new_local.text_rotation.z, Reset);
+        assert_matches!(block.new_local.font_name, Reset);
+        assert_matches!(global.alignment, Reset);
+        assert_matches!(global.position, None);
+        assert_matches!(global.fade, None);
+        assert_matches!(global.origin, None);
+        assert_eq!(block.new_local.animations.len(), 0);
+        assert_matches!(block.new_local.primary_colour, Reset);
+        assert_matches!(block.new_local.secondary_colour, Reset);
+        assert_matches!(block.new_local.border_colour, Reset);
+        assert_matches!(block.new_local.shadow_colour, Reset);
+        assert_matches!(block.new_local.primary_transparency, Reset);
+        assert_matches!(block.new_local.secondary_transparency, Reset);
+        assert_matches!(block.new_local.border_transparency, Reset);
+        assert_matches!(block.new_local.shadow_transparency, Reset);
+        assert_matches!(block.new_local.soften, Reset);
+        assert_matches!(block.new_local.font_weight, Reset);
+        assert_matches!(block.new_local.italic, Reset);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: None,
+                onset: KaraokeOnset::Absolute(Centiseconds(0.0))
+            }
+        );
+        assert_matches!(block.new_local.strike_out, Reset);
+        assert_matches!(block.new_local.underline, Reset);
+        assert_eq!(block.new_local.drawing_baseline_offset, Some(0.0));
+        assert!(block.end_previous_drawing);
+        assert_matches!(global.wrap_style, Reset);
+        assert_matches!(block.new_local.font_encoding, Reset);
+
+        let mut global = Global::empty();
+        let block = parse_tag_block(
+            "\\bord\\move\\shad\\fsc\\alpha\\a\\fad\\clip\\kf",
+            &mut global,
+            false,
+        );
+        assert_matches!(block.new_local.border.x, Reset);
+        assert_matches!(block.new_local.border.y, Reset);
+        assert_matches!(global.position, None);
+        assert_matches!(block.new_local.shadow.x, Reset);
+        assert_matches!(block.new_local.shadow.y, Reset);
+        assert_matches!(block.new_local.font_scale.x, Reset);
+        assert_matches!(block.new_local.font_scale.y, Reset);
+        assert_matches!(block.new_local.primary_transparency, Reset);
+        assert_matches!(block.new_local.secondary_transparency, Reset);
+        assert_matches!(block.new_local.border_transparency, Reset);
+        assert_matches!(block.new_local.shadow_transparency, Reset);
+        assert_matches!(global.alignment, Reset);
+        assert_matches!(global.fade, None);
+        assert_matches!(global.clip, None);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::FillSweep, Centiseconds(100.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\ko", &mut global, false);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::BorderInstant, Centiseconds(100.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\k", &mut global, false);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(100.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+    }
+
+    #[test]
+    fn override_values() {
+        use Resettable::*;
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\iclip(7,8,9,10)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global, false);
+
+        assert_eq!(block.new_local.border.x, Override(1.0));
+        assert_eq!(block.new_local.border.y, Override(2.0));
+        assert_eq!(block.new_local.shadow.x, Override(3.0));
+        assert_eq!(block.new_local.shadow.y, Override(4.0));
+        assert_eq!(block.new_local.text_shear.x, Override(5.0));
+        assert_eq!(block.new_local.text_shear.y, Override(6.0));
+        assert_eq!(
+            global.clip,
+            Some(Clip::InverseRectangle(ClipRectangle {
+                x1: 7,
+                x2: 8,
+                y1: 9,
+                y2: 10
+            }))
+        );
+        assert_eq!(block.new_local.gaussian_blur, Override(11.0));
+        assert_eq!(block.new_local.font_scale.x, Override(12.0));
+        assert_eq!(block.new_local.font_scale.y, Override(13.0));
+        assert_eq!(block.new_local.letter_spacing, Override(14.0));
+        assert_eq!(block.new_local.font_size, Override(FontSize::Set(15.0)));
+        assert_eq!(block.new_local.text_rotation.x, Override(16.0));
+        assert_eq!(block.new_local.text_rotation.y, Override(17.0));
+        assert_eq!(block.new_local.text_rotation.z, Override(18.0));
+        assert_eq!(block.new_local.font_name, Override("Alegreya".to_owned()));
+        assert_eq!(
+            global.alignment,
+            Override(Alignment {
+                horizontal: HorizontalAlignment::Center,
+                vertical: VerticalAlignment::Center,
+            })
+        );
+        assert_eq!(
+            global.position,
+            Some(PositionOrMove::Position(Position { x: 19.0, y: 20.0 }))
+        );
+        assert_eq!(
+            global.fade,
+            Some(Fade::Complex(ComplexFade {
+                transparency_before: 0,
+                transparency_main: 255,
+                transparency_after: 0,
+                fade_in_start: Milliseconds(0),
+                fade_in_end: Milliseconds(1000),
+                fade_out_start: Milliseconds(2000),
+                fade_out_end: Milliseconds(3000)
+            }))
+        );
+        assert_eq!(global.origin, Some(Position { x: 21.0, y: 22.0 }));
+        assert_eq!(block.new_local.animations.len(), 1);
+        assert_eq!(
+            block.new_local.animations[0],
+            Animation {
+                modifiers: LocalAnimatable {
+                    border: Maybe2D {
+                        x: Override(23.0),
+                        y: Keep
+                    },
+                    ..Default::default()
+                },
+                acceleration: 1.0,
+                interval: None,
+            }
+        );
+        assert_eq!(
+            block.new_local.primary_colour,
+            Override(Colour {
+                red: 0,
+                green: 0,
+                blue: 0xff
+            })
+        );
+        assert_eq!(
+            block.new_local.secondary_colour,
+            Override(Colour {
+                red: 0,
+                green: 0xff,
+                blue: 0
+            })
+        );
+        assert_eq!(
+            block.new_local.border_colour,
+            Override(Colour {
+                red: 0xff,
+                green: 0,
+                blue: 0
+            })
+        );
+        assert_eq!(
+            block.new_local.shadow_colour,
+            Override(Colour {
+                red: 0xff,
+                green: 0,
+                blue: 0xff
+            })
+        );
+        assert_eq!(
+            block.new_local.primary_transparency,
+            Override(Transparency(0x22))
+        );
+        assert_eq!(
+            block.new_local.secondary_transparency,
+            Override(Transparency(0x44))
+        );
+        assert_eq!(
+            block.new_local.border_transparency,
+            Override(Transparency(0x66))
+        );
+        assert_eq!(
+            block.new_local.shadow_transparency,
+            Override(Transparency(0x88))
+        );
+        assert_eq!(block.new_local.soften, Override(24));
+        assert_eq!(
+            block.new_local.font_weight,
+            Override(FontWeight::BoldToggle(true))
+        );
+        assert_eq!(block.new_local.italic, Override(true));
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: None,
+                onset: KaraokeOnset::Absolute(Centiseconds(25.0))
+            }
+        );
+        assert_eq!(block.new_local.strike_out, Override(true));
+        assert_eq!(block.new_local.underline, Override(true));
+        assert_eq!(block.new_local.drawing_baseline_offset, Some(26.0));
+        assert!(!block.end_previous_drawing);
+        assert_eq!(block.new_drawing_scale, Some(1));
+        assert_eq!(global.wrap_style, Override(WrapStyle::EndOfLine));
+        assert_eq!(block.new_local.font_encoding, Override(1));
+
+        let mut global = Global::empty();
+        let block = parse_tag_block(
+            "\\bord1\\move(2,3,4,5)\\shad6\\fsc7\\alpha&H08&\\a5\\fad(450,550)\\clip(2,m 0 0 s 100 0 100 100 0 100 c)\\kf8\\b500",
+            &mut global,
+            false,
+        );
+        assert_eq!(block.new_local.border.x, Override(1.0));
+        assert_eq!(block.new_local.border.y, Override(1.0));
+        assert_eq!(
+            global.position,
+            Some(PositionOrMove::Move(Move {
+                initial_position: Position { x: 2.0, y: 3.0 },
+                final_position: Position { x: 4.0, y: 5.0 },
+                timing: None
+            }))
+        );
+        assert_eq!(block.new_local.shadow.x, Override(6.0));
+        assert_eq!(block.new_local.shadow.y, Override(6.0));
+        // `\fsc` can only reset, not override
+        assert_eq!(block.new_local.font_scale.x, Reset);
+        assert_eq!(block.new_local.font_scale.y, Reset);
+        assert_eq!(
+            block.new_local.primary_transparency,
+            Override(Transparency(0x08))
+        );
+        assert_eq!(
+            block.new_local.secondary_transparency,
+            Override(Transparency(0x08))
+        );
+        assert_eq!(
+            block.new_local.border_transparency,
+            Override(Transparency(0x08))
+        );
+        assert_eq!(
+            block.new_local.shadow_transparency,
+            Override(Transparency(0x08))
+        );
+        assert_eq!(
+            global.alignment,
+            Override(Alignment {
+                vertical: VerticalAlignment::Top,
+                horizontal: HorizontalAlignment::Left
+            })
+        );
+        assert_eq!(
+            global.fade,
+            Some(Fade::Simple(SimpleFade {
+                fade_in_duration: Milliseconds(450),
+                fade_out_duration: Milliseconds(550)
+            }))
+        );
+        assert_eq!(
+            global.clip,
+            Some(Clip::Vector(Drawing {
+                scale: 2,
+                commands: "m 0 0 s 100 0 100 100 0 100 c".to_owned()
+            }))
+        );
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::FillSweep, Centiseconds(8.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+        assert_eq!(
+            block.new_local.font_weight,
+            Override(FontWeight::Numeric(500))
+        );
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\ko9\\fs+10", &mut global, false);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::BorderInstant, Centiseconds(9.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+        assert_eq!(
+            block.new_local.font_size,
+            Override(FontSize::Increase(10.0))
+        );
+
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\k10\\fs-11", &mut global, false);
+        assert_eq!(
+            block.new_local.karaoke,
+            Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(10.0))),
+                onset: KaraokeOnset::NoDelay,
+            }
+        );
+        assert_eq!(
+            block.new_local.font_size,
+            Override(FontSize::Decrease(11.0))
+        );
     }
 
     #[test]
@@ -1004,6 +1389,16 @@ mod tests {
             test_single_global("fade(1,2,3,4,5,6,7)").fade,
             Some(Fade::Complex(_))
         );
+
+        let colour = test_single_local("1c&FFAA11");
+        assert_eq!(
+            colour.primary_colour,
+            Override(Colour {
+                red: 0x11,
+                green: 0xaa,
+                blue: 0xff,
+            })
+        );
     }
 
     #[test]
@@ -1037,32 +1432,47 @@ mod tests {
         assert_eq!(global.animations.len(), 2);
     }
 
-    fn test_single_local(tag: &str) -> Local {
+    #[test]
+    fn reset() {
+        assert_eq!(test_tag("r").1.reset, Some(Reset::Reset));
+        assert_eq!(
+            test_tag("rStyle").1.reset,
+            Some(Reset::ResetToStyle("Style".to_owned()))
+        );
+        assert_eq!(
+            test_tag("rStyle)").1.reset,
+            Some(Reset::ResetToStyle("Style)".to_owned()))
+        );
+
         let mut global = Global::empty();
-        let mut block = TagBlock::empty();
 
-        if !parse_tag(tag, &mut global, &mut block, false) {
-            panic!(
-                "should have parsed a tag in test_single_local -- input: {}",
-                tag
-            );
-        }
+        assert_eq!(
+            parse_tag_block("\\r(Style)", &mut global, false).reset,
+            Some(Reset::ResetToStyle("Style".to_owned()))
+        );
+        assert_eq!(
+            parse_tag_block("\\r(Style))", &mut global, false).reset,
+            Some(Reset::ResetToStyle("Style".to_owned()))
+        );
+    }
 
-        block.new_local
+    fn test_single_local(tag: &str) -> Local {
+        test_tag(tag).1.new_local
     }
 
     fn test_single_global(tag: &str) -> Global {
+        test_tag(tag).0
+    }
+
+    fn test_tag(tag: &str) -> (Global, TagBlock) {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
 
         if !parse_tag(tag, &mut global, &mut block, false) {
-            panic!(
-                "should have parsed a tag in test_single_global -- input: {}",
-                tag
-            );
+            panic!("should have parsed a tag in test_tag -- input: {}", tag);
         }
 
-        global
+        (global, block)
     }
 
     #[test]
@@ -1102,6 +1512,8 @@ mod tests {
                 "&HFF&",
                 "&HFFFFF&",
                 "H",
+                "&HFFAA11&",
+                "1",
             ],
             has_backslash_arg: false,
             tag_found: true,
@@ -1147,6 +1559,64 @@ mod tests {
         assert_eq!(twa.transparency_arg(14), Some(Transparency(0xff)));
         assert_eq!(twa.transparency_arg(15), Some(Transparency(0xff)));
         assert_eq!(twa.transparency_arg(16), Some(Transparency(0)));
+        assert_eq!(twa.transparency_arg(17), Some(Transparency(0x11)));
+
+        assert_eq!(twa.colour_arg(0), Some(Colour::BLACK));
+        assert_eq!(
+            twa.colour_arg(1),
+            Some(Colour {
+                red: 0xaa,
+                green: 0,
+                blue: 0
+            })
+        );
+        assert_eq!(twa.colour_arg(2), Some(Colour::BLACK));
+        assert_eq!(
+            twa.colour_arg(3),
+            Some(Colour {
+                red: 0x34,
+                green: 0x12,
+                blue: 0,
+            })
+        );
+        assert_eq!(
+            twa.colour_arg(4),
+            Some(Colour {
+                red: 0xaa,
+                green: 0x34,
+                blue: 0x12,
+            })
+        );
+        assert_eq!(
+            twa.colour_arg(14),
+            Some(Colour {
+                red: 0xff,
+                green: 0,
+                blue: 0,
+            })
+        );
+        assert_eq!(
+            twa.colour_arg(15),
+            Some(Colour {
+                red: 0xff,
+                green: 0xff,
+                blue: 0x0f,
+            })
+        );
+        assert_eq!(twa.colour_arg(16), Some(Colour::BLACK));
+        assert_eq!(
+            twa.colour_arg(17),
+            Some(Colour {
+                red: 0x11,
+                green: 0xaa,
+                blue: 0xff,
+            })
+        );
+
+        assert_eq!(twa.bool_arg(0), Some(false));
+        assert_eq!(twa.bool_arg(1), Some(false)); // `aa` gets parsed as 0 numerically
+        assert_eq!(twa.bool_arg(3), None);
+        assert_eq!(twa.bool_arg(18), Some(true));
     }
 
     #[test]
