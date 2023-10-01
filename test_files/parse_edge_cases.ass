@@ -14,9 +14,9 @@ Last Style Storage: Default
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Scroll Position: 51
-Active Line: 53
-Video Position: 3381
+Scroll Position: 54
+Active Line: 55
+Video Position: 3525
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -81,3 +81,5 @@ Dialogue: 0,0:02:12.00,0:02:15.00,Default,,0,0,0,,{\k10}aaa{\k50\k0}bbb\Nccc
 Dialogue: 0,0:02:15.00,0:02:18.00,Default,,0,0,0,,{\xshad-10}aaa   {\shad}bbb   {\shad-10}ccc
 Dialogue: 0,0:02:18.00,0:02:21.00,Default,,0,0,0,,a{\pbo\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}
 Dialogue: 0,0:02:21.00,0:02:24.00,Default,,0,0,0,,a{\p1}m 0 0 s 100 0 100 100 0 100 c{\p0\p1\p0\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}
+Dialogue: 0,0:02:24.00,0:02:27.00,Default,,0,0,0,,{{{{{}a
+Dialogue: 0,0:02:27.00,0:02:30.00,Default,,0,0,0,,a{\fsp10\r\fax2}bbbbb

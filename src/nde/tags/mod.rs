@@ -86,7 +86,7 @@ where
 
 /// Tags that apply to the entire line, may only be used once,
 /// and that only make sense to put at the beginning of the line.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Global {
     pub position: Option<PositionOrMove>,
     pub clip: Option<Clip>,
@@ -121,6 +121,24 @@ impl Global {
     }
 }
 
+impl Debug for Global {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *self == Global::empty() {
+            write!(f, "Global {{ empty }}")
+        } else {
+            f.debug_struct("Global")
+                .field("position", &self.position)
+                .field("clip", &self.clip)
+                .field("origin", &self.origin)
+                .field("fade", &self.fade)
+                .field("wrap_style", &self.wrap_style)
+                .field("alignment", &self.alignment)
+                .field("animations", &self.animations)
+                .finish()
+        }
+    }
+}
+
 /// Subset of global tags that are animatable.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GlobalAnimatable {
@@ -134,7 +152,7 @@ impl GlobalAnimatable {
 }
 
 /// Tags that modify the text following it.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Local {
     pub italic: Resettable<bool>,
     pub font_weight: Resettable<FontWeight>,
@@ -345,6 +363,43 @@ impl Local {
         // TODO: animations
 
         Ok(())
+    }
+}
+
+impl Debug for Local {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *self == Local::empty() {
+            write!(f, "Local {{ empty }}")
+        } else {
+            f.debug_struct("Local")
+                .field("italic", &self.italic)
+                .field("font_weight", &self.font_weight)
+                .field("underline", &self.underline)
+                .field("strike_out", &self.strike_out)
+                .field("border", &self.border)
+                .field("shadow", &self.shadow)
+                .field("soften", &self.soften)
+                .field("gaussian_blur", &self.gaussian_blur)
+                .field("font_name", &self.font_name)
+                .field("font_size", &self.font_size)
+                .field("font_scale", &self.font_scale)
+                .field("letter_spacing", &self.letter_spacing)
+                .field("text_rotation", &self.text_rotation)
+                .field("text_shear", &self.text_shear)
+                .field("font_encoding", &self.font_encoding)
+                .field("primary_colour", &self.primary_colour)
+                .field("secondary_colour", &self.secondary_colour)
+                .field("border_colour", &self.border_colour)
+                .field("shadow_colour", &self.shadow_colour)
+                .field("primary_transparency", &self.primary_transparency)
+                .field("secondary_transparency", &self.secondary_transparency)
+                .field("border_transparency", &self.border_transparency)
+                .field("shadow_transparency", &self.shadow_transparency)
+                .field("karaoke", &self.karaoke)
+                .field("drawing_baseline_offset", &self.drawing_baseline_offset)
+                .field("animations", &self.animations)
+                .finish()
+        }
     }
 }
 

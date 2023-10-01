@@ -24,6 +24,7 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
 
     'outer: while !slice.is_empty() {
         if maybe_block_start {
+            maybe_block_start = false;
             if let Some(block_end) = slice.find('}') {
                 // We found a tag block.
                 // We first need to parse it, to find out whether we must end the current drawing
@@ -34,16 +35,6 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
                     new_drawing_scale,
                     end_previous_drawing,
                 } = tag_block;
-
-                // The tags might have contained a reset, which we have to deal with
-                // before appending any following override tags in `end_span`.
-                match reset {
-                    Some(Reset::Reset) => spans.push(Span::Reset),
-                    Some(Reset::ResetToStyle(style_name)) => {
-                        spans.push(Span::ResetToStyle(style_name))
-                    }
-                    None => {}
-                }
 
                 // Finalise and append the previous span to the list.
                 // This might reset the contents of the current drawing.
@@ -56,6 +47,17 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
                 );
                 span_text = String::new();
                 last_local = Box::new(new_local);
+
+                // The tags might have contained a reset, which we append now.
+                // Other tags potentially following it will be appended
+                // in the next iteration
+                match reset {
+                    Some(Reset::Reset) => spans.push(Span::Reset),
+                    Some(Reset::ResetToStyle(style_name)) => {
+                        spans.push(Span::ResetToStyle(style_name))
+                    }
+                    None => {}
+                }
 
                 // Check whether we need to set a new scale, or create a new drawing
                 if let Some(new_drawing_scale) = new_drawing_scale {
@@ -75,8 +77,11 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
                         }
                     }
                 }
+
+                slice = &slice[(block_end + 1)..];
             } else {
                 span_text.push('{');
+                slice = &slice[1..];
             }
         } else {
             let mut last_byte_index = 0;
@@ -538,6 +543,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
     } else if twa.tag::<false>("4a") {
         local.shadow_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("r") {
+        *local = Local::empty(); // clear previous overrides in this block
         block.reset = if twa.nargs() > 0 {
             Some(Reset::ResetToStyle(twa.string_arg(0).unwrap().to_owned()))
         } else {
@@ -951,13 +957,110 @@ mod tests {
         let (global, spans) = parse(text);
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 1);
-        match &spans[0] {
-            Span::Tags(local, span_text) => {
-                assert_eq!(span_text, text);
-                assert_eq!(local, &Local::empty());
+        assert_matches!(&spans[0], Span::Tags(local, span_text));
+        assert_eq!(local, &Local::empty());
+        assert_eq!(span_text, text);
+    }
+
+    #[test]
+    fn span_tags() {
+        let (global, spans) = parse("before{\\i1}after");
+        assert_eq!(*global, Global::empty());
+        assert_eq!(spans.len(), 2);
+        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "before");
+        assert_matches!(&spans[1], Span::Tags(local, text));
+        assert_eq!(
+            *local,
+            Local {
+                italic: Resettable::Override(true),
+                ..Default::default()
             }
-            _ => panic!("found non-Tags span: {:?}", spans[0]),
-        }
+        );
+        assert_eq!(text, "after");
+
+        let (global, spans) = parse("{\\pos(10,11)}text");
+        assert_eq!(
+            *global,
+            Global {
+                position: Some(PositionOrMove::Position(Position { x: 10.0, y: 11.0 })),
+                ..Default::default()
+            }
+        );
+        assert_eq!(spans.len(), 2);
+        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "");
+        assert_matches!(&spans[1], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "text");
+    }
+
+    #[test]
+    fn span_reset() {
+        let (global, spans) = parse("a{\\rA\\r}b{\\rB}{\\r}c");
+        assert_eq!(*global, Global::empty());
+        assert_eq!(spans.len(), 7);
+        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "a");
+        assert_matches!(&spans[1], Span::Reset);
+        assert_matches!(&spans[2], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "b");
+        assert_matches!(&spans[3], Span::ResetToStyle(style_name));
+        assert_eq!(style_name, "B");
+        assert_matches!(&spans[4], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "");
+        assert_matches!(&spans[5], Span::Reset);
+        assert_matches!(&spans[6], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "c");
+
+        let (global, spans) = parse("a{\\fsp10\\r\\fax20}b");
+        assert_eq!(*global, Global::empty());
+        assert_eq!(spans.len(), 3);
+        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "a");
+        assert_matches!(&spans[1], Span::Reset);
+        assert_matches!(&spans[2], Span::Tags(local, text));
+        assert_eq!(local.letter_spacing, Resettable::Keep);
+        assert_eq!(local.text_shear.x, Resettable::Override(20.0));
+        assert_eq!(text, "b");
+    }
+
+    #[test]
+    fn span_drawing() {
+        let (global, spans) = parse("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
+        assert_eq!(*global, Global::empty());
+        assert_eq!(spans.len(), 4);
+        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "a");
+        assert_matches!(&spans[1], Span::Drawing(local, Drawing { scale, commands }));
+        assert_eq!(
+            *local,
+            Local {
+                primary_colour: Resettable::Override(Colour {
+                    red: 0,
+                    green: 0,
+                    blue: 0xff,
+                }),
+                ..Default::default()
+            }
+        );
+        assert_eq!(*scale, 2);
+        assert_eq!(commands, "b");
+        assert_matches!(&spans[2], Span::Drawing(local, Drawing { scale, commands }));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(*scale, 1);
+        assert_eq!(commands, "c");
+        assert_matches!(&spans[3], Span::Tags(local, text));
+        assert_eq!(*local, Local::empty());
+        assert_eq!(text, "d");
     }
 
     #[test]
