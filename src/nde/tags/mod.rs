@@ -228,18 +228,20 @@ impl Local {
     }
 
     /// Sets all tags that are present in `other` to their value in `other`. Keeps all tags that
-    /// are **not** present in `other` as they currently are.
-    ///
-    /// “Present” is defined as `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
+    /// are **not** present in `other` as they currently are. “Present” is defined as
+    /// `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
     ///
     /// The `merge` argument controls the behaviour of this method with respect to incrementally
-    /// specifiable tags (i.e. `font_size`). With `merge: true`, it will behave as if merging two
-    /// subsequent tag blocks into one — that is, the effects of `other` will always be added onto
-    /// `self`, if applicable. With `merge: false`, it will behave as if modifying the `self`
-    /// value using a globally specified override tag — that is, if `other` specifies a relative
-    /// value, `self` will only be modified if it specifies an absolute one.
+    /// specifiable tags (i.e. `font_size`, karaoke effects, and animations). With `merge: true`,
+    /// it will behave as if merging two subsequent tag blocks into one — that is, the effects of
+    /// `other` will always be added onto `self`, if applicable. With `merge: false`, it will
+    /// behave as if modifying the `self` value using a globally specified override tag — that is,
+    /// if `other` specifies a relative value, `self` will only be modified if it specifies an
+    /// absolute one.
     ///
-    /// Does not modify animations and karaoke effects.
+    /// Animations and karaoke effects will be concatenated if `merge: true` and overwritten
+    /// otherwise. For karaoke effects and `merge: false`, only the effect type will be changed,
+    /// not the timing.
     pub fn override_from(&mut self, other: &Local, merge: bool) {
         self.italic.override_from(&other.italic);
         self.font_weight.override_from(&other.font_weight);
@@ -276,12 +278,21 @@ impl Local {
         self.shadow_transparency
             .override_from(&other.shadow_transparency);
 
+        self.karaoke.override_from(&other.karaoke, merge);
+
         self.drawing_baseline_offset
             .override_from(&other.drawing_baseline_offset);
+
+        if merge {
+            self.animations.extend(other.animations.clone());
+        } else {
+            self.animations = other.animations.clone();
+        }
     }
 
-    /// Clears all tags that are present in `other`. Does not modify animations and karaoke
-    /// effects.
+    /// Clears all tags that are present in `other`. This includes all animations if any animation
+    /// is present in `other`, and all karaoke effects if any karaoke effect is present in
+    /// `other`. (Karaoke onsets in `other` are ignored.)
     ///
     /// “Present” is defined as `Option::Some`, `Resettable::Reset`, or `Resettable::Override`.
     pub fn clear_from(&mut self, other: &Local) {
@@ -320,8 +331,14 @@ impl Local {
         self.shadow_transparency
             .clear_from(&other.shadow_transparency);
 
+        self.karaoke.clear_from(&other.karaoke);
+
         self.drawing_baseline_offset
             .clear_from(&other.drawing_baseline_offset);
+
+        if !other.animations.is_empty() {
+            self.animations.clear();
+        }
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -895,6 +912,46 @@ impl Karaoke {
         self.onset = KaraokeOnset::Absolute(absolute_delay);
     }
 
+    fn override_from(&mut self, other: &Self, merge: bool) {
+        if merge {
+            match other.onset {
+                KaraokeOnset::NoDelay => {
+                    if let Some((effect, duration)) = other.effect {
+                        self.add_relative(effect, duration);
+                    }
+                }
+                KaraokeOnset::RelativeDelay(delay) => {
+                    let (effect, duration) = other.effect.expect("Karaoke invariant was violated: RelativeDelay onset must only be specified with an effect present");
+                    self.add_relative(effect, delay);
+                    self.add_relative(effect, duration);
+                }
+                KaraokeOnset::Absolute(delay) => {
+                    self.set_absolute(delay);
+
+                    if let Some((effect, duration)) = other.effect {
+                        self.add_relative(effect, duration);
+                    }
+                }
+            }
+        } else {
+            // Only overwrite the effect type, and only if both `self` and `other` have an effect
+            // set.
+            if let Some((other_effect, _)) = other.effect {
+                if let Some((self_effect, _)) = &mut self.effect {
+                    *self_effect = other_effect
+                }
+            }
+        }
+    }
+
+    fn clear_from(&mut self, other: &Self) {
+        // Only clear if an effect is present. We don't care about the other's onset here.
+        if other.effect.is_some() {
+            self.onset = KaraokeOnset::NoDelay;
+            self.effect = None;
+        }
+    }
+
     fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -928,9 +985,15 @@ enum KaraokeError {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum KaraokeOnset {
+    /// There is no delay between the end of the previous karaoke effect and this onset.
     #[default]
     NoDelay,
 
+    /// Delay the onset of this karaoke effect by the specified amount of centiseconds
+    /// relative to the previous karaoke effect.
+    /// Note that it is valid to specify zero centiseconds here, mapping to `\k0`,
+    /// with subtly different behaviour from `NoDelay`. (TODO: document this subtly different
+    /// behaviour)
     RelativeDelay(Centiseconds),
 
     /// Maps to `\kt` — sets the absolute time of a karaoke syllable.
@@ -1030,6 +1093,10 @@ pub struct Drawing {
 impl Drawing {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
     }
 }
 
@@ -1232,6 +1299,77 @@ mod tests {
         assert_emits!(k, "\\kt80\\ko40");
 
         Ok(())
+    }
+
+    #[test]
+    fn karaoke_override() {
+        use KaraokeEffect::*;
+        use KaraokeOnset::*;
+
+        // Merge, no delay
+        let mut k1 = Karaoke {
+            effect: Some((FillInstant, Centiseconds(100.0))),
+            onset: NoDelay,
+        };
+        let k2 = Karaoke {
+            effect: Some((FillSweep, Centiseconds(200.0))),
+            onset: NoDelay,
+        };
+        k1.override_from(&k2, true);
+        assert_eq!(k1.effect, Some((FillSweep, Centiseconds(200.0))));
+        assert_eq!(k1.onset, RelativeDelay(Centiseconds(100.0)));
+
+        // Merge, relative delay
+        let mut k1 = Karaoke {
+            effect: Some((FillInstant, Centiseconds(100.0))),
+            onset: RelativeDelay(Centiseconds(50.0)),
+        };
+        let k2 = Karaoke {
+            effect: Some((FillSweep, Centiseconds(200.0))),
+            onset: RelativeDelay(Centiseconds(30.0)),
+        };
+        k1.override_from(&k2, true);
+        assert_eq!(k1.effect, Some((FillSweep, Centiseconds(200.0))));
+        assert_eq!(k1.onset, RelativeDelay(Centiseconds(180.0)));
+
+        // Merge, absolute
+        let mut k1 = Karaoke {
+            effect: Some((FillInstant, Centiseconds(100.0))),
+            onset: Absolute(Centiseconds(50.0)),
+        };
+        let k2 = Karaoke {
+            effect: Some((FillSweep, Centiseconds(200.0))),
+            onset: Absolute(Centiseconds(30.0)),
+        };
+        k1.override_from(&k2, true);
+        assert_eq!(k1.effect, Some((FillSweep, Centiseconds(200.0))));
+        assert_eq!(k1.onset, Absolute(Centiseconds(30.0)));
+
+        // Merge, no effect
+        let mut k1 = Karaoke {
+            effect: Some((FillInstant, Centiseconds(100.0))),
+            onset: NoDelay,
+        };
+        let k2 = Karaoke {
+            effect: None,
+            onset: NoDelay,
+        };
+        k1.override_from(&k2, true);
+        assert_eq!(k1.effect, Some((FillInstant, Centiseconds(100.0))));
+        assert_eq!(k1.onset, NoDelay);
+
+        // No merge
+        let mut k1 = Karaoke {
+            effect: Some((FillInstant, Centiseconds(100.0))),
+            onset: NoDelay,
+        };
+        let k2 = Karaoke {
+            effect: Some((FillSweep, Centiseconds(200.0))),
+            onset: RelativeDelay(Centiseconds(30.0)),
+        };
+        k1.override_from(&k2, false);
+        assert_eq!(k1.effect, Some((FillSweep, Centiseconds(100.0))));
+        assert_eq!(k1.onset, NoDelay);
     }
 
     #[test]
