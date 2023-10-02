@@ -915,9 +915,101 @@ fn end_span(
     }
 }
 
-fn simplify(spans: Vec<Span>) -> Vec<Span> {
-    // TODO
-    spans
+fn simplify(s0: Vec<Span>) -> Vec<Span> {
+    use Span::*;
+
+    // Remove empty texts and drawings
+    let mut s1: Vec<Span> = vec![];
+    for span in s0.into_iter() {
+        if !span.is_empty() {
+            s1.push(span)
+        }
+    }
+
+    println!("s1: {:#?}", s1);
+
+    // Try to merge spans into their predecessors
+    let mut s2: Vec<Span> = vec![];
+    for span in s1.into_iter() {
+        match span {
+            Tags(local, text) => match s2.pop() {
+                Some(prev_span) => match prev_span {
+                    // Merge with preceding tags, if the preceding text is empty
+                    Tags(mut prev_local, prev_text) if prev_text.is_empty() => {
+                        prev_local.override_from(&local, true);
+                        s2.push(Tags(prev_local, text));
+                    }
+                    // Merge with preceding drawing, if it has no commands
+                    Drawing(mut prev_local, prev_drawing) if prev_drawing.is_empty() => {
+                        prev_local.override_from(&local, true);
+                        s2.push(Tags(prev_local, text));
+                    }
+                    _ => {
+                        s2.push(prev_span);
+                        s2.push(Tags(local, text));
+                    }
+                },
+                None => s2.push(Tags(local, text)),
+            },
+            Drawing(local, drawing) => match s2.pop() {
+                Some(prev_span) => match prev_span {
+                    // Merge with preceding tags, if the preceding text is empty
+                    Tags(mut prev_local, prev_text) if prev_text.is_empty() => {
+                        prev_local.override_from(&local, true);
+                        s2.push(Drawing(prev_local, drawing));
+                    }
+                    // Merge with preceding drawing, if it has no commands
+                    Drawing(mut prev_local, prev_drawing) if prev_drawing.is_empty() => {
+                        prev_local.override_from(&local, true);
+                        s2.push(Drawing(prev_local, drawing));
+                    }
+                    _ => {
+                        s2.push(prev_span);
+                        s2.push(Drawing(local, drawing));
+                    }
+                },
+                None => s2.push(Drawing(local, drawing)),
+            },
+            Reset => match s2.last_mut() {
+                // Overwrite preceding reset, if it exists
+                Some(prev_span) => {
+                    if prev_span.is_reset() {
+                        *prev_span = Reset;
+                    } else {
+                        s2.push(Reset);
+                    }
+                }
+                None => {
+                    // A reset at the beginning of the line does nothing,
+                    // so we can skip it
+                }
+            },
+            ResetToStyle(style_name) => match s2.last_mut() {
+                // Overwrite preceding reset, if it exists
+                Some(prev_span) => {
+                    if prev_span.is_reset() {
+                        *prev_span = ResetToStyle(style_name);
+                    } else {
+                        s2.push(ResetToStyle(style_name));
+                    }
+                }
+                None => s2.push(ResetToStyle(style_name)),
+            },
+        }
+    }
+
+    println!("s2: {:#?}", s2);
+
+    // Remove spans without content from the end
+    let mut last_non_empty_index = 0;
+    for (i, span) in s2.iter().enumerate() {
+        if !span.content_is_empty() {
+            last_non_empty_index = i;
+        }
+    }
+    s2.truncate(last_non_empty_index + 1);
+
+    s2
 }
 
 struct TagBlock {
@@ -1744,6 +1836,72 @@ mod tests {
         };
 
         assert_eq!(twa2.position_args(), None);
+    }
+
+    #[test]
+    fn simplification() {
+        use Span::*;
+
+        let non_empty = Local {
+            italic: Resettable::Override(true),
+            ..Default::default()
+        };
+
+        let empty_drawing = super::Drawing {
+            scale: 1,
+            commands: "".to_owned(),
+        };
+
+        let non_empty_drawing = super::Drawing {
+            scale: 1,
+            commands: "Drawing".to_owned(),
+        };
+
+        let spans: Vec<Span> = vec![
+            Reset,
+            Tags(non_empty.clone(), "a".to_owned()),
+            Tags(Local::empty(), "".to_owned()),
+            Tags(non_empty.clone(), "b".to_owned()),
+            Drawing(non_empty.clone(), non_empty_drawing.clone()),
+            Drawing(Local::empty(), empty_drawing.clone()),
+            Drawing(non_empty.clone(), non_empty_drawing.clone()),
+            Reset,
+            ResetToStyle("A".to_owned()),
+            Tags(non_empty.clone(), "c".to_owned()),
+            ResetToStyle("B".to_owned()),
+            Reset,
+            Tags(non_empty.clone(), "d".to_owned()),
+            Tags(non_empty.clone(), "".to_owned()),
+            Tags(non_empty.clone(), "e".to_owned()),
+            Drawing(non_empty.clone(), empty_drawing.clone()),
+            Tags(non_empty.clone(), "f".to_owned()),
+            Tags(non_empty.clone(), "".to_owned()),
+            Drawing(non_empty.clone(), non_empty_drawing.clone()),
+            Drawing(non_empty.clone(), empty_drawing.clone()),
+            Drawing(non_empty.clone(), non_empty_drawing.clone()),
+            Tags(non_empty.clone(), "g".to_owned()),
+            ResetToStyle("C".to_owned()),
+            Reset,
+            Tags(non_empty.clone(), "".to_owned()),
+            Drawing(non_empty.clone(), empty_drawing.clone()),
+        ];
+
+        let simplified = simplify(spans);
+
+        assert_eq!(simplified.len(), 13);
+        assert_matches!(&simplified[0], Tags(_, _));
+        assert_matches!(&simplified[1], Tags(_, _));
+        assert_matches!(&simplified[2], Drawing(_, _));
+        assert_matches!(&simplified[3], Drawing(_, _));
+        assert_matches!(&simplified[4], ResetToStyle(_));
+        assert_matches!(&simplified[5], Tags(_, _));
+        assert_matches!(&simplified[6], Reset);
+        assert_matches!(&simplified[7], Tags(_, _));
+        assert_matches!(&simplified[8], Tags(_, _));
+        assert_matches!(&simplified[9], Tags(_, _));
+        assert_matches!(&simplified[10], Drawing(_, _));
+        assert_matches!(&simplified[11], Drawing(_, _));
+        assert_matches!(&simplified[12], Tags(_, _));
     }
 
     #[test]

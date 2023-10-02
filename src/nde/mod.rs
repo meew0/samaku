@@ -109,3 +109,45 @@ pub enum Span {
     /// Vector drawing
     Drawing(tags::Local, tags::Drawing),
 }
+
+impl Span {
+    /// Returns `true` if this span has no content (`content_is_empty` returns true) **and** the
+    /// local tags are also empty. Returns `false` for `Reset` or `ResetToStyle`.
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Tags(local, text) if text.is_empty() && *local == tags::Local::empty() => false,
+            Self::Drawing(local, drawing)
+                if drawing.is_empty() && *local == tags::Local::empty() =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this `Span` has no content (`Tags`/`Drawing` with empty text/drawing,
+    /// or either of the `Reset` variants) and `false` otherwise (`Tags`/`Drawing` with non-empty
+    /// text/drawing).
+    fn content_is_empty(&self) -> bool {
+        match self {
+            Self::Tags(_, text) if !text.is_empty() => false,
+            Self::Drawing(_, drawing) if !drawing.is_empty() => false,
+            _ => true,
+        }
+    }
+
+    /// Returns `true` if this `Span` is `Reset` or `ResetToStyle`.
+    fn is_reset(&self) -> bool {
+        matches!(self, Self::Reset | Self::ResetToStyle(_))
+    }
+
+    /// Moves the local overrides out of this span, if present, and discards the rest.
+    /// Guaranteed to return `Some(_)` if and only if this span is `Tags` or `Drawing`.
+    fn into_local(self) -> Option<tags::Local> {
+        match self {
+            Self::Tags(local, _) => Some(local),
+            Self::Drawing(local, _) => Some(local),
+            _ => None,
+        }
+    }
+}
