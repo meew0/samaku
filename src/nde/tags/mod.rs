@@ -1293,8 +1293,8 @@ impl emit::EmitTag for AnimatableClip {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClipRectangle {
     pub x1: i32,
-    pub x2: i32,
     pub y1: i32,
+    pub x2: i32,
     pub y2: i32,
 }
 

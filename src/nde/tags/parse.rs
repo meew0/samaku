@@ -858,8 +858,8 @@ fn parse_clip<R, V>(
     if twa.nargs() == 4 {
         let rect = ClipRectangle {
             x1: twa.int_arg(0).unwrap(),
-            x2: twa.int_arg(1).unwrap(),
-            y1: twa.int_arg(2).unwrap(),
+            y1: twa.int_arg(1).unwrap(),
+            x2: twa.int_arg(2).unwrap(),
             y2: twa.int_arg(3).unwrap(),
         };
         global.clip = Some(rect_clip(rect));
@@ -1306,8 +1306,8 @@ mod tests {
             global.clip,
             Some(Clip::InverseRectangle(ClipRectangle {
                 x1: 7,
-                x2: 8,
-                y1: 9,
+                y1: 8,
+                x2: 9,
                 y2: 10,
             }))
         );
