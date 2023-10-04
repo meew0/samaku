@@ -1,11 +1,11 @@
 use std::{fmt::Debug, ops::Add};
 
+pub use parse::parse;
+
 use crate::subtitle;
 
 mod emit;
 mod parse;
-
-pub use parse::{parse, parse_raw, simplify};
 
 /// Like an `Option`, but also represents the possibility that an ASS tag can be specified
 /// in such a way that it is not set to a value defined by the tag, but to a default value.
@@ -890,10 +890,7 @@ impl FontSize {
     }
 
     fn is_empty(&self) -> bool {
-        match *self {
-            Self::Delta(delta) if delta == FontSizeDelta::ZERO => true,
-            _ => false,
-        }
+        matches!(*self, Self::Delta(delta) if delta == FontSizeDelta::ZERO)
     }
 
     fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -1110,7 +1107,7 @@ impl Karaoke {
     }
 }
 
-enum KaraokeError {
+pub enum KaraokeError {
     /// Creating a `Karaoke` object with relative-delay
     /// onset requires specifying an effect. See
     /// `Karaoke` docs for details

@@ -93,7 +93,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
         } else {
             let mut last_byte_index = 0;
             let mut escape = false;
-            let mut char_iter = slice.char_indices();
+            let char_iter = slice.char_indices();
 
             'inner: for (byte_index, next_char) in char_iter {
                 last_byte_index = byte_index;
@@ -141,7 +141,6 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
         &mut spans, span_text, last_local, drawing,
         true, // Always end a drawing at the end of the line
     );
-    span_text = String::new();
 
     (global, spans)
 }
@@ -439,7 +438,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
         }
     } else if twa.tag::<true>("pos") {
         if global.position.is_none() {
-            global.position = twa.position_args().map(|pos| PositionOrMove::Position(pos));
+            global.position = twa.position_args().map(PositionOrMove::Position);
         }
     } else if twa.tag::<true>("fade") || twa.tag::<true>("fad") {
         if global.fade.is_none() {
@@ -608,7 +607,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
         }
     } else if twa.tag::<false>("q") {
         global.wrap_style = match twa.int_arg(0) {
-            Some(x) if x >= 0 && x <= 3 => Resettable::Override(WrapStyle::from(x)),
+            Some(x) if (0..=3).contains(&x) => Resettable::Override(WrapStyle::from(x)),
             Some(_) | None => Resettable::Reset,
         };
     } else if twa.tag::<false>("fe") {
@@ -654,19 +653,19 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
     }
 
     use ParenArgsParseState::*;
-    let mut state = BeforeArgument;
+    let mut state = Before;
     let mut arg_start_bytes = 0;
     let mut arg_end_bytes: Option<usize> = None;
 
     for (byte_index, next_char) in paren_args.char_indices() {
         state = match state {
-            BeforeArgument => match next_char {
+            Before => match next_char {
                 // Skip spaces, like above
-                ' ' | '\t' => BeforeArgument,
+                ' ' | '\t' => Before,
                 ',' => {
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
                     arg_start_bytes = byte_index;
-                    BeforeArgument
+                    Before
                 }
                 '\\' => {
                     twa.has_backslash_arg = true;
@@ -688,7 +687,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
                 ',' => {
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
                     arg_start_bytes = byte_index;
-                    BeforeArgument
+                    Before
                 }
                 '\\' => {
                     twa.has_backslash_arg = true;
@@ -710,14 +709,14 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
         }
     }
 
-    let mut end = arg_end_bytes.unwrap_or(paren_args.len());
+    let end = arg_end_bytes.unwrap_or(paren_args.len());
 
     // Don't include closing parenthesis
     twa.push_argument(&paren_args[arg_start_bytes..end]);
 }
 
 enum ParenArgsParseState {
-    BeforeArgument,
+    Before,
     GenericArgument,
     BackslashArgument,
 }
