@@ -33,7 +33,7 @@ where
 pub fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,
-    maybe_value: &Option<V>,
+    maybe_value: Option<&V>,
 ) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
@@ -52,7 +52,7 @@ where
 pub fn simple_tag_resettable<W, N, V>(
     sink: &mut W,
     tag_name: N,
-    maybe_value: &super::Resettable<V>,
+    maybe_value: super::Resettable<&V>,
 ) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
@@ -77,7 +77,7 @@ where
 pub fn complex_tag<W, V>(
     sink: &mut W,
     tag_name: &str,
-    maybe_value: &Option<V>,
+    maybe_value: Option<&V>,
 ) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
@@ -181,7 +181,7 @@ mod tests {
         let mut string = String::new();
 
         let no_value: Option<i32> = None;
-        simple_tag(&mut string, "blub", &no_value)?;
+        simple_tag(&mut string, "blub", no_value.as_ref())?;
         assert_eq!(string, "");
 
         Ok(())
@@ -192,8 +192,8 @@ mod tests {
         let mut string = String::new();
 
         let some_value: Option<i32> = Some(123);
-        simple_tag(&mut string, "blub", &some_value)?;
-        complex_tag(&mut string, "blubblub", &some_value)?;
+        simple_tag(&mut string, "blub", some_value.as_ref())?;
+        complex_tag(&mut string, "blubblub", some_value.as_ref())?;
 
         assert_eq!(string, "\\blub123\\blubblub(123)");
 

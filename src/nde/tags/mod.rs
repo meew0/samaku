@@ -37,6 +37,17 @@ impl<T> Resettable<T> {
     fn is_keep(&self) -> bool {
         matches!(self, Self::Keep)
     }
+
+    #[inline]
+    pub fn as_ref(&self) -> Resettable<&T> {
+        use Resettable::*;
+
+        match *self {
+            Override(ref x) => Override(x),
+            Reset => Reset,
+            Keep => Keep,
+        }
+    }
 }
 
 pub trait OverrideFrom<T> {
@@ -116,10 +127,10 @@ impl Global {
     {
         emit::tag(sink, &self.position)?;
         emit::tag(sink, &self.clip)?;
-        emit::complex_tag(sink, "org", &self.origin)?;
+        emit::complex_tag(sink, "org", self.origin.as_ref())?;
         emit::tag(sink, &self.fade)?;
-        emit::simple_tag_resettable(sink, "q", &self.wrap_style)?;
-        emit::simple_tag_resettable(sink, "an", &self.alignment)?;
+        emit::simple_tag_resettable(sink, "q", self.wrap_style.as_ref())?;
+        emit::simple_tag_resettable(sink, "an", self.alignment.as_ref())?;
 
         for animation in &self.animations {
             animation.emit(sink)?;
@@ -389,40 +400,40 @@ impl Local {
     where
         W: std::fmt::Write,
     {
-        emit::simple_tag_resettable(sink, "i", &self.italic)?;
-        emit::simple_tag_resettable(sink, "b", &self.font_weight)?;
-        emit::simple_tag_resettable(sink, "u", &self.underline)?;
-        emit::simple_tag_resettable(sink, "s", &self.strike_out)?;
+        emit::simple_tag_resettable(sink, "i", self.italic.as_ref())?;
+        emit::simple_tag_resettable(sink, "b", self.font_weight.as_ref())?;
+        emit::simple_tag_resettable(sink, "u", self.underline.as_ref())?;
+        emit::simple_tag_resettable(sink, "s", self.strike_out.as_ref())?;
 
         self.border.emit(sink, "", "bord")?;
         self.shadow.emit(sink, "", "shad")?;
 
-        emit::simple_tag_resettable(sink, "be", &self.soften)?;
-        emit::simple_tag_resettable(sink, "blur", &self.gaussian_blur)?;
+        emit::simple_tag_resettable(sink, "be", self.soften.as_ref())?;
+        emit::simple_tag_resettable(sink, "blur", self.gaussian_blur.as_ref())?;
 
-        emit::simple_tag_resettable(sink, "fn", &self.font_name)?;
+        emit::simple_tag_resettable(sink, "fn", self.font_name.as_ref())?;
         self.font_size.emit(sink)?;
         self.font_scale.emit(sink, "fsc", "")?;
-        emit::simple_tag_resettable(sink, "fsp", &self.letter_spacing)?;
+        emit::simple_tag_resettable(sink, "fsp", self.letter_spacing.as_ref())?;
 
         self.text_rotation.emit(sink, "fr", "")?;
         self.text_shear.emit(sink, "fa", "")?;
 
-        emit::simple_tag_resettable(sink, "fe", &self.font_encoding)?;
+        emit::simple_tag_resettable(sink, "fe", self.font_encoding.as_ref())?;
 
-        emit::simple_tag_resettable(sink, "1c", &self.primary_colour)?;
-        emit::simple_tag_resettable(sink, "2c", &self.secondary_colour)?;
-        emit::simple_tag_resettable(sink, "3c", &self.border_colour)?;
-        emit::simple_tag_resettable(sink, "4c", &self.shadow_colour)?;
+        emit::simple_tag_resettable(sink, "1c", self.primary_colour.as_ref())?;
+        emit::simple_tag_resettable(sink, "2c", self.secondary_colour.as_ref())?;
+        emit::simple_tag_resettable(sink, "3c", self.border_colour.as_ref())?;
+        emit::simple_tag_resettable(sink, "4c", self.shadow_colour.as_ref())?;
 
-        emit::simple_tag_resettable(sink, "1a", &self.primary_transparency)?;
-        emit::simple_tag_resettable(sink, "2a", &self.secondary_transparency)?;
-        emit::simple_tag_resettable(sink, "3a", &self.border_transparency)?;
-        emit::simple_tag_resettable(sink, "4a", &self.shadow_transparency)?;
+        emit::simple_tag_resettable(sink, "1a", self.primary_transparency.as_ref())?;
+        emit::simple_tag_resettable(sink, "2a", self.secondary_transparency.as_ref())?;
+        emit::simple_tag_resettable(sink, "3a", self.border_transparency.as_ref())?;
+        emit::simple_tag_resettable(sink, "4a", self.shadow_transparency.as_ref())?;
 
         self.karaoke.emit(sink)?;
 
-        emit::simple_tag(sink, "pbo", &self.drawing_baseline_offset)?;
+        emit::simple_tag(sink, "pbo", self.drawing_baseline_offset.as_ref())?;
 
         for animation in &self.animations {
             animation.emit(sink)?;
@@ -593,8 +604,8 @@ impl emit::EmitTag for PositionOrMove {
         W: std::fmt::Write,
     {
         match self {
-            Self::Position(position) => emit::complex_tag(sink, "pos", &Some(*position)),
-            Self::Move(move_value) => emit::complex_tag(sink, "move", &Some(*move_value)),
+            Self::Position(position) => emit::complex_tag(sink, "pos", Some(position)),
+            Self::Move(move_value) => emit::complex_tag(sink, "move", Some(move_value)),
         }
     }
 }
@@ -642,7 +653,7 @@ impl Maybe2D {
                 middle: "x",
                 after,
             },
-            &self.x,
+            self.x.as_ref(),
         )?;
         emit::simple_tag_resettable(
             sink,
@@ -651,7 +662,7 @@ impl Maybe2D {
                 middle: "y",
                 after,
             },
-            &self.y,
+            self.y.as_ref(),
         )?;
 
         Ok(())
@@ -708,7 +719,7 @@ impl Maybe3D {
                 middle: "x",
                 after,
             },
-            &self.x,
+            self.x.as_ref(),
         )?;
         emit::simple_tag_resettable(
             sink,
@@ -717,7 +728,7 @@ impl Maybe3D {
                 middle: "y",
                 after,
             },
-            &self.y,
+            self.y.as_ref(),
         )?;
         emit::simple_tag_resettable(
             sink,
@@ -726,7 +737,7 @@ impl Maybe3D {
                 middle: "z",
                 after,
             },
-            &self.z,
+            self.z.as_ref(),
         )?;
 
         Ok(())
@@ -896,11 +907,11 @@ impl FontSize {
             }
             FontSize::Reset(delta) => {
                 delta_value = delta.0;
-                emit::simple_tag_resettable(sink, "fs", &Resettable::Reset::<EmitFontSize>)
+                emit::simple_tag_resettable(sink, "fs", Resettable::Reset::<&EmitFontSize>)
             }
             FontSize::Set(font_size) => {
                 let emit_value = EmitFontSize::Set(font_size.max(0.0));
-                emit::simple_tag(sink, "fs", &Some(emit_value))
+                emit::simple_tag(sink, "fs", Some(&emit_value))
             }
         }?;
 
@@ -909,7 +920,7 @@ impl FontSize {
             positive if positive > 0.0 => EmitFontSize::Increase(positive),
             _ => return Ok(()), // do not emit any other tag for a delta of zero
         };
-        emit::simple_tag(sink, "fs", &Some(emit_value))
+        emit::simple_tag(sink, "fs", Some(&emit_value))
     }
 }
 
@@ -1079,19 +1090,19 @@ impl Karaoke {
     {
         match self.onset {
             KaraokeOnset::NoDelay => Ok(()),
-            KaraokeOnset::RelativeDelay(delay) => emit::simple_tag(sink, "k", &Some(delay)),
-            KaraokeOnset::Absolute(delay) => emit::simple_tag(sink, "kt", &Some(delay)),
+            KaraokeOnset::RelativeDelay(delay) => emit::simple_tag(sink, "k", Some(&delay)),
+            KaraokeOnset::Absolute(delay) => emit::simple_tag(sink, "kt", Some(&delay)),
         }?;
         match self.effect {
             None => Ok(()),
             Some((KaraokeEffect::FillInstant, duration)) => {
-                emit::simple_tag(sink, "k", &Some(duration))
+                emit::simple_tag(sink, "k", Some(&duration))
             }
             Some((KaraokeEffect::FillSweep, duration)) => {
-                emit::simple_tag(sink, "kf", &Some(duration))
+                emit::simple_tag(sink, "kf", Some(&duration))
             }
             Some((KaraokeEffect::BorderInstant, duration)) => {
-                emit::simple_tag(sink, "ko", &Some(duration))
+                emit::simple_tag(sink, "ko", Some(&duration))
             }
         }
     }
@@ -1150,8 +1161,8 @@ impl emit::EmitTag for Fade {
         W: std::fmt::Write,
     {
         match self {
-            Self::Simple(simple) => emit::complex_tag(sink, "fad", &Some(*simple)),
-            Self::Complex(complex) => emit::complex_tag(sink, "fade", &Some(*complex)),
+            Self::Simple(simple) => emit::complex_tag(sink, "fad", Some(simple)),
+            Self::Complex(complex) => emit::complex_tag(sink, "fade", Some(complex)),
         }
     }
 }
@@ -1256,10 +1267,10 @@ impl emit::EmitTag for Clip {
         W: std::fmt::Write,
     {
         match self {
-            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", &Some(*rect)),
-            Clip::InverseRectangle(rect) => emit::complex_tag(sink, "iclip", &Some(*rect)),
-            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", &Some(drawing)),
-            Clip::InverseVector(drawing) => emit::complex_tag(sink, "iclip", &Some(drawing)),
+            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", Some(rect)),
+            Clip::InverseRectangle(rect) => emit::complex_tag(sink, "iclip", Some(rect)),
+            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", Some(drawing)),
+            Clip::InverseVector(drawing) => emit::complex_tag(sink, "iclip", Some(drawing)),
         }
     }
 }
@@ -1312,7 +1323,7 @@ impl Drawing {
     }
 }
 
-impl emit::EmitValue for &Drawing {
+impl emit::EmitValue for Drawing {
     /// Only valid for vector clips, not for inline drawings
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
