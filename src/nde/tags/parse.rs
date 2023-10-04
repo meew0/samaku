@@ -664,7 +664,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
                 ' ' | '\t' => Before,
                 ',' => {
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
-                    arg_start_bytes = byte_index;
+                    arg_start_bytes = byte_index + 1; // Ignore the comma itself
                     Before
                 }
                 '\\' => {
@@ -686,7 +686,7 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
             GenericArgument => match next_char {
                 ',' => {
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
-                    arg_start_bytes = byte_index;
+                    arg_start_bytes = byte_index + 1; // Ignore the comma itself
                     Before
                 }
                 '\\' => {
@@ -1838,6 +1838,14 @@ mod tests {
         };
 
         assert_eq!(twa2.position_args(), None);
+    }
+
+    #[test]
+    fn position_empty_second_arg() {
+        let mut global = Global::empty();
+        let mut block = TagBlock::empty();
+        parse_tag("pos(50,)", &mut global, &mut block, false);
+        assert_eq!(global.position, None);
     }
 
     #[test]
