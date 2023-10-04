@@ -1,6 +1,6 @@
 use crate::nde::tags::{
-    Clip, ClipRectangle, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position,
-    PositionOrMove, Resettable,
+    Clip, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle,
+    Resettable,
 };
 use crate::nde::Span;
 use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment, WrapStyle};
@@ -255,13 +255,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
     } else if twa.tag::<false>("fay") {
         local.text_shear.y = resettable(twa.float_arg(0));
     } else if twa.tag::<true>("iclip") {
-        parse_clip(
-            global,
-            &twa,
-            nested,
-            Clip::InverseRectangle,
-            Clip::InverseVector,
-        );
+        parse_clip(global, &twa, nested, Clip::Inverse, Clip::Inverse);
     } else if twa.tag::<false>("blur") {
         local.gaussian_blur = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fscx") {
@@ -530,7 +524,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
             }
         }
     } else if twa.tag::<true>("clip") {
-        parse_clip(global, &twa, nested, Clip::Rectangle, Clip::Vector);
+        parse_clip(global, &twa, nested, Clip::Contained, Clip::Contained);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
         local.primary_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("2c") {
@@ -868,17 +862,17 @@ fn parse_clip<R, V>(
     rect_clip: R,
     vector_clip: V,
 ) where
-    R: FnOnce(ClipRectangle) -> Clip,
-    V: FnOnce(Drawing) -> Clip,
+    R: FnOnce(Rectangle) -> Clip<Rectangle>,
+    V: FnOnce(Drawing) -> Clip<Drawing>,
 {
     if twa.nargs() == 4 {
-        let rect = ClipRectangle {
+        let rect = Rectangle {
             x1: twa.int_arg(0).unwrap(),
             y1: twa.int_arg(1).unwrap(),
             x2: twa.int_arg(2).unwrap(),
             y2: twa.int_arg(3).unwrap(),
         };
-        global.clip = Some(rect_clip(rect));
+        global.rectangle_clip = Some(rect_clip(rect));
     } else {
         let scale: i32 = match twa.nargs() {
             2 => twa.int_arg(0).unwrap(),
@@ -900,7 +894,7 @@ fn parse_clip<R, V>(
             commands: commands.to_string(),
         };
 
-        global.clip = Some(vector_clip(drawing));
+        global.vector_clip = Some(vector_clip(drawing));
     }
 
     // As specifying a clip overrides all previous clips, it will also override clip animations.
@@ -1062,7 +1056,7 @@ enum Reset {
 mod tests {
     use assert_matches2::assert_matches;
 
-    use crate::nde::tags::{AnimatableClip, Karaoke, KaraokeOnset};
+    use crate::nde::tags::{Karaoke, KaraokeOnset};
 
     use super::*;
 
@@ -1184,7 +1178,7 @@ mod tests {
 
         let mut global = Global::empty();
         parse_tag_block(
-            "\\an5\\an8\\clip(1,2,3,4)\\iclip(aaa)\\pos(123,456)\\move(1,2,3,4)\\fad(1,2)\\fade(1,2,3,4,5,6,7)\\org(1,2)\\org(3,4)",
+            "\\an5\\an8\\clip(1,2,3,4)\\iclip(5,6,7,8)\\iclip(aaa)\\clip(bbb)\\pos(123,456)\\move(1,2,3,4)\\fad(1,2)\\fade(1,2,3,4,5,6,7)\\org(1,2)\\org(3,4)",
             &mut global,
             false,
         );
@@ -1202,7 +1196,8 @@ mod tests {
         assert_eq!(global.origin, Some(Position { x: 1.0, y: 2.0 }));
 
         // These tags SHOULD override their predecessors.
-        assert_matches!(global.clip, Some(Clip::InverseVector(_)));
+        assert_matches!(global.rectangle_clip, Some(Clip::Inverse(_)));
+        assert_matches!(global.vector_clip, Some(Clip::Contained(_)));
     }
 
     #[test]
@@ -1218,7 +1213,8 @@ mod tests {
         assert_matches!(block.new_local.shadow.y, Reset);
         assert_matches!(block.new_local.text_shear.x, Reset);
         assert_matches!(block.new_local.text_shear.y, Reset);
-        assert_matches!(global.clip, None);
+        assert_matches!(global.rectangle_clip, None);
+        assert_matches!(global.vector_clip, None);
         assert_matches!(block.new_local.gaussian_blur, Reset);
         assert_matches!(block.new_local.font_scale.x, Reset);
         assert_matches!(block.new_local.font_scale.y, Reset);
@@ -1280,7 +1276,8 @@ mod tests {
         assert_matches!(block.new_local.shadow_transparency, Reset);
         assert_matches!(global.alignment, Reset);
         assert_matches!(global.fade, None);
-        assert_matches!(global.clip, None);
+        assert_matches!(global.vector_clip, None);
+        assert_matches!(global.rectangle_clip, None);
         assert_eq!(
             block.new_local.karaoke,
             Karaoke {
@@ -1315,7 +1312,7 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\iclip(7,8,9,10)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global, false);
+        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global, false);
 
         assert_eq!(block.new_local.border.x, Override(1.0));
         assert_eq!(block.new_local.border.y, Override(2.0));
@@ -1324,12 +1321,19 @@ mod tests {
         assert_eq!(block.new_local.text_shear.x, Override(5.0));
         assert_eq!(block.new_local.text_shear.y, Override(6.0));
         assert_eq!(
-            global.clip,
-            Some(Clip::InverseRectangle(ClipRectangle {
+            global.rectangle_clip,
+            Some(Clip::Inverse(Rectangle {
                 x1: 7,
                 y1: 8,
                 x2: 9,
                 y2: 10,
+            }))
+        );
+        assert_eq!(
+            global.vector_clip,
+            Some(Clip::Contained(Drawing {
+                scale: 2,
+                commands: "def".to_owned(),
             }))
         );
         assert_eq!(block.new_local.gaussian_blur, Override(11.0));
@@ -1501,8 +1505,8 @@ mod tests {
             }))
         );
         assert_eq!(
-            global.clip,
-            Some(Clip::Vector(Drawing {
+            global.vector_clip,
+            Some(Clip::Contained(Drawing {
                 scale: 2,
                 commands: "m 0 0 s 100 0 100 100 0 100 c".to_owned(),
             }))
@@ -1638,10 +1642,10 @@ mod tests {
         assert_eq!(anim.modifiers.letter_spacing, Resettable::Override(10.0));
 
         assert_matches!(
-            test_single_global("t(\\clip(1,2,3,4))").animations[0]
+            &test_single_global("t(\\clip(1,2,3,4))").animations[0]
                 .modifiers
                 .clip,
-            Some(AnimatableClip::Rectangle(_))
+            Some(Clip::Contained(_))
         );
 
         let mut global = Global::empty();

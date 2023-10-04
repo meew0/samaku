@@ -15,8 +15,8 @@ Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
 Scroll Position: 51
-Active Line: 62
-Video Position: 3933
+Active Line: 65
+Video Position: 4076
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -90,3 +90,6 @@ Dialogue: 0,0:02:36.00,0:02:39.00,Default,,0,0,0,,{\pos(50,50)}a{\t(\1c&HFF0000&
 Dialogue: 0,0:02:39.00,0:02:42.00,Default,,0,0,0,,a{\t(1,2,3,)\b1}b
 Dialogue: 0,0:02:42.00,0:02:44.00,Default,,0,0,0,,{\1c&H FF0000&}aaaa
 Dialogue: 0,0:02:44.00,0:02:46.00,Default,,0,0,0,,em {\fs +10}space
+Dialogue: 0,0:02:46.00,0:02:48.00,Default,,0,0,0,,{\t(\iclip(m 118.4 86.4 l 68.8 72 58.8 98 91.2 99.6))}{\clip(50,50,100,100)}aaaaaaaaaaaa
+Dialogue: 0,0:02:48.00,0:02:50.00,Default,,0,0,0,,{\clip(m 118.4 86.4 l 68.8 72 58.8 98 91.2 99.6)}{\clip(50,50,100,100)}aaaaaaaaaaaa
+Dialogue: 0,0:02:50.00,0:02:52.00,Default,,0,0,0,,{\clip(50,50,100,100)\t(\iclip(100,50,100,100)}aaaaaaaaaaaaaaaaa

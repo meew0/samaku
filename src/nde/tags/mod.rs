@@ -105,7 +105,8 @@ pub trait Animatable: emit::EmitValue {}
 #[derive(Clone, Default, PartialEq)]
 pub struct Global {
     pub position: Option<PositionOrMove>,
-    pub clip: Option<Clip>,
+    pub rectangle_clip: Option<Clip<Rectangle>>,
+    pub vector_clip: Option<Clip<Drawing>>,
     pub origin: Option<Position>,
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<subtitle::WrapStyle>,
@@ -120,7 +121,7 @@ impl Global {
 
     pub fn animatable(&self) -> GlobalAnimatable {
         GlobalAnimatable {
-            clip: self.clip.clone().and_then(Clip::into_animatable),
+            clip: self.rectangle_clip.clone(),
         }
     }
 
@@ -129,7 +130,8 @@ impl Global {
         W: std::fmt::Write,
     {
         emit::tag(sink, &self.position)?;
-        emit::tag(sink, &self.clip)?;
+        emit::tag(sink, &self.rectangle_clip)?;
+        emit::tag(sink, &self.vector_clip)?;
         emit::complex_tag(sink, "org", self.origin.as_ref())?;
         emit::tag(sink, &self.fade)?;
         emit::simple_tag_resettable(sink, "q", self.wrap_style.as_ref())?;
@@ -150,7 +152,8 @@ impl Debug for Global {
         } else {
             f.debug_struct("Global")
                 .field("position", &self.position)
-                .field("clip", &self.clip)
+                .field("rectangle_clip", &self.rectangle_clip)
+                .field("vector_clip", &self.vector_clip)
                 .field("origin", &self.origin)
                 .field("fade", &self.fade)
                 .field("wrap_style", &self.wrap_style)
@@ -164,7 +167,7 @@ impl Debug for Global {
 /// Subset of global tags that are animatable.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GlobalAnimatable {
-    pub clip: Option<AnimatableClip>,
+    pub clip: Option<Clip<Rectangle>>,
 }
 
 impl GlobalAnimatable {
@@ -1233,72 +1236,41 @@ impl emit::EmitValue for ComplexFade {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Clip {
-    Rectangle(ClipRectangle),
-    InverseRectangle(ClipRectangle),
-    Vector(Drawing),
-    InverseVector(Drawing),
+pub enum Clip<T: emit::EmitValue> {
+    /// Show only the content **inside** the border. Maps to `\clip`.
+    Contained(T),
+
+    /// Show only the content **outside** the border. Maps to `\iclip`.
+    Inverse(T),
 }
 
-impl Clip {
-    pub fn into_animatable(self) -> Option<AnimatableClip> {
-        match self {
-            Clip::Rectangle(rect) => Some(AnimatableClip::Rectangle(rect)),
-            Clip::InverseRectangle(rect) => Some(AnimatableClip::InverseRectangle(rect)),
-            _ => None,
-        }
-    }
-
-    pub fn from_animatable(other: &AnimatableClip) -> Self {
-        match other {
-            AnimatableClip::Rectangle(rect) => Clip::Rectangle(*rect),
-            AnimatableClip::InverseRectangle(rect) => Clip::InverseRectangle(*rect),
-        }
-    }
-
+impl<T: emit::EmitValue> Clip<T> {
     pub fn is_inverse(&self) -> bool {
-        matches!(self, Clip::InverseRectangle(_) | Clip::InverseVector(_))
+        matches!(self, Clip::Inverse(_))
     }
 }
 
-impl emit::EmitTag for Clip {
+impl<T: emit::EmitValue> emit::EmitTag for Clip<T> {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
         match self {
-            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", Some(rect)),
-            Clip::InverseRectangle(rect) => emit::complex_tag(sink, "iclip", Some(rect)),
-            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", Some(drawing)),
-            Clip::InverseVector(drawing) => emit::complex_tag(sink, "iclip", Some(drawing)),
+            Clip::Contained(structure) => emit::complex_tag(sink, "clip", Some(structure)),
+            Clip::Inverse(structure) => emit::complex_tag(sink, "iclip", Some(structure)),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AnimatableClip {
-    Rectangle(ClipRectangle),
-    InverseRectangle(ClipRectangle),
-}
-
-impl emit::EmitTag for AnimatableClip {
-    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        Clip::from_animatable(self).emit_tag(sink)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClipRectangle {
+pub struct Rectangle {
     pub x1: i32,
     pub y1: i32,
     pub x2: i32,
     pub y2: i32,
 }
 
-impl emit::EmitValue for ClipRectangle {
+impl emit::EmitValue for Rectangle {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1456,7 +1428,13 @@ mod tests {
     fn global() -> Result<(), std::fmt::Error> {
         let global = Global {
             position: Some(PositionOrMove::Position(Position { x: 1.0, y: 2.0 })),
-            clip: Some(Clip::Vector(Drawing {
+            rectangle_clip: Some(Clip::Inverse(Rectangle {
+                x1: 10,
+                y1: 11,
+                x2: 12,
+                y2: 13,
+            })),
+            vector_clip: Some(Clip::Contained(Drawing {
                 commands: "abc".to_owned(),
                 scale: 1,
             })),
@@ -1480,7 +1458,7 @@ mod tests {
 
         assert_emits!(
             global,
-            "\\pos(1,2)\\clip(1,abc)\\org(3,4)\\fade(0,100,200,300,400,500,600)\\q0\\an1"
+            "\\pos(1,2)\\iclip(10,11,12,13)\\clip(1,abc)\\org(3,4)\\fade(0,100,200,300,400,500,600)\\q0\\an1"
         );
 
         Ok(())
@@ -1646,7 +1624,7 @@ mod tests {
             Global {
                 animations: vec![Animation {
                     modifiers: GlobalAnimatable {
-                        clip: Some(AnimatableClip::Rectangle(ClipRectangle {
+                        clip: Some(Clip::Contained(Rectangle {
                             x1: 1,
                             y1: 2,
                             x2: 3,
