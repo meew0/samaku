@@ -1,5 +1,6 @@
 use std::{fmt::Debug, ops::Add};
 
+pub use emit::emit;
 pub use parse::parse;
 
 use crate::subtitle;

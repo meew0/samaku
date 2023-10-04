@@ -1,4 +1,59 @@
+use crate::nde::Span;
 use crate::subtitle;
+
+pub fn emit(global: &super::Global, spans: &Vec<Span>) -> String {
+    use std::fmt::Write;
+
+    let mut compiled_text = String::new();
+
+    // Reused buffer for compiled tags
+    let mut compiled_tags = String::new();
+
+    global
+        .emit(&mut compiled_tags)
+        .expect("emitting tags into a String should not fail");
+    maybe_write_block(&mut compiled_text, compiled_tags.as_str());
+
+    for (i, element) in spans.iter().enumerate() {
+        match element {
+            Span::Tags(tags, text) => {
+                compiled_tags.clear();
+                tags.emit(&mut compiled_tags)
+                    .expect("emitting tags into a String should not fail");
+                maybe_write_block(&mut compiled_text, compiled_tags.as_str());
+                compiled_text.push_str(text);
+            }
+            Span::Reset => compiled_text.push_str("{\\r}"),
+            Span::ResetToStyle(style_name) => {
+                compiled_text.push_str("{\\r");
+                compiled_text.push_str(style_name);
+                compiled_text.push('}');
+            }
+            Span::Drawing(tags, drawing) => {
+                compiled_tags.clear();
+                tags.emit(&mut compiled_tags)
+                    .expect("emitting tags into a String should not fail");
+                maybe_write_block(&mut compiled_text, compiled_tags.as_str());
+                write!(
+                    compiled_text,
+                    "{{\\p{}}}{}{{\\p0}}",
+                    drawing.scale, drawing.commands
+                )
+                .expect("writing drawing to String should not fail");
+            }
+        }
+    }
+
+    compiled_text
+}
+
+fn maybe_write_block(text: &mut String, tags: &str) {
+    if !tags.is_empty() {
+        text.push('{');
+        text.push_str(tags);
+        text.push('}');
+    }
+}
 
 pub trait TagName {
     fn write_name<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>

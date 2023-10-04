@@ -38,39 +38,26 @@ pub struct Event {
 
 impl Event {
     pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
-        let mut compiled_text = String::new();
-
-        // Reused buffer for compiled tags
-        let mut compiled_tags = String::new();
-
-        self.global_tags
-            .emit(&mut compiled_tags)
-            .expect("emitting tags into a String should not fail");
-        maybe_write_block(&mut compiled_text, compiled_tags.as_str());
+        let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
-            match element {
+            let new_span = match element {
                 Span::Tags(tags, text) => {
-                    let mut new_tags = tags.clone();
-
-                    if i == 0 {
-                        new_tags.override_from(&self.overrides, false);
-                    } else {
-                        new_tags.clear_from(&self.overrides);
-                    }
-
-                    compiled_tags.clear();
-                    new_tags
-                        .emit(&mut compiled_tags)
-                        .expect("emitting tags into a String should not fail");
-                    maybe_write_block(&mut compiled_text, compiled_tags.as_str());
-                    compiled_text.push_str(text);
+                    let new_tags = self.clone_and_maybe_override_or_clear(tags, i);
+                    Span::Tags(new_tags, text.clone())
                 }
-                Span::Reset => todo!(),
-                Span::ResetToStyle(_) => todo!(),
-                Span::Drawing(_, _) => todo!(),
-            }
+                Span::Reset => Span::Reset,
+                Span::ResetToStyle(style_name) => Span::ResetToStyle(style_name.clone()),
+                Span::Drawing(tags, drawing) => {
+                    let new_tags = self.clone_and_maybe_override_or_clear(tags, i);
+                    Span::Drawing(new_tags, drawing.clone())
+                }
+            };
+
+            cloned_spans.push(new_span);
         }
+
+        let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
         subtitle::ass::Event {
             start: self.start,
@@ -84,13 +71,17 @@ impl Event {
             effect: Cow::from(""),
         }
     }
-}
 
-fn maybe_write_block(text: &mut String, tags: &str) {
-    if !tags.is_empty() {
-        text.push('{');
-        text.push_str(tags);
-        text.push('}');
+    fn clone_and_maybe_override_or_clear(&self, tags: &tags::Local, i: usize) -> tags::Local {
+        let mut new_tags = tags.clone();
+
+        if i == 0 {
+            new_tags.override_from(&self.overrides, false);
+        } else {
+            new_tags.clear_from(&self.overrides);
+        }
+
+        new_tags
     }
 }
 
