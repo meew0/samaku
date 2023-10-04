@@ -15,8 +15,8 @@ Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
 Scroll Position: 51
-Active Line: 68
-Video Position: 4220
+Active Line: 76
+Video Position: 4412
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -96,3 +96,11 @@ Dialogue: 0,0:02:50.00,0:02:52.00,Default,,0,0,0,,{\clip(50,50,100,100)\t(\iclip
 Dialogue: 0,0:02:52.00,0:02:54.00,Default,,0,0,0,,abc{\t(\fnAlegreya)}aaa
 Dialogue: 0,0:02:54.00,0:02:56.00,Default,,0,0,0,,aaa{\t(\fs+10)}bbb
 Dialogue: 0,0:02:56.00,0:02:58.00,Default,,0,0,0,,aaa{\t(\pos(50,50)}bbb
+Dialogue: 0,0:02:58.00,0:03:00.00,Default,,0,0,0,,{\pos(100,100)}{\t(0,500,\xshad10)}{\t(750,1250,\xshad50)}{\t(750,1250,\xshad50)}aaaaaa
+Dialogue: 0,0:02:58.00,0:03:00.00,Default,,0,0,0,,{\pos(100,85)}{\t(0,500,\xshad10)}{\t(750,1250,\xshad50)}{\t(750,1250,\t(\xshad50))}aaaaaa
+Dialogue: 0,0:02:58.00,0:03:00.00,Default,,0,0,0,,{\pos(100,70)}{\t(0,500,\xshad10)}{\t(750,1250,\xshad50)}{\t(\xshad50)}aaaaaa
+Dialogue: 0,0:03:00.00,0:03:02.00,Default,,0,0,0,,{\pos(100,100)}{\t(500,1000,\1c&HFF0000&\t(\xshad10)}aaaaa
+Dialogue: 0,0:03:00.00,0:03:02.00,Default,,0,0,0,,{\pos(100,70)}{\t(500,1000,\1c&HFF0000&\t(\1c&HFF0000&\xshad10)}aaaaa
+Dialogue: 0,0:03:02.00,0:03:04.00,Default,,0,0,0,,{\yshad-10\t(0,500,\yshad10\t(500,1000,\yshad10)}aaaa
+Dialogue: 0,0:03:04.00,0:03:06.00,Default,,0,0,0,,{\pos(100,50)}{\yshad-20\t(0,666,\yshad0\t(333,1000,\yshad10)}aaaa
+Dialogue: 0,0:03:04.00,0:03:06.00,Default,,0,0,0,,{\pos(50,50)}{\yshad-20\t(0,666,\yshad0)}{\t(333,1000,\yshad10)}aaaa

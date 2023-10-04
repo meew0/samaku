@@ -466,67 +466,63 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
             global.origin = twa.position_args();
         }
     } else if twa.tag::<true>("t") {
-        // This implementation of animation parsing makes no attempt
-        // at matching obscure libass edge cases (like nested \t).
-        if nested {
-            println!("Detected nested \\t, this is not supported by samaku!");
-        } else {
-            let (interval, acceleration) = match twa.nargs() {
-                4 => (
+        let (interval, acceleration) = match twa.nargs() {
+            4 => (
+                Some(AnimationInterval {
+                    start: Milliseconds(twa.int_arg(0).unwrap()),
+                    end: Milliseconds(twa.int_arg(1).unwrap()),
+                }),
+                twa.float_arg(2).unwrap(),
+            ),
+            3 => {
+                // Although we do match *this* obscure edge case...
+                // “VSFilter compatibility (because we can): parse the
+                // timestamps differently depending on argument count”
+                (
                     Some(AnimationInterval {
-                        start: Milliseconds(twa.int_arg(0).unwrap()),
-                        end: Milliseconds(twa.int_arg(1).unwrap()),
+                        start: Milliseconds(twa.float_arg(0).unwrap() as i32),
+                        end: Milliseconds(twa.float_arg(1).unwrap() as i32),
                     }),
-                    twa.float_arg(2).unwrap(),
-                ),
-                3 => {
-                    // Although we do match *this* obscure edge case...
-                    // “VSFilter compatibility (because we can): parse the
-                    // timestamps differently depending on argument count”
-                    (
-                        Some(AnimationInterval {
-                            start: Milliseconds(twa.float_arg(0).unwrap() as i32),
-                            end: Milliseconds(twa.float_arg(1).unwrap() as i32),
-                        }),
-                        1.0,
-                    )
-                }
-                2 => (None, twa.float_arg(0).unwrap()),
-                1 => (None, 1.0),
-                _ => return true,
-            };
-
-            if twa.has_backslash_arg {
-                let mut inner_global = Global::empty();
-                let animated_tags = twa.string_arg(twa.arguments.len() - 1).unwrap();
-                let mut inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
-
-                let global_animatable = inner_global.split_animatable();
-                if global_animatable != GlobalAnimatable::empty() {
-                    // It is in fact possible to have multiple global (clip)
-                    // animations, with different behaviour than if only one
-                    // of them were specified.
-                    global.animations.push(Animation {
-                        modifiers: global_animatable,
-                        acceleration,
-                        interval,
-                    })
-                }
-
-                let local_animatable = inner_block.new_local.split_animatable();
-                if local_animatable != LocalAnimatable::empty() {
-                    local.animations.push(Animation {
-                        modifiers: local_animatable,
-                        acceleration,
-                        interval,
-                    })
-                }
-
-                // Merge leftover non-animatable global and local properties
-                // into their respective targets
-                global.override_from(&inner_global);
-                local.override_from(&inner_block.new_local, true);
+                    1.0,
+                )
             }
+            2 => (None, twa.float_arg(0).unwrap()),
+            1 => (None, 1.0),
+            _ => return true,
+        };
+
+        if twa.has_backslash_arg {
+            let mut inner_global = Global::empty();
+            let animated_tags = twa.string_arg(twa.arguments.len() - 1).unwrap();
+            let mut inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
+
+            let global_animatable = inner_global.split_animatable();
+            if global_animatable != GlobalAnimatable::empty() {
+                // It is in fact possible to have multiple global (clip)
+                // animations, with different behaviour than if only one
+                // of them were specified.
+                global.animations.push(Animation {
+                    modifiers: global_animatable,
+                    acceleration,
+                    interval,
+                })
+            }
+
+            let local_animatable = inner_block.new_local.split_animatable();
+            if local_animatable != LocalAnimatable::empty() {
+                local.animations.push(Animation {
+                    modifiers: local_animatable,
+                    acceleration,
+                    interval,
+                })
+            }
+
+            // Merge leftover non-animatable global and local properties
+            // into their respective targets.
+            // This includes animations: nested animations behave like concatenated animations.
+            // `\t(A,B,C,D\t(E,F,G,H))` is equivalent to `\t(A,B,C,D)\t(E,F,G,H)`.
+            global.override_from(&inner_global);
+            local.override_from(&inner_block.new_local, true);
         }
     } else if twa.tag::<true>("clip") {
         parse_clip(global, &twa, Clip::Contained, Clip::Contained);
@@ -1647,6 +1643,18 @@ mod tests {
             false,
         );
         assert_eq!(global.animations.len(), 2);
+    }
+
+    #[test]
+    fn nested_animation() {
+        let local = test_single_local("t(1,2,3,\\fsp10\\t(4,5,6\\xshad20)");
+        assert_eq!(local.animations.len(), 2);
+
+        assert_matches!(&local.animations[0], Animation { modifiers, .. });
+        assert_eq!(modifiers.letter_spacing, Resettable::Override(10.0));
+
+        assert_matches!(&local.animations[1], Animation { modifiers, .. });
+        assert_eq!(modifiers.shadow.x, Resettable::Override(20.0));
     }
 
     #[test]
