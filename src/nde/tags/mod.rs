@@ -41,6 +41,12 @@ impl<T> Resettable<T> {
         matches!(self, Self::Keep)
     }
 
+    /// Analogous to `Option::take`: removes and returns the current value from the `Resettable`
+    /// and replaces it with `Keep`.
+    pub fn take(&mut self) -> Resettable<T> {
+        std::mem::replace(self, Self::Keep)
+    }
+
     #[inline]
     pub fn as_ref(&self) -> Resettable<&T> {
         use Resettable::*;
@@ -119,10 +125,22 @@ impl Global {
         Self::default()
     }
 
-    pub fn animatable(&self) -> GlobalAnimatable {
+    pub fn split_animatable(&mut self) -> GlobalAnimatable {
         GlobalAnimatable {
-            clip: self.rectangle_clip.clone(),
+            clip: self.rectangle_clip.take(),
         }
+    }
+
+    pub fn override_from(&mut self, other: &Global) {
+        self.position.override_from(&other.position);
+        self.rectangle_clip.override_from(&other.rectangle_clip);
+        self.vector_clip.override_from(&other.vector_clip);
+        self.origin.override_from(&other.origin);
+        self.fade.override_from(&other.fade);
+        self.wrap_style.override_from(&other.wrap_style);
+        self.alignment.override_from(&other.alignment);
+        
+        self.animations.extend(other.animations.clone());
     }
 
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
@@ -243,25 +261,25 @@ impl Local {
         Self::default()
     }
 
-    pub fn animatable(&self) -> LocalAnimatable {
+    pub fn split_animatable(&mut self) -> LocalAnimatable {
         LocalAnimatable {
-            border: self.border,
-            shadow: self.shadow,
-            soften: self.soften,
-            gaussian_blur: self.gaussian_blur,
-            font_size: self.font_size,
-            font_scale: self.font_scale,
-            letter_spacing: self.letter_spacing,
-            text_rotation: self.text_rotation,
-            text_shear: self.text_shear,
-            primary_colour: self.primary_colour,
-            secondary_colour: self.secondary_colour,
-            border_colour: self.border_colour,
-            shadow_colour: self.shadow_colour,
-            primary_transparency: self.primary_transparency,
-            secondary_transparency: self.secondary_transparency,
-            border_transparency: self.border_transparency,
-            shadow_transparency: self.shadow_transparency,
+            border: self.border.take(),
+            shadow: self.shadow.take(),
+            soften: self.soften.take(),
+            gaussian_blur: self.gaussian_blur.take(),
+            font_size: self.font_size.take(),
+            font_scale: self.font_scale.take(),
+            letter_spacing: self.letter_spacing.take(),
+            text_rotation: self.text_rotation.take(),
+            text_shear: self.text_shear.take(),
+            primary_colour: self.primary_colour.take(),
+            secondary_colour: self.secondary_colour.take(),
+            border_colour: self.border_colour.take(),
+            shadow_colour: self.shadow_colour.take(),
+            primary_transparency: self.primary_transparency.take(),
+            secondary_transparency: self.secondary_transparency.take(),
+            border_transparency: self.border_transparency.take(),
+            shadow_transparency: self.shadow_transparency.take(),
         }
     }
 
@@ -648,6 +666,13 @@ impl Maybe2D {
         self.y.clear_from(&other.y);
     }
 
+    pub fn take(&mut self) -> Maybe2D {
+        Maybe2D {
+            x: self.x.take(),
+            y: self.y.take(),
+        }
+    }
+
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -712,6 +737,14 @@ impl Maybe3D {
         self.x.clear_from(&other.x);
         self.y.clear_from(&other.y);
         self.z.clear_from(&other.z);
+    }
+
+    pub fn take(&mut self) -> Maybe3D {
+        Maybe3D {
+            x: self.x.take(),
+            y: self.y.take(),
+            z: self.z.take(),
+        }
     }
 
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
@@ -891,6 +924,10 @@ impl FontSize {
         if !other.is_empty() {
             *self = Self::KEEP;
         }
+    }
+
+    fn take(&mut self) -> Self {
+        std::mem::replace(self, FontSize::KEEP)
     }
 
     fn is_empty(&self) -> bool {

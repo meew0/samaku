@@ -255,7 +255,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
     } else if twa.tag::<false>("fay") {
         local.text_shear.y = resettable(twa.float_arg(0));
     } else if twa.tag::<true>("iclip") {
-        parse_clip(global, &twa, nested, Clip::Inverse, Clip::Inverse);
+        parse_clip(global, &twa, Clip::Inverse, Clip::Inverse);
     } else if twa.tag::<false>("blur") {
         local.gaussian_blur = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fscx") {
@@ -499,9 +499,9 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
             if twa.has_backslash_arg {
                 let mut inner_global = Global::empty();
                 let animated_tags = twa.string_arg(twa.arguments.len() - 1).unwrap();
-                let inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
+                let mut inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
 
-                let global_animatable = inner_global.animatable();
+                let global_animatable = inner_global.split_animatable();
                 if global_animatable != GlobalAnimatable::empty() {
                     // It is in fact possible to have multiple global (clip)
                     // animations, with different behaviour than if only one
@@ -513,7 +513,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
                     })
                 }
 
-                let local_animatable = inner_block.new_local.animatable();
+                let local_animatable = inner_block.new_local.split_animatable();
                 if local_animatable != LocalAnimatable::empty() {
                     local.animations.push(Animation {
                         modifiers: local_animatable,
@@ -521,10 +521,15 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
                         interval,
                     })
                 }
+
+                // Merge leftover non-animatable global and local properties
+                // into their respective targets
+                global.override_from(&inner_global);
+                local.override_from(&inner_block.new_local, true);
             }
         }
     } else if twa.tag::<true>("clip") {
-        parse_clip(global, &twa, nested, Clip::Contained, Clip::Contained);
+        parse_clip(global, &twa, Clip::Contained, Clip::Contained);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
         local.primary_colour = resettable(twa.colour_arg(0));
     } else if twa.tag::<false>("2c") {
@@ -855,13 +860,8 @@ fn trim_start_ctype_isspace(str: &str) -> &str {
     })
 }
 
-fn parse_clip<R, V>(
-    global: &mut Global,
-    twa: &TagWithArguments,
-    nested: bool,
-    rect_clip: R,
-    vector_clip: V,
-) where
+fn parse_clip<R, V>(global: &mut Global, twa: &TagWithArguments, rect_clip: R, vector_clip: V)
+where
     R: FnOnce(Rectangle) -> Clip<Rectangle>,
     V: FnOnce(Drawing) -> Clip<Drawing>,
 {
@@ -879,14 +879,6 @@ fn parse_clip<R, V>(
             1 => 1,
             _ => return,
         };
-
-        if nested {
-            // While libass lacks the capability to *animate* vector clips,
-            // if a vector clip is specified within a \t before any other clips,
-            // it is applied as the event-wide clip (without being animated).
-            // We do not support this behaviour.
-            println!("Detected vector clip in \\t, this is not supported by samaku!");
-        }
 
         let commands = twa.string_arg(twa.nargs() - 1).unwrap();
         let drawing = Drawing {
@@ -1655,6 +1647,22 @@ mod tests {
             false,
         );
         assert_eq!(global.animations.len(), 2);
+    }
+
+    #[test]
+    fn animation_non_animatable() {
+        let mut global = Global::empty();
+        let block = parse_tag_block(
+            "\\t(\\fsp10)\\t(\\fnAlegreya)\\t(\\clip(1,2,3,4))\\t(\\iclip(abc))",
+            &mut global,
+            false,
+        );
+
+        assert_eq!(global.animations.len(), 1);
+        assert_eq!(block.new_local.animations.len(), 1);
+
+        assert_matches!(global.vector_clip, Some(_));
+        assert_matches!(block.new_local.font_name, Resettable::Override(_));
     }
 
     #[test]
