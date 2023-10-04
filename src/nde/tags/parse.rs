@@ -12,6 +12,12 @@ use super::{
 };
 
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
+    let (global, spans) = parse_raw(text);
+    let simplified = simplify(spans);
+    (global, simplified)
+}
+
+pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
     let mut last_local = Box::new(Local::empty());
     let mut global = Box::new(Global::empty());
@@ -1046,7 +1052,7 @@ mod tests {
     #[test]
     fn no_tags() {
         let text = "this text has no tags";
-        let (global, spans) = parse(text);
+        let (global, spans) = parse_raw(text);
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 1);
         assert_matches!(&spans[0], Span::Tags(local, span_text));
@@ -1056,7 +1062,7 @@ mod tests {
 
     #[test]
     fn span_tags() {
-        let (global, spans) = parse("before{\\i1}after");
+        let (global, spans) = parse_raw("before{\\i1}after");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 2);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1072,7 +1078,7 @@ mod tests {
         );
         assert_eq!(text, "after");
 
-        let (global, spans) = parse("{\\pos(10,11)}text");
+        let (global, spans) = parse_raw("{\\pos(10,11)}text");
         assert_eq!(
             *global,
             Global {
@@ -1091,7 +1097,7 @@ mod tests {
 
     #[test]
     fn span_reset() {
-        let (global, spans) = parse("a{\\rA\\r}b{\\rB}{\\r}c");
+        let (global, spans) = parse_raw("a{\\rA\\r}b{\\rB}{\\r}c");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 7);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1111,7 +1117,7 @@ mod tests {
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "c");
 
-        let (global, spans) = parse("a{\\fsp10\\r\\fax20}b");
+        let (global, spans) = parse_raw("a{\\fsp10\\r\\fax20}b");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 3);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1126,7 +1132,7 @@ mod tests {
 
     #[test]
     fn span_drawing() {
-        let (global, spans) = parse("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
+        let (global, spans) = parse_raw("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 4);
         assert_matches!(&spans[0], Span::Tags(local, text));
