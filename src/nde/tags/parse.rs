@@ -761,7 +761,7 @@ impl<'a> TagWithArguments<'a> {
     fn float_arg(&self, index: usize) -> Option<f64> {
         self.arguments.get(index).map(|arg_str| {
             assert!(!arg_str.is_empty());
-            fast_float::parse_partial::<f64, _>(arg_str)
+            fast_float::parse_partial::<f64, _>(trim_start_ctype_isspace(arg_str))
                 .ok()
                 .map(|(value, _digits)| value)
                 .unwrap_or(0.0) // default value if parsing fails
@@ -826,6 +826,8 @@ impl<'a> TagWithArguments<'a> {
 /// from the beginning of `str`, and returns 0 if parsing fails entirely.
 /// Also handles i32 overflows gracefully by first parsing as i64.
 fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
+    let str = trim_start_ctype_isspace(str);
+
     let (slice, sign) = match str.chars().next() {
         Some('+') => {
             (&str[1..], 1) // consume sign
@@ -843,6 +845,15 @@ fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
     maybe_parsed
         .unwrap_or(0i64)
         .clamp(i32::MIN.into(), i32::MAX.into()) as i32
+}
+
+/// Trims whitespace from the start of a string, according to the non-Unicode-aware definition of
+/// C's `isspace` function. This is required to match libass behaviour in the admittedly extremely
+/// obscure case that someone specifies a numeric literal preceded by a Unicode whitespace.
+fn trim_start_ctype_isspace(str: &str) -> &str {
+    str.trim_start_matches(|c: char| {
+        matches!(c, '\x20' | '\x0c' | '\x0a' | '\x0d' | '\x09' | '\x0b')
+    })
 }
 
 fn parse_clip<R, V>(
@@ -1851,6 +1862,14 @@ mod tests {
         let mut block = TagBlock::empty();
         parse_tag("pos(50,)", &mut global, &mut block, false);
         assert_eq!(global.position, None);
+    }
+
+    #[test]
+    fn font_size_space_before_plus() {
+        let mut global = Global::empty();
+        let mut block = TagBlock::empty();
+        parse_tag("fs +10", &mut global, &mut block, false);
+        assert_eq!(block.new_local.font_size, FontSize::Set(10.0));
     }
 
     #[test]
