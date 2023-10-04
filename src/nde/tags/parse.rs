@@ -886,6 +886,11 @@ fn parse_clip<R, V>(
 
         global.clip = Some(vector_clip(drawing));
     }
+
+    // As specifying a clip overrides all previous clips, it will also override clip animations.
+    // There are no global animations other than clip ones, so clearing all global animations
+    // suffices to clear previous clip animations
+    global.animations.clear();
 }
 
 fn end_span(
