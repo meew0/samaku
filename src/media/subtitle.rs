@@ -1,6 +1,7 @@
 use crate::{subtitle, view};
 
 use super::bindings::{ass, c_string};
+pub use ass::Image;
 
 pub struct OpaqueTrack {
     internal: ass::Track,
@@ -102,7 +103,7 @@ impl Renderer {
 
     pub fn render_subtitles_onto_base(
         &mut self,
-        subtitles: OpaqueTrack,
+        subtitles: &OpaqueTrack,
         base: iced::widget::image::Handle,
         frame: i32,
         frame_rate: super::video::FrameRate,
@@ -118,16 +119,31 @@ impl Renderer {
             y: 0,
         });
 
+        self.render_subtitles_with_callback(
+            subtitles,
+            now,
+            frame_size,
+            storage_size,
+            &mut |image| result.push(ass_image_to_iced(image)),
+        );
+
+        result
+    }
+
+    pub fn render_subtitles_with_callback<F: FnMut(&Image)>(
+        &mut self,
+        subtitles: &OpaqueTrack,
+        now: i64,
+        frame_size: subtitle::Resolution,
+        storage_size: subtitle::Resolution,
+        callback: &mut F,
+    ) {
         self.internal.set_frame_size(frame_size.x, frame_size.y);
         self.internal
             .set_storage_size(storage_size.x, storage_size.y);
 
         self.internal
-            .render_frame(&subtitles.internal, now, &mut |image| {
-                result.push(ass_image_to_iced(image))
-            });
-
-        result
+            .render_frame(&subtitles.internal, now, callback);
     }
 }
 

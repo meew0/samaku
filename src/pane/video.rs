@@ -47,7 +47,7 @@ pub fn view<'a>(
                     let stack = {
                         let mut view_state = global_state.view.borrow_mut();
                         view_state.subtitle_renderer.render_subtitles_onto_base(
-                            ass,
+                            &ass,
                             handle.clone(),
                             *num_frame,
                             video_metadata.frame_rate,
