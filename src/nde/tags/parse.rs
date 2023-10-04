@@ -921,7 +921,7 @@ fn end_span(
     }
 }
 
-fn simplify(s0: Vec<Span>) -> Vec<Span> {
+pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
     use Span::*;
 
     // Remove empty texts and drawings
@@ -1044,8 +1044,9 @@ enum Reset {
 
 #[cfg(test)]
 mod tests {
-    use crate::nde::tags::{AnimatableClip, Karaoke, KaraokeOnset};
     use assert_matches2::assert_matches;
+
+    use crate::nde::tags::{AnimatableClip, Karaoke, KaraokeOnset};
 
     use super::*;
 
@@ -1177,7 +1178,7 @@ mod tests {
             global.alignment,
             Override(Alignment {
                 vertical: VerticalAlignment::Center,
-                horizontal: HorizontalAlignment::Center
+                horizontal: HorizontalAlignment::Center,
             })
         );
         assert_matches!(global.position, Some(PositionOrMove::Position(_)));
@@ -1234,7 +1235,7 @@ mod tests {
             block.new_local.karaoke,
             Karaoke {
                 effect: None,
-                onset: KaraokeOnset::Absolute(Centiseconds(0.0))
+                onset: KaraokeOnset::Absolute(Centiseconds(0.0)),
             }
         );
         assert_matches!(block.new_local.strike_out, Reset);
@@ -1312,7 +1313,7 @@ mod tests {
                 x1: 7,
                 x2: 8,
                 y1: 9,
-                y2: 10
+                y2: 10,
             }))
         );
         assert_eq!(block.new_local.gaussian_blur, Override(11.0));
@@ -1344,7 +1345,7 @@ mod tests {
                 fade_in_start: Milliseconds(0),
                 fade_in_end: Milliseconds(1000),
                 fade_out_start: Milliseconds(2000),
-                fade_out_end: Milliseconds(3000)
+                fade_out_end: Milliseconds(3000),
             }))
         );
         assert_eq!(global.origin, Some(Position { x: 21.0, y: 22.0 }));
@@ -1355,7 +1356,7 @@ mod tests {
                 modifiers: LocalAnimatable {
                     border: Maybe2D {
                         x: Override(23.0),
-                        y: Keep
+                        y: Keep,
                     },
                     ..Default::default()
                 },
@@ -1368,7 +1369,7 @@ mod tests {
             Override(Colour {
                 red: 0,
                 green: 0,
-                blue: 0xff
+                blue: 0xff,
             })
         );
         assert_eq!(
@@ -1376,7 +1377,7 @@ mod tests {
             Override(Colour {
                 red: 0,
                 green: 0xff,
-                blue: 0
+                blue: 0,
             })
         );
         assert_eq!(
@@ -1384,7 +1385,7 @@ mod tests {
             Override(Colour {
                 red: 0xff,
                 green: 0,
-                blue: 0
+                blue: 0,
             })
         );
         assert_eq!(
@@ -1392,7 +1393,7 @@ mod tests {
             Override(Colour {
                 red: 0xff,
                 green: 0,
-                blue: 0xff
+                blue: 0xff,
             })
         );
         assert_eq!(
@@ -1421,7 +1422,7 @@ mod tests {
             block.new_local.karaoke,
             Karaoke {
                 effect: None,
-                onset: KaraokeOnset::Absolute(Centiseconds(25.0))
+                onset: KaraokeOnset::Absolute(Centiseconds(25.0)),
             }
         );
         assert_eq!(block.new_local.strike_out, Override(true));
@@ -1445,7 +1446,7 @@ mod tests {
             Some(PositionOrMove::Move(Move {
                 initial_position: Position { x: 2.0, y: 3.0 },
                 final_position: Position { x: 4.0, y: 5.0 },
-                timing: None
+                timing: None,
             }))
         );
         assert_eq!(block.new_local.shadow.x, Override(6.0));
@@ -1473,21 +1474,21 @@ mod tests {
             global.alignment,
             Override(Alignment {
                 vertical: VerticalAlignment::Top,
-                horizontal: HorizontalAlignment::Left
+                horizontal: HorizontalAlignment::Left,
             })
         );
         assert_eq!(
             global.fade,
             Some(Fade::Simple(SimpleFade {
                 fade_in_duration: Milliseconds(450),
-                fade_out_duration: Milliseconds(550)
+                fade_out_duration: Milliseconds(550),
             }))
         );
         assert_eq!(
             global.clip,
             Some(Clip::Vector(Drawing {
                 scale: 2,
-                commands: "m 0 0 s 100 0 100 100 0 100 c".to_owned()
+                commands: "m 0 0 s 100 0 100 100 0 100 c".to_owned(),
             }))
         );
         assert_eq!(
@@ -1572,14 +1573,14 @@ mod tests {
             test_single_global("an5").alignment,
             Override(Alignment {
                 vertical: VerticalAlignment::Center,
-                horizontal: HorizontalAlignment::Center
+                horizontal: HorizontalAlignment::Center,
             })
         );
         assert_eq!(
             test_single_global("a10").alignment,
             Override(Alignment {
                 vertical: VerticalAlignment::Center,
-                horizontal: HorizontalAlignment::Center
+                horizontal: HorizontalAlignment::Center,
             })
         );
 
@@ -1614,7 +1615,7 @@ mod tests {
             anim.interval,
             Some(AnimationInterval {
                 start: Milliseconds(1),
-                end: Milliseconds(2)
+                end: Milliseconds(2),
             })
         );
         assert_eq!(anim.acceleration, 3.0);
@@ -1771,7 +1772,7 @@ mod tests {
             Some(Colour {
                 red: 0xaa,
                 green: 0,
-                blue: 0
+                blue: 0,
             })
         );
         assert_eq!(twa.colour_arg(2), Some(Colour::BLACK));

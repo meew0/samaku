@@ -5,6 +5,8 @@ use crate::subtitle;
 mod emit;
 mod parse;
 
+pub use parse::{parse, parse_raw, simplify};
+
 /// Like an `Option`, but also represents the possibility that an ASS tag can be specified
 /// in such a way that it is not set to a value defined by the tag, but to a default value.
 /// This default value comes either from the line style or is hardcoded within libass.

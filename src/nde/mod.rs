@@ -7,7 +7,7 @@ use crate::subtitle;
 
 pub mod graph;
 pub mod node;
-mod tags;
+pub mod tags;
 
 #[derive(Debug)]
 pub struct Filter {

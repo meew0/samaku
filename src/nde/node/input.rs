@@ -23,20 +23,18 @@ impl Node for InputSline {
             SocketValue::Sline(sline) => sline,
             _ => return Err(NodeError::MismatchedTypes),
         };
+
+        let (global, spans) = nde::tags::parse(&sline.text);
+
         let event = nde::Event {
             start: sline.start,
             duration: sline.duration,
             layer_index: sline.layer_index,
             style_index: sline.style_index,
             margins: sline.margins,
-            global_tags: nde::tags::Global::empty(),
+            global_tags: *global,
             overrides: nde::tags::Local::empty(),
-
-            // TODO in the far future: parse ASS tags into span?
-            text: vec![nde::Span::Tags(
-                nde::tags::Local::empty(),
-                sline.text.clone(),
-            )],
+            text: spans,
         };
         Ok(vec![SocketValue::IndividualEvent(Box::new(event))])
     }
