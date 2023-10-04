@@ -21,7 +21,7 @@ pub fn emit(global: &super::Global, spans: &Vec<Span>) -> String {
                 tags.emit(&mut compiled_tags)
                     .expect("emitting tags into a String should not fail");
                 maybe_write_block(&mut compiled_text, compiled_tags.as_str());
-                compiled_text.push_str(text);
+                push_escaped(&mut compiled_text, text);
             }
             Span::Reset => compiled_text.push_str("{\\r}"),
             Span::ResetToStyle(style_name) => {
@@ -34,17 +34,24 @@ pub fn emit(global: &super::Global, spans: &Vec<Span>) -> String {
                 tags.emit(&mut compiled_tags)
                     .expect("emitting tags into a String should not fail");
                 maybe_write_block(&mut compiled_text, compiled_tags.as_str());
-                write!(
-                    compiled_text,
-                    "{{\\p{}}}{}{{\\p0}}",
-                    drawing.scale, drawing.commands
-                )
-                .expect("writing drawing to String should not fail");
+                write!(compiled_text, "{{\\p{}}}", drawing.scale)
+                    .expect("writing drawing scale to String should not fail");
+                push_escaped(&mut compiled_text, &drawing.commands);
+                compiled_text.push_str("{\\p0}");
             }
         }
     }
 
     compiled_text
+}
+
+fn push_escaped(target: &mut String, source: &str) {
+    for char in source.chars() {
+        match char {
+            '{' => target.push_str("\\{"),
+            other => target.push(other),
+        }
+    }
 }
 
 fn maybe_write_block(text: &mut String, tags: &str) {
