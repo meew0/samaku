@@ -869,7 +869,8 @@ where
             y2: twa.int_arg(3).unwrap(),
         };
         global.rectangle_clip = Some(rect_clip(rect));
-    } else {
+    } else if global.vector_clip.is_none() {
+        // Vector clips do not override their predecessors
         let scale: i32 = match twa.nargs() {
             2 => twa.int_arg(0).unwrap(),
             1 => 1,
@@ -1182,10 +1183,10 @@ mod tests {
         assert_matches!(global.position, Some(PositionOrMove::Position(_)));
         assert_matches!(global.fade, Some(Fade::Simple(_)));
         assert_eq!(global.origin, Some(Position { x: 1.0, y: 2.0 }));
+        assert_matches!(global.vector_clip, Some(Clip::Inverse(_)));
 
         // These tags SHOULD override their predecessors.
         assert_matches!(global.rectangle_clip, Some(Clip::Inverse(_)));
-        assert_matches!(global.vector_clip, Some(Clip::Contained(_)));
     }
 
     #[test]
@@ -1319,9 +1320,9 @@ mod tests {
         );
         assert_eq!(
             global.vector_clip,
-            Some(Clip::Contained(Drawing {
-                scale: 2,
-                commands: "def".to_owned(),
+            Some(Clip::Inverse(Drawing {
+                scale: 1,
+                commands: "abc".to_owned(),
             }))
         );
         assert_eq!(block.new_local.gaussian_blur, Override(11.0));
