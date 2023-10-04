@@ -548,7 +548,12 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
     } else if twa.tag::<false>("4a") {
         local.shadow_transparency = resettable(twa.transparency_arg(0));
     } else if twa.tag::<false>("r") {
-        *local = Local::empty(); // clear previous overrides in this block
+        // Clear previous overrides in this block, but keep the drawing baseline offset,
+        // which is not reset by `\r`
+        let prev_pbo = local.drawing_baseline_offset;
+        *local = Local::empty();
+        local.drawing_baseline_offset = prev_pbo;
+
         block.reset = if twa.nargs() > 0 {
             Some(Reset::ResetToStyle(twa.string_arg(0).unwrap().to_owned()))
         } else {
@@ -1870,6 +1875,13 @@ mod tests {
         let mut block = TagBlock::empty();
         parse_tag("fs +10", &mut global, &mut block, false);
         assert_eq!(block.new_local.font_size, FontSize::Set(10.0));
+    }
+
+    #[test]
+    fn reset_after_pbo() {
+        let mut global = Global::empty();
+        let block = parse_tag_block("\\pbo50\\r", &mut global, false);
+        assert_eq!(block.new_local.drawing_baseline_offset, Some(50.0));
     }
 
     #[test]
