@@ -14,9 +14,9 @@ Last Style Storage: Default
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Scroll Position: 60
-Active Line: 77
-Video Position: 4460
+Scroll Position: 66
+Active Line: 73
+Video Position: 4316
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -105,3 +105,7 @@ Dialogue: 0,0:03:02.00,0:03:04.00,Default,,0,0,0,,{\yshad-10\t(0,500,\yshad10\t(
 Dialogue: 0,0:03:04.00,0:03:06.00,Default,,0,0,0,,{\pos(100,50)}{\yshad-20\t(0,666,\yshad0\t(333,1000,\yshad10)}aaaa
 Dialogue: 0,0:03:04.00,0:03:06.00,Default,,0,0,0,,{\pos(50,50)}{\yshad-20\t(0,666,\yshad0)}{\t(333,1000,\yshad10)}aaaa
 Dialogue: 0,0:03:06.00,0:03:08.00,Default,,0,0,0,,{\pos(10,20)}{\iclip(1,m 0 0 s 20 0 20 20 0 20 c)\clip(2,m 0 0 s 20 0 20 20 0 20 c)}aaaaaaaaaa
+Dialogue: 0,0:03:08.00,0:03:10.00,Default,,0,0,0,,{\xbord1\ybord2\xshad3\yshad4\fax5\fay6\clip(70,80,90,100)\iclip(20,20,30,30)\iclip(1,m 0 0 s 20 0 20 20 0 20 c)\clip(2,m 0 0 s 20 0 20 20 0 20 c)\blur11\fscx12\fscy13\fsp14\fs15\frx16\fry17\frz18\fnAlegreya\an5\pos(19,20)\fade(0,255,0,0,1000,2000,3000)\org(21,22)\t(\xbord23)\1c&HFF0000&\2c&H00FF00&\3c&H0000FF&\4c&HFF00FF&\1a&H22&\2a&H44&\3a&H66&\4a&H88&\be24\b1\i1\kt25\s1\u1\pbo26\q1\fe1}All tags 1{\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}
+Dialogue: 0,0:03:10.00,0:03:12.00,Default,,0,0,0,,{\bord1\move(2,3,4,5)\shad6\fsc7\alpha&H08&\a5\fad(450,550)\clip(2,m 0 0 s 100 0 100 100 0 100 c)\kf8\b500}All tags 2
+Dialogue: 0,0:03:12.00,0:03:14.00,Default,,0,0,0,,{\ko20}All tags{\ko50\fs+10}3
+Dialogue: 0,0:03:14.00,0:03:16.00,Default,,0,0,0,,{\k20}All tags{\k50\fs-11}4
