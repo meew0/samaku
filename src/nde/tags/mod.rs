@@ -114,8 +114,10 @@ impl Global {
     where
         W: std::fmt::Write,
     {
-        // TODO: other global properties
-
+        emit::tag(sink, &self.position)?;
+        emit::tag(sink, &self.clip)?;
+        emit::complex_tag(sink, "org", &self.origin)?;
+        emit::tag(sink, &self.fade)?;
         emit::simple_tag_resettable(sink, "q", &self.wrap_style)?;
         emit::simple_tag_resettable(sink, "an", &self.alignment)?;
 
@@ -585,10 +587,31 @@ pub enum PositionOrMove {
     Move(Move),
 }
 
+impl emit::EmitTag for PositionOrMove {
+    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        match self {
+            Self::Position(position) => emit::complex_tag(sink, "pos", &Some(*position)),
+            Self::Move(move_value) => emit::complex_tag(sink, "move", &Some(*move_value)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
+}
+
+impl emit::EmitValue for Position {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        write!(sink, "{},{}", self.x, self.y)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -763,6 +786,26 @@ pub struct Move {
     pub initial_position: Position,
     pub final_position: Position,
     pub timing: Option<MoveTiming>,
+}
+
+impl emit::EmitValue for Move {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        self.initial_position.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.final_position.emit_value(sink)?;
+
+        if let Some(timing) = self.timing {
+            sink.write_char(',')?;
+            timing.start_time.emit_value(sink)?;
+            sink.write_char(',')?;
+            timing.end_time.emit_value(sink)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1101,10 +1144,35 @@ pub enum Fade {
     Complex(ComplexFade),
 }
 
+impl emit::EmitTag for Fade {
+    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        match self {
+            Self::Simple(simple) => emit::complex_tag(sink, "fad", &Some(*simple)),
+            Self::Complex(complex) => emit::complex_tag(sink, "fade", &Some(*complex)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SimpleFade {
     pub fade_in_duration: Milliseconds,
     pub fade_out_duration: Milliseconds,
+}
+
+impl emit::EmitValue for SimpleFade {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        self.fade_in_duration.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.fade_out_duration.emit_value(sink)?;
+
+        Ok(())
+    }
 }
 
 /// Before `fade_in_start`, the line will have transparency
@@ -1128,6 +1196,29 @@ pub struct ComplexFade {
     pub fade_in_end: Milliseconds,
     pub fade_out_start: Milliseconds,
     pub fade_out_end: Milliseconds,
+}
+
+impl emit::EmitValue for ComplexFade {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        self.transparency_before.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.transparency_main.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.transparency_after.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.fade_in_start.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.fade_in_end.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.fade_out_start.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.fade_out_end.emit_value(sink)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1165,14 +1256,10 @@ impl emit::EmitTag for Clip {
         W: std::fmt::Write,
     {
         match self {
-            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", std::iter::once(*rect)),
-            Clip::InverseRectangle(rect) => {
-                emit::complex_tag(sink, "iclip", std::iter::once(*rect))
-            }
-            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", std::iter::once(drawing)),
-            Clip::InverseVector(drawing) => {
-                emit::complex_tag(sink, "iclip", std::iter::once(drawing))
-            }
+            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", &Some(*rect)),
+            Clip::InverseRectangle(rect) => emit::complex_tag(sink, "iclip", &Some(*rect)),
+            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", &Some(drawing)),
+            Clip::InverseVector(drawing) => emit::complex_tag(sink, "iclip", &Some(drawing)),
         }
     }
 }
@@ -1238,6 +1325,14 @@ impl emit::EmitValue for &Drawing {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! assert_emits {
+        ($a:expr, $b:expr) => {
+            let mut _str = String::new();
+            $a.emit(&mut _str)?;
+            assert_eq!(_str, $b);
+        };
+    }
 
     #[test]
     fn override_from() {
@@ -1311,7 +1406,8 @@ mod tests {
         fsot!(false, Set(1.0), Reset(ONE), Reset(ONE));
         fsot!(false, Set(1.0), Set(1.0), Set(1.0));
 
-        fsot!(true, Delta(ZERO), Delta(ONE), Delta(ONE)); // !
+        fsot!(true, Delta(ZERO), Delta(ONE), Delta(ONE));
+        // !
         fsot!(true, Delta(ZERO), Reset(ONE), Reset(ONE));
         fsot!(true, Delta(ZERO), Set(1.0), Set(1.0));
 
@@ -1346,6 +1442,40 @@ mod tests {
     }
 
     #[test]
+    fn global() -> Result<(), std::fmt::Error> {
+        let global = Global {
+            position: Some(PositionOrMove::Position(Position { x: 1.0, y: 2.0 })),
+            clip: Some(Clip::Vector(Drawing {
+                commands: "abc".to_owned(),
+                scale: 1,
+            })),
+            origin: Some(Position { x: 3.0, y: 4.0 }),
+            fade: Some(Fade::Complex(ComplexFade {
+                transparency_before: 0,
+                transparency_main: 100,
+                transparency_after: 200,
+                fade_in_start: Milliseconds(300),
+                fade_in_end: Milliseconds(400),
+                fade_out_start: Milliseconds(500),
+                fade_out_end: Milliseconds(600),
+            })),
+            wrap_style: Resettable::Override(subtitle::WrapStyle::SmartEven),
+            alignment: Resettable::Override(subtitle::Alignment {
+                vertical: subtitle::VerticalAlignment::Sub,
+                horizontal: subtitle::HorizontalAlignment::Left,
+            }),
+            animations: vec![],
+        };
+
+        assert_emits!(
+            global,
+            "\\pos(1,2)\\clip(1,abc)\\org(3,4)\\fade(0,100,200,300,400,500,600)\\q0\\an1"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn local() -> Result<(), std::fmt::Error> {
         let mut string = String::new();
 
@@ -1372,14 +1502,6 @@ mod tests {
         assert_eq!(colour.red, 0x11);
         assert_eq!(colour.green, 0xbb);
         assert_eq!(colour.blue, 0xff);
-    }
-
-    macro_rules! assert_emits {
-        ($a:expr, $b:expr) => {
-            let mut _str = String::new();
-            $a.emit(&mut _str)?;
-            assert_eq!(_str, $b);
-        };
     }
 
     #[test]

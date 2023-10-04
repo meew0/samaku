@@ -73,27 +73,23 @@ where
     Ok(())
 }
 
+/// Behaves like `simple_tag`, but inserts parentheses around the argument.
 pub fn complex_tag<W, V>(
     sink: &mut W,
     tag_name: &str,
-    values: impl IntoIterator<Item = V>,
+    maybe_value: &Option<V>,
 ) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
     V: EmitValue,
 {
-    sink.write_str("\\")?;
-    sink.write_str(tag_name)?;
-    sink.write_str("(")?;
-
-    for (i, value) in values.into_iter().enumerate() {
-        if i > 0 {
-            sink.write_str(",")?;
-        }
+    if let Some(value) = maybe_value {
+        sink.write_str("\\")?;
+        sink.write_str(tag_name)?;
+        sink.write_str("(")?;
         value.emit_value(sink)?;
+        sink.write_str(")")?;
     }
-
-    sink.write_str(")")?;
 
     Ok(())
 }
@@ -197,11 +193,9 @@ mod tests {
 
         let some_value: Option<i32> = Some(123);
         simple_tag(&mut string, "blub", &some_value)?;
+        complex_tag(&mut string, "blubblub", &some_value)?;
 
-        let some_values: Vec<i32> = vec![1, 2, 3];
-        complex_tag(&mut string, "blubblub", some_values)?;
-
-        assert_eq!(string, "\\blub123\\blubblub(1,2,3)");
+        assert_eq!(string, "\\blub123\\blubblub(123)");
 
         Ok(())
     }
