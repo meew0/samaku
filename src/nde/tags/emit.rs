@@ -12,6 +12,24 @@ pub trait EmitValue {
         W: std::fmt::Write;
 }
 
+pub trait EmitTag {
+    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write;
+}
+
+pub fn tag<W, T>(sink: &mut W, maybe_tag: &Option<T>) -> Result<(), std::fmt::Error>
+where
+    W: std::fmt::Write,
+    T: EmitTag,
+{
+    if let Some(tag) = maybe_tag {
+        tag.emit_tag(sink)?;
+    }
+
+    Ok(())
+}
+
 pub fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,

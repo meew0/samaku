@@ -84,6 +84,8 @@ where
     }
 }
 
+pub trait Animatable: emit::EmitValue {}
+
 /// Tags that apply to the entire line, may only be used once,
 /// and that only make sense to put at the beginning of the line.
 #[derive(Clone, Default, PartialEq)]
@@ -117,6 +119,10 @@ impl Global {
         emit::simple_tag_resettable(sink, "q", &self.wrap_style)?;
         emit::simple_tag_resettable(sink, "an", &self.alignment)?;
 
+        for animation in &self.animations {
+            animation.emit(sink)?;
+        }
+
         Ok(())
     }
 }
@@ -148,6 +154,19 @@ pub struct GlobalAnimatable {
 impl GlobalAnimatable {
     pub fn empty() -> Self {
         Self::default()
+    }
+}
+
+impl Animatable for GlobalAnimatable {}
+
+impl emit::EmitValue for GlobalAnimatable {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        emit::tag(sink, &self.clip)?;
+
+        Ok(())
     }
 }
 
@@ -224,6 +243,29 @@ impl Local {
             secondary_transparency: self.secondary_transparency,
             border_transparency: self.border_transparency,
             shadow_transparency: self.shadow_transparency,
+        }
+    }
+
+    pub fn from_animatable(other: &LocalAnimatable) -> Self {
+        Self {
+            border: other.border,
+            shadow: other.shadow,
+            soften: other.soften,
+            gaussian_blur: other.gaussian_blur,
+            font_size: other.font_size,
+            font_scale: other.font_scale,
+            letter_spacing: other.letter_spacing,
+            text_rotation: other.text_rotation,
+            text_shear: other.text_shear,
+            primary_colour: other.primary_colour,
+            secondary_colour: other.secondary_colour,
+            border_colour: other.border_colour,
+            shadow_colour: other.shadow_colour,
+            primary_transparency: other.primary_transparency,
+            secondary_transparency: other.secondary_transparency,
+            border_transparency: other.border_transparency,
+            shadow_transparency: other.shadow_transparency,
+            ..Default::default()
         }
     }
 
@@ -380,7 +422,9 @@ impl Local {
 
         emit::simple_tag(sink, "pbo", &self.drawing_baseline_offset)?;
 
-        // TODO: animations
+        for animation in &self.animations {
+            animation.emit(sink)?;
+        }
 
         Ok(())
     }
@@ -456,6 +500,17 @@ impl LocalAnimatable {
     }
 }
 
+impl Animatable for LocalAnimatable {}
+
+impl emit::EmitValue for LocalAnimatable {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        Local::from_animatable(self).emit(sink)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Milliseconds(i32);
 
@@ -489,10 +544,33 @@ impl emit::EmitValue for Centiseconds {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Animation<A> {
+pub struct Animation<A: Animatable> {
     pub modifiers: A,
     pub acceleration: f64,
     pub interval: Option<AnimationInterval>,
+}
+
+impl<A: Animatable> Animation<A> {
+    fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        use emit::EmitValue;
+
+        sink.write_str("\\t(")?;
+        if let Some(interval) = self.interval {
+            interval.start.emit_value(sink)?;
+            sink.write_char(',')?;
+            interval.end.emit_value(sink)?;
+            sink.write_char(',')?;
+        }
+        self.acceleration.emit_value(sink)?;
+        sink.write_char(',')?;
+        self.modifiers.emit_value(sink)?;
+        sink.write_char(')')?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1068,6 +1146,35 @@ impl Clip {
             _ => None,
         }
     }
+
+    pub fn from_animatable(other: &AnimatableClip) -> Self {
+        match other {
+            AnimatableClip::Rectangle(rect) => Clip::Rectangle(*rect),
+            AnimatableClip::InverseRectangle(rect) => Clip::InverseRectangle(*rect),
+        }
+    }
+
+    pub fn is_inverse(&self) -> bool {
+        matches!(self, Clip::InverseRectangle(_) | Clip::InverseVector(_))
+    }
+}
+
+impl emit::EmitTag for Clip {
+    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        match self {
+            Clip::Rectangle(rect) => emit::complex_tag(sink, "clip", std::iter::once(*rect)),
+            Clip::InverseRectangle(rect) => {
+                emit::complex_tag(sink, "iclip", std::iter::once(*rect))
+            }
+            Clip::Vector(drawing) => emit::complex_tag(sink, "clip", std::iter::once(drawing)),
+            Clip::InverseVector(drawing) => {
+                emit::complex_tag(sink, "iclip", std::iter::once(drawing))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1076,12 +1183,30 @@ pub enum AnimatableClip {
     InverseRectangle(ClipRectangle),
 }
 
+impl emit::EmitTag for AnimatableClip {
+    fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        Clip::from_animatable(self).emit_tag(sink)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClipRectangle {
     pub x1: i32,
     pub x2: i32,
     pub y1: i32,
     pub y2: i32,
+}
+
+impl emit::EmitValue for ClipRectangle {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        write!(sink, "{},{},{},{}", self.x1, self.y1, self.x2, self.y2)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1097,6 +1222,16 @@ impl Drawing {
 
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
+    }
+}
+
+impl emit::EmitValue for &Drawing {
+    /// Only valid for vector clips, not for inline drawings
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        write!(sink, "{},{}", self.scale, self.commands)
     }
 }
 
@@ -1370,6 +1505,48 @@ mod tests {
         k1.override_from(&k2, false);
         assert_eq!(k1.effect, Some((FillSweep, Centiseconds(100.0))));
         assert_eq!(k1.onset, NoDelay);
+    }
+
+    #[test]
+    fn animations() -> Result<(), std::fmt::Error> {
+        assert_emits!(
+            Global {
+                animations: vec![Animation {
+                    modifiers: GlobalAnimatable {
+                        clip: Some(AnimatableClip::Rectangle(ClipRectangle {
+                            x1: 1,
+                            y1: 2,
+                            x2: 3,
+                            y2: 4
+                        }))
+                    },
+                    acceleration: 1.0,
+                    interval: None
+                }],
+                ..Default::default()
+            },
+            "\\t(1,\\clip(1,2,3,4))"
+        );
+
+        assert_emits!(
+            Local {
+                animations: vec![Animation {
+                    modifiers: LocalAnimatable {
+                        letter_spacing: Resettable::Override(5.0),
+                        ..Default::default()
+                    },
+                    acceleration: 1.0,
+                    interval: Some(AnimationInterval {
+                        start: Milliseconds(500),
+                        end: Milliseconds(1000)
+                    })
+                }],
+                ..Default::default()
+            },
+            "\\t(500,1000,1,\\fsp5)"
+        );
+
+        Ok(())
     }
 
     #[test]
