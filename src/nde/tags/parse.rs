@@ -931,8 +931,6 @@ pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
         }
     }
 
-    println!("s1: {:#?}", s1);
-
     // Try to merge spans into their predecessors
     let mut s2: Vec<Span> = vec![];
     for span in s1.into_iter() {
@@ -1002,8 +1000,6 @@ pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
             },
         }
     }
-
-    println!("s2: {:#?}", s2);
 
     // Remove spans without content from the end
     let mut last_non_empty_index = 0;
