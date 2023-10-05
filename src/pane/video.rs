@@ -98,6 +98,7 @@ struct ReticuleProgram {}
 
 #[derive(Default)]
 struct ReticuleState {
+    dragging: bool,
     position: iced::Point,
 }
 
@@ -111,12 +112,28 @@ impl canvas::Program<message::Message> for ReticuleProgram {
         bounds: iced::Rectangle,
         cursor: iced::mouse::Cursor,
     ) -> (iced::event::Status, Option<message::Message>) {
-        if let canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) =
-            event
-        {
-            if let Some(position) = cursor.position_in(bounds) {
-                state.position = position;
-                return (iced::event::Status::Captured, None);
+        if let Some(position) = cursor.position_in(bounds) {
+            if let canvas::Event::Mouse(mouse_event) = event {
+                match mouse_event {
+                    iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
+                        state.dragging = true;
+                        state.position = position;
+                        return (iced::event::Status::Captured, None);
+                    }
+                    iced::mouse::Event::CursorMoved { .. } => {
+                        if state.dragging {
+                            state.position = position;
+                            return (iced::event::Status::Captured, None);
+                        }
+                    }
+                    iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                        if state.dragging {
+                            state.dragging = false;
+                            return (iced::event::Status::Captured, None);
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
 
