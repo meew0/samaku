@@ -1,2 +1,2 @@
 [toolchain]
-channel = "nightly" # for int_roundings only, to be changed to stable for rust 1.73
+channel = "stable"

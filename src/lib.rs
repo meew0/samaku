@@ -1,5 +1,3 @@
-#![feature(int_roundings)]
-
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
