@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
+#![allow(clippy::enum_glob_use)]
 
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
@@ -9,7 +10,7 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 
-use crate::pane::PaneState;
+use crate::pane::State;
 
 pub mod keyboard;
 pub mod media;
@@ -50,7 +51,7 @@ pub struct Samaku {
 
     /// The current state of the global pane grid.
     /// Includes all state for the individual panes themselves.
-    panes: pane_grid::State<pane::PaneState>,
+    panes: pane_grid::State<pane::State>,
 
     /// Currently focused pane, if one exists.
     focus: Option<pane_grid::Pane>,
@@ -132,7 +133,7 @@ impl Samaku {
     /// NDE filter list to update their internal representations
     pub fn update_filter_lists(&mut self) {
         for pane in self.panes.panes.values_mut() {
-            if let PaneState::NodeEditor(node_editor_state) = pane {
+            if let State::NodeEditor(node_editor_state) = pane {
                 node_editor_state.update_filter_names(&self.subtitles);
             }
         }
@@ -146,7 +147,7 @@ impl Application for Samaku {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
-        let (panes, _) = pane_grid::State::new(pane::PaneState::Unassigned);
+        let (panes, _) = pane_grid::State::new(pane::State::Unassigned);
 
         let shared_state = SharedState {
             audio: Arc::new(Mutex::new(None)),
@@ -183,7 +184,7 @@ impl Application for Samaku {
             Self::Message::None => {}
             Self::Message::SplitPane(axis) => {
                 if let Some(pane) = self.focus {
-                    let result = self.panes.split(axis, &pane, pane::PaneState::Unassigned);
+                    let result = self.panes.split(axis, &pane, pane::State::Unassigned);
 
                     if let Some((pane, _)) = result {
                         self.focus = Some(pane);
@@ -386,7 +387,7 @@ impl Application for Samaku {
                     });
 
                     if let Some(previous) = maybe_previous {
-                        if let Some(pane::PaneState::NodeEditor(node_editor_state)) =
+                        if let Some(pane::State::NodeEditor(node_editor_state)) =
                             self.panes.get_mut(&source_pane)
                         {
                             let new_dangling_source = iced_node_editor::LogicalEndpoint {
@@ -414,7 +415,7 @@ impl Application for Samaku {
         // let total_panes = self.panes.len();
 
         let pane_grid =
-            PaneGrid::new::<pane::PaneState>(&self.panes, |pane, pane_state, _is_maximized| {
+            PaneGrid::new::<pane::State>(&self.panes, |pane, pane_state, _is_maximized| {
                 let is_focused = focus == Some(pane);
 
                 let pane_view = pane::dispatch_view(pane, self, pane_state);

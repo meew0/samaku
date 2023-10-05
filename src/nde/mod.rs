@@ -37,7 +37,7 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
+    #[must_use] pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {

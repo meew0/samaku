@@ -1,5 +1,5 @@
 //! Utilities for creating menus.
-//! Adapted from https://github.com/iced-rs/iced_aw/blob/main/examples/menu/src/main.rs
+//! Adapted from <https://github.com/iced-rs/iced_aw/blob/main/examples/menu/src/main.rs>
 use iced::widget::{button, row, svg, text};
 use iced::{alignment, theme, Color, Element, Length};
 use iced_aw::helpers::menu_tree;
@@ -43,6 +43,7 @@ pub fn base_button<'a>(
         .on_press(msg)
 }
 
+#[must_use]
 pub fn labeled_button<'a>(
     label: &str,
     msg: Message,
@@ -56,6 +57,8 @@ pub fn labeled_button<'a>(
     )
 }
 
+#[must_use]
+#[allow(clippy::module_name_repetitions)]
 pub fn sub_menu<'a>(
     label: &str,
     msg: Message,

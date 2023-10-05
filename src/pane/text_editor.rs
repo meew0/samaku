@@ -7,7 +7,7 @@ pub fn view<'a>(
     _self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     _editor_state: &'a State,
-) -> super::PaneView<'a> {
+) -> super::View<'a> {
     let content: iced::Element<message::Message> = match global_state.active_sline() {
         Some(active_sline) => iced::widget::responsive(|size| {
             iced::widget::text_input("Enter subtitle text...", &active_sline.text)
@@ -20,7 +20,7 @@ pub fn view<'a>(
         None => iced::widget::text("No subtitle line currently selected.").into(),
     };
 
-    super::PaneView {
+    super::View {
         title: iced::widget::text("Text editor").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
@@ -33,7 +33,7 @@ pub fn view<'a>(
 
 pub fn update(
     _editor_state: &mut State,
-    _pane_message: message::PaneMessage,
+    _pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
     iced::Command::none()
 }

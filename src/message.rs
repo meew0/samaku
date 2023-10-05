@@ -12,8 +12,8 @@ pub enum Message {
     /// Message pertaining to a specific pane (PaneState)
     /// Will be dispatched to the given pane (`Pane`) or the focused one (`FocusedPane`).
     /// For example changing video display settings, or scrolling the timeline
-    Pane(pane_grid::Pane, PaneMessage),
-    FocusedPane(PaneMessage),
+    Pane(pane_grid::Pane, Pane),
+    FocusedPane(Pane),
 
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),
@@ -24,7 +24,7 @@ pub enum Message {
 
     /// Set the given pane to contain the given state.
     /// Can be used to change its type or possibly more
-    SetPaneState(pane_grid::Pane, Box<pane::PaneState>),
+    SetPaneState(pane_grid::Pane, Box<pane::State>),
 
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
@@ -58,7 +58,7 @@ pub enum Message {
     SetActiveFilterName(String),
     DeleteFilter(usize),
 
-    AddNode(nde::node::NodeShell),
+    AddNode(nde::node::Shell),
     MoveNode(usize, f32, f32),
     ConnectNodes(iced_node_editor::Link),
     DisconnectNodes(
@@ -79,7 +79,7 @@ impl Message {
 }
 
 #[derive(Debug, Clone)]
-pub enum PaneMessage {
+pub enum Pane {
     GridSyncHeader(iced::widget::scrollable::AbsoluteOffset),
     GridColumnResizing(usize, f32),
     GridColumnResized,

@@ -33,16 +33,13 @@ pub enum Resettable<T> {
 }
 
 impl<T> Resettable<T> {
-    fn is_set(&self) -> bool {
-        matches!(self, Self::Reset | Self::Override(_))
-    }
-
     fn is_keep(&self) -> bool {
         matches!(self, Self::Keep)
     }
 
     /// Analogous to `Option::take`: removes and returns the current value from the `Resettable`
     /// and replaces it with `Keep`.
+    #[must_use]
     pub fn take(&mut self) -> Resettable<T> {
         std::mem::replace(self, Self::Keep)
     }
@@ -121,6 +118,7 @@ pub struct Global {
 }
 
 impl Global {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -143,6 +141,10 @@ impl Global {
         self.animations.extend(other.animations.clone());
     }
 
+    /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
+    ///
+    /// # Errors
+    /// Returns a [`std::fmt::Error`] if writing values into the sink fails.
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -189,6 +191,7 @@ pub struct GlobalAnimatable {
 }
 
 impl GlobalAnimatable {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -257,6 +260,7 @@ pub struct Local {
 }
 
 impl Local {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -283,6 +287,7 @@ impl Local {
         }
     }
 
+    #[must_use]
     pub fn from_animatable(other: &LocalAnimatable) -> Self {
         Self {
             border: other.border,
@@ -420,6 +425,10 @@ impl Local {
         }
     }
 
+    /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
+    ///
+    /// # Errors
+    /// Returns a [`std::fmt::Error`] if writing values into the sink fails.
     pub fn emit<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -532,6 +541,7 @@ pub struct LocalAnimatable {
 }
 
 impl LocalAnimatable {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -667,6 +677,7 @@ impl Maybe2D {
         self.y.clear_from(&other.y);
     }
 
+    #[must_use]
     pub fn take(&mut self) -> Maybe2D {
         Maybe2D {
             x: self.x.take(),
@@ -674,6 +685,10 @@ impl Maybe2D {
         }
     }
 
+    /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
+    ///
+    /// # Errors
+    /// Returns a [`std::fmt::Error`] if writing values into the sink fails.
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -740,6 +755,7 @@ impl Maybe3D {
         self.z.clear_from(&other.z);
     }
 
+    #[must_use]
     pub fn take(&mut self) -> Maybe3D {
         Maybe3D {
             x: self.x.take(),
@@ -748,6 +764,10 @@ impl Maybe3D {
         }
     }
 
+    /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
+    ///
+    /// # Errors
+    /// Returns a [`std::fmt::Error`] if writing values into the sink fails.
     pub fn emit<W>(&self, sink: &mut W, before: &str, after: &str) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -799,6 +819,7 @@ impl Colour {
     };
 
     fn from_bgr_packed(packed: u32) -> Self {
+        #[allow(clippy::unreadable_literal)]
         Self {
             red: (packed & 0x0000FF) as u8,
             green: ((packed & 0x00FF00) >> 8) as u8,
@@ -1038,10 +1059,17 @@ pub struct Karaoke {
 }
 
 impl Karaoke {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
 
+    /// Create a new `Karaoke` instance from the given values. The karaoke invariant must be
+    /// upheld: if `onset` is [`KaraokeOnset::RelativeDelay`], `effect` must not be `None`.
+    ///
+    /// # Errors
+    /// Returns [`KaraokeError::EffectRequiredForRelativeOnset`] if the karaoke invariant is
+    /// violated.
     pub fn try_new(
         effect: Option<(KaraokeEffect, Centiseconds)>,
         onset: KaraokeOnset,
@@ -1053,10 +1081,12 @@ impl Karaoke {
         }
     }
 
+    #[must_use]
     pub fn effect(&self) -> Option<(KaraokeEffect, Centiseconds)> {
         self.effect
     }
 
+    #[must_use]
     pub fn onset(&self) -> KaraokeOnset {
         self.onset
     }
@@ -1111,7 +1141,7 @@ impl Karaoke {
             // set.
             if let Some((other_effect, _)) = other.effect {
                 if let Some((self_effect, _)) = &mut self.effect {
-                    *self_effect = other_effect
+                    *self_effect = other_effect;
                 }
             }
         }
@@ -1324,10 +1354,12 @@ pub struct Drawing {
 }
 
 impl Drawing {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }
@@ -1525,6 +1557,7 @@ mod tests {
 
     #[test]
     fn colour() {
+        #[allow(clippy::unreadable_literal)]
         let colour = Colour::from_bgr_packed(0xffbb11);
         assert_eq!(colour.red, 0x11);
         assert_eq!(colour.green, 0xbb);

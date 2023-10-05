@@ -92,7 +92,7 @@ pub struct MonochromeImage<'a> {
 
 impl<'a> MonochromeImage<'a> {
     pub fn new(data: &'a [f32], width: i32, height: i32) -> Self {
-        assert_eq!(data.len(), (width * height) as usize);
+        assert_eq!(data.len(), (width * height).try_into().unwrap());
         Self {
             data,
             width,
@@ -209,11 +209,11 @@ pub fn track_region(
         direction: options.direction.as_libmv(),
         motion_model: options.motion_model as i32,
         num_iterations: options.num_iterations,
-        use_brute: if options.use_brute { 1 } else { 0 },
-        use_normalization: if options.use_normalization { 1 } else { 0 },
+        use_brute: i32::from(options.use_brute),
+        use_normalization: i32::from(options.use_normalization),
         minimum_correlation: options.minimum_correlation,
         sigma: options.sigma,
-        image1_mask: image1_mask_ptr as *mut f32,
+        image1_mask: image1_mask_ptr.cast_mut(),
     };
 
     let (x1, y1) = region1.as_float_slices();
@@ -221,7 +221,7 @@ pub fn track_region(
 
     let result = unsafe {
         libmv::libmv_trackRegion(
-            &libmv_options as *const libmv_TrackRegionOptions,
+            std::ptr::addr_of!(libmv_options),
             image1.data.as_ptr(),
             image1.width,
             image1.height,

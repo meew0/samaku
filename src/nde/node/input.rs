@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{LeafInputType, Node, NodeError, SocketType, SocketValue};
+use super::{Error, LeafInputType, Node, SocketType, SocketValue};
 
 #[derive(Debug, Clone)]
 pub struct Sline {}
@@ -18,8 +18,10 @@ impl Node for Sline {
         &[SocketType::IndividualEvent]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError> {
-        let SocketValue::Sline(sline) = inputs[0] else { return Err(NodeError::MismatchedTypes) };
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+        let SocketValue::Sline(sline) = inputs[0] else {
+            return Err(Error::MismatchedTypes);
+        };
 
         let (global, spans) = nde::tags::parse(&sline.text);
 

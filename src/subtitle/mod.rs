@@ -88,7 +88,9 @@ pub struct Colour {
 
 impl Colour {
     /// Converts a libass 32-bit packed colour into a `Colour`.
+    #[must_use]
     pub fn unpack(packed: u32) -> Self {
+        #[allow(clippy::unreadable_literal)]
         Self {
             red: ((packed & 0xff000000) >> 24) as u8,
             green: ((packed & 0x00ff0000) >> 16) as u8,
@@ -98,11 +100,12 @@ impl Colour {
     }
 
     /// Converts a colour into the 32 bit packed value used in libass.
+    #[must_use]
     pub fn pack(&self) -> u32 {
-        (self.red as u32) << 24
-            | (self.green as u32) << 16
-            | (self.blue as u32) << 8
-            | (self.transparency as u32)
+        u32::from(self.red) << 24
+            | u32::from(self.green) << 16
+            | u32::from(self.blue) << 8
+            | u32::from(self.transparency)
     }
 }
 
@@ -113,6 +116,7 @@ pub struct Alignment {
 }
 
 impl Alignment {
+    #[must_use]
     pub fn try_unpack(packed: i32) -> Option<Self> {
         let vertical_opt: Option<VerticalAlignment> = match packed & 0b1100 {
             x if x == VerticalAlignment::Sub as i32 => Some(VerticalAlignment::Sub),
@@ -138,6 +142,7 @@ impl Alignment {
     }
 
     // Convert to a number to be used in the `\an` formatting tag.
+    #[must_use]
     pub fn as_an(&self) -> i32 {
         match self.vertical {
             VerticalAlignment::Sub => match self.horizontal {
@@ -158,6 +163,7 @@ impl Alignment {
         }
     }
 
+    #[must_use]
     pub fn pack(&self) -> i32 {
         self.vertical as i32 | self.horizontal as i32
     }
@@ -230,7 +236,7 @@ impl From<i32> for BorderStyle {
     }
 }
 
-/// See http://www.tcax.org/docs/ass-specs.htm
+/// See <http://www.tcax.org/docs/ass-specs.htm>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapStyle {
     SmartEven = 0,
@@ -252,6 +258,7 @@ impl From<i32> for WrapStyle {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Style {
     pub name: String,
     pub font_name: String,
@@ -300,11 +307,13 @@ pub struct SlineTrack {
 impl SlineTrack {
     /// Returns true if and only if there are no slines in this track
     /// (there may still be some styles)
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.slines.is_empty()
     }
 
     /// Compile subtitles in the given frame range to ASS.
+    #[must_use]
     pub fn compile(
         &self,
         _frame_start: i32,
@@ -314,7 +323,7 @@ impl SlineTrack {
         let mut counter = 0;
         let mut compiled: Vec<self::ass::Event> = vec![];
 
-        for sline in self.slines.iter() {
+        for sline in &self.slines {
             match sline.nde_filter_index {
                 Some(filter_index) => {
                     let graph = &self.filters[filter_index].graph;
@@ -324,7 +333,7 @@ impl SlineTrack {
                             None => println!("No output from NDE filter"),
                         },
                         Err(error) => {
-                            println!("Got NdeError while running NDE filter: {:?}", error);
+                            println!("Got NdeError while running NDE filter: {error:?}");
                         }
                     }
                 }

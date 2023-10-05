@@ -108,7 +108,7 @@ pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
-) -> super::PaneView<'a> {
+) -> super::View<'a> {
     let content: iced::Element<message::Message> = match global_state.active_sline_index {
         Some(active_sline_index) => {
             // There is an active sline, check whether it has an NDE filter
@@ -321,13 +321,13 @@ pub fn view<'a>(
                     .on_translate(move |p| {
                         message::Message::Pane(
                             self_pane,
-                            message::PaneMessage::NodeEditorTranslationChanged(p.0, p.1),
+                            message::Pane::NodeEditorTranslationChanged(p.0, p.1),
                         )
                     })
                     .on_scale(move |x, y, s| {
                         message::Message::Pane(
                             self_pane,
-                            message::PaneMessage::NodeEditorScaleChanged(x, y, s),
+                            message::Pane::NodeEditorScaleChanged(x, y, s),
                         )
                     })
                     .on_connect(message::Message::ConnectNodes)
@@ -341,7 +341,7 @@ pub fn view<'a>(
                     .on_dangling(move |maybe_dangling| {
                         message::Message::Pane(
                             self_pane,
-                            message::PaneMessage::NodeEditorDangling(maybe_dangling),
+                            message::Pane::NodeEditorDangling(maybe_dangling),
                         )
                     })
                     .width(iced::Length::Fill)
@@ -399,7 +399,7 @@ pub fn view<'a>(
                         move |selection_index, filter_ref| {
                             message::Message::Pane(
                                 self_pane,
-                                message::PaneMessage::NodeEditorFilterSelected(
+                                message::Pane::NodeEditorFilterSelected(
                                     selection_index,
                                     filter_ref,
                                 ),
@@ -436,7 +436,7 @@ pub fn view<'a>(
         None => iced::widget::text("No subtitle currently selected.").into(),
     };
 
-    super::PaneView {
+    super::View {
         title: iced::widget::text("Node editor").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
@@ -495,7 +495,7 @@ where
 
 fn menu_item(
     label: &str,
-    node_shell: nde::node::NodeShell,
+    node_shell: nde::node::Shell,
 ) -> iced_aw::menu::MenuTree<message::Message, iced::Renderer> {
     iced_aw::menu_tree!(
         view::menu::labeled_button(label, message::Message::AddNode(node_shell))
@@ -517,37 +517,37 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
         vec![
             sub_menu(
                 "Input",
-                vec![menu_item("Input", nde::node::NodeShell::InputSline)],
+                vec![menu_item("Input", nde::node::Shell::InputSline)],
             ),
-            menu_item("Italicise", nde::node::NodeShell::Italic),
+            menu_item("Italicise", nde::node::Shell::Italic),
         ],
     )
 }
 
 pub fn update(
     node_editor_state: &mut State,
-    pane_message: message::PaneMessage,
+    pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
     match pane_message {
-        message::PaneMessage::NodeEditorScaleChanged(x, y, scale) => {
+        message::Pane::NodeEditorScaleChanged(x, y, scale) => {
             node_editor_state.matrix = node_editor_state
                 .matrix
                 .translate(-x, -y)
                 .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
                 .translate(x, y);
         }
-        message::PaneMessage::NodeEditorTranslationChanged(x, y) => {
+        message::Pane::NodeEditorTranslationChanged(x, y) => {
             node_editor_state.matrix = node_editor_state.matrix.translate(x, y);
         }
-        message::PaneMessage::NodeEditorDangling(Some((source, link))) => {
+        message::Pane::NodeEditorDangling(Some((source, link))) => {
             node_editor_state.dangling_source = Some(source);
             node_editor_state.dangling_connection = Some(link);
         }
-        message::PaneMessage::NodeEditorDangling(None) => {
+        message::Pane::NodeEditorDangling(None) => {
             node_editor_state.dangling_source = None;
             node_editor_state.dangling_connection = None;
         }
-        message::PaneMessage::NodeEditorFilterSelected(selection_index, filter_ref) => {
+        message::Pane::NodeEditorFilterSelected(selection_index, filter_ref) => {
             node_editor_state.selection_index = Some(selection_index);
             node_editor_state.selected_filter = Some(filter_ref);
         }

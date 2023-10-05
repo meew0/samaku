@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Node, NodeError, SocketType, SocketValue};
+use super::{Error, Node, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Italic {}
@@ -18,7 +18,7 @@ impl Node for Italic {
         &[SocketType::GenericEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError> {
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
         let socket_value = inputs[0].map_events(|event| {
             let mut new_event = event.clone();
             new_event.overrides.italic = nde::tags::Resettable::Override(true);

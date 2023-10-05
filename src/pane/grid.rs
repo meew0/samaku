@@ -137,7 +137,7 @@ pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     grid_state: &'a State,
-) -> super::PaneView<'a> {
+) -> super::View<'a> {
     let columns_with_state: Vec<(&'a crate::Samaku, &Column)> = std::iter::repeat(global_state)
         .zip(&grid_state.columns)
         .collect();
@@ -151,21 +151,19 @@ pub fn view<'a>(
             // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
             // does not support passing a closure here.
             // TODO: Make a PR to support this?
-            |offset| message::Message::FocusedPane(message::PaneMessage::GridSyncHeader(offset)),
+            |offset| message::Message::FocusedPane(message::Pane::GridSyncHeader(offset)),
         )
         .on_column_resize(
             |index, offset| {
-                message::Message::FocusedPane(message::PaneMessage::GridColumnResizing(
-                    index, offset,
-                ))
+                message::Message::FocusedPane(message::Pane::GridColumnResizing(index, offset))
             },
-            message::Message::Pane(self_pane, message::PaneMessage::GridColumnResized),
+            message::Message::Pane(self_pane, message::Pane::GridColumnResized),
         )
         .min_width(size.width)
         .into()
     });
 
-    super::PaneView {
+    super::View {
         title: iced::widget::text("Subtitle grid").into(),
         content: iced::widget::container(table)
             .width(iced::Length::Fill)
@@ -179,21 +177,21 @@ pub fn view<'a>(
 #[allow(clippy::needless_pass_by_value)]
 pub fn update(
     grid_state: &mut State,
-    pane_message: message::PaneMessage,
+    pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
     match pane_message {
-        message::PaneMessage::GridSyncHeader(offset) => {
+        message::Pane::GridSyncHeader(offset) => {
             return iced::widget::scrollable::scroll_to(
                 grid_state.header_scrollable_id.clone(),
                 offset,
             );
         }
-        message::PaneMessage::GridColumnResizing(index, offset) => {
+        message::Pane::GridColumnResizing(index, offset) => {
             if let Some(column) = grid_state.columns.get_mut(index) {
                 column.resize_offset = Some(offset);
             }
         }
-        message::PaneMessage::GridColumnResized => {
+        message::Pane::GridColumnResized => {
             grid_state.columns.iter_mut().for_each(|column| {
                 if let Some(offset) = column.resize_offset.take() {
                     column.width += offset;

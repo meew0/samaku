@@ -18,7 +18,7 @@ pub fn view<'a>(
     _self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     _video_state: &'a State,
-) -> super::PaneView<'a> {
+) -> super::View<'a> {
     let scroll = match &global_state.actual_frame {
         None => empty!(),
         Some((num_frame, handle)) => match &global_state.video_metadata {
@@ -76,7 +76,7 @@ pub fn view<'a>(
         },
     };
 
-    super::PaneView {
+    super::View {
         title: iced::widget::text("Video").into(),
         content: iced::widget::container(scroll)
             .width(iced::Length::Fill)
@@ -89,7 +89,7 @@ pub fn view<'a>(
 
 pub fn update(
     _video_state: &mut State,
-    _pane_message: message::PaneMessage,
+    _pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
     iced::Command::none()
 }

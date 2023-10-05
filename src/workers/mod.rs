@@ -41,6 +41,7 @@ pub struct Workers {
 
 impl Workers {
     /// Construct a new `Workers` instance with all workers spawned.
+    #[must_use]
     pub fn spawn_all(shared_state: &crate::SharedState) -> Self {
         let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
 

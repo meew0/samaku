@@ -1,4 +1,4 @@
-pub use mv::MotionModel;
+pub use mv::MotionModel as Model;
 pub use mv::Point;
 pub use mv::Region;
 
@@ -21,7 +21,7 @@ pub struct PatchResponse {
     pub height: usize,
 }
 
-pub struct MotionTracker<V, P>
+pub struct Tracker<V, P>
 where
     P: FnMut(&V, i32, PatchRequest) -> PatchResponse,
 {
@@ -33,7 +33,7 @@ where
     end_frame: i32,
 }
 
-impl<V, P> MotionTracker<V, P>
+impl<V, P> Tracker<V, P>
 where
     P: FnMut(&V, i32, PatchRequest) -> PatchResponse,
 {
@@ -65,7 +65,7 @@ where
         &self.track
     }
 
-    pub fn update(&mut self, motion_model: MotionModel) -> TrackResult {
+    pub fn update(&mut self, motion_model: Model) -> TrackResult {
         if self.last_frame == self.end_frame {
             return TrackResult::Termination;
         }
@@ -99,10 +99,12 @@ where
 
         // In theory, the two different patch responses might have different origin points,
         // because the frames might be of a different size.
+        #[allow(clippy::cast_precision_loss)]
         let region1 = last_region.offset(
             -(patch_response_1.left as f64),
             -(patch_response_1.top as f64),
         );
+        #[allow(clippy::cast_precision_loss)]
         let predicted_region2 = last_region.offset(
             -(patch_response_2.left as f64),
             -(patch_response_2.top as f64),
@@ -123,6 +125,7 @@ where
 
         match result {
             Some(refined_region2) => {
+                #[allow(clippy::cast_precision_loss)]
                 self.track.push(
                     refined_region2
                         .offset(patch_response_2.left as f64, patch_response_2.top as f64),
@@ -152,7 +155,7 @@ mod tests {
         let video = video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv"));
 
         let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
-        let mut tracker = MotionTracker::new(
+        let mut tracker = Tracker::new(
             video,
             video::Video::get_libmv_patch,
             initial_marker,
@@ -163,13 +166,13 @@ mod tests {
 
         let mut last_result = TrackResult::Success;
         while last_result == TrackResult::Success {
-            last_result = tracker.update(MotionModel::Translation);
+            last_result = tracker.update(Model::Translation);
         }
 
         assert_eq!(last_result, TrackResult::Termination);
         assert_eq!(tracker.track().len(), 100);
         let last_region = tracker.track().last().unwrap();
-        println!("{:?}", last_region);
+        println!("{last_region:?}");
         assert!((last_region.center.x - 45.0).abs() < 2.0);
         assert!((last_region.center.y - 81.0).abs() < 2.0);
     }

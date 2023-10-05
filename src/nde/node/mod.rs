@@ -40,44 +40,54 @@ pub enum SocketValue<'a> {
 }
 
 impl<'a> SocketValue<'a> {
+    #[must_use]
     pub fn as_type(&self) -> Option<SocketType> {
         match self {
-            SocketValue::None => None,
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MonotonicEvents(_) => Some(SocketType::MonotonicEvents),
             SocketValue::GenericEvents(_) => Some(SocketType::GenericEvents),
-            SocketValue::Sline(_) => None,
-            SocketValue::CompiledEvents(_) => None,
+            SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
         }
     }
 
-    pub fn map_events<F>(&self, callback: F) -> Result<SocketValue<'static>, NodeError>
+    /// Assumes `self` contains events of some kind, and maps those events one-by-one using the
+    /// given function, returning a [`SocketValue`] of the same kind as `self`.
+    ///
+    /// # Errors
+    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
+    pub fn map_events<F>(&self, func: F) -> Result<SocketValue<'static>, Error>
     where
         F: Fn(&super::Event) -> super::Event,
     {
         match self {
-            SocketValue::IndividualEvent(event) => Ok(SocketValue::IndividualEvent(Box::new(
-                callback(event.as_ref()),
-            ))),
+            SocketValue::IndividualEvent(event) => {
+                Ok(SocketValue::IndividualEvent(Box::new(func(event.as_ref()))))
+            }
             SocketValue::MonotonicEvents(events) => Ok(SocketValue::MonotonicEvents(
-                events.iter().map(callback).collect(),
+                events.iter().map(func).collect(),
             )),
             SocketValue::GenericEvents(events) => Ok(SocketValue::GenericEvents(
-                events.iter().map(callback).collect(),
+                events.iter().map(func).collect(),
             )),
-            _ => Err(NodeError::MismatchedTypes),
+            _ => Err(Error::MismatchedTypes),
         }
     }
 
-    pub fn map_events_into<T, F>(&self, callback: F) -> Result<Vec<T>, NodeError>
+    /// Assumes `self` contains events of some kind, and maps those events one-by-one using the
+    /// given function, returning a [`Vec`] of returned values.
+    ///
+    /// # Errors
+    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
+    pub fn map_events_into<T, F>(&self, func: F) -> Result<Vec<T>, Error>
     where
         F: Fn(&super::Event) -> T,
     {
         match self {
-            SocketValue::IndividualEvent(event) => Ok(vec![callback(event.as_ref())]),
-            SocketValue::MonotonicEvents(events) => Ok(events.iter().map(callback).collect()),
-            SocketValue::GenericEvents(events) => Ok(events.iter().map(callback).collect()),
-            _ => Err(NodeError::MismatchedTypes),
+            SocketValue::IndividualEvent(event) => Ok(vec![func(event.as_ref())]),
+            SocketValue::MonotonicEvents(events) | SocketValue::GenericEvents(events) => {
+                Ok(events.iter().map(func).collect())
+            }
+            _ => Err(Error::MismatchedTypes),
         }
     }
 }
@@ -95,6 +105,7 @@ pub enum SocketType {
 }
 
 impl SocketType {
+    #[must_use]
     pub fn is_event(&self) -> bool {
         matches!(
             self,
@@ -112,26 +123,36 @@ pub trait Node: Debug {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
     fn predicted_outputs(&self) -> &[SocketType];
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError>;
+
+    /// Run the action defined by this node. `inputs` can be assumed to have the same length as
+    /// [`desired_inputs`], but the specific types may be different. If it returns `Ok`, the `Vec`
+    /// should have the same length as [`predicted_outputs`], but the specific types may again
+    /// be different.
+    ///
+    /// # Errors
+    /// Can return an [`Error`] to indicate that the node is unable to process the given inputs
+    /// for whatever reason, for example due to mismatched input types.
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error>;
 }
 
-pub enum NodeError {
+pub enum Error {
     MismatchedTypes,
 }
 
 /// An “empty shell” representation of the operation performed by a node. Used to represent the
 /// idea of a node e.g. in the `AddNode` message.
 #[derive(Debug, Clone)]
-pub enum NodeShell {
+pub enum Shell {
     InputSline,
     Italic,
 }
 
-impl NodeShell {
+impl Shell {
+    #[must_use]
     pub fn instantiate(&self) -> Box<dyn Node> {
         match self {
-            NodeShell::InputSline => Box::new(InputSline {}),
-            NodeShell::Italic => Box::new(Italic {}),
+            Shell::InputSline => Box::new(InputSline {}),
+            Shell::Italic => Box::new(Italic {}),
         }
     }
 }

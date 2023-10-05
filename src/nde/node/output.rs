@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Node, NodeError, SocketType, SocketValue};
+use super::{Error, Node, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Output {}
@@ -18,7 +18,7 @@ impl Node for Output {
         &[]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError> {
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
         let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }
