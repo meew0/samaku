@@ -139,7 +139,7 @@ impl Global {
         self.fade.override_from(&other.fade);
         self.wrap_style.override_from(&other.wrap_style);
         self.alignment.override_from(&other.alignment);
-        
+
         self.animations.extend(other.animations.clone());
     }
 
@@ -551,13 +551,19 @@ impl emit::EmitValue for LocalAnimatable {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Milliseconds(i32);
 
+macro_rules! emit_value_newtype {
+    () => {
+        fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+        where
+            W: std::fmt::Write,
+        {
+            self.0.emit_value(sink)
+        }
+    };
+}
+
 impl emit::EmitValue for Milliseconds {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        self.0.emit_value(sink)
-    }
+    emit_value_newtype!();
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -572,12 +578,7 @@ impl Add for Centiseconds {
 }
 
 impl emit::EmitValue for Centiseconds {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        self.0.emit_value(sink)
-    }
+    emit_value_newtype!();
 }
 
 #[derive(Debug, Clone, PartialEq)]

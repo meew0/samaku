@@ -180,31 +180,27 @@ impl EmitValue for bool {
     }
 }
 
+macro_rules! emit_value_numeric {
+    () => {
+        fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+        where
+            W: std::fmt::Write,
+        {
+            write!(sink, "{}", *self)
+        }
+    };
+}
+
 impl EmitValue for f64 {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        write!(sink, "{}", *self)
-    }
+    emit_value_numeric!();
 }
 
 impl EmitValue for u32 {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        write!(sink, "{}", *self)
-    }
+    emit_value_numeric!();
 }
 
 impl EmitValue for i32 {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        write!(sink, "{}", *self)
-    }
+    emit_value_numeric!();
 }
 
 impl EmitValue for String {
