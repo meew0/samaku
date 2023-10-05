@@ -85,7 +85,7 @@ pub struct SharedState {
 
     /// Authoritative playback position and state.
     /// Set this to seek/pause/resume etc.
-    pub playback_position: Arc<model::playback::PlaybackPosition>,
+    pub playback_position: Arc<model::playback::Position>,
 }
 
 /// More-or-less temporary data, that needs to be mutable within View functions.
@@ -151,7 +151,7 @@ impl Application for Samaku {
 
         let shared_state = SharedState {
             audio: Arc::new(Mutex::new(None)),
-            playback_position: Arc::new(model::playback::PlaybackPosition::default()),
+            playback_position: Arc::new(model::playback::Position::default()),
         };
 
         (
@@ -268,7 +268,7 @@ impl Application for Samaku {
                 );
             }
             Self::Message::SubtitleFileRead(content) => {
-                let ass = media::subtitle::OpaqueTrack::parse(content);
+                let ass = media::subtitle::OpaqueTrack::parse(&content);
                 self.subtitles = ass.to_sline_track();
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {

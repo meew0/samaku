@@ -29,8 +29,8 @@ pub fn spawn(
                             // and whether the frame has actually changed, and if it has,
                             // decode the new frame
                             if let Some(ref video) = video_opt {
-                                let new_frame =
-                                    playback_position.current_frame(video.metadata.frame_rate);
+                                let new_frame: i32 =
+                                    playback_position.current_frame(video.metadata.frame_rate).try_into().expect("frame number overflow");
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
                                     let handle = video.get_iced_frame(new_frame);

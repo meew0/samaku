@@ -11,13 +11,14 @@ use super::{
     Transparency,
 };
 
+#[must_use]
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
-    let (global, spans) = parse_raw(text);
+    let (global, spans) = raw(text);
     let simplified = simplify(spans);
     (global, simplified)
 }
 
-pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
+pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
     let mut last_local = Box::new(Local::empty());
     let mut global = Box::new(Global::empty());
@@ -61,7 +62,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
                 match reset {
                     Some(Reset::Reset) => spans.push(Span::Reset),
                     Some(Reset::ResetToStyle(style_name)) => {
-                        spans.push(Span::ResetToStyle(style_name))
+                        spans.push(Span::ResetToStyle(style_name));
                     }
                     None => {}
                 }
@@ -70,7 +71,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
                 if let Some(new_drawing_scale) = new_drawing_scale {
                     match &mut drawing {
                         Some(existing_drawing) => {
-                            existing_drawing.scale = new_drawing_scale
+                            existing_drawing.scale = new_drawing_scale;
 
                             // We would also reset the commands here,
                             // but it has already been done in `end_span`, if necessary.
@@ -80,7 +81,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
                             drawing = Some(Drawing {
                                 scale: new_drawing_scale,
                                 commands: String::new(),
-                            })
+                            });
                         }
                     }
                 }
@@ -146,6 +147,8 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
 }
 
 fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
+    use TagBlockParseState::*;
+
     let mut tag_block = TagBlock {
         reset: None,
         new_local: Local::empty(),
@@ -153,7 +156,6 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
         end_previous_drawing: false,
     };
 
-    use TagBlockParseState::*;
     let mut state = Initial;
     let mut tag_start_bytes = 0;
 
@@ -209,6 +211,7 @@ enum TagBlockParseState {
     Parenthesis,
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     if tag.is_empty() {
         return false;
@@ -393,7 +396,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                     horizontal: HorizontalAlignment::Right,
                 }),
                 // “vsfilter quirk: handle illegal \a8 and \a4 like \a5”
-                Some(5) | Some(4) | Some(8) => Override(Alignment {
+                Some(5 | 4 | 8) => Override(Alignment {
                     vertical: VerticalAlignment::Top,
                     horizontal: HorizontalAlignment::Left,
                 }),
@@ -468,6 +471,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                 // Although we do match *this* obscure edge case...
                 // “VSFilter compatibility (because we can): parse the
                 // timestamps differently depending on argument count”
+                #[allow(clippy::cast_possible_truncation)]
                 (
                     Some(AnimationInterval {
                         start: Milliseconds(twa.float_arg(0).unwrap() as i32),
@@ -495,7 +499,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                     modifiers: global_animatable,
                     acceleration,
                     interval,
-                })
+                });
             }
 
             let local_animatable = inner_block.new_local.split_animatable();
@@ -504,7 +508,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                     modifiers: local_animatable,
                     acceleration,
                     interval,
-                })
+                });
             }
 
             // Merge leftover non-animatable global and local properties
@@ -545,7 +549,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
             Some(Reset::Reset)
         };
     } else if twa.tag::<false>("be") {
-        local.soften = resettable(twa.int_arg(0))
+        local.soften = resettable(twa.int_arg(0));
     } else if twa.tag::<false>("b") {
         use Resettable::*;
         local.font_weight = match twa.int_arg(0) {
@@ -561,22 +565,22 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     } else if twa.tag::<false>("kt") {
         local
             .karaoke
-            .set_absolute(Centiseconds(twa.float_arg(0).unwrap_or(0.0)))
+            .set_absolute(Centiseconds(twa.float_arg(0).unwrap_or(0.0)));
     } else if twa.tag::<false>("kf") || twa.tag::<false>("K") {
         local.karaoke.add_relative(
             KaraokeEffect::FillSweep,
             Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
-        )
+        );
     } else if twa.tag::<false>("ko") {
         local.karaoke.add_relative(
             KaraokeEffect::BorderInstant,
             Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
-        )
+        );
     } else if twa.tag::<false>("k") {
         local.karaoke.add_relative(
             KaraokeEffect::FillInstant,
             Centiseconds(twa.float_arg(0).unwrap_or(100.0)),
-        )
+        );
     } else if twa.tag::<false>("shad") {
         // “VSFilter compatibility: clip for \shad but not for \[xy]shad”
         let maybe_val = resettable(twa.float_arg(0).map(|val| val.max(0.0)));
@@ -638,11 +642,12 @@ fn lstrip(str: &str) -> &str {
 }
 
 fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
+    use ParenArgsParseState::*;
+
     if paren_args.is_empty() {
         return;
     }
 
-    use ParenArgsParseState::*;
     let mut state = Before;
     let mut arg_start_bytes = 0;
     let mut arg_end_bytes: Option<usize> = None;
@@ -724,7 +729,7 @@ struct TagWithArguments<'a> {
 impl<'a> TagWithArguments<'a> {
     fn push_argument(&mut self, arg_str: &'a str) {
         if let Some(last_non_space) = arg_str.rfind(|char| char != ' ' && char != '\t') {
-            self.arguments.push(&arg_str[0..(last_non_space + 1)]);
+            self.arguments.push(&arg_str[0..=last_non_space]);
         }
     }
 
@@ -733,9 +738,10 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn tag<const COMPLEX: bool>(&mut self, tag_name: &str) -> bool {
-        if self.tag_found {
-            panic!("tried to call tag(), but the tag has already been found");
-        }
+        assert!(
+            !self.tag_found,
+            "tried to call tag(), but the tag has already been found"
+        );
 
         if self.first_part.starts_with(tag_name) {
             self.tag_found = true;
@@ -753,8 +759,7 @@ impl<'a> TagWithArguments<'a> {
             assert!(!arg_str.is_empty());
             fast_float::parse_partial::<f64, _>(trim_start_ctype_isspace(arg_str))
                 .ok()
-                .map(|(value, _digits)| value)
-                .unwrap_or(0.0) // default value if parsing fails
+                .map_or(0.0, |(value, _digits)| value)
         })
     }
 
@@ -783,10 +788,13 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn transparency_arg(&self, index: usize) -> Option<Transparency> {
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
         self.hex_arg(index).map(|val: i32| Transparency(val as u8))
     }
 
     fn colour_arg(&self, index: usize) -> Option<Colour> {
+        #[allow(clippy::cast_sign_loss)] // Yes, libass allows specifying negative colours.
         self.hex_arg(index)
             .map(|val: i32| Colour::from_bgr_packed(val as u32))
     }
@@ -794,8 +802,9 @@ impl<'a> TagWithArguments<'a> {
     fn hex_arg(&self, index: usize) -> Option<i32> {
         self.string_arg(index).map(|arg| {
             arg.find(|char| char != '&' && char != 'H')
-                .map(|first_value_char| parse_prefix_i32(&arg[first_value_char..], 16))
-                .unwrap_or(0)
+                .map_or(0, |first_value_char| {
+                    parse_prefix_i32(&arg[first_value_char..], 16)
+                })
         })
     }
 
@@ -832,9 +841,16 @@ fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
     let maybe_parsed = i64::from_str_radix(&slice[0..num_end], radix)
         .ok()
         .map(|num| num * sign);
-    maybe_parsed
-        .unwrap_or(0i64)
-        .clamp(i32::MIN.into(), i32::MAX.into()) as i32
+    i64_to_i32_truncate(
+        maybe_parsed
+            .unwrap_or(0i64)
+            .clamp(i32::MIN.into(), i32::MAX.into()),
+    )
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn i64_to_i32_truncate(val: i64) -> i32 {
+    val as i32
 }
 
 /// Trims whitespace from the start of a string, according to the non-Unicode-aware definition of
@@ -889,28 +905,25 @@ fn end_span(
     drawing: Option<Drawing>,
     end_drawing: bool,
 ) -> Option<Drawing> {
-    match drawing {
-        Some(mut drawing) => {
-            if end_drawing {
-                drawing.commands = span_text;
-                spans.push(Span::Drawing(*last_local, drawing));
-                None
-            } else {
-                // If there is an override tag in the middle of a drawing,
-                // the previous commands are discarded.
-                drawing.commands.clear();
-
-                // We still need to keep the local tags, since they may contain text override
-                // tags that will apply to text following the drawing.
-                spans.push(Span::Tags(*last_local, String::new()));
-
-                Some(drawing)
-            }
-        }
-        None => {
-            spans.push(Span::Tags(*last_local, span_text));
+    if let Some(mut drawing) = drawing {
+        if end_drawing {
+            drawing.commands = span_text;
+            spans.push(Span::Drawing(*last_local, drawing));
             None
+        } else {
+            // If there is an override tag in the middle of a drawing,
+            // the previous commands are discarded.
+            drawing.commands.clear();
+
+            // We still need to keep the local tags, since they may contain text override
+            // tags that will apply to text following the drawing.
+            spans.push(Span::Tags(*last_local, String::new()));
+
+            Some(drawing)
         }
+    } else {
+        spans.push(Span::Tags(*last_local, span_text));
+        None
     }
 }
 
@@ -919,15 +932,15 @@ pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
 
     // Remove empty texts and drawings
     let mut s1: Vec<Span> = vec![];
-    for span in s0.into_iter() {
+    for span in s0 {
         if !span.is_empty() {
-            s1.push(span)
+            s1.push(span);
         }
     }
 
     // Try to merge spans into their predecessors
     let mut s2: Vec<Span> = vec![];
-    for span in s1.into_iter() {
+    for span in s1 {
         match span {
             Tags(local, text) => match s2.pop() {
                 Some(prev_span) => match prev_span {
@@ -967,20 +980,18 @@ pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
                 },
                 None => s2.push(Drawing(local, drawing)),
             },
-            Reset => match s2.last_mut() {
-                // Overwrite preceding reset, if it exists
-                Some(prev_span) => {
+            Reset => {
+                if let Some(prev_span) = s2.last_mut() {
                     if prev_span.is_reset() {
                         *prev_span = Reset;
                     } else {
                         s2.push(Reset);
                     }
-                }
-                None => {
+                } else {
                     // A reset at the beginning of the line does nothing,
                     // so we can skip it
                 }
-            },
+            }
             ResetToStyle(style_name) => match s2.last_mut() {
                 // Overwrite preceding reset, if it exists
                 Some(prev_span) => {
@@ -1043,7 +1054,7 @@ mod tests {
     #[test]
     fn no_tags() {
         let text = "this text has no tags";
-        let (global, spans) = parse_raw(text);
+        let (global, spans) = raw(text);
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 1);
         assert_matches!(&spans[0], Span::Tags(local, span_text));
@@ -1053,7 +1064,7 @@ mod tests {
 
     #[test]
     fn span_tags() {
-        let (global, spans) = parse_raw("before{\\i1}after");
+        let (global, spans) = raw("before{\\i1}after");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 2);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1069,7 +1080,7 @@ mod tests {
         );
         assert_eq!(text, "after");
 
-        let (global, spans) = parse_raw("{\\pos(10,11)}text");
+        let (global, spans) = raw("{\\pos(10,11)}text");
         assert_eq!(
             *global,
             Global {
@@ -1088,7 +1099,7 @@ mod tests {
 
     #[test]
     fn span_reset() {
-        let (global, spans) = parse_raw("a{\\rA\\r}b{\\rB}{\\r}c");
+        let (global, spans) = raw("a{\\rA\\r}b{\\rB}{\\r}c");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 7);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1108,7 +1119,7 @@ mod tests {
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "c");
 
-        let (global, spans) = parse_raw("a{\\fsp10\\r\\fax20}b");
+        let (global, spans) = raw("a{\\fsp10\\r\\fax20}b");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 3);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1123,7 +1134,7 @@ mod tests {
 
     #[test]
     fn span_drawing() {
-        let (global, spans) = parse_raw("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
+        let (global, spans) = raw("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 4);
         assert_matches!(&spans[0], Span::Tags(local, text));
@@ -1286,6 +1297,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn override_values() {
         use Resettable::*;
 
@@ -1615,7 +1627,7 @@ mod tests {
                 end: Milliseconds(2),
             })
         );
-        assert_eq!(anim.acceleration, 3.0);
+        assert!((anim.acceleration - 3.0).abs() < f64::EPSILON);
         assert_eq!(anim.modifiers.letter_spacing, Resettable::Override(10.0));
 
         assert_matches!(
@@ -1693,9 +1705,10 @@ mod tests {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
 
-        if !parse_tag(tag, &mut global, &mut block) {
-            panic!("should have parsed a tag in test_tag -- input: {}", tag);
-        }
+        assert!(
+            parse_tag(tag, &mut global, &mut block),
+            "should have parsed a tag in test_tag -- input: {tag}"
+        );
 
         (global, block)
     }
@@ -1716,6 +1729,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn argument_parse() {
         let twa = TagWithArguments {
             first_part: "",
@@ -1772,8 +1786,8 @@ mod tests {
         assert_eq!(twa.float_arg(9), Some(-1234.56));
         assert_eq!(twa.float_arg(10), Some(1234.56));
         assert_eq!(twa.float_arg(11), Some(0.0));
-        assert_eq!(twa.float_arg(12), Some(100000000000000.0));
-        assert_eq!(twa.float_arg(13), Some(-100000000000000.0));
+        assert_eq!(twa.float_arg(12), Some(100_000_000_000_000.0));
+        assert_eq!(twa.float_arg(13), Some(-100_000_000_000_000.0));
         assert_eq!(twa.float_arg(twa.arguments.len()), None);
 
         assert_eq!(twa.transparency_arg(0), Some(Transparency(0)));
@@ -1899,7 +1913,7 @@ mod tests {
 
         let empty_drawing = super::Drawing {
             scale: 1,
-            commands: "".to_owned(),
+            commands: String::new(),
         };
 
         let non_empty_drawing = super::Drawing {
@@ -1910,7 +1924,7 @@ mod tests {
         let spans: Vec<Span> = vec![
             Reset,
             Tags(non_empty.clone(), "a".to_owned()),
-            Tags(Local::empty(), "".to_owned()),
+            Tags(Local::empty(), String::new()),
             Tags(non_empty.clone(), "b".to_owned()),
             Drawing(non_empty.clone(), non_empty_drawing.clone()),
             Drawing(Local::empty(), empty_drawing.clone()),
@@ -1921,18 +1935,18 @@ mod tests {
             ResetToStyle("B".to_owned()),
             Reset,
             Tags(non_empty.clone(), "d".to_owned()),
-            Tags(non_empty.clone(), "".to_owned()),
+            Tags(non_empty.clone(), String::new()),
             Tags(non_empty.clone(), "e".to_owned()),
             Drawing(non_empty.clone(), empty_drawing.clone()),
             Tags(non_empty.clone(), "f".to_owned()),
-            Tags(non_empty.clone(), "".to_owned()),
+            Tags(non_empty.clone(), String::new()),
             Drawing(non_empty.clone(), non_empty_drawing.clone()),
             Drawing(non_empty.clone(), empty_drawing.clone()),
             Drawing(non_empty.clone(), non_empty_drawing.clone()),
             Tags(non_empty.clone(), "g".to_owned()),
             ResetToStyle("C".to_owned()),
             Reset,
-            Tags(non_empty.clone(), "".to_owned()),
+            Tags(non_empty.clone(), String::new()),
             Drawing(non_empty.clone(), empty_drawing.clone()),
         ];
 

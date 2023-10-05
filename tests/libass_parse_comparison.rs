@@ -15,7 +15,7 @@ pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 1
 
 #[test]
 fn libass_parse_comparison() {
-    let track = media::subtitle::OpaqueTrack::parse(ASS_FILE.to_owned()).to_sline_track();
+    let track = media::subtitle::OpaqueTrack::parse(&ASS_FILE.to_owned()).to_sline_track();
 
     let mut indirect_renderer = media::subtitle::Renderer::new();
     let mut direct_renderer = media::subtitle::Renderer::new();

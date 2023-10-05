@@ -5,7 +5,7 @@ use std::sync::{
 
 use crate::media;
 
-pub struct PlaybackPosition {
+pub struct Position {
     // Position in terms of `rate`. Always guaranteed to be correct,
     // but requires a lock on the mutex to access.
     pub authoritative_position: Mutex<u64>,
@@ -17,7 +17,7 @@ pub struct PlaybackPosition {
     pub rate: AtomicU32,
 }
 
-impl PlaybackPosition {
+impl Position {
     pub fn position(&self) -> u64 {
         self.position.load(Ordering::Relaxed)
     }
@@ -26,19 +26,27 @@ impl PlaybackPosition {
         self.rate.load(Ordering::Relaxed)
     }
 
+    /// Returns the current non-authoritative position as floating-point seconds.
+    /// May be imprecise for very large positions or rates.
+    #[allow(clippy::cast_precision_loss)]
     pub fn seconds(&self) -> f64 {
         if self.rate() == 0 {
             return 0.0;
         }
-        self.position() as f64 / self.rate() as f64
+        self.position() as f64 / f64::from(self.rate())
     }
 
-    pub fn current_frame(&self, frame_rate: media::FrameRate) -> i32 {
-        (self.seconds() * f64::from(frame_rate)).floor() as i32
+    pub fn current_frame(&self, frame_rate: media::FrameRate) -> u64 {
+        let numerator = self.position() * frame_rate.numerator;
+        let denominator = frame_rate.denominator * u64::from(self.rate());
+
+        numerator / denominator
     }
 
-    // These do not require a mutable reference as the struct
-    // ensures unique mutability by itself
+    /// Adds the given `delta` number of ticks to the playback state. May be negative.
+    ///
+    /// # Panics
+    /// Panics if the authoritative position lock is poisoned.
     pub fn add_ticks(&self, delta: i64) {
         let mut lock = self.authoritative_position.lock().unwrap();
         let new_value = lock.saturating_add_signed(delta);
@@ -50,16 +58,17 @@ impl PlaybackPosition {
         if self.rate() == 0 {
             return;
         }
-        let delta_ticks: i64 = (delta_seconds * self.rate() as f64).round() as i64;
+        #[allow(clippy::cast_possible_truncation)]
+        let delta_ticks: i64 = (delta_seconds * f64::from(self.rate())).round() as i64;
         self.add_ticks(delta_ticks);
     }
 
     pub fn add_frames(&self, delta_frames: i32, frame_rate: media::FrameRate) {
-        self.add_seconds(delta_frames as f64 / f64::from(frame_rate));
+        self.add_seconds(f64::from(delta_frames) / f64::from(frame_rate));
     }
 }
 
-impl Default for PlaybackPosition {
+impl Default for Position {
     fn default() -> Self {
         Self {
             authoritative_position: Mutex::new(0),

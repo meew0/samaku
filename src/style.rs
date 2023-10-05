@@ -1,3 +1,5 @@
+#![allow(clippy::cast_precision_loss)]
+
 use iced::widget::container;
 use iced::{
     theme::{Palette, Theme},
@@ -42,6 +44,7 @@ pub const SAMAKU_DESTRUCTIVE: Color = Color::from_rgb(
     0x4e as f32 / 255.0,
 );
 
+#[must_use]
 pub fn samaku_theme() -> Theme {
     Theme::custom(Palette {
         background: SAMAKU_BACKGROUND,
@@ -52,6 +55,7 @@ pub fn samaku_theme() -> Theme {
     })
 }
 
+#[must_use]
 pub fn title_bar_active(theme: &Theme) -> container::Appearance {
     let palette = theme.extended_palette();
 
@@ -64,6 +68,7 @@ pub fn title_bar_active(theme: &Theme) -> container::Appearance {
     }
 }
 
+#[must_use]
 pub fn title_bar_focused(theme: &Theme) -> container::Appearance {
     let palette = theme.extended_palette();
 
@@ -74,6 +79,7 @@ pub fn title_bar_focused(theme: &Theme) -> container::Appearance {
     }
 }
 
+#[must_use]
 pub fn pane_active(theme: &Theme) -> container::Appearance {
     let palette = theme.extended_palette();
 
@@ -85,6 +91,7 @@ pub fn pane_active(theme: &Theme) -> container::Appearance {
     }
 }
 
+#[must_use]
 pub fn pane_focused(theme: &Theme) -> container::Appearance {
     let palette = theme.extended_palette();
 

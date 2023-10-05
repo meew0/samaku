@@ -15,13 +15,19 @@ impl OpaqueTrack {
     /// Parse subtitles represented in the text-based ASS format.
     /// Beyond the individual events, the string must also contain
     /// all the metadata libass needs to correctly parse them.
-    pub fn parse(data: String) -> OpaqueTrack {
+    ///
+    /// # Panics
+    /// Panics if libass fails to parse the data.
+    pub fn parse(data: &String) -> OpaqueTrack {
         let track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
 
         OpaqueTrack { internal: track }
     }
 
     /// Convert data from our representation into libass'.
+    ///
+    /// # Panics
+    /// Panics if libass fails to construct a new subtitle track.
     pub fn from_compiled<'a>(
         events: impl IntoIterator<Item = &'a subtitle::ass::Event<'a>>,
         metadata: &subtitle::SlineTrack,
@@ -41,12 +47,12 @@ impl OpaqueTrack {
             name: None,
         });
 
-        for event in events.into_iter() {
+        for event in events {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
         }
 
-        for style in metadata.styles.iter() {
+        for style in &metadata.styles {
             track.alloc_style();
             *track.styles_mut().last_mut().unwrap() = ass::style_to_raw(style);
         }
@@ -54,6 +60,7 @@ impl OpaqueTrack {
         OpaqueTrack { internal: track }
     }
 
+    #[must_use]
     pub fn to_sline_track(&self) -> subtitle::SlineTrack {
         let header = self.internal.header();
 
@@ -65,10 +72,12 @@ impl OpaqueTrack {
         }
     }
 
+    #[must_use]
     pub fn num_events(&self) -> usize {
         self.internal.events().len()
     }
 
+    #[must_use]
     pub fn num_styles(&self) -> usize {
         self.internal.styles().len()
     }
@@ -96,6 +105,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Create a new renderer by calling into libass.
+    ///
+    /// # Panics
+    /// Panics if libass fails to create a new renderer.
     pub fn new() -> Renderer {
         let mut renderer = ass::LIBRARY.renderer_init().unwrap();
         renderer_set_fonts_default(&mut renderer);
@@ -166,11 +179,24 @@ pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
     );
 }
 
+/// Convert an image from libass' representation into iced's.
+///
+/// # Panics
+/// Panics if the libass image has invalid metadata (e.g. negative dimensions).
+#[must_use]
 pub fn ass_image_to_iced(
     ass_image: &ass::Image,
 ) -> view::widget::StackedImage<iced::widget::image::Handle> {
-    let width = ass_image.metadata.w as usize;
-    let height = ass_image.metadata.h as usize;
+    let width: usize = ass_image
+        .metadata
+        .w
+        .try_into()
+        .expect("image width should not be negative");
+    let height: usize = ass_image
+        .metadata
+        .h
+        .try_into()
+        .expect("image height should not be negative");
     let pitch = width * 4;
     let out_len = pitch * height;
 
@@ -183,10 +209,16 @@ pub fn ass_image_to_iced(
         blue,
         transparency,
     } = subtitle::Colour::unpack(ass_image.metadata.color);
-    let alpha: u16 = 255 - transparency as u16;
+    let alpha: u16 = 255 - u16::from(transparency);
+
+    let stride: usize = ass_image
+        .metadata
+        .stride
+        .try_into()
+        .expect("stride should not be negative");
 
     for row in 0..height {
-        let row_read_start = row * ass_image.metadata.stride as usize;
+        let row_read_start = row * stride;
         let row_read_ptr = &ass_image.bitmap[row_read_start..(row_read_start + width)];
 
         let row_write_start = row * pitch;
@@ -196,11 +228,15 @@ pub fn ass_image_to_iced(
             row_write_ptr[col * 4] = red;
             row_write_ptr[col * 4 + 1] = green;
             row_write_ptr[col * 4 + 2] = blue;
-            row_write_ptr[col * 4 + 3] = ((alpha * row_read_ptr[col] as u16) >> 8) as u8;
+            row_write_ptr[col * 4 + 3] = ((alpha * u16::from(row_read_ptr[col])) >> 8) as u8;
         }
     }
 
-    let handle = iced::widget::image::Handle::from_pixels(width as u32, height as u32, out);
+    let handle = iced::widget::image::Handle::from_pixels(
+        u32::try_from(width).expect("image width should fit into a `u32`"),
+        u32::try_from(height).expect("image height should fit into a `u32`"),
+        out,
+    );
     view::widget::StackedImage {
         handle,
         x: ass_image.metadata.dst_x,

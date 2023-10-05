@@ -549,8 +549,12 @@ impl VideoInfo<'_> {
 
     pub fn get_frame_rate(&self) -> FrameRate {
         FrameRate {
-            numerator: unsafe { (*self.vi).fpsNum },
-            denominator: unsafe { (*self.vi).fpsDen },
+            numerator: unsafe { (*self.vi).fpsNum }
+                .try_into()
+                .expect("frame rate numerator should not be negative"),
+            denominator: unsafe { (*self.vi).fpsDen }
+                .try_into()
+                .expect("frame rate denominator should not be negative"),
         }
     }
 }
@@ -586,8 +590,8 @@ impl AudioInfo<'_> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FrameRate {
-    pub numerator: i64,
-    pub denominator: i64,
+    pub numerator: u64,
+    pub denominator: u64,
 }
 
 impl From<FrameRate> for f64 {

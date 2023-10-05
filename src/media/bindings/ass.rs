@@ -10,16 +10,22 @@ use crate::subtitle;
 pub type CString = std::ffi::CString;
 
 pub fn ms_to_frame(ass_ms: i64, frame_rate: FrameRate) -> i32 {
-    let numerator = ass_ms * frame_rate.numerator;
-    let denominator = 1000 * frame_rate.denominator;
+    // since the numerator is guaranteed to be smaller than i64 max
+    #[allow(clippy::cast_possible_wrap)]
+    let numerator = ass_ms * frame_rate.numerator as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let denominator = 1000 * frame_rate.denominator as i64;
     (numerator / denominator)
         .try_into()
         .expect("overflow while converting time to frame number")
 }
 
 pub fn frame_to_ms(frame: i32, frame_rate: FrameRate) -> i64 {
-    let inv_numerator = i64::from(frame * 1000) * frame_rate.denominator;
-    inv_numerator / frame_rate.numerator
+    #[allow(clippy::cast_possible_wrap)]
+    let inv_numerator = i64::from(frame * 1000) * frame_rate.denominator as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let result = inv_numerator / frame_rate.numerator as i64;
+    result
 }
 
 unsafe fn str_from_libass<'a>(ptr: *const i8) -> Option<&'a str> {

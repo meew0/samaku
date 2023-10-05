@@ -146,7 +146,7 @@ fn try_build_stream(
     config: cpal::SupportedStreamConfig,
     audio_mutex: Arc<Mutex<Option<media::Audio>>>,
     playing: Arc<atomic::AtomicBool>,
-    playback_position: Arc<model::playback::PlaybackPosition>,
+    playback_position: Arc<model::playback::Position>,
     tx_out: super::GlobalSender,
 ) -> Option<cpal::Stream> {
     match sample_format {
@@ -202,7 +202,7 @@ fn build_stream<T>(
     config: &cpal::StreamConfig,
     audio_mutex: Arc<Mutex<Option<media::Audio>>>,
     playing: Arc<atomic::AtomicBool>,
-    playback_position: Arc<model::playback::PlaybackPosition>,
+    playback_position: Arc<model::playback::Position>,
     tx_out: super::GlobalSender,
 ) -> cpal::Stream
 where
@@ -226,7 +226,7 @@ fn data_callback<T>(
     data: &mut [T],
     audio_mutex: &Arc<Mutex<Option<media::Audio>>>,
     playing: &Arc<atomic::AtomicBool>,
-    playback_position: &Arc<model::playback::PlaybackPosition>,
+    playback_position: &Arc<model::playback::Position>,
     tx_out: &super::GlobalSender,
 ) where
     T: Default,
