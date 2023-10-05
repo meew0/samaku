@@ -24,3 +24,8 @@ fast-float = "0.2"
 
 [dev-dependencies]
 assert_matches2 = "0.1"
+criterion = "0.5"
+
+[[bench]]
+name = "nde"
+harness = false
