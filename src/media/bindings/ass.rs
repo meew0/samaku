@@ -4,18 +4,22 @@ use std::ffi::CStr;
 
 use libass_sys as libass;
 
+use crate::media::FrameRate;
 use crate::subtitle;
 
 pub type CString = std::ffi::CString;
 
-pub fn ms_to_frame(ass_ms: i64, fps: f64) -> i32 {
-    let ass_seconds: f64 = ass_ms as f64 / 1000.0;
-    (ass_seconds * fps) as i32
+pub fn ms_to_frame(ass_ms: i64, frame_rate: FrameRate) -> i32 {
+    let numerator = ass_ms * frame_rate.numerator;
+    let denominator = 1000 * frame_rate.denominator;
+    (numerator / denominator)
+        .try_into()
+        .expect("overflow while converting time to frame number")
 }
 
-pub fn frame_to_ms(frame: i32, fps: f64) -> i64 {
-    let ass_seconds: f64 = frame as f64 / fps;
-    (ass_seconds * 1000.0) as i64
+pub fn frame_to_ms(frame: i32, frame_rate: FrameRate) -> i64 {
+    let inv_numerator = i64::from(frame * 1000) * frame_rate.denominator;
+    inv_numerator / frame_rate.numerator
 }
 
 unsafe fn str_from_libass<'a>(ptr: *const i8) -> Option<&'a str> {

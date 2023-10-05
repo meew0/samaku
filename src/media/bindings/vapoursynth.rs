@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
-use rustsynth_sys as vs;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
+
+use rustsynth_sys as vs;
 
 use super::c_string;
 
@@ -256,7 +257,9 @@ type MapConstPtr = *const vs::VSMap;
 type MapMutPtr = *mut vs::VSMap;
 
 impl private::MapPtr for MapConstPtr {}
+
 impl private::MapPtr for MapMutPtr {}
+
 pub struct Map<'a, P: private::MapPtr> {
     map: P,
     _a: PhantomData<&'a vs::VSMap>,
@@ -583,8 +586,8 @@ impl AudioInfo<'_> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FrameRate {
-    numerator: i64,
-    denominator: i64,
+    pub numerator: i64,
+    pub denominator: i64,
 }
 
 impl From<FrameRate> for f64 {

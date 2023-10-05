@@ -111,7 +111,7 @@ impl Renderer {
         frame_size: subtitle::Resolution,
         storage_size: subtitle::Resolution,
     ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
-        let now: i64 = ass::frame_to_ms(frame, frame_rate.into());
+        let now: i64 = ass::frame_to_ms(frame, frame_rate);
 
         let mut result: Vec<view::widget::StackedImage<iced::widget::image::Handle>> = vec![];
         result.push(view::widget::StackedImage {

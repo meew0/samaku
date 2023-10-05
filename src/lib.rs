@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+#![warn(clippy::style)]
+
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
