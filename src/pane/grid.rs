@@ -176,6 +176,7 @@ pub fn view<'a>(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn update(
     grid_state: &mut State,
     pane_message: message::PaneMessage,
@@ -197,7 +198,7 @@ pub fn update(
                 if let Some(offset) = column.resize_offset.take() {
                     column.width += offset;
                 }
-            })
+            });
         }
         _ => (),
     }

@@ -25,6 +25,7 @@ impl Default for Graph {
 impl Graph {
     /// Returns a graph that contains an input node connected to an output node, with no further
     /// processing done.
+    #[must_use]
     pub fn identity() -> Self {
         let mut connections = HashMap::new();
         connections.insert(
@@ -55,6 +56,7 @@ impl Graph {
 
     /// Returns a basic graph that contains an input node, an intermediate filter node,
     /// and an output node. Useful for testing.
+    #[must_use]
     pub fn from_single_intermediate(intermediate: Box<dyn node::Node>) -> Self {
         let mut connections = HashMap::new();
         connections.insert(
@@ -97,11 +99,16 @@ impl Graph {
         }
     }
 
-    pub fn verify_output_node(&self) {
+    /// Asserts that the first node in the graph is an output node.
+    ///
+    /// # Panics
+    /// Panics if it is not.
+    pub fn assert_output_node(&self) {
         let output_node = &self.nodes[0];
-        if !output_node.node.predicted_outputs().is_empty() {
-            panic!("first node in graph must be an output node");
-        }
+        assert!(
+            output_node.node.predicted_outputs().is_empty(),
+            "first node in graph must be an output node"
+        );
     }
 
     pub fn connect(&mut self, next: NextEndpoint, previous: PreviousEndpoint) {
@@ -123,7 +130,7 @@ impl Graph {
             .desired_inputs()
             .iter()
             .enumerate()
-            .flat_map(move |(socket_index, _)| {
+            .filter_map(move |(socket_index, _)| {
                 self.connections
                     .get(&NextEndpoint {
                         node_index: next_node_index,
@@ -133,6 +140,7 @@ impl Graph {
             })
     }
 
+    #[must_use]
     pub fn dfs(&self) -> DfsResult {
         let mut process_queue: VecDeque<usize> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];

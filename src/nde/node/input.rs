@@ -3,9 +3,9 @@ use crate::nde;
 use super::{LeafInputType, Node, NodeError, SocketType, SocketValue};
 
 #[derive(Debug, Clone)]
-pub struct InputSline {}
+pub struct Sline {}
 
-impl Node for InputSline {
+impl Node for Sline {
     fn name(&self) -> &'static str {
         "Input: Subtitle line"
     }
@@ -19,10 +19,7 @@ impl Node for InputSline {
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, NodeError> {
-        let sline = match inputs[0] {
-            SocketValue::Sline(sline) => sline,
-            _ => return Err(NodeError::MismatchedTypes),
-        };
+        let SocketValue::Sline(sline) = inputs[0] else { return Err(NodeError::MismatchedTypes) };
 
         let (global, spans) = nde::tags::parse(&sline.text);
 

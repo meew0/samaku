@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-pub use input::InputSline;
+pub use input::Sline as InputSline;
 pub use output::Output;
 pub use style_basic::Italic;
 

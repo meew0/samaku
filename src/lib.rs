@@ -23,6 +23,7 @@ pub mod subtitle;
 pub mod view;
 pub mod workers;
 
+#[allow(clippy::missing_errors_doc)]
 pub fn run() -> iced::Result {
     Samaku::run(Settings {
         id: Some("samaku".to_owned()),
@@ -132,7 +133,7 @@ impl Samaku {
     pub fn update_filter_lists(&mut self) {
         for pane in self.panes.panes.values_mut() {
             if let PaneState::NodeEditor(node_editor_state) = pane {
-                node_editor_state.update_filter_names(&self.subtitles)
+                node_editor_state.update_filter_names(&self.subtitles);
             }
         }
     }
@@ -175,7 +176,9 @@ impl Application for Samaku {
         String::from("samaku")
     }
 
+    #[allow(clippy::too_many_lines)]
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        #[allow(clippy::match_same_arms)]
         match message {
             Self::Message::None => {}
             Self::Message::SplitPane(axis) => {
@@ -202,7 +205,7 @@ impl Application for Samaku {
             }
             Self::Message::DragPane(_) => {}
             Self::Message::ResizePane(pane_grid::ResizeEvent { split, ratio }) => {
-                self.panes.resize(&split, ratio)
+                self.panes.resize(&split, ratio);
             }
             Self::Message::SetPaneState(pane, new_state) => {
                 if let Some(pane_state) = self.panes.get_mut(&pane) {
@@ -321,7 +324,7 @@ impl Application for Samaku {
             }
             Self::Message::CreateEmptyFilter => {
                 self.subtitles.filters.push(nde::Filter {
-                    name: "".to_string(),
+                    name: String::new(),
                     graph: nde::graph::Graph::identity(),
                 });
                 self.update_filter_lists();
@@ -372,7 +375,7 @@ impl Application for Samaku {
                             node_index: start.node_index,
                             socket_index: start.socket_index,
                         },
-                    )
+                    );
                 }
             }
             Self::Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
@@ -460,6 +463,8 @@ impl Application for Samaku {
         style::samaku_theme()
     }
     fn subscription(&self) -> Subscription<Self::Message> {
+        use iced::futures::StreamExt;
+
         let events = subscription::events_with(|event, status| {
             if let event::Status::Captured = status {
                 return None;
@@ -474,7 +479,6 @@ impl Application for Samaku {
             }
         });
 
-        use iced::futures::StreamExt;
         let worker_messages = subscription::unfold(
             std::any::TypeId::of::<workers::Workers>(),
             self.workers.receiver.take(),
@@ -493,18 +497,22 @@ pub mod test_utils {
     use std::env;
     use std::path::{Path, PathBuf};
 
+    /// Creates a `PathBuf` pointing to the given file relative to the root directory, and ensures
+    /// the file exists.
+    ///
+    /// # Panics
+    /// Panics if the file could not be found.
     pub fn test_file<P>(join_path: P) -> PathBuf
     where
         P: AsRef<Path>,
     {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&manifest_dir).join(&join_path);
-        if !path.exists() {
-            panic!(
-                "Could not find test data ({})! Perhaps some relative-path problem?",
-                join_path.as_ref().display()
-            );
-        }
+        assert!(
+            path.exists(),
+            "Could not find test data ({})! Perhaps some relative-path problem?",
+            join_path.as_ref().display()
+        );
         path
     }
 }

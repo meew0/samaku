@@ -54,12 +54,14 @@ where
     }
 
     /// Sets the width of the [`ImageStack`] boundaries.
+    #[must_use]
     pub fn width(mut self, width: impl Into<Length>) -> Self {
         self.width = width.into();
         self
     }
 
     /// Sets the height of the [`ImageStack`] boundaries.
+    #[must_use]
     pub fn height(mut self, height: impl Into<Length>) -> Self {
         self.height = height.into();
         self
@@ -68,6 +70,7 @@ where
     /// Sets the [`ContentFit`] of the [`ImageStack`].
     ///
     /// Defaults to [`ContentFit::Contain`]
+    #[must_use]
     pub fn content_fit(self, content_fit: ContentFit) -> Self {
         Self {
             content_fit,
@@ -92,6 +95,7 @@ where
     let image_size = {
         let Size { width, height } = renderer.dimensions(&images[0].handle);
 
+        #[allow(clippy::cast_precision_loss)]
         Size::new(width as f32, height as f32)
     };
 
@@ -128,6 +132,7 @@ pub fn draw<R, H>(
 {
     // Find out maximum size (assuming the first image covers the entire area)
     let Size { width, height } = renderer.dimensions(&images[0].handle);
+    #[allow(clippy::cast_precision_loss)]
     let overall_size = Size::new(width as f32, height as f32);
 
     let bounds = layout.bounds();
@@ -147,8 +152,10 @@ pub fn draw<R, H>(
                 (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
             );
 
+            #[allow(clippy::cast_precision_loss)]
             let pos_offset = Vector::new((image.x as f32) * x_scale, (image.y as f32) * y_scale);
 
+            #[allow(clippy::cast_precision_loss)]
             let drawing_bounds = Rectangle {
                 width: width as f32 * x_scale,
                 height: height as f32 * y_scale,
@@ -157,13 +164,11 @@ pub fn draw<R, H>(
 
             let sum_bounds = drawing_bounds + center_offset + pos_offset;
 
-            //println!("bounds {:?}", sum_bounds);
-
             (image, sum_bounds)
         })
         .collect();
     let render = |renderer: &mut R| {
-        for (image, bounds) in to_draw.into_iter() {
+        for (image, bounds) in to_draw {
             renderer.draw(image.handle.clone(), bounds);
         }
     };
@@ -171,7 +176,7 @@ pub fn draw<R, H>(
     if overall_adjusted_fit.width > bounds.width || overall_adjusted_fit.height > bounds.height {
         renderer.with_layer(bounds, render);
     } else {
-        render(renderer)
+        render(renderer);
     }
 }
 
@@ -222,7 +227,7 @@ where
                     self.program
                         .draw(state, renderer, theme, layout.bounds(), cursor),
                 );
-            })
+            });
         });
     }
 
@@ -252,7 +257,7 @@ where
             Event::Mouse(mouse_event) => Some(canvas::Event::Mouse(mouse_event)),
             Event::Touch(touch_event) => Some(canvas::Event::Touch(touch_event)),
             Event::Keyboard(keyboard_event) => Some(canvas::Event::Keyboard(keyboard_event)),
-            _ => None,
+            Event::Window(_) => None,
         };
 
         if let Some(canvas_event) = canvas_event {
