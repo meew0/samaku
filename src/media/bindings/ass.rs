@@ -35,7 +35,7 @@ unsafe fn str_from_libass<'a>(ptr: *const i8) -> Option<&'a str> {
 }
 
 fn string_from_libass(ptr: *const i8) -> Option<String> {
-    unsafe { str_from_libass(ptr) }.map(|str| str.to_owned())
+    unsafe { str_from_libass(ptr) }.map(str::to_owned)
 }
 
 /// Allocate an empty string of required length with libc's malloc specifically,
@@ -48,14 +48,15 @@ fn malloc_string(source: &str) -> *mut i8 {
     let len = source_slice.len();
 
     let ptr = unsafe { libc::malloc(len) };
-    if ptr.is_null() {
-        panic!("malloc in malloc_string returned null pointer, out of memory?");
-    }
+    assert!(
+        !ptr.is_null(),
+        "malloc in malloc_string returned null pointer, out of memory?"
+    );
 
-    let target_slice: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, len) };
+    let target_slice: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(ptr.cast::<u8>(), len) };
     target_slice.copy_from_slice(source_slice);
 
-    ptr as *mut i8
+    ptr.cast::<i8>()
 }
 
 #[derive(Debug)]
@@ -101,7 +102,7 @@ impl Library {
                 self.library,
                 buf.as_ptr() as *mut i8,
                 buf.len(),
-                codepage.map_or(std::ptr::null_mut::<i8>(), |cp| cp.as_ptr() as *mut i8),
+                codepage.map_or(std::ptr::null_mut::<i8>(), |cp| cp.as_ptr().cast_mut()),
             )
         };
         if track.is_null() {
@@ -122,12 +123,13 @@ pub static LIBRARY: once_cell::sync::Lazy<Library> =
     once_cell::sync::Lazy::new(|| Library::init().unwrap());
 
 #[derive(Debug, Clone, Copy)]
+#[repr(u32)]
 pub enum FontProvider {
-    None = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_NONE as isize,
-    Autodetect = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_AUTODETECT as isize,
-    CoreText = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_CORETEXT as isize,
-    Fontconfig = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_FONTCONFIG as isize,
-    DirectWrite = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_DIRECTWRITE as isize,
+    None = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_NONE,
+    Autodetect = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_AUTODETECT,
+    CoreText = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_CORETEXT,
+    Fontconfig = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_FONTCONFIG,
+    DirectWrite = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_DIRECTWRITE,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -154,7 +156,7 @@ impl Renderer {
     pub fn set_fonts(
         &mut self,
         default_font: Option<CString>,
-        default_family: CString,
+        default_family: &CString,
         default_font_provider: FontProvider,
         fontconfig_config: Option<CString>,
         update: bool,
@@ -166,8 +168,8 @@ impl Renderer {
                 default_family.as_ptr(),
                 default_font_provider as i32,
                 fontconfig_config.map_or(std::ptr::null(), |s| s.as_ptr()),
-                update as i32,
-            )
+                i32::from(update),
+            );
         }
     }
 
@@ -178,7 +180,7 @@ impl Renderer {
         detect_change: bool,
         callback: &mut F,
     ) -> i32 {
-        let mut change = if detect_change { 1 } else { 0 };
+        let mut change = i32::from(detect_change);
         let mut image =
             unsafe { libass::ass_render_frame(self.renderer, track.track, now, &mut change) };
 
@@ -193,6 +195,7 @@ impl Renderer {
             let safe_image = Image {
                 metadata: unsafe { &(*image) },
                 bitmap: unsafe {
+                    #[allow(clippy::cast_sign_loss)]
                     std::slice::from_raw_parts((*image).bitmap, bitmap_size as usize)
                 },
             };
@@ -213,7 +216,7 @@ impl Renderer {
             0 => RenderChange::Identical,
             1 => RenderChange::DifferentPositions,
             2 => RenderChange::DifferentContent,
-            n => panic!("Invalid detect_change value: {}", n),
+            n => panic!("Invalid detect_change value: {n}"),
         }
     }
 
@@ -309,10 +312,10 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
         SecondaryColour: style.secondary_colour.pack(),
         OutlineColour: style.outline_colour.pack(),
         BackColour: style.back_colour.pack(),
-        Bold: style.bold as i32,
-        Italic: style.italic as i32,
-        Underline: style.underline as i32,
-        StrikeOut: style.strike_out as i32,
+        Bold: i32::from(style.bold),
+        Italic: i32::from(style.italic),
+        Underline: i32::from(style.underline),
+        StrikeOut: i32::from(style.strike_out),
         ScaleX: style.scale.x,
         ScaleY: style.scale.y,
         Spacing: style.spacing,
@@ -339,22 +342,30 @@ pub struct Track {
 impl Track {
     pub fn events_mut(&mut self) -> &mut [RawEvent] {
         unsafe {
+            #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts_mut((*self.track).events, (*self.track).n_events as usize)
         }
     }
 
     pub fn events(&self) -> &[RawEvent] {
-        unsafe { std::slice::from_raw_parts((*self.track).events, (*self.track).n_events as usize) }
+        unsafe {
+            #[allow(clippy::cast_sign_loss)]
+            std::slice::from_raw_parts((*self.track).events, (*self.track).n_events as usize)
+        }
     }
 
     pub fn styles_mut(&mut self) -> &mut [RawStyle] {
         unsafe {
+            #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts_mut((*self.track).styles, (*self.track).n_styles as usize)
         }
     }
 
     pub fn styles(&self) -> &[RawStyle] {
-        unsafe { std::slice::from_raw_parts((*self.track).styles, (*self.track).n_styles as usize) }
+        unsafe {
+            #[allow(clippy::cast_sign_loss)]
+            std::slice::from_raw_parts((*self.track).styles, (*self.track).n_styles as usize)
+        }
     }
 
     pub fn alloc_event(&mut self) {
@@ -383,7 +394,8 @@ impl Track {
             ycbcr_matrix: match unsafe { (*self.track).YCbCrMatrix } {
                 libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::ass::YCbCrMatrix::Default,
                 libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::ass::YCbCrMatrix::Unknown,
-                libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::ass::YCbCrMatrix::None,
+                // implied by `_` arm
+                // libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::ass::YCbCrMatrix::None,
                 libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::ass::YCbCrMatrix::Bt601Tv,
                 libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::ass::YCbCrMatrix::Bt601Pc,
                 libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::ass::YCbCrMatrix::Bt709Tv,
@@ -411,8 +423,8 @@ impl Track {
             (*self.track).PlayResY = header.play_res.y;
             (*self.track).Timer = header.timer;
             (*self.track).WrapStyle = header.wrap_style as i32;
-            (*self.track).ScaledBorderAndShadow = header.scaled_border_and_shadow as i32;
-            (*self.track).Kerning = header.kerning as i32;
+            (*self.track).ScaledBorderAndShadow = i32::from(header.scaled_border_and_shadow);
+            (*self.track).Kerning = i32::from(header.kerning);
             (*self.track).YCbCrMatrix = header.ycbcr_matrix as u32;
 
             (*self.track).Language = match header.language {

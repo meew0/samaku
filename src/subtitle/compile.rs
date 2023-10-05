@@ -19,6 +19,15 @@ pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Ev
     event
 }
 
+/// Applies the given `filter` to the given `sline`, and returns the resulting events plus certain
+/// intermediate values. The `counter` is counted up for every created event and used as its read
+/// index.
+///
+/// # Errors
+/// Returns [`NdeError::CycleInGraph`] if the graph contains a cycle.
+///
+/// # Panics
+/// Panics if the filter's output node does not provide a [`SocketValue::CompiledEvents`].
 pub fn nde<'a, 'b>(
     sline: &'a super::Sline,
     filter: &'b nde::graph::Graph,
@@ -73,7 +82,7 @@ pub fn nde<'a, 'b>(
 
             match first_output {
                 nde::node::SocketValue::CompiledEvents(mut events) => {
-                    for event in events.iter_mut() {
+                    for event in &mut events {
                         event.read_order = *counter;
                         *counter += 1;
                     }
@@ -116,6 +125,8 @@ pub enum NodeState<'a> {
 mod tests {
     use std::collections::VecDeque;
 
+    use assert_matches2::assert_matches;
+
     use super::super::*;
     use super::*;
 
@@ -149,14 +160,14 @@ mod tests {
         let result = nde(&sline, &filter, &mut counter).expect("there should be no error");
 
         for node_state in &result.intermediates {
-            assert!(matches!(node_state, NodeState::Active { .. }));
+            assert_matches!(node_state, NodeState::Active { .. });
         }
 
         if let NodeState::Active(socket_values) = &result.intermediates[1] {
-            assert!(matches!(
-                socket_values[0],
+            assert_matches!(
+                &socket_values[0],
                 nde::node::SocketValue::IndividualEvent { .. }
-            ))
+            );
         }
 
         let events = result.events.expect("there should be output events");

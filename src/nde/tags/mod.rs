@@ -104,7 +104,7 @@ where
     }
 }
 
-pub trait Animatable: emit::EmitValue {}
+pub trait Animatable: emit::Value {}
 
 /// Tags that apply to the entire line, may only be used once,
 /// and that only make sense to put at the beginning of the line.
@@ -196,7 +196,7 @@ impl GlobalAnimatable {
 
 impl Animatable for GlobalAnimatable {}
 
-impl emit::EmitValue for GlobalAnimatable {
+impl emit::Value for GlobalAnimatable {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -539,7 +539,7 @@ impl LocalAnimatable {
 
 impl Animatable for LocalAnimatable {}
 
-impl emit::EmitValue for LocalAnimatable {
+impl emit::Value for LocalAnimatable {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -562,7 +562,7 @@ macro_rules! emit_value_newtype {
     };
 }
 
-impl emit::EmitValue for Milliseconds {
+impl emit::Value for Milliseconds {
     emit_value_newtype!();
 }
 
@@ -577,7 +577,7 @@ impl Add for Centiseconds {
     }
 }
 
-impl emit::EmitValue for Centiseconds {
+impl emit::Value for Centiseconds {
     emit_value_newtype!();
 }
 
@@ -593,7 +593,7 @@ impl<A: Animatable> Animation<A> {
     where
         W: std::fmt::Write,
     {
-        use emit::EmitValue;
+        use emit::Value;
 
         sink.write_str("\\t(")?;
         if let Some(interval) = self.interval {
@@ -623,7 +623,7 @@ pub enum PositionOrMove {
     Move(Move),
 }
 
-impl emit::EmitTag for PositionOrMove {
+impl emit::Tag for PositionOrMove {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -641,7 +641,7 @@ pub struct Position {
     pub y: f64,
 }
 
-impl emit::EmitValue for Position {
+impl emit::Value for Position {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -807,7 +807,7 @@ impl Colour {
     }
 }
 
-impl emit::EmitValue for Colour {
+impl emit::Value for Colour {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -823,7 +823,7 @@ impl emit::EmitValue for Colour {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transparency(u8);
 
-impl emit::EmitValue for Transparency {
+impl emit::Value for Transparency {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -839,7 +839,7 @@ pub struct Move {
     pub timing: Option<MoveTiming>,
 }
 
-impl emit::EmitValue for Move {
+impl emit::Value for Move {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -871,7 +871,7 @@ pub enum FontWeight {
     Numeric(u32),
 }
 
-impl emit::EmitValue for FontWeight {
+impl emit::Value for FontWeight {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -992,7 +992,7 @@ enum EmitFontSize {
     Decrease(f64),
 }
 
-impl emit::EmitValue for EmitFontSize {
+impl emit::Value for EmitFontSize {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1196,7 +1196,7 @@ pub enum Fade {
     Complex(ComplexFade),
 }
 
-impl emit::EmitTag for Fade {
+impl emit::Tag for Fade {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1214,7 +1214,7 @@ pub struct SimpleFade {
     pub fade_out_duration: Milliseconds,
 }
 
-impl emit::EmitValue for SimpleFade {
+impl emit::Value for SimpleFade {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1250,7 +1250,7 @@ pub struct ComplexFade {
     pub fade_out_end: Milliseconds,
 }
 
-impl emit::EmitValue for ComplexFade {
+impl emit::Value for ComplexFade {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1274,7 +1274,7 @@ impl emit::EmitValue for ComplexFade {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Clip<T: emit::EmitValue> {
+pub enum Clip<T: emit::Value> {
     /// Show only the content **inside** the border. Maps to `\clip`.
     Contained(T),
 
@@ -1282,13 +1282,13 @@ pub enum Clip<T: emit::EmitValue> {
     Inverse(T),
 }
 
-impl<T: emit::EmitValue> Clip<T> {
+impl<T: emit::Value> Clip<T> {
     pub fn is_inverse(&self) -> bool {
         matches!(self, Clip::Inverse(_))
     }
 }
 
-impl<T: emit::EmitValue> emit::EmitTag for Clip<T> {
+impl<T: emit::Value> emit::Tag for Clip<T> {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1308,7 +1308,7 @@ pub struct Rectangle {
     pub y2: i32,
 }
 
-impl emit::EmitValue for Rectangle {
+impl emit::Value for Rectangle {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1333,7 +1333,7 @@ impl Drawing {
     }
 }
 
-impl emit::EmitValue for Drawing {
+impl emit::Value for Drawing {
     /// Only valid for vector clips, not for inline drawings
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where

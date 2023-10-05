@@ -159,7 +159,7 @@ pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
         Some(c_string(
             "/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf",
         )),
-        c_string("Alegreya Sans"),
+        &c_string("Alegreya Sans"),
         ass::FontProvider::Autodetect,
         None,
         false,

@@ -7,10 +7,10 @@ use bestsource_sys as bs;
 #[derive(Debug, Clone, Copy)]
 pub struct AudioProperties {
     pub is_float: bool,
-    pub bytes_per_sample: i32,
-    pub bits_per_sample: i32,
-    pub sample_rate: i32,
-    pub channels: i32,
+    pub bytes_per_sample: usize,
+    pub bits_per_sample: usize,
+    pub sample_rate: u32,
+    pub channels: u32,
     pub channel_layout: u64,
     pub num_samples: i64,
     pub start_time: f64,
@@ -45,44 +45,37 @@ impl BestAudioSource {
             )
         };
 
-        if w.error > 0 {
-            panic!("error while constructing BestAudioSource");
-        }
-
-        if w.value.is_null() {
-            panic!("got null pointer from BestAudioSource constructor");
-        }
+        assert!(w.error <= 0, "error while constructing BestAudioSource");
+        assert!(
+            !w.value.is_null(),
+            "got null pointer from BestAudioSource constructor"
+        );
 
         BestAudioSource { internal: w.value }
     }
 
     pub fn get_track(&self) -> i32 {
         let w = unsafe { bs::BestAudioSource_GetTrack(self.internal) };
-        if w.error > 0 {
-            panic!("error in BestAudioSource::GetTrack");
-        }
+        assert!(w.error <= 0, "error in BestAudioSource::GetTrack");
         w.value
     }
 
     pub fn set_max_cache_size(&mut self, bytes: usize) {
         let err = unsafe { bs::BestAudioSource_SetMaxCacheSize(self.internal, bytes) };
-        if err > 0 {
-            panic!("error in BestAudioSource::SetMaxCacheSize");
-        }
+        assert!(err <= 0, "error in BestAudioSource::SetMaxCacheSize");
     }
 
     pub fn set_seek_pre_roll(&mut self, samples: i64) {
         let err = unsafe { bs::BestAudioSource_SetSeekPreRoll(self.internal, samples) };
-        if err > 0 {
-            panic!("error in BestAudioSource::SetSeekPreRoll");
-        }
+        assert!(err <= 0, "error in BestAudioSource::SetSeekPreRoll");
     }
 
     pub fn get_relative_start_time(&self, track: i32) -> f64 {
         let w = unsafe { bs::BestAudioSource_GetRelativeStartTime(self.internal, track) };
-        if w.error > 0 {
-            panic!("error in BestAudioSource::GetRelativeStartTime");
-        }
+        assert!(
+            w.error <= 0,
+            "error in BestAudioSource::GetRelativeStartTime"
+        );
         w.value
     }
 
@@ -90,23 +83,24 @@ impl BestAudioSource {
     // so I'm defining it as requiring a &mut self...
     pub fn get_exact_duration(&mut self) -> bool {
         let w = unsafe { bs::BestAudioSource_GetExactDuration(self.internal) };
-        if w.error > 0 {
-            panic!("error in BestAudioSource::GetExactDuration");
-        }
+        assert!(w.error <= 0, "error in BestAudioSource::GetExactDuration");
         w.value != 0
     }
 
     pub fn get_audio_properties(&self) -> AudioProperties {
         let bas_ap = unsafe { bs::BestAudioSource_GetAudioProperties(self.internal) };
-        if bas_ap.error > 0 {
-            panic!("error in BestAudioSource::GetAudioProperties");
-        }
+        assert!(
+            bas_ap.error <= 0,
+            "error in BestAudioSource::GetAudioProperties"
+        );
+
+        #[allow(clippy::cast_sign_loss)]
         AudioProperties {
             is_float: bas_ap.IsFloat != 0,
-            bytes_per_sample: bas_ap.BytesPerSample,
-            bits_per_sample: bas_ap.BitsPerSample,
-            sample_rate: bas_ap.SampleRate,
-            channels: bas_ap.Channels,
+            bytes_per_sample: bas_ap.BytesPerSample as usize,
+            bits_per_sample: bas_ap.BitsPerSample as usize,
+            sample_rate: bas_ap.SampleRate as u32,
+            channels: bas_ap.Channels as u32,
             channel_layout: bas_ap.ChannelLayout,
             num_samples: bas_ap.NumSamples,
             start_time: bas_ap.StartTime,
@@ -119,18 +113,17 @@ impl BestAudioSource {
         let err = unsafe {
             bs::BestAudioSource_GetPackedAudio(self.internal, slice.as_mut_ptr(), start, count)
         };
-        if err > 0 {
-            panic!("error in BestAudioSource::GetPackedAudio");
-        }
+        assert!(err <= 0, "error in BestAudioSource::GetPackedAudio");
     }
 }
 
 impl Drop for BestAudioSource {
     fn drop(&mut self) {
         let err = unsafe { bs::BestAudioSource_delete(self.internal) };
-        if err > 0 && !std::thread::panicking() {
-            panic!("error while freeing BestAudioSource");
-        }
+        assert!(
+            err <= 0 || std::thread::panicking(),
+            "error while freeing BestAudioSource"
+        );
     }
 }
 
@@ -148,11 +141,11 @@ mod tests {
         assert_eq!(properties.sample_rate, 44100);
         assert_eq!(properties.channels, 2);
 
-        let mut slice = vec![0u8; 256 * properties.bytes_per_sample as usize];
+        let mut slice = vec![0u8; 256 * properties.bytes_per_sample];
         bas.get_packed_audio(&mut slice, 88200, 128);
         assert_ne!(
             slice,
-            vec![0u8; 256 * properties.bytes_per_sample as usize],
+            vec![0u8; 256 * properties.bytes_per_sample],
             "there should be some audio data"
         );
     }

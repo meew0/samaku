@@ -43,7 +43,7 @@ pub struct TrackHeader<'a> {
     pub name: Option<&'a str>,
 }
 
-/// See https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152
+/// See <https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152>
 #[derive(Debug, Clone, Copy)]
 pub enum YCbCrMatrix {
     Default = 0,

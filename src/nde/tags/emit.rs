@@ -1,6 +1,10 @@
 use crate::nde::Span;
 use crate::subtitle;
 
+/// Converts the given `spans` together with the given `global` tag overrides into a string of
+/// ASS tag blocks, to be used by e.g. libass.
+#[must_use]
+#[allow(clippy::missing_panics_doc)] // the expectations should never fail
 pub fn emit(global: &super::Global, spans: &[Span]) -> String {
     use std::fmt::Write;
 
@@ -14,7 +18,7 @@ pub fn emit(global: &super::Global, spans: &[Span]) -> String {
         .expect("emitting tags into a String should not fail");
     maybe_write_block(&mut compiled_text, compiled_tags.as_str());
 
-    for element in spans.iter() {
+    for element in spans {
         match element {
             Span::Tags(tags, text) => {
                 compiled_tags.clear();
@@ -68,13 +72,13 @@ pub trait TagName {
         W: std::fmt::Write;
 }
 
-pub trait EmitValue {
+pub trait Value {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write;
 }
 
-pub trait EmitTag {
+pub trait Tag {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write;
@@ -83,7 +87,7 @@ pub trait EmitTag {
 pub fn tag<W, T>(sink: &mut W, maybe_tag: &Option<T>) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
-    T: EmitTag,
+    T: Tag,
 {
     if let Some(tag) = maybe_tag {
         tag.emit_tag(sink)?;
@@ -92,6 +96,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,
@@ -100,7 +105,7 @@ pub fn simple_tag<W, N, V>(
 where
     W: std::fmt::Write,
     N: TagName,
-    V: EmitValue,
+    V: Value,
 {
     if let Some(value) = maybe_value {
         sink.write_str("\\")?;
@@ -111,6 +116,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn simple_tag_resettable<W, N, V>(
     sink: &mut W,
     tag_name: N,
@@ -119,16 +125,14 @@ pub fn simple_tag_resettable<W, N, V>(
 where
     W: std::fmt::Write,
     N: TagName,
-    V: EmitValue,
+    V: Value,
 {
-    match maybe_value {
-        super::Resettable::Keep => {}
-        _ => {
-            sink.write_str("\\")?;
-            tag_name.write_name(sink)?;
-            if let super::Resettable::Override(value) = maybe_value {
-                value.emit_value(sink)?;
-            }
+    if let super::Resettable::Keep = maybe_value {
+    } else {
+        sink.write_str("\\")?;
+        tag_name.write_name(sink)?;
+        if let super::Resettable::Override(value) = maybe_value {
+            value.emit_value(sink)?;
         }
     }
 
@@ -143,7 +147,7 @@ pub fn complex_tag<W, V>(
 ) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
-    V: EmitValue,
+    V: Value,
 {
     if let Some(value) = maybe_value {
         sink.write_str("\\")?;
@@ -165,7 +169,7 @@ impl TagName for &str {
     }
 }
 
-impl EmitValue for bool {
+impl Value for bool {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -191,19 +195,19 @@ macro_rules! emit_value_numeric {
     };
 }
 
-impl EmitValue for f64 {
+impl Value for f64 {
     emit_value_numeric!();
 }
 
-impl EmitValue for u32 {
+impl Value for u32 {
     emit_value_numeric!();
 }
 
-impl EmitValue for i32 {
+impl Value for i32 {
     emit_value_numeric!();
 }
 
-impl EmitValue for String {
+impl Value for String {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -212,7 +216,7 @@ impl EmitValue for String {
     }
 }
 
-impl EmitValue for subtitle::Alignment {
+impl Value for subtitle::Alignment {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -221,7 +225,7 @@ impl EmitValue for subtitle::Alignment {
     }
 }
 
-impl EmitValue for subtitle::WrapStyle {
+impl Value for subtitle::WrapStyle {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
