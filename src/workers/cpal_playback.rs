@@ -1,6 +1,6 @@
 use std::{
     mem::size_of,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{atomic, Arc, Mutex},
     thread,
 };
 
@@ -9,10 +9,6 @@ use crate::{media, message, model};
 #[derive(Debug, Clone)]
 pub enum Message {
     TryRestart,
-
-    // These are NOT for playing and pausing video/audio playback
-    // at the application level (use global_state.playback_state.playing),
-    // but for the stream level
     Play,
     Pause,
 }
@@ -25,7 +21,8 @@ pub fn spawn(
 
     let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
 
-    let playback_state = Arc::clone(&shared_state.playback_state);
+    let playing = Arc::new(atomic::AtomicBool::new(false));
+    let playback_position = Arc::clone(&shared_state.playback_position);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
     let handle = thread::Builder::new().name("samaku_cpal_playback".to_string()).spawn(move || {
@@ -104,12 +101,13 @@ pub fn spawn(
                             "Could not find a suitable system audio configuration that matches the loaded audio file",
                         );
 
-                        playback_state
+                        playback_position
                             .rate
-                            .store(audio_properties.sample_rate as u32, Ordering::Relaxed);
+                            .store(audio_properties.sample_rate as u32, atomic::Ordering::Relaxed);
 
                         let audio_mutex2 = Arc::clone(&audio_mutex);
-                        let playback_state2 = Arc::clone(&playback_state);
+                        let playing2 = Arc::clone(&playing);
+                        let playback_position2 = Arc::clone(&playback_position);
                         let tx_out2 = tx_out.clone();
 
                         if let Some(stream) = match sample_format {
@@ -117,35 +115,40 @@ pub fn spawn(
                                 &device,
                                 &config.into(),
                                 audio_mutex2,
-                                playback_state2,
+                                playing2,
+                                playback_position2,
                                 tx_out2,
                             )),
                             cpal::SampleFormat::F64 => Some(build_stream::<f64>(
                                 &device,
                                 &config.into(),
                                 audio_mutex2,
-                                playback_state2,
+                                playing2,
+                                playback_position2,
                                 tx_out2,
                             )),
                             cpal::SampleFormat::U8 => Some(build_stream::<u8>(
                                 &device,
                                 &config.into(),
                                 audio_mutex2,
-                                playback_state2,
+                                playing2,
+                                playback_position2,
                                 tx_out2,
                             )),
                             cpal::SampleFormat::I16 => Some(build_stream::<i16>(
                                 &device,
                                 &config.into(),
                                 audio_mutex2,
-                                playback_state2,
+                                playing2,
+                                playback_position2,
                                 tx_out2,
                             )),
                             cpal::SampleFormat::I32 => Some(build_stream::<i32>(
                                 &device,
                                 &config.into(),
                                 audio_mutex2,
-                                playback_state2,
+                                playing2,
+                                playback_position2,
                                 tx_out2,
                             )),
                             other => {
@@ -153,17 +156,20 @@ pub fn spawn(
                                 None
                             }
                         } {
-                            stream.play().expect("Failed to play audio stream");
                             stream_opt = Some(stream);
                         }
                     }
                     self::Message::Play => {
                         if let Some(ref stream) = stream_opt {
+                            playing.store(true, atomic::Ordering::Relaxed);
+                            tx_out.unbounded_send(message::Message::Playing(true)).expect("Failed to send playing message");
                             stream.play().expect("Failed to play audio stream");
                         }
                     }
                     self::Message::Pause => {
                         if let Some(ref stream) = stream_opt {
+                            playing.store(false, atomic::Ordering::Relaxed);
+                            tx_out.unbounded_send(message::Message::Playing(false)).expect("Failed to send pausing message");
                             stream.pause().expect("Failed to pause audio stream");
                         }
                     }
@@ -184,7 +190,8 @@ fn build_stream<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     audio_mutex: Arc<Mutex<Option<media::Audio>>>,
-    playback_state: Arc<model::playback::PlaybackState>,
+    playing: Arc<atomic::AtomicBool>,
+    playback_position: Arc<model::playback::PlaybackPosition>,
     tx_out: super::GlobalSender,
 ) -> cpal::Stream
 where
@@ -196,7 +203,7 @@ where
         .build_output_stream(
             config,
             move |data: &mut [T], _| {
-                data_callback::<T>(data, &audio_mutex, &playback_state, &tx_out);
+                data_callback::<T>(data, &audio_mutex, &playing, &playback_position, &tx_out);
             },
             move |err| println!("Audio stream error: {}", err),
             None,
@@ -207,7 +214,8 @@ where
 fn data_callback<T>(
     data: &mut [T],
     audio_mutex: &Arc<Mutex<Option<media::Audio>>>,
-    playback_state: &Arc<model::playback::PlaybackState>,
+    playing: &Arc<atomic::AtomicBool>,
+    playback_position: &Arc<model::playback::PlaybackPosition>,
     tx_out: &super::GlobalSender,
 ) where
     T: Default,
@@ -216,7 +224,7 @@ fn data_callback<T>(
     let mut audio_lock = audio_mutex.lock().unwrap();
 
     // If playback is paused, zero the array and return
-    if !playback_state.playing.load(Ordering::Relaxed) {
+    if !playing.load(atomic::Ordering::Relaxed) {
         for i in data.iter_mut() {
             *i = Default::default();
         }
@@ -226,7 +234,7 @@ fn data_callback<T>(
     if let Some(audio) = audio_lock.as_mut() {
         // Lock the position mutex, so nothing tries to change the position
         // between now and when we get the audio.
-        let mut auth_pos = playback_state.authoritative_position.lock().unwrap();
+        let mut auth_pos = playback_position.authoritative_position.lock().unwrap();
 
         // cpal expects packed audio. The buffer length refers to the
         // number of samples (so frames * channels)
@@ -240,7 +248,9 @@ fn data_callback<T>(
         audio.fill_buffer_packed(data, *auth_pos as i64, num_frames as i64);
 
         *auth_pos += num_frames;
-        playback_state.position.store(*auth_pos, Ordering::Relaxed);
+        playback_position
+            .position
+            .store(*auth_pos, atomic::Ordering::Relaxed);
 
         tx_out
             .unbounded_send(message::Message::PlaybackStep)

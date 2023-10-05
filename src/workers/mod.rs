@@ -1,9 +1,9 @@
-mod cpal_playback;
-mod video_decoder;
-
 use std::{cell::RefCell, thread};
 
 use crate::message;
+
+mod cpal_playback;
+mod video_decoder;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -51,6 +51,14 @@ impl Workers {
             _sender: sender,
             receiver: RefCell::new(Some(receiver)),
         }
+    }
+
+    pub fn emit_play(&self) {
+        self.cpal_playback.dispatch(cpal_playback::Message::Play);
+    }
+
+    pub fn emit_pause(&self) {
+        self.cpal_playback.dispatch(cpal_playback::Message::Pause);
     }
 
     pub fn emit_playback_step(&self) {

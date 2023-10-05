@@ -45,6 +45,7 @@ pub enum Message {
     PlaybackAdvanceFrames(i32),
     PlaybackAdvanceSeconds(f64),
     TogglePlayback,
+    Playing(bool),
 
     AddSline,
 

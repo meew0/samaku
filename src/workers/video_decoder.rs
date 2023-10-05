@@ -14,7 +14,7 @@ pub fn spawn(
 ) -> super::Worker<self::Message> {
     let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
 
-    let playback_state = Arc::clone(&shared_state.playback_state);
+    let playback_position = Arc::clone(&shared_state.playback_position);
 
     let handle = thread::Builder::new()
         .name("samaku_video_decoder".to_string())
@@ -30,7 +30,7 @@ pub fn spawn(
                             // decode the new frame
                             if let Some(ref video) = video_opt {
                                 let new_frame =
-                                    playback_state.current_frame(video.metadata.frame_rate);
+                                    playback_position.current_frame(video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
                                     let handle = video.get_iced_frame(new_frame);

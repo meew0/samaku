@@ -5,7 +5,7 @@ use std::sync::{
 
 use crate::media;
 
-pub struct PlaybackState {
+pub struct PlaybackPosition {
     // Position in terms of `rate`. Always guaranteed to be correct,
     // but requires a lock on the mutex to access.
     pub authoritative_position: Mutex<u64>,
@@ -15,11 +15,9 @@ pub struct PlaybackState {
 
     // How many `n`'s per second there are.
     pub rate: AtomicU32,
-
-    pub playing: AtomicBool,
 }
 
-impl PlaybackState {
+impl PlaybackPosition {
     pub fn position(&self) -> u64 {
         self.position.load(Ordering::Relaxed)
     }
@@ -61,13 +59,12 @@ impl PlaybackState {
     }
 }
 
-impl Default for PlaybackState {
+impl Default for PlaybackPosition {
     fn default() -> Self {
         Self {
             authoritative_position: Mutex::new(0),
             position: 0.into(),
             rate: 1000.into(), // if nothing is loaded, use milliseconds for position
-            playing: false.into(),
         }
     }
 }

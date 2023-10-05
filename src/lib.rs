@@ -67,6 +67,10 @@ struct Samaku {
     /// Will be slightly different from the information in
     /// `playback_state` due to decoding latency etc.
     pub actual_frame: Option<(i32, iced::widget::image::Handle)>,
+
+    /// Our own representation of whether playback is currently running or not.
+    /// Setting this does nothing; it is updated by playback controller workers.
+    pub playing: bool,
 }
 
 /// Data that needs to be shared with workers.
@@ -78,7 +82,7 @@ struct SharedState {
 
     /// Authoritative playback position and state.
     /// Set this to seek/pause/resume etc.
-    pub playback_state: Arc<model::playback::PlaybackState>,
+    pub playback_position: Arc<model::playback::PlaybackPosition>,
 }
 
 /// More-or-less temporary data, that needs to be mutable within View functions.
@@ -144,7 +148,7 @@ impl Application for Samaku {
 
         let shared_state = SharedState {
             audio: Arc::new(Mutex::new(None)),
-            playback_state: Arc::new(model::playback::PlaybackState::default()),
+            playback_position: Arc::new(model::playback::PlaybackPosition::default()),
         };
 
         (
@@ -160,6 +164,7 @@ impl Application for Samaku {
                 view: RefCell::new(ViewState {
                     subtitle_renderer: media::subtitle::Renderer::new(),
                 }),
+                playing: false,
             },
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
         )
@@ -270,22 +275,26 @@ impl Application for Samaku {
             Self::Message::PlaybackAdvanceFrames(delta_frames) => {
                 if let Some(video_metadata) = &self.video_metadata {
                     self.shared
-                        .playback_state
+                        .playback_position
                         .add_frames(delta_frames, video_metadata.frame_rate);
                 }
                 self.workers.emit_playback_step();
             }
             Self::Message::PlaybackAdvanceSeconds(delta_seconds) => {
-                self.shared.playback_state.add_seconds(delta_seconds);
+                self.shared.playback_position.add_seconds(delta_seconds);
                 self.workers.emit_playback_step();
             }
             Self::Message::TogglePlayback => {
-                // For some reason `fetch_not`, which would perform a toggle in place,
-                // is unstable. `fetch_xor` with true should be equivalent.
-                self.shared
-                    .playback_state
-                    .playing
-                    .fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+                // Notify workers to play or pause. The respective playback controller will assume
+                // responsibility of updating us.
+                if self.playing {
+                    self.workers.emit_pause();
+                } else {
+                    self.workers.emit_play();
+                }
+            }
+            Self::Message::Playing(playing) => {
+                self.playing = playing;
             }
             Self::Message::AddSline => {
                 let new_sline = subtitle::Sline {
