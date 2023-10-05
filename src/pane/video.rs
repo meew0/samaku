@@ -35,7 +35,7 @@ pub fn view<'a>(
                     let compiled =
                         global_state
                             .subtitles
-                            .compile(0, 1000000, video_metadata.frame_rate); // TODO give actual frame range values here
+                            .compile(0, 1_000_000, video_metadata.frame_rate); // TODO give actual frame range values here
                     let elapsed_compile = instant.elapsed();
 
                     let instant2 = std::time::Instant::now();
@@ -87,6 +87,7 @@ pub fn view<'a>(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn update(
     _video_state: &mut State,
     _pane_message: message::Pane,

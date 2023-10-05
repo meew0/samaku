@@ -15,10 +15,10 @@ pub struct PatchRequest {
 #[derive(Debug, Clone)]
 pub struct PatchResponse {
     pub data: Vec<f32>,
-    pub left: usize,
-    pub top: usize,
-    pub width: usize,
-    pub height: usize,
+    pub left: u32,
+    pub top: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub struct Tracker<V, P>
@@ -99,15 +99,13 @@ where
 
         // In theory, the two different patch responses might have different origin points,
         // because the frames might be of a different size.
-        #[allow(clippy::cast_precision_loss)]
         let region1 = last_region.offset(
-            -(patch_response_1.left as f64),
-            -(patch_response_1.top as f64),
+            -f64::from(patch_response_1.left),
+            -f64::from(patch_response_1.top),
         );
-        #[allow(clippy::cast_precision_loss)]
         let predicted_region2 = last_region.offset(
-            -(patch_response_2.left as f64),
-            -(patch_response_2.top as f64),
+            -f64::from(patch_response_2.left),
+            -f64::from(patch_response_2.top),
         );
 
         let options = mv::TrackRegionOptions {
@@ -125,11 +123,10 @@ where
 
         match result {
             Some(refined_region2) => {
-                #[allow(clippy::cast_precision_loss)]
-                self.track.push(
-                    refined_region2
-                        .offset(patch_response_2.left as f64, patch_response_2.top as f64),
-                );
+                self.track.push(refined_region2.offset(
+                    f64::from(patch_response_2.left),
+                    f64::from(patch_response_2.top),
+                ));
                 self.last_frame += 1;
                 TrackResult::Success
             }

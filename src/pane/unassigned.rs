@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use crate::message;
 
+#[must_use]
 pub fn view<'a>(self_pane: super::Pane) -> super::View<'a> {
     super::View {
         title: iced::widget::text("Unassigned pane").into(),

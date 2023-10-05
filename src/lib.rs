@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
 #![allow(clippy::enum_glob_use)]
+#![allow(clippy::doc_markdown)] // Useful to have in general, but too many false positives — perhaps worth revisiting later?
 
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};

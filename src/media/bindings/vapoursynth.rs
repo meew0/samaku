@@ -10,10 +10,8 @@ use rustsynth_sys as vs;
 
 use super::c_string;
 
-fn vs_panic(ret: i32, message: &str) {
-    if ret > 0 {
-        panic!("{}", message);
-    }
+fn vs_assert(ret: i32, message: &str) {
+    assert!(ret <= 0, "{}", message);
 }
 
 static SCRIPTAPI: AtomicPtr<vs::VSSCRIPTAPI> = AtomicPtr::new(ptr::null_mut());
@@ -23,12 +21,9 @@ fn get_script_api() -> *const vs::VSSCRIPTAPI {
     let ptr = SCRIPTAPI.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        let new_ptr = unsafe {
-            vs::getVSScriptAPI(vs::VSSCRIPT_API_VERSION.try_into().unwrap()) as *mut vs::VSSCRIPTAPI
-        };
-        if new_ptr.is_null() {
-            panic!("Failed to initialise VSScriptAPI");
-        }
+        let new_ptr =
+            unsafe { vs::getVSScriptAPI(vs::VSSCRIPT_API_VERSION.try_into().unwrap()).cast_mut() };
+        assert!(!new_ptr.is_null(), "Failed to initialise VSScriptAPI");
 
         SCRIPTAPI.store(new_ptr, Ordering::Relaxed);
         new_ptr
@@ -44,11 +39,9 @@ fn get_api() -> *const vs::VSAPI {
         let script_api = get_script_api();
         let new_ptr = unsafe {
             (*script_api).getVSAPI.unwrap()(vs::VAPOURSYNTH_API_VERSION.try_into().unwrap())
-                as *mut vs::VSAPI
+                .cast_mut()
         };
-        if new_ptr.is_null() {
-            panic!("Failed to initialise VSAPI");
-        }
+        assert!(!new_ptr.is_null(), "Failed to initialise VSAPI");
 
         API.store(new_ptr, Ordering::Relaxed);
         new_ptr
@@ -60,15 +53,15 @@ fn get_api() -> *const vs::VSAPI {
 pub type LogHandler = dyn Fn(i32, &str);
 
 unsafe extern "C" fn log_handler(msg_type: c_int, msg: *const c_char, user_data: *mut c_void) {
-    let log_handler: *mut Box<LogHandler> = unsafe { std::mem::transmute(user_data) };
+    let log_handler: *mut Box<LogHandler> = user_data.cast::<Box<LogHandler>>();
     let rust_str: &str = unsafe { CStr::from_ptr(msg).to_str().unwrap() };
     unsafe { (*log_handler)(msg_type, rust_str) };
 }
 
 unsafe extern "C" fn log_handler_free(user_data: *mut c_void) {
-    let log_handler: *mut Box<LogHandler> = unsafe { std::mem::transmute(user_data) };
+    let log_handler: *mut Box<LogHandler> = user_data.cast::<Box<LogHandler>>();
     let data: Box<Box<LogHandler>> = unsafe { Box::from_raw(log_handler) };
-    drop(data)
+    drop(data);
 }
 
 pub struct Core {
@@ -97,6 +90,7 @@ impl Core {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn get_plugin_by_id(&self, identifier: CString) -> Option<Plugin> {
         self.check_null();
         let api = get_api();
@@ -124,7 +118,7 @@ impl Core {
             (*api).addLogHandler.unwrap()(
                 Some(log_handler),
                 Some(log_handler_free),
-                data_ptr as *mut c_void,
+                data_ptr.cast::<libc::c_void>(),
                 self.core,
             )
         };
@@ -132,6 +126,7 @@ impl Core {
         LogHandle { handle: log_handle }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn remove_log_handler(&mut self, handle: LogHandle) {
         self.check_null();
         let api = get_api();
@@ -145,9 +140,7 @@ impl Core {
     }
 
     fn check_null(&self) {
-        if self.core.is_null() {
-            panic!("Tried to access freed core");
-        }
+        assert!(!self.core.is_null(), "Tried to access freed core");
     }
 }
 
@@ -168,6 +161,7 @@ impl Script {
         unsafe { (*script_api).evalSetWorkingDir.unwrap()(self.script, set_cwd) };
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn evaluate_file(&mut self, script_filename: CString) -> Result<(), i32> {
         let script_api = get_script_api();
         let ret =
@@ -180,6 +174,7 @@ impl Script {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn evaluate_buffer(
         &mut self,
         buffer: CString,
@@ -201,17 +196,19 @@ impl Script {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn get_variable(&self, name: CString, dst: &MutMap) {
         let script_api = get_script_api();
         let ret =
             unsafe { (*script_api).getVariable.unwrap()(self.script, name.as_ptr(), dst.map) };
-        vs_panic(ret, "Script variable retrieval failed");
+        vs_assert(ret, "Script variable retrieval failed");
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn set_variables(&mut self, vars: ConstMap) {
         let script_api = get_script_api();
         let ret = unsafe { (*script_api).setVariables.unwrap()(self.script, vars.map) };
-        vs_panic(ret, "Script variable setting failed");
+        vs_assert(ret, "Script variable setting failed");
     }
 
     pub fn get_output_node(&self, index: i32) -> Option<Node> {
@@ -269,7 +266,8 @@ pub type ConstMap<'a> = Map<'a, MapConstPtr>;
 pub type MutMap<'a> = Map<'a, MapMutPtr>;
 
 impl ConstMap<'_> {
-    pub fn get_int(&self, key: CString, index: i32) -> Result<i64, i32> {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn get_int(&self, key: &CStr, index: i32) -> Result<i64, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let res = unsafe { (*api).mapGetInt.unwrap()(self.map, key.as_ptr(), index, &mut err) };
@@ -280,7 +278,7 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn get_node(&self, key: CString, index: i32) -> Result<Node, i32> {
+    pub fn get_node(&self, key: &CStr, index: i32) -> Result<Node, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let node = unsafe { (*api).mapGetNode.unwrap()(self.map, key.as_ptr(), index, &mut err) };
@@ -291,8 +289,8 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn get_int_array(&self, variable: CString) -> Result<Vec<i64>, i32> {
-        let len = self.num_elements(variable.clone());
+    pub fn get_int_array(&self, variable: &CStr) -> Result<Vec<i64>, i32> {
+        let len = self.num_elements(variable);
         let api = get_api();
         let mut err: i32 = 0;
         let res: *const i64 =
@@ -300,29 +298,29 @@ impl ConstMap<'_> {
         if err > 0 {
             Err(err)
         } else {
-            let slice: &[i64] = unsafe { std::slice::from_raw_parts(res, len as usize) };
+            let slice: &[i64] = unsafe { std::slice::from_raw_parts(res, len) };
             let mut vec = Vec::new();
             vec.extend_from_slice(slice);
             Ok(vec)
         }
     }
-
-    pub fn get_data(&self, variable: CString, index: i32) -> Result<Vec<u8>, i32> {
+    pub fn get_data(&self, variable: &CStr, index: i32) -> Result<Vec<u8>, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let res: *const u8 = unsafe {
-            (*api).mapGetData.unwrap()(self.map, variable.clone().as_ptr(), index, &mut err)
-                as *const u8
+            (*api).mapGetData.unwrap()(self.map, variable.as_ptr(), index, &mut err).cast::<u8>()
         };
         if err > 0 {
             return Err(err);
         }
-        let len: i32 =
-            unsafe { (*api).mapGetDataSize.unwrap()(self.map, variable.as_ptr(), index, &mut err) };
+        let len: usize =
+            unsafe { (*api).mapGetDataSize.unwrap()(self.map, variable.as_ptr(), index, &mut err) }
+                .try_into()
+                .expect("map data size should not be negative");
         if err > 0 {
             Err(err)
         } else {
-            let slice: &[u8] = unsafe { std::slice::from_raw_parts(res, len as usize) };
+            let slice: &[u8] = unsafe { std::slice::from_raw_parts(res, len) };
             let mut vec = Vec::new();
             vec.extend_from_slice(slice);
             Ok(vec)
@@ -342,14 +340,20 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn num_elements(&self, variable: CString) -> i32 {
+    pub fn num_elements(&self, variable: &CStr) -> usize {
         let api = get_api();
         unsafe { (*api).mapNumElements.unwrap()(self.map, variable.as_ptr()) }
+            .try_into()
+            .expect("num_elements result should not be negative")
+    }
+
+    fn into_ptr(self) -> MapConstPtr {
+        self.map
     }
 }
 
 impl<'a> MutMap<'a> {
-    pub fn set_utf8(&mut self, key: CString, value: CString) {
+    pub fn set_utf8(&mut self, key: &CStr, value: &CStr) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetData.unwrap()(
@@ -361,15 +365,15 @@ impl<'a> MutMap<'a> {
                 1,
             )
         };
-        vs_panic(ret, "Map data setting failed");
+        vs_assert(ret, "Map data setting failed");
     }
 
-    pub fn set_path<P: AsRef<Path>>(&mut self, key: CString, value: P) {
+    pub fn set_path<P: AsRef<Path>>(&mut self, key: &CStr, value: P) {
         // TODO: technically, we are reinterpreting arbitrary bytes as UTF-8 here
-        self.set_utf8(key, super::path_to_cstring(value));
+        self.set_utf8(key, super::path_to_cstring(value).as_c_str());
     }
 
-    pub fn append_int(&mut self, key: CString, value: i64) {
+    pub fn append_int(&mut self, key: &CStr, value: i64) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetInt.unwrap()(
@@ -379,10 +383,10 @@ impl<'a> MutMap<'a> {
                 vs::VSMapAppendMode::maAppend as i32,
             )
         };
-        vs_panic(ret, "Map int setting failed");
+        vs_assert(ret, "Map int setting failed");
     }
 
-    pub fn append_node(&mut self, key: CString, value: Node) {
+    pub fn append_node(&mut self, key: &CStr, value: &Node) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetNode.unwrap()(
@@ -392,7 +396,7 @@ impl<'a> MutMap<'a> {
                 vs::VSMapAppendMode::maAppend as i32,
             )
         };
-        vs_panic(ret, "Map node setting failed");
+        vs_assert(ret, "Map node setting failed");
     }
 
     pub fn as_const(&self) -> ConstMap<'a> {
@@ -489,7 +493,7 @@ impl Node {
             (*api).getFrame.unwrap()(
                 n,
                 self.node,
-                error_buf.as_mut_ptr() as *mut i8,
+                error_buf.as_mut_ptr().cast::<i8>(),
                 error_len.into(),
             )
         };
@@ -595,6 +599,9 @@ pub struct FrameRate {
 }
 
 impl From<FrameRate> for f64 {
+    /// Convert the frame rate to a floating-point value by dividing the numerator by the
+    /// denominator. May lose precision for very large numerators/denominators.
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: FrameRate) -> Self {
         value.numerator as f64 / value.denominator as f64
     }
@@ -641,16 +648,20 @@ impl Frame {
         unsafe { (*api).getFrameHeight.unwrap()(self.frame, plane) }
     }
 
-    pub fn get_stride(&self, plane: i32) -> isize {
+    pub fn get_stride(&self, plane: i32) -> usize {
         let api = get_api();
         unsafe { (*api).getStride.unwrap()(self.frame, plane) }
+            .try_into()
+            .expect("stride should be positive")
     }
 
     pub fn get_read_ptr(&self, plane: i32) -> &[u8] {
         let api = get_api();
         let ptr: *const u8 = unsafe { (*api).getReadPtr.unwrap()(self.frame, plane) };
-        let len = self.get_height(plane) as isize * self.get_stride(plane);
-        unsafe { std::slice::from_raw_parts(ptr, len as usize) }
+        let len: usize = usize::try_from(self.get_height(plane))
+            .expect("frame height should be positive")
+            * self.get_stride(plane);
+        unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 }
 
@@ -686,9 +697,9 @@ pub struct Plugin {
 }
 
 impl Plugin {
-    pub fn invoke(&mut self, name: CString, args: ConstMap) -> OwnedMap {
+    pub fn invoke(&mut self, name: &CStr, args: ConstMap) -> OwnedMap {
         let api = get_api();
-        let map = unsafe { (*api).invoke.unwrap()(self.plugin, name.as_ptr(), args.map) };
+        let map = unsafe { (*api).invoke.unwrap()(self.plugin, name.as_ptr(), args.into_ptr()) };
         OwnedMap {
             map: MutMap {
                 map,
@@ -705,10 +716,10 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
     }
 
     let range = props
-        .get_int(CString::new("_ColorRange").unwrap(), 0)
+        .get_int(CString::new("_ColorRange").unwrap().as_c_str(), 0)
         .unwrap_or(-1);
     let matrix = props
-        .get_int(CString::new("_Matrix").unwrap(), 0)
+        .get_int(CString::new("_Matrix").unwrap().as_c_str(), 0)
         .unwrap_or(-1);
 
     if matrix == vs::VSMatrixCoefficients::VSC_MATRIX_RGB as i64 {
@@ -740,54 +751,54 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
 
 pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
     args.append_int(
-        CString::new("format").unwrap(),
+        CString::new("format").unwrap().as_c_str(),
         vs::VSPresetFormat::pfRGB24 as i64,
     );
 
     if vi.get_color_family() != vs::VSColorFamily::cfGray as i32
         && !props
-            .get_int(CString::new("_Matrix").unwrap(), 0)
+            .get_int(CString::new("_Matrix").unwrap().as_c_str(), 0)
             .is_ok_and(|x| x != vs::VSMatrixCoefficients::VSC_MATRIX_UNSPECIFIED as i64)
     {
         args.append_int(
-            CString::new("matrix_in").unwrap(),
+            CString::new("matrix_in").unwrap().as_c_str(),
             vs::VSMatrixCoefficients::VSC_MATRIX_BT709 as i64,
         );
     }
 
     if !props
-        .get_int(CString::new("_Transfer").unwrap(), 0)
+        .get_int(CString::new("_Transfer").unwrap().as_c_str(), 0)
         .is_ok_and(|x| x != vs::VSTransferCharacteristics::VSC_TRANSFER_UNSPECIFIED as i64)
     {
         args.append_int(
-            CString::new("transfer_in").unwrap(),
+            CString::new("transfer_in").unwrap().as_c_str(),
             vs::VSTransferCharacteristics::VSC_TRANSFER_BT709 as i64,
         );
     }
 
     if !props
-        .get_int(CString::new("_Primaries").unwrap(), 0)
+        .get_int(CString::new("_Primaries").unwrap().as_c_str(), 0)
         .is_ok_and(|x| x != vs::VSColorPrimaries::VSC_PRIMARIES_UNSPECIFIED as i64)
     {
         args.append_int(
-            CString::new("primaries_in").unwrap(),
+            CString::new("primaries_in").unwrap().as_c_str(),
             vs::VSColorPrimaries::VSC_PRIMARIES_BT709 as i64,
         );
     }
 
     if !props
-        .get_int(CString::new("_ColorRange").unwrap(), 0)
+        .get_int(CString::new("_ColorRange").unwrap().as_c_str(), 0)
         .is_ok_and(|x| x != -1_i64)
     {
-        args.append_int(CString::new("range_in").unwrap(), 0_i64);
+        args.append_int(CString::new("range_in").unwrap().as_c_str(), 0_i64);
     }
 
     if !props
-        .get_int(CString::new("_ChromaLocation").unwrap(), 0)
+        .get_int(CString::new("_ChromaLocation").unwrap().as_c_str(), 0)
         .is_ok_and(|x| x != -1_i64)
     {
         args.append_int(
-            CString::new("chromaloc_in").unwrap(),
+            CString::new("chromaloc_in").unwrap().as_c_str(),
             vs::VSChromaLocation::VSC_CHROMA_LEFT as i64,
         );
     }
@@ -795,39 +806,42 @@ pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
 
 const PRELUDE: &str = include_str!("../default_scripts/prelude.py");
 
-pub fn open_script<P: AsRef<Path>>(code: &str, filename: P) -> Script {
+pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Script {
     let mut core = Core::create_core(0).unwrap();
-    let mut script = match core.create_script() {
-        Some(script) => script,
-        None => {
-            // This matches how it's done in aegi, where a core is only ever specifically freed
-            // when script creation fails. Doing it otherwise leads to “double free of core”
-            // errors.
-            core.free();
-            panic!("Could not create script");
-        }
+    let Some(mut script) = core.create_script() else {
+        // This matches how it's done in aegi, where a core is only ever specifically freed
+        // when script creation fails. Doing it otherwise leads to “double free of core”
+        // errors.
+        core.free();
+        panic!("Could not create script");
     };
     script.eval_set_working_dir(1);
 
-    let handle = core.add_log_handler(|msg_type, msg| println!("{} - {}", msg_type, msg));
+    let handle = core.add_log_handler(|msg_type, msg| println!("[VapourSynth] {msg_type} - {msg}"));
 
     let mut map_owned = OwnedMap::create_map().unwrap();
     let map = map_owned.as_mut();
-    map.set_path(c_string("filename"), filename);
-    map.set_path(c_string("__aegi_vscache"), Path::new("./vscache/"));
-    map.set_utf8(c_string("__aegi_vsplugins"), c_string(""));
+    map.set_path(c_string("filename").as_c_str(), filename);
     map.set_path(
-        c_string("__samaku_vapoursynth_path"),
+        c_string("__aegi_vscache").as_c_str(),
+        Path::new("./vscache/"),
+    );
+    map.set_utf8(
+        c_string("__aegi_vsplugins").as_c_str(),
+        c_string("").as_c_str(),
+    );
+    map.set_path(
+        c_string("__samaku_vapoursynth_path").as_c_str(),
         std::fs::canonicalize(Path::new("./vapoursynth")).unwrap(),
     );
     // TODO: user paths
     script.set_variables(map.as_const());
 
-    let mut vscript = String::from(PRELUDE);
-    vscript.push_str(code);
+    let mut vs_script_code = String::from(PRELUDE);
+    vs_script_code.push_str(script_code);
 
     script
-        .evaluate_buffer(c_string(vscript), c_string("samaku"))
+        .evaluate_buffer(c_string(vs_script_code), c_string("samaku"))
         .unwrap();
 
     core.remove_log_handler(handle);

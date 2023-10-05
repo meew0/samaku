@@ -812,6 +812,7 @@ pub struct Colour {
 }
 
 impl Colour {
+    #[cfg(test)]
     const BLACK: Self = Self {
         red: 0,
         green: 0,
