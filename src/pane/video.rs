@@ -1,4 +1,6 @@
-use crate::{media, message, subtitle};
+use iced::widget::canvas;
+
+use crate::{media, message, subtitle, view};
 
 #[derive(Debug, Clone, Default)]
 pub struct State {}
@@ -22,8 +24,12 @@ pub fn view<'a>(
         Some((num_frame, handle)) => match &global_state.video_metadata {
             None => empty!(),
             Some(video_metadata) => {
-                if global_state.subtitles.is_empty() {
-                    iced::widget::scrollable(iced::widget::image(handle.clone()))
+                let stack = if global_state.subtitles.is_empty() {
+                    vec![view::widget::StackedImage {
+                        handle: handle.clone(),
+                        x: 0,
+                        y: 0,
+                    }]
                 } else {
                     let instant = std::time::Instant::now();
                     let compiled =
@@ -61,8 +67,11 @@ pub fn view<'a>(
                         global_state.subtitles.slines.len(), compiled.len(), elapsed_compile, elapsed_copy, elapsed_render
                     );
 
-                    iced::widget::scrollable(crate::view::widget::ImageStack::new(stack))
-                }
+                    stack
+                };
+
+                let program = ReticuleProgram {};
+                iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
             }
         },
     };
@@ -83,4 +92,48 @@ pub fn update(
     _pane_message: message::PaneMessage,
 ) -> iced::Command<message::Message> {
     iced::Command::none()
+}
+
+struct ReticuleProgram {}
+
+#[derive(Default)]
+struct ReticuleState {
+    position: iced::Point,
+}
+
+impl canvas::Program<message::Message> for ReticuleProgram {
+    type State = ReticuleState;
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: canvas::Event,
+        bounds: iced::Rectangle,
+        cursor: iced::mouse::Cursor,
+    ) -> (iced::event::Status, Option<message::Message>) {
+        if let canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) =
+            event
+        {
+            if let Some(position) = cursor.position_in(bounds) {
+                state.position = position;
+                return (iced::event::Status::Captured, None);
+            }
+        }
+
+        (iced::event::Status::Ignored, None)
+    }
+
+    fn draw(
+        &self,
+        state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        bounds: iced::Rectangle,
+        _cursor: iced::mouse::Cursor,
+    ) -> Vec<canvas::Geometry> {
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        let circle = canvas::Path::circle(state.position, 20.0);
+        frame.fill(&circle, iced::Color::BLACK);
+        vec![frame.into_geometry()]
+    }
 }

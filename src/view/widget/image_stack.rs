@@ -1,12 +1,15 @@
-use iced::advanced::image;
+use std::hash::Hash;
+use std::marker::PhantomData;
+
+use iced::advanced::graphics::geometry;
 use iced::advanced::layout;
 use iced::advanced::mouse;
 use iced::advanced::renderer;
-use iced::advanced::widget::Tree;
+use iced::advanced::widget::{tree, Tree};
+use iced::advanced::{image, Clipboard, Shell};
 use iced::advanced::{Layout, Widget};
-use iced::{ContentFit, Element, Length, Rectangle, Size, Vector};
-
-use std::hash::Hash;
+use iced::widget::canvas;
+use iced::{ContentFit, Element, Event, Length, Rectangle, Size, Vector};
 
 #[derive(Debug)]
 pub struct StackedImage<H> {
@@ -18,21 +21,35 @@ pub struct StackedImage<H> {
 /// Displays a stack of images overlaid on top of each other.
 /// The size is defined by the first image in the stack
 #[derive(Debug)]
-pub struct ImageStack<H> {
+pub struct ImageStack<H, M, P, R>
+where
+    P: canvas::Program<M, R>,
+    R: image::Renderer<Handle = H> + canvas::Renderer,
+{
     images: Vec<StackedImage<H>>,
     width: Length,
     height: Length,
     content_fit: ContentFit,
+    program: P,
+    _phantom_message: PhantomData<M>,
+    _phantom_renderer: PhantomData<R>,
 }
 
-impl<H> ImageStack<H> {
+impl<H, M, P, R> ImageStack<H, M, P, R>
+where
+    P: canvas::Program<M, R>,
+    R: image::Renderer<Handle = H> + canvas::Renderer,
+{
     /// Creates a new [`ImageStack`] with the given path.
-    pub fn new<T: Into<Vec<StackedImage<H>>>>(images: T) -> Self {
+    pub fn new<T: Into<Vec<StackedImage<H>>>>(images: T, program: P) -> Self {
         ImageStack {
             images: images.into(),
             width: Length::Shrink,
             height: Length::Shrink,
             content_fit: ContentFit::Contain,
+            program,
+            _phantom_message: PhantomData,
+            _phantom_renderer: PhantomData,
         }
     }
 
@@ -145,10 +162,9 @@ pub fn draw<R, H>(
             (image, sum_bounds)
         })
         .collect();
-
     let render = |renderer: &mut R| {
-        for (image, bounds) in to_draw.iter() {
-            renderer.draw(image.handle.clone(), *bounds);
+        for (image, bounds) in to_draw.into_iter() {
+            renderer.draw(image.handle.clone(), bounds);
         }
     };
 
@@ -159,10 +175,11 @@ pub fn draw<R, H>(
     }
 }
 
-impl<M, R, H> Widget<M, R> for ImageStack<H>
+impl<M, R, H, P> Widget<M, R> for ImageStack<H, M, P, R>
 where
-    R: image::Renderer<Handle = H>,
+    R: image::Renderer<Handle = H> + canvas::Renderer,
     H: Clone + Hash,
+    P: canvas::Program<M, R>,
 {
     fn width(&self) -> Length {
         self.width
@@ -185,24 +202,97 @@ where
 
     fn draw(
         &self,
-        _state: &Tree,
+        tree: &Tree,
         renderer: &mut R,
-        _theme: &R::Theme,
+        theme: &R::Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        draw(renderer, layout, &self.images, self.content_fit)
+        draw(renderer, layout, &self.images, self.content_fit);
+
+        let bounds = layout.bounds();
+
+        let state = tree.state.downcast_ref::<P::State>();
+        renderer.with_layer(bounds, |renderer| {
+            renderer.with_translation(Vector::new(bounds.x, bounds.y), |renderer| {
+                canvas::Renderer::draw(
+                    renderer,
+                    self.program
+                        .draw(state, renderer, theme, layout.bounds(), cursor),
+                );
+            })
+        });
+    }
+
+    fn tag(&self) -> tree::Tag {
+        struct Tag<T>(T);
+        tree::Tag::of::<Tag<P::State>>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(P::State::default())
+    }
+
+    fn on_event(
+        &mut self,
+        tree: &mut Tree,
+        event: Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _renderer: &R,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, M>,
+        _viewport: &Rectangle,
+    ) -> iced::event::Status {
+        let bounds = layout.bounds();
+
+        let canvas_event = match event {
+            Event::Mouse(mouse_event) => Some(canvas::Event::Mouse(mouse_event)),
+            Event::Touch(touch_event) => Some(canvas::Event::Touch(touch_event)),
+            Event::Keyboard(keyboard_event) => Some(canvas::Event::Keyboard(keyboard_event)),
+            _ => None,
+        };
+
+        if let Some(canvas_event) = canvas_event {
+            let state = tree.state.downcast_mut::<P::State>();
+
+            let (event_status, message) = self.program.update(state, canvas_event, bounds, cursor);
+
+            if let Some(message) = message {
+                shell.publish(message);
+            }
+
+            return event_status;
+        }
+
+        iced::event::Status::Ignored
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &R,
+    ) -> mouse::Interaction {
+        let bounds = layout.bounds();
+        let state = tree.state.downcast_ref::<P::State>();
+
+        self.program.mouse_interaction(state, bounds, cursor)
     }
 }
 
-impl<'a, M, R, H> From<ImageStack<H>> for Element<'a, M, R>
+impl<'a, M, R, H, P> From<ImageStack<H, M, P, R>> for Element<'a, M, R>
 where
-    R: image::Renderer<Handle = H>,
+    R: image::Renderer<Handle = H> + geometry::Renderer + 'a,
     H: Clone + Hash + 'a,
+    P: canvas::Program<M, R> + 'a,
+    M: 'a,
 {
-    fn from(image: ImageStack<H>) -> Element<'a, M, R> {
+    fn from(image: ImageStack<H, M, P, R>) -> Element<'a, M, R> {
         Element::new(image)
     }
 }
