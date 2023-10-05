@@ -40,7 +40,7 @@ pub fn run() -> iced::Result {
 }
 
 /// Global application state.
-struct Samaku {
+pub struct Samaku {
     workers: workers::Workers,
 
     shared: SharedState,
@@ -74,7 +74,7 @@ struct Samaku {
 }
 
 /// Data that needs to be shared with workers.
-struct SharedState {
+pub struct SharedState {
     /// Currently loaded audio, if present.
     /// Can be shared into workers etc., but be sure not to hold the mutex for
     /// too long, otherwise the playback worker will stall.
@@ -86,7 +86,7 @@ struct SharedState {
 }
 
 /// More-or-less temporary data, that needs to be mutable within View functions.
-struct ViewState {
+pub struct ViewState {
     pub subtitle_renderer: media::subtitle::Renderer,
 }
 
@@ -341,7 +341,7 @@ impl Application for Samaku {
                     self.update_filter_lists();
                 }
             }
-            Self::Message::DeleteFilter(filter_index) => {
+            Self::Message::DeleteFilter(_filter_index) => {
                 todo!()
             }
             Self::Message::AddNode(node_shell) => {

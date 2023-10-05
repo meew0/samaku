@@ -24,7 +24,7 @@ pub struct PaneView<'a> {
     pub content: iced::Element<'a, message::Message>,
 }
 
-pub fn dispatch_view<'a>(
+pub(crate) fn dispatch_view<'a>(
     self_pane: Pane,
     global_state: &'a crate::Samaku,
     state: &'a PaneState,

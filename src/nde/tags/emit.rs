@@ -1,7 +1,7 @@
 use crate::nde::Span;
 use crate::subtitle;
 
-pub fn emit(global: &super::Global, spans: &Vec<Span>) -> String {
+pub fn emit(global: &super::Global, spans: &[Span]) -> String {
     use std::fmt::Write;
 
     let mut compiled_text = String::new();
@@ -14,7 +14,7 @@ pub fn emit(global: &super::Global, spans: &Vec<Span>) -> String {
         .expect("emitting tags into a String should not fail");
     maybe_write_block(&mut compiled_text, compiled_tags.as_str());
 
-    for (i, element) in spans.iter().enumerate() {
+    for element in spans.iter() {
         match element {
             Span::Tags(tags, text) => {
                 compiled_tags.clear();

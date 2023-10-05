@@ -35,7 +35,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
             if let Some(block_end) = slice.find('}') {
                 // We found a tag block.
                 // We first need to parse it, to find out whether we must end the current drawing
-                let tag_block = parse_tag_block(&slice[1..block_end], &mut global, false);
+                let tag_block = parse_tag_block(&slice[1..block_end], &mut global);
                 let TagBlock {
                     reset,
                     new_local,
@@ -145,7 +145,7 @@ pub fn parse_raw(text: &str) -> (Box<Global>, Vec<Span>) {
     (global, spans)
 }
 
-fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
+fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
     let mut tag_block = TagBlock {
         reset: None,
         new_local: Local::empty(),
@@ -165,12 +165,7 @@ fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
             },
             Comment => match next_char {
                 '\\' => {
-                    parse_tag(
-                        &block[tag_start_bytes..byte_index],
-                        global,
-                        &mut tag_block,
-                        nested,
-                    );
+                    parse_tag(&block[tag_start_bytes..byte_index], global, &mut tag_block);
                     TagStart
                 }
                 _ => Comment,
@@ -186,12 +181,7 @@ fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
             },
             Tag => match next_char {
                 '\\' => {
-                    parse_tag(
-                        &block[tag_start_bytes..byte_index],
-                        global,
-                        &mut tag_block,
-                        nested,
-                    );
+                    parse_tag(&block[tag_start_bytes..byte_index], global, &mut tag_block);
                     TagStart
                 }
                 '(' => Parenthesis,
@@ -206,7 +196,7 @@ fn parse_tag_block(block: &str, global: &mut Global, nested: bool) -> TagBlock {
         }
     }
 
-    parse_tag(&block[tag_start_bytes..], global, &mut tag_block, nested);
+    parse_tag(&block[tag_start_bytes..], global, &mut tag_block);
 
     tag_block
 }
@@ -219,7 +209,7 @@ enum TagBlockParseState {
     Parenthesis,
 }
 
-fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool) -> bool {
+fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     if tag.is_empty() {
         return false;
     }
@@ -494,7 +484,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock, nested: bool)
         if twa.has_backslash_arg {
             let mut inner_global = Global::empty();
             let animated_tags = twa.string_arg(twa.arguments.len() - 1).unwrap();
-            let mut inner_block = parse_tag_block(animated_tags, &mut inner_global, true);
+            let mut inner_block = parse_tag_block(animated_tags, &mut inner_global);
 
             let global_animatable = inner_global.split_animatable();
             if global_animatable != GlobalAnimatable::empty() {
@@ -1025,6 +1015,7 @@ struct TagBlock {
 }
 
 impl TagBlock {
+    #[cfg(test)]
     fn empty() -> Self {
         Self {
             reset: None,
@@ -1169,7 +1160,6 @@ mod tests {
         parse_tag_block(
             "\\an5\\an8\\clip(1,2,3,4)\\iclip(5,6,7,8)\\iclip(aaa)\\clip(bbb)\\pos(123,456)\\move(1,2,3,4)\\fad(1,2)\\fade(1,2,3,4,5,6,7)\\org(1,2)\\org(3,4)",
             &mut global,
-            false,
         );
 
         // These tags should NOT override their predecessors.
@@ -1194,7 +1184,7 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\xbord\\ybord\\xshad\\yshad\\fax\\fay\\iclip\\blur\\fscx\\fscy\\fsp\\fs\\frx\\fry\\frz\\fn\\an\\pos\\fade\\org\\t\\1c\\2c\\3c\\4c\\1a\\2a\\3a\\4a\\be\\b\\i\\kt\\s\\u\\pbo\\p\\q\\fe", &mut global, false);
+        let block = parse_tag_block("\\xbord\\ybord\\xshad\\yshad\\fax\\fay\\iclip\\blur\\fscx\\fscy\\fsp\\fs\\frx\\fry\\frz\\fn\\an\\pos\\fade\\org\\t\\1c\\2c\\3c\\4c\\1a\\2a\\3a\\4a\\be\\b\\i\\kt\\s\\u\\pbo\\p\\q\\fe", &mut global);
 
         assert_matches!(block.new_local.border.x, Reset);
         assert_matches!(block.new_local.border.y, Reset);
@@ -1250,7 +1240,6 @@ mod tests {
         let block = parse_tag_block(
             "\\bord\\move\\shad\\fsc\\alpha\\a\\fad\\clip\\kf",
             &mut global,
-            false,
         );
         assert_matches!(block.new_local.border.x, Reset);
         assert_matches!(block.new_local.border.y, Reset);
@@ -1276,7 +1265,7 @@ mod tests {
         );
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\ko", &mut global, false);
+        let block = parse_tag_block("\\ko", &mut global);
         assert_eq!(
             block.new_local.karaoke,
             Karaoke {
@@ -1286,7 +1275,7 @@ mod tests {
         );
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\k", &mut global, false);
+        let block = parse_tag_block("\\k", &mut global);
         assert_eq!(
             block.new_local.karaoke,
             Karaoke {
@@ -1301,7 +1290,7 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global, false);
+        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global);
 
         assert_eq!(block.new_local.border.x, Override(1.0));
         assert_eq!(block.new_local.border.y, Override(2.0));
@@ -1446,7 +1435,6 @@ mod tests {
         let block = parse_tag_block(
             "\\bord1\\move(2,3,4,5)\\shad6\\fsc7\\alpha&H08&\\a5\\fad(450,550)\\clip(2,m 0 0 s 100 0 100 100 0 100 c)\\kf8\\b500",
             &mut global,
-            false,
         );
         assert_eq!(block.new_local.border.x, Override(1.0));
         assert_eq!(block.new_local.border.y, Override(1.0));
@@ -1513,7 +1501,7 @@ mod tests {
         );
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\ko9\\fs+10", &mut global, false);
+        let block = parse_tag_block("\\ko9\\fs+10", &mut global);
         assert_eq!(
             block.new_local.karaoke,
             Karaoke {
@@ -1527,7 +1515,7 @@ mod tests {
         );
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\k10\\fs-11", &mut global, false);
+        let block = parse_tag_block("\\k10\\fs-11", &mut global);
         assert_eq!(
             block.new_local.karaoke,
             Karaoke {
@@ -1638,11 +1626,7 @@ mod tests {
         );
 
         let mut global = Global::empty();
-        parse_tag_block(
-            "\\t(\\clip(1,2,3,4))\\t(\\clip(5,6,7,8))",
-            &mut global,
-            false,
-        );
+        parse_tag_block("\\t(\\clip(1,2,3,4))\\t(\\clip(5,6,7,8))", &mut global);
         assert_eq!(global.animations.len(), 2);
     }
 
@@ -1664,7 +1648,6 @@ mod tests {
         let block = parse_tag_block(
             "\\t(\\fsp10)\\t(\\fnAlegreya)\\t(\\clip(1,2,3,4))\\t(\\iclip(abc))",
             &mut global,
-            false,
         );
 
         assert_eq!(global.animations.len(), 1);
@@ -1689,11 +1672,11 @@ mod tests {
         let mut global = Global::empty();
 
         assert_eq!(
-            parse_tag_block("\\r(Style)", &mut global, false).reset,
+            parse_tag_block("\\r(Style)", &mut global).reset,
             Some(Reset::ResetToStyle("Style".to_owned()))
         );
         assert_eq!(
-            parse_tag_block("\\r(Style))", &mut global, false).reset,
+            parse_tag_block("\\r(Style))", &mut global).reset,
             Some(Reset::ResetToStyle("Style".to_owned()))
         );
     }
@@ -1710,7 +1693,7 @@ mod tests {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
 
-        if !parse_tag(tag, &mut global, &mut block, false) {
+        if !parse_tag(tag, &mut global, &mut block) {
             panic!("should have parsed a tag in test_tag -- input: {}", tag);
         }
 
@@ -1886,7 +1869,7 @@ mod tests {
     fn position_empty_second_arg() {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
-        parse_tag("pos(50,)", &mut global, &mut block, false);
+        parse_tag("pos(50,)", &mut global, &mut block);
         assert_eq!(global.position, None);
     }
 
@@ -1894,14 +1877,14 @@ mod tests {
     fn font_size_space_before_plus() {
         let mut global = Global::empty();
         let mut block = TagBlock::empty();
-        parse_tag("fs +10", &mut global, &mut block, false);
+        parse_tag("fs +10", &mut global, &mut block);
         assert_eq!(block.new_local.font_size, FontSize::Set(10.0));
     }
 
     #[test]
     fn reset_after_pbo() {
         let mut global = Global::empty();
-        let block = parse_tag_block("\\pbo50\\r", &mut global, false);
+        let block = parse_tag_block("\\pbo50\\r", &mut global);
         assert_eq!(block.new_local.drawing_baseline_offset, Some(50.0));
     }
 

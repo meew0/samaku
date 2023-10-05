@@ -131,14 +131,4 @@ impl Span {
     fn is_reset(&self) -> bool {
         matches!(self, Self::Reset | Self::ResetToStyle(_))
     }
-
-    /// Moves the local overrides out of this span, if present, and discards the rest.
-    /// Guaranteed to return `Some(_)` if and only if this span is `Tags` or `Drawing`.
-    fn into_local(self) -> Option<tags::Local> {
-        match self {
-            Self::Tags(local, _) => Some(local),
-            Self::Drawing(local, _) => Some(local),
-            _ => None,
-        }
-    }
 }

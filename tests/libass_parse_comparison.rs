@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 use std::collections::hash_map::RandomState;
-use std::hash::{BuildHasher, Hash};
+use std::hash::BuildHasher;
 
 use samaku::media;
 use samaku::nde;

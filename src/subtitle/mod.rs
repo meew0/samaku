@@ -307,9 +307,9 @@ impl SlineTrack {
     /// Compile subtitles in the given frame range to ASS.
     pub fn compile(
         &self,
-        frame_start: i32,
-        frame_count: i32,
-        frame_rate: media::FrameRate,
+        _frame_start: i32,
+        _frame_count: i32,
+        _frame_rate: media::FrameRate,
     ) -> Vec<self::ass::Event> {
         let mut counter = 0;
         let mut compiled: Vec<self::ass::Event> = vec![];

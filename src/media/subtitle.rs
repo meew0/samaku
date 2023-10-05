@@ -1,7 +1,8 @@
+pub use ass::Image;
+
 use crate::{subtitle, view};
 
 use super::bindings::{ass, c_string};
-pub use ass::Image;
 
 pub struct OpaqueTrack {
     internal: ass::Track,
@@ -144,6 +145,12 @@ impl Renderer {
 
         self.internal
             .render_frame(&subtitles.internal, now, callback);
+    }
+}
+
+impl Default for Renderer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
