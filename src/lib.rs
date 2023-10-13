@@ -75,6 +75,10 @@ pub struct Samaku {
     /// Our own representation of whether playback is currently running or not.
     /// Setting this does nothing; it is updated by playback controller workers.
     pub playing: bool,
+
+    /// Control widgets that are shown over the video, in order to allow quick setting of positions
+    /// and the like.
+    pub reticules: Vec<model::reticule::Reticule>,
 }
 
 /// Data that needs to be shared with workers.
@@ -169,6 +173,12 @@ impl Application for Samaku {
                     subtitle_renderer: media::subtitle::Renderer::new(),
                 }),
                 playing: false,
+                reticules: vec![model::reticule::Reticule {
+                    shape: model::reticule::Shape::Cross,
+                    position: nde::tags::Position { x: 300.0, y: 500.0 },
+                    radius: 10.0,
+                    source_node_id: 0,
+                }],
             },
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
         )
@@ -404,6 +414,13 @@ impl Application for Samaku {
                                 ));
                         }
                     }
+                }
+            }
+            Self::Message::UpdateReticulePosition(index, position) => {
+                if let Some(reticule) = self.reticules.get_mut(index) {
+                    reticule.position = position;
+                } else {
+                    println!("Failed to update position of reticule {index}");
                 }
             }
         }

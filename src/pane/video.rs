@@ -1,6 +1,6 @@
 use iced::widget::canvas;
 
-use crate::{media, message, subtitle, view};
+use crate::{media, message, model, subtitle, view};
 
 #[derive(Debug, Clone, Default)]
 pub struct State {}
@@ -24,6 +24,11 @@ pub fn view<'a>(
         Some((num_frame, handle)) => match &global_state.video_metadata {
             None => empty!(),
             Some(video_metadata) => {
+                let storage_size = subtitle::Resolution {
+                    x: video_metadata.width,
+                    y: video_metadata.height,
+                };
+
                 let stack = if global_state.subtitles.is_empty() {
                     vec![view::widget::StackedImage {
                         handle: handle.clone(),
@@ -46,10 +51,6 @@ pub fn view<'a>(
                     let elapsed_copy = instant2.elapsed();
 
                     let instant3 = std::time::Instant::now();
-                    let storage_size = subtitle::Resolution {
-                        x: video_metadata.width,
-                        y: video_metadata.height,
-                    };
                     let stack = {
                         let mut view_state = global_state.view.borrow_mut();
                         view_state.subtitle_renderer.render_subtitles_onto_base(
@@ -70,7 +71,10 @@ pub fn view<'a>(
                     stack
                 };
 
-                let program = ReticuleProgram {};
+                let program = ReticuleProgram {
+                    reticules: &global_state.reticules,
+                    storage_size,
+                };
                 iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
             }
         },
@@ -95,15 +99,18 @@ pub fn update(
     iced::Command::none()
 }
 
-struct ReticuleProgram {}
+struct ReticuleProgram<'a> {
+    reticules: &'a Vec<model::reticule::Reticule>,
+    storage_size: subtitle::Resolution,
+}
 
 #[derive(Default)]
 struct ReticuleState {
-    dragging: bool,
-    position: iced::Point,
+    dragging: Option<usize>,
+    drag_offset: iced::Vector,
 }
 
-impl canvas::Program<message::Message> for ReticuleProgram {
+impl<'a> canvas::Program<message::Message> for ReticuleProgram<'a> {
     type State = ReticuleState;
 
     fn update(
@@ -117,19 +124,34 @@ impl canvas::Program<message::Message> for ReticuleProgram {
             if let canvas::Event::Mouse(mouse_event) = event {
                 match mouse_event {
                     iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
-                        state.dragging = true;
-                        state.position = position;
-                        return (iced::event::Status::Captured, None);
+                        for (i, reticule) in self.reticules.iter().enumerate().rev() {
+                            let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
+                            if iced_pos.distance(position) < reticule.radius {
+                                state.dragging = Some(i);
+                                state.drag_offset = position - iced_pos;
+                                return (iced::event::Status::Captured, None);
+                            }
+                        }
                     }
                     iced::mouse::Event::CursorMoved { .. } => {
-                        if state.dragging {
-                            state.position = position;
-                            return (iced::event::Status::Captured, None);
+                        if let Some(dragging_reticule_index) = state.dragging {
+                            return (
+                                iced::event::Status::Captured,
+                                Some(message::Message::UpdateReticulePosition(
+                                    dragging_reticule_index,
+                                    model::reticule::Reticule::position_from_iced(
+                                        position,
+                                        state.drag_offset,
+                                        bounds.size(),
+                                        self.storage_size,
+                                    ),
+                                )),
+                            );
                         }
                     }
                     iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
-                        if state.dragging {
-                            state.dragging = false;
+                        if state.dragging.is_some() {
+                            state.dragging = None;
                             return (iced::event::Status::Captured, None);
                         }
                     }
@@ -143,15 +165,22 @@ impl canvas::Program<message::Message> for ReticuleProgram {
 
     fn draw(
         &self,
-        state: &Self::State,
+        _state: &Self::State,
         renderer: &iced::Renderer,
         _theme: &iced::Theme,
         bounds: iced::Rectangle,
         _cursor: iced::mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let circle = canvas::Path::circle(state.position, 20.0);
-        frame.fill(&circle, iced::Color::BLACK);
+
+        for reticule in self.reticules {
+            let circle = canvas::Path::circle(
+                reticule.iced_position(bounds.size(), self.storage_size),
+                reticule.radius,
+            );
+            frame.fill(&circle, iced::Color::BLACK);
+        }
+
         vec![frame.into_geometry()]
     }
 }

@@ -66,6 +66,8 @@ pub enum Message {
         iced::Point,
         pane_grid::Pane,
     ),
+
+    UpdateReticulePosition(usize, nde::tags::Position),
 }
 
 impl Message {
