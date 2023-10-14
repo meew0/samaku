@@ -40,6 +40,28 @@ impl Node for Sline {
 }
 
 #[derive(Debug, Clone)]
+pub struct FrameRate {}
+
+impl Node for FrameRate {
+    fn name(&self) -> &'static str {
+        "Input: Frame rate"
+    }
+
+    fn desired_inputs(&self) -> &[SocketType] {
+        &[SocketType::LeafInput(LeafInputType::FrameRate)]
+    }
+
+    fn predicted_outputs(&self) -> &[SocketType] {
+        &[SocketType::FrameRate]
+    }
+
+    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+        super::retrieve!(inputs[0], SocketValue::FrameRate(frame_rate));
+        Ok(vec![SocketValue::FrameRate(*frame_rate)])
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Position {
     pub value: nde::tags::Position,
 }

@@ -120,8 +120,12 @@ pub fn view<'a>(
                     // which lets us determine what style to draw nodes in, as well as provide
                     // precise information of what types sockets contain
                     let mut counter = 0;
-                    let nde_result_or_error =
-                        subtitle::compile::nde(active_sline, &nde_filter.graph, &mut counter);
+                    let nde_result_or_error = subtitle::compile::nde(
+                        active_sline,
+                        &nde_filter.graph,
+                        global_state.frame_rate(),
+                        &mut counter,
+                    );
 
                     let mut graph_content = vec![];
                     let scale = pane_state.matrix.get_scale(); // For correct node grid translation behaviour
@@ -511,6 +515,11 @@ where
             iced::Color::from_rgb(0.09, 0.81, 0.48),
             "Position",
         ),
+        nde::node::SocketType::FrameRate => (
+            BLOB_RADIUS,
+            iced::Color::from_rgb(0.73, 0.38, 0.76),
+            "Frame rate",
+        ),
         nde::node::SocketType::LeafInput(_) => return None,
     };
 
@@ -557,7 +566,15 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
                 vec![
                     menu_item("Subtitle", nde::node::Shell::InputSline),
                     menu_item("Position", nde::node::Shell::InputPosition),
+                    menu_item("Frame rate", nde::node::Shell::InputFrameRate),
                 ],
+            ),
+            sub_menu(
+                "Split",
+                vec![menu_item(
+                    "Frame by frame",
+                    nde::node::Shell::SplitFrameByFrame,
+                )],
             ),
             menu_item("Italicise", nde::node::Shell::Italic),
             menu_item("Set position", nde::node::Shell::SetPosition),

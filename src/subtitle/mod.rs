@@ -359,7 +359,7 @@ impl SlineTrack {
         &self,
         _frame_start: i32,
         _frame_count: i32,
-        _frame_rate: media::FrameRate,
+        frame_rate: media::FrameRate,
     ) -> Vec<self::ass::Event> {
         let mut counter = 0;
         let mut compiled: Vec<self::ass::Event> = vec![];
@@ -368,7 +368,7 @@ impl SlineTrack {
             match sline.nde_filter_index {
                 Some(filter_index) => {
                     let graph = &self.filters[filter_index].graph;
-                    match compile::nde(sline, graph, &mut counter) {
+                    match compile::nde(sline, graph, frame_rate, &mut counter) {
                         Ok(mut nde_result) => match &mut nde_result.events {
                             Some(events) => compiled.append(events),
                             None => println!("No output from NDE filter"),

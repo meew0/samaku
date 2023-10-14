@@ -598,6 +598,31 @@ pub struct FrameRate {
     pub denominator: u64,
 }
 
+impl FrameRate {
+    pub fn ms_to_frame(&self, ass_ms: i64) -> i32 {
+        // since the numerator is guaranteed to be smaller than i64 max
+        #[allow(clippy::cast_possible_wrap)]
+        let numerator = ass_ms * self.numerator as i64;
+        #[allow(clippy::cast_possible_wrap)]
+        let denominator = 1000 * self.denominator as i64;
+        (numerator / denominator)
+            .try_into()
+            .expect("overflow while converting time to frame number")
+    }
+
+    pub fn frame_to_ms(&self, frame: i32) -> i64 {
+        #[allow(clippy::cast_possible_wrap)]
+        let inv_numerator = i64::from(frame * 1000) * self.denominator as i64;
+        #[allow(clippy::cast_possible_wrap)]
+        let result = inv_numerator / self.numerator as i64;
+        result
+    }
+
+    pub fn frame_time_ms(&self) -> i64 {
+        self.frame_to_ms(1)
+    }
+}
+
 impl From<FrameRate> for f64 {
     /// Convert the frame rate to a floating-point value by dividing the numerator by the
     /// denominator. May lose precision for very large numerators/denominators.

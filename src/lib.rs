@@ -109,6 +109,18 @@ impl Samaku {
             }
         }
     }
+
+    /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
+    pub fn frame_rate(&self) -> media::FrameRate {
+        if let Some(video_metadata) = self.video_metadata {
+            video_metadata.frame_rate
+        } else {
+            media::FrameRate {
+                numerator: 24,
+                denominator: 1,
+            }
+        }
+    }
 }
 
 impl Application for Samaku {
@@ -404,7 +416,9 @@ impl Application for Samaku {
                             .subtitles
                             .active_nde_filter_mut(self.active_sline_index)
                         {
-                            if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index) {
+                            if let Some(node) =
+                                filter.graph.nodes.get_mut(reticules.source_node_index)
+                            {
                                 node.node.reticule_update(reticules, index, position);
                             }
                         }

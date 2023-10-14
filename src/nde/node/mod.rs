@@ -1,18 +1,21 @@
 use std::fmt::Debug;
 
+pub use input::FrameRate as InputFrameRate;
 pub use input::Position as InputPosition;
 pub use input::Sline as InputSline;
 pub use motion_track::MotionTrack;
 pub use output::Output;
 pub use positioning::SetPosition;
+pub use split::FrameByFrame as SplitFrameByFrame;
 pub use style_basic::Italic;
 
-use crate::{message, model, nde, subtitle};
+use crate::{media, message, model, nde, subtitle};
 
 mod input;
 mod motion_track;
 mod output;
 mod positioning;
+mod split;
 mod style_basic;
 
 /// Represents a value passed into a socket.
@@ -31,9 +34,11 @@ pub enum SocketValue<'a> {
     /// A collection of events. Can have any length.
     MultipleEvents(Vec<super::Event>),
 
-    Sline(&'a subtitle::Sline),
-
     Position(nde::tags::Position),
+
+    FrameRate(media::FrameRate),
+
+    Sline(&'a subtitle::Sline),
 
     /// Compiled events that are ready to copy into libass.
     CompiledEvents(Vec<subtitle::ass::Event<'static>>),
@@ -46,6 +51,7 @@ impl<'a> SocketValue<'a> {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
             SocketValue::Position(_) => Some(SocketType::Position),
+            SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
             SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
         }
     }
@@ -87,6 +93,17 @@ impl<'a> SocketValue<'a> {
     }
 }
 
+macro_rules! retrieve {
+    ($val:expr, $pattern:pat) => {
+        let value = $val;
+        let $pattern = value else {
+            return Err(Error::MismatchedTypes);
+        };
+    };
+}
+
+pub(crate) use retrieve;
+
 /// Represents a type of socket, as in, what kind of value a node would like to have passed into it.
 #[derive(Debug, Clone, Copy)]
 pub enum SocketType {
@@ -94,6 +111,7 @@ pub enum SocketType {
     MultipleEvents,
     AnyEvents,
     Position,
+    FrameRate,
 
     /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
     /// input and thus acts as a node that supplies an initial value to the graph.
@@ -113,6 +131,7 @@ impl SocketType {
 #[derive(Debug, Clone, Copy)]
 pub enum LeafInputType {
     Sline,
+    FrameRate,
 }
 
 pub trait Node: Debug {
@@ -166,9 +185,11 @@ pub enum Error {
 pub enum Shell {
     InputSline,
     InputPosition,
+    InputFrameRate,
     Italic,
     SetPosition,
     MotionTrack,
+    SplitFrameByFrame,
 }
 
 impl Shell {
@@ -179,9 +200,11 @@ impl Shell {
             Shell::InputPosition => Box::new(InputPosition {
                 value: nde::tags::Position { x: 0.0, y: 0.0 },
             }),
+            Shell::InputFrameRate => Box::new(InputFrameRate {}),
             Shell::Italic => Box::new(Italic {}),
             Shell::SetPosition => Box::new(SetPosition {}),
             Shell::MotionTrack => Box::new(MotionTrack {}),
+            Shell::SplitFrameByFrame => Box::new(SplitFrameByFrame {}),
         }
     }
 }

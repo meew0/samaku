@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::nde;
+use crate::{media, nde};
 
 pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Event<'a> {
     let event = super::ass::Event {
@@ -31,6 +31,7 @@ pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Ev
 pub fn nde<'a, 'b>(
     sline: &'a super::Sline,
     filter: &'b nde::graph::Graph,
+    frame_rate: media::FrameRate,
     counter: &mut i32,
 ) -> Result<NdeResult<'a, 'b>, NdeError> {
     let mut intermediates: Vec<NodeState> = vec![NodeState::Inactive; filter.nodes.len()];
@@ -39,6 +40,7 @@ pub fn nde<'a, 'b>(
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
     };
     let sline_value = nde::node::SocketValue::Sline(sline);
+    let frame_rate_value = nde::node::SocketValue::FrameRate(frame_rate);
 
     // Go through the process queue and process the individual nodes
     while let Some(node_index) = process_queue.pop_front() {
@@ -53,6 +55,9 @@ pub fn nde<'a, 'b>(
                 match desired_leaf_input {
                     nde::node::LeafInputType::Sline => {
                         inputs[i] = &sline_value;
+                    }
+                    nde::node::LeafInputType::FrameRate => {
+                        inputs[i] = &frame_rate_value;
                     }
                 }
             }
@@ -157,7 +162,16 @@ mod tests {
 
         let mut counter = 0;
 
-        let result = nde(&sline, &filter, &mut counter).expect("there should be no error");
+        let result = nde(
+            &sline,
+            &filter,
+            media::FrameRate {
+                numerator: 24,
+                denominator: 1,
+            },
+            &mut counter,
+        )
+        .expect("there should be no error");
 
         for node_state in &result.intermediates {
             assert_matches!(node_state, NodeState::Active { .. });

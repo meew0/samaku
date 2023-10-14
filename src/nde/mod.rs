@@ -3,7 +3,7 @@ use std::borrow::Cow;
 pub use graph::Graph;
 pub use node::Node;
 
-use crate::{nde, subtitle};
+use crate::subtitle;
 
 pub mod graph;
 pub mod node;
