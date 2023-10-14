@@ -1,11 +1,16 @@
 use crate::{nde, subtitle};
 
 #[derive(Debug, Clone)]
+pub struct Reticules {
+    pub list: Vec<Reticule>,
+    pub source_node_index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct Reticule {
     pub shape: Shape,
     pub position: nde::tags::Position,
     pub radius: f32,
-    pub source_node_index: usize,
 }
 
 impl Reticule {

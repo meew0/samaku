@@ -150,8 +150,16 @@ pub trait Node: Debug {
         iced::widget::text(self.name()).into()
     }
 
-    /// Called when a reticule claiming to originate from this node is updated.
-    fn reticule_update(&mut self, _reticules: &[model::reticule::Reticule]) {}
+    /// Called when a reticule claiming to originate from this node is moved. The node takes care
+    /// of actually updating the data — it can introduce complex logic here to link some reticules
+    /// to others etc.
+    fn reticule_update(
+        &mut self,
+        reticules: &mut model::reticule::Reticules,
+        index: usize,
+        new_position: nde::tags::Position,
+    ) {
+    }
 
     /// The node's content size, used for layouting the content.
     fn content_size(&self) -> iced::Size {

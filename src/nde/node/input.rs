@@ -65,14 +65,16 @@ impl Node for Position {
         &self,
         self_index: usize,
     ) -> iced::Element<'a, message::Message, iced::Renderer> {
-        let button = iced::widget::button("Set").on_press(message::Message::SetReticules(vec![
-            model::reticule::Reticule {
-                shape: model::reticule::Shape::Cross,
-                position: self.value,
-                radius: 10.0,
+        let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
+            model::reticule::Reticules {
+                list: vec![model::reticule::Reticule {
+                    shape: model::reticule::Shape::Cross,
+                    position: self.value,
+                    radius: 10.0,
+                }],
                 source_node_index: self_index,
             },
-        ]));
+        ));
 
         let column = iced::widget::column![
             iced::widget::text(self.name()),
@@ -83,8 +85,18 @@ impl Node for Position {
         column.align_items(iced::Alignment::Center).into()
     }
 
-    fn reticule_update(&mut self, reticules: &[model::reticule::Reticule]) {
-        self.value = reticules[0].position;
+    fn reticule_update(
+        &mut self,
+        reticules: &mut model::reticule::Reticules,
+        index: usize,
+        new_position: nde::tags::Position,
+    ) {
+        if index != 0 {
+            return;
+        }
+
+        reticules.list[0].position = new_position;
+        self.value = new_position;
     }
 
     fn content_size(&self) -> iced::Size {

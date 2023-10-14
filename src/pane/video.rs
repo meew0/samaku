@@ -71,8 +71,15 @@ pub fn view<'a>(
                     stack
                 };
 
+                let reticules: &[model::reticule::Reticule] =
+                    if let Some(reticules) = &global_state.reticules {
+                        reticules.list.as_slice()
+                    } else {
+                        &[]
+                    };
+
                 let program = ReticuleProgram {
-                    reticules: &global_state.reticules,
+                    reticules,
                     storage_size,
                 };
                 iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
@@ -100,7 +107,7 @@ pub fn update(
 }
 
 struct ReticuleProgram<'a> {
-    reticules: &'a Vec<model::reticule::Reticule>,
+    reticules: &'a [model::reticule::Reticule],
     storage_size: subtitle::Resolution,
 }
 

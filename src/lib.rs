@@ -78,7 +78,7 @@ pub struct Samaku {
 
     /// Control widgets that are shown over the video, in order to allow quick setting of positions
     /// and the like.
-    pub reticules: Vec<model::reticule::Reticule>,
+    pub reticules: Option<model::reticule::Reticules>,
 }
 
 /// Data that needs to be shared with workers.
@@ -139,12 +139,7 @@ impl Application for Samaku {
                     subtitle_renderer: media::subtitle::Renderer::new(),
                 }),
                 playing: false,
-                reticules: vec![model::reticule::Reticule {
-                    shape: model::reticule::Shape::Cross,
-                    position: nde::tags::Position { x: 300.0, y: 500.0 },
-                    radius: 10.0,
-                    source_node_index: 0,
-                }],
+                reticules: None,
             },
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
         )
@@ -400,21 +395,22 @@ impl Application for Samaku {
                 }
             }
             Self::Message::SetReticules(reticules) => {
-                self.reticules = reticules;
+                self.reticules = Some(reticules);
             }
             Self::Message::UpdateReticulePosition(index, position) => {
-                if let Some(reticule) = self.reticules.get_mut(index) {
-                    reticule.position = position;
-                    if let Some(filter) = self
-                        .subtitles
-                        .active_nde_filter_mut(self.active_sline_index)
-                    {
-                        if let Some(node) = filter.graph.nodes.get_mut(reticule.source_node_index) {
-                            node.node.reticule_update(&self.reticules);
+                if let Some(reticules) = &mut self.reticules {
+                    if let Some(reticule) = reticules.list.get_mut(index) {
+                        if let Some(filter) = self
+                            .subtitles
+                            .active_nde_filter_mut(self.active_sline_index)
+                        {
+                            if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index) {
+                                node.node.reticule_update(reticules, index, position);
+                            }
                         }
+                    } else {
+                        println!("Failed to update position of reticule {index}");
                     }
-                } else {
-                    println!("Failed to update position of reticule {index}");
                 }
             }
         }

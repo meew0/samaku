@@ -67,7 +67,7 @@ pub enum Message {
         pane_grid::Pane,
     ),
 
-    SetReticules(Vec<model::reticule::Reticule>),
+    SetReticules(model::reticule::Reticules),
     UpdateReticulePosition(usize, nde::tags::Position),
 }
 
