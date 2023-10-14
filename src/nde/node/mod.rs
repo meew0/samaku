@@ -3,12 +3,14 @@ use std::fmt::Debug;
 pub use input::Position as InputPosition;
 pub use input::Sline as InputSline;
 pub use output::Output;
+pub use positioning::SetPosition;
 pub use style_basic::Italic;
 
 use crate::{message, model, nde, subtitle};
 
 mod input;
 mod output;
+mod positioning;
 mod style_basic;
 
 /// Represents a value passed into a socket.
@@ -168,6 +170,7 @@ pub enum Shell {
     InputSline,
     InputPosition,
     Italic,
+    SetPosition,
 }
 
 impl Shell {
@@ -179,6 +182,7 @@ impl Shell {
                 value: nde::tags::Position { x: 0.0, y: 0.0 },
             }),
             Shell::Italic => Box::new(Italic {}),
+            Shell::SetPosition => Box::new(SetPosition {}),
         }
     }
 }

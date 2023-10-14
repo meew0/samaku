@@ -560,6 +560,7 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
                 ],
             ),
             menu_item("Italicise", nde::node::Shell::Italic),
+            menu_item("Set position", nde::node::Shell::SetPosition),
         ],
     )
 }
