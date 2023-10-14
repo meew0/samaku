@@ -312,6 +312,7 @@ impl SlineTrack {
         self.slines.is_empty()
     }
 
+    #[must_use]
     pub fn active_sline(&self, active_sline_index: Option<usize>) -> Option<&Sline> {
         match active_sline_index {
             Some(active_sline_index) => Some(&self.slines[active_sline_index]),
@@ -319,6 +320,7 @@ impl SlineTrack {
         }
     }
 
+    #[must_use]
     pub fn active_sline_mut(&mut self, active_sline_index: Option<usize>) -> Option<&mut Sline> {
         match active_sline_index {
             Some(active_sline_index) => Some(&mut self.slines[active_sline_index]),
@@ -326,6 +328,7 @@ impl SlineTrack {
         }
     }
 
+    #[must_use]
     pub fn active_nde_filter(&self, active_sline_index: Option<usize>) -> Option<&nde::Filter> {
         match self.active_sline(active_sline_index) {
             Some(active_sline) => match active_sline.nde_filter_index {
@@ -336,6 +339,7 @@ impl SlineTrack {
         }
     }
 
+    #[must_use]
     pub fn active_nde_filter_mut(
         &mut self,
         active_sline_index: Option<usize>,
