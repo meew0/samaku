@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 pub use input::Position as InputPosition;
 pub use input::Sline as InputSline;
+pub use motion_track::MotionTrack;
 pub use output::Output;
 pub use positioning::SetPosition;
 pub use style_basic::Italic;
@@ -9,6 +10,7 @@ pub use style_basic::Italic;
 use crate::{message, model, nde, subtitle};
 
 mod input;
+mod motion_track;
 mod output;
 mod positioning;
 mod style_basic;
@@ -179,6 +181,7 @@ pub enum Shell {
     InputPosition,
     Italic,
     SetPosition,
+    MotionTrack,
 }
 
 impl Shell {
@@ -191,6 +194,7 @@ impl Shell {
             }),
             Shell::Italic => Box::new(Italic {}),
             Shell::SetPosition => Box::new(SetPosition {}),
+            Shell::MotionTrack => Box::new(MotionTrack {}),
         }
     }
 }
