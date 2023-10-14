@@ -11,7 +11,7 @@ impl Node for Output {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::GenericEvents]
+        &[SocketType::AnyEvents]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {

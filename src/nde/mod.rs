@@ -3,7 +3,7 @@ use std::borrow::Cow;
 pub use graph::Graph;
 pub use node::Node;
 
-use crate::subtitle;
+use crate::{nde, subtitle};
 
 pub mod graph;
 pub mod node;
@@ -37,7 +37,8 @@ pub struct Event {
 }
 
 impl Event {
-    #[must_use] pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
+    #[must_use]
+    pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
@@ -69,6 +70,26 @@ impl Event {
             read_order: 0,
             name: Cow::from(""),
             effect: Cow::from(""),
+        }
+    }
+
+    #[must_use]
+    pub fn make_static(
+        &self,
+        time_point: subtitle::StartTime,
+        static_duration: subtitle::Duration,
+    ) -> Event {
+        // TODO: take care of animations and the like
+        Event {
+            start: time_point,
+            duration: static_duration,
+
+            layer_index: self.layer_index,
+            style_index: self.style_index,
+            margins: self.margins,
+            global_tags: self.global_tags.clone(),
+            overrides: self.overrides.clone(),
+            text: self.text.clone(),
         }
     }
 

@@ -10,11 +10,11 @@ impl Node for SetPosition {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::GenericEvents, SocketType::Position]
+        &[SocketType::AnyEvents, SocketType::Position]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::GenericEvents]
+        &[SocketType::AnyEvents]
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {

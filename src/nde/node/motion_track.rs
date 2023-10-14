@@ -11,11 +11,11 @@ impl Node for MotionTrack {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::GenericEvents]
+        &[SocketType::AnyEvents]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::GenericEvents]
+        &[SocketType::AnyEvents]
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {

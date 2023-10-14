@@ -504,8 +504,8 @@ where
     // itself.
     let (blob_border_radius, blob_color, label) = match socket_type {
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
-        nde::node::SocketType::MonotonicEvents => (0.0, crate::style::SAMAKU_PRIMARY, ""),
-        nde::node::SocketType::GenericEvents => (0.0, crate::style::SAMAKU_BACKGROUND, ""),
+        nde::node::SocketType::MultipleEvents => (0.0, crate::style::SAMAKU_PRIMARY, ""),
+        nde::node::SocketType::AnyEvents => (0.0, crate::style::SAMAKU_BACKGROUND, ""),
         nde::node::SocketType::Position => (
             BLOB_RADIUS,
             iced::Color::from_rgb(0.09, 0.81, 0.48),

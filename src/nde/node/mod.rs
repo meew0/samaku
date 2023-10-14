@@ -28,15 +28,8 @@ pub enum SocketValue<'a> {
     /// One single event.
     IndividualEvent(Box<super::Event>),
 
-    /// A collection of events that do not overlap. For each point in time, there will be
-    /// at most one event in the collection that is visible at that time. Note that there may
-    /// still be gaps between events.
-    /// Most commonly this will be frame-by-frame events or the like.
-    MonotonicEvents(Vec<super::Event>),
-
-    /// An arbitrary collection of events, may overlap in time/space. For example rendered gradient
-    /// fields or the like.
-    GenericEvents(Vec<super::Event>),
+    /// A collection of events. Can have any length.
+    MultipleEvents(Vec<super::Event>),
 
     Sline(&'a subtitle::Sline),
 
@@ -51,8 +44,7 @@ impl<'a> SocketValue<'a> {
     pub fn as_type(&self) -> Option<SocketType> {
         match self {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
-            SocketValue::MonotonicEvents(_) => Some(SocketType::MonotonicEvents),
-            SocketValue::GenericEvents(_) => Some(SocketType::GenericEvents),
+            SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
         }
@@ -71,10 +63,7 @@ impl<'a> SocketValue<'a> {
             SocketValue::IndividualEvent(event) => {
                 Ok(SocketValue::IndividualEvent(Box::new(func(event.as_ref()))))
             }
-            SocketValue::MonotonicEvents(events) => Ok(SocketValue::MonotonicEvents(
-                events.iter().map(func).collect(),
-            )),
-            SocketValue::GenericEvents(events) => Ok(SocketValue::GenericEvents(
+            SocketValue::MultipleEvents(events) => Ok(SocketValue::MultipleEvents(
                 events.iter().map(func).collect(),
             )),
             _ => Err(Error::MismatchedTypes),
@@ -92,9 +81,7 @@ impl<'a> SocketValue<'a> {
     {
         match self {
             SocketValue::IndividualEvent(event) => Ok(vec![func(event.as_ref())]),
-            SocketValue::MonotonicEvents(events) | SocketValue::GenericEvents(events) => {
-                Ok(events.iter().map(func).collect())
-            }
+            SocketValue::MultipleEvents(events) => Ok(events.iter().map(func).collect()),
             _ => Err(Error::MismatchedTypes),
         }
     }
@@ -104,8 +91,8 @@ impl<'a> SocketValue<'a> {
 #[derive(Debug, Clone, Copy)]
 pub enum SocketType {
     IndividualEvent,
-    MonotonicEvents,
-    GenericEvents,
+    MultipleEvents,
+    AnyEvents,
     Position,
 
     /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
@@ -118,7 +105,7 @@ impl SocketType {
     pub fn is_event(&self) -> bool {
         matches!(
             self,
-            SocketType::IndividualEvent | SocketType::MonotonicEvents | SocketType::GenericEvents
+            SocketType::IndividualEvent | SocketType::MultipleEvents | SocketType::AnyEvents
         )
     }
 }
