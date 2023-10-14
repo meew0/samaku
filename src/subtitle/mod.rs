@@ -312,6 +312,43 @@ impl SlineTrack {
         self.slines.is_empty()
     }
 
+    pub fn active_sline(&self, active_sline_index: Option<usize>) -> Option<&Sline> {
+        match active_sline_index {
+            Some(active_sline_index) => Some(&self.slines[active_sline_index]),
+            None => None,
+        }
+    }
+
+    pub fn active_sline_mut(&mut self, active_sline_index: Option<usize>) -> Option<&mut Sline> {
+        match active_sline_index {
+            Some(active_sline_index) => Some(&mut self.slines[active_sline_index]),
+            None => None,
+        }
+    }
+
+    pub fn active_nde_filter(&self, active_sline_index: Option<usize>) -> Option<&nde::Filter> {
+        match self.active_sline(active_sline_index) {
+            Some(active_sline) => match active_sline.nde_filter_index {
+                Some(nde_filter_index) => Some(&self.filters[nde_filter_index]),
+                None => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn active_nde_filter_mut(
+        &mut self,
+        active_sline_index: Option<usize>,
+    ) -> Option<&mut nde::Filter> {
+        match self.active_sline(active_sline_index) {
+            Some(active_sline) => match active_sline.nde_filter_index {
+                Some(nde_filter_index) => Some(&mut self.filters[nde_filter_index]),
+                None => None,
+            },
+            None => None,
+        }
+    }
+
     /// Compile subtitles in the given frame range to ASS.
     #[must_use]
     pub fn compile(

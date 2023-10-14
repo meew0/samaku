@@ -1,10 +1,11 @@
 use crate::{nde, subtitle};
 
+#[derive(Debug, Clone)]
 pub struct Reticule {
     pub shape: Shape,
     pub position: nde::tags::Position,
     pub radius: f32,
-    pub source_node_id: usize,
+    pub source_node_index: usize,
 }
 
 impl Reticule {
@@ -37,6 +38,7 @@ impl Reticule {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Shape {
     Cross,
 }

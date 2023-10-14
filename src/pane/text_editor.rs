@@ -8,7 +8,10 @@ pub fn view<'a>(
     global_state: &'a crate::Samaku,
     _editor_state: &'a State,
 ) -> super::View<'a> {
-    let content: iced::Element<message::Message> = match global_state.active_sline() {
+    let content: iced::Element<message::Message> = match global_state
+        .subtitles
+        .active_sline(global_state.active_sline_index)
+    {
         Some(active_sline) => iced::widget::responsive(|size| {
             iced::widget::text_input("Enter subtitle text...", &active_sline.text)
                 .on_input(message::Message::SetActiveSlineText)

@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, nde, pane};
+use crate::{media, model, nde, pane};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -67,6 +67,7 @@ pub enum Message {
         pane_grid::Pane,
     ),
 
+    SetReticules(Vec<model::reticule::Reticule>),
     UpdateReticulePosition(usize, nde::tags::Position),
 }
 

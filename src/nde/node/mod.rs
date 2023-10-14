@@ -1,10 +1,11 @@
 use std::fmt::Debug;
 
+pub use input::Position as InputPosition;
 pub use input::Sline as InputSline;
 pub use output::Output;
 pub use style_basic::Italic;
 
-use crate::subtitle;
+use crate::{message, model, nde, subtitle};
 
 mod input;
 mod output;
@@ -35,6 +36,8 @@ pub enum SocketValue<'a> {
 
     Sline(&'a subtitle::Sline),
 
+    Position(nde::tags::Position),
+
     /// Compiled events that are ready to copy into libass.
     CompiledEvents(Vec<subtitle::ass::Event<'static>>),
 }
@@ -46,6 +49,7 @@ impl<'a> SocketValue<'a> {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MonotonicEvents(_) => Some(SocketType::MonotonicEvents),
             SocketValue::GenericEvents(_) => Some(SocketType::GenericEvents),
+            SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
         }
     }
@@ -98,6 +102,7 @@ pub enum SocketType {
     IndividualEvent,
     MonotonicEvents,
     GenericEvents,
+    Position,
 
     /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
     /// input and thus acts as a node that supplies an initial value to the graph.
@@ -133,6 +138,23 @@ pub trait Node: Debug {
     /// Can return an [`Error`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error>;
+
+    /// Content elements that should be displayed at the top of the node. By default, this is simply
+    /// some text showing the node's name.
+    fn content<'a>(
+        &self,
+        _self_index: usize,
+    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+        iced::widget::text(self.name()).into()
+    }
+
+    /// Called when a reticule claiming to originate from this node is updated.
+    fn reticule_update(&mut self, _reticules: &[model::reticule::Reticule]) {}
+
+    /// The node's content size, used for layouting the content.
+    fn content_size(&self) -> iced::Size {
+        iced::Size::new(200.0, 75.0)
+    }
 }
 
 pub enum Error {
@@ -144,6 +166,7 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub enum Shell {
     InputSline,
+    InputPosition,
     Italic,
 }
 
@@ -152,6 +175,9 @@ impl Shell {
     pub fn instantiate(&self) -> Box<dyn Node> {
         match self {
             Shell::InputSline => Box::new(InputSline {}),
+            Shell::InputPosition => Box::new(InputPosition {
+                value: nde::tags::Position { x: 0.0, y: 0.0 },
+            }),
             Shell::Italic => Box::new(Italic {}),
         }
     }

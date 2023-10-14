@@ -66,9 +66,6 @@ impl Display for FilterReference {
     }
 }
 
-const NODE_WIDTH: f32 = 200.0;
-const NODE_HEIGHT: f32 = 75.0;
-
 struct NodeStyle {
     border_colour: iced::Color,
 }
@@ -212,8 +209,10 @@ fn create_nodes(
             }
         };
 
+        let content_size = visual_node.node.content_size();
+
         graph_content.push(
-            iced_node_editor::node(iced::widget::text(visual_node.node.name()))
+            iced_node_editor::node(visual_node.node.content(node_index))
                 .sockets(node_sockets)
                 .padding(iced::Padding::from(12.0))
                 .center_x()
@@ -221,8 +220,8 @@ fn create_nodes(
                 .on_translate(move |(x, y)| {
                     message::Message::MoveNode(node_index, x / scale, y / scale)
                 })
-                .width(iced::Length::Fixed(NODE_WIDTH))
-                .height(iced::Length::Fixed(NODE_HEIGHT))
+                .width(iced::Length::Fixed(content_size.width))
+                .height(iced::Length::Fixed(content_size.height))
                 .position(visual_node.position)
                 .style(iced_node_editor::styles::node::Node::Custom(Box::new(
                     NodeStyle {
@@ -507,6 +506,11 @@ where
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
         nde::node::SocketType::MonotonicEvents => (0.0, crate::style::SAMAKU_PRIMARY, ""),
         nde::node::SocketType::GenericEvents => (0.0, crate::style::SAMAKU_BACKGROUND, ""),
+        nde::node::SocketType::Position => (
+            BLOB_RADIUS,
+            iced::Color::from_rgb(0.09, 0.81, 0.48),
+            "Position",
+        ),
         nde::node::SocketType::LeafInput(_) => return None,
     };
 
@@ -550,7 +554,10 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
         vec![
             sub_menu(
                 "Input",
-                vec![menu_item("Input", nde::node::Shell::InputSline)],
+                vec![
+                    menu_item("Subtitle", nde::node::Shell::InputSline),
+                    menu_item("Position", nde::node::Shell::InputPosition),
+                ],
             ),
             menu_item("Italicise", nde::node::Shell::Italic),
         ],

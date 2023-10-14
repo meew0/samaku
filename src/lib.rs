@@ -100,40 +100,6 @@ pub struct ViewState {
 
 /// Utility methods for global state
 impl Samaku {
-    pub fn active_sline(&self) -> Option<&subtitle::Sline> {
-        match self.active_sline_index {
-            Some(active_sline_index) => Some(&self.subtitles.slines[active_sline_index]),
-            None => None,
-        }
-    }
-
-    pub fn active_sline_mut(&mut self) -> Option<&mut subtitle::Sline> {
-        match self.active_sline_index {
-            Some(active_sline_index) => Some(&mut self.subtitles.slines[active_sline_index]),
-            None => None,
-        }
-    }
-
-    pub fn active_nde_filter(&self) -> Option<&nde::Filter> {
-        match self.active_sline() {
-            Some(active_sline) => match active_sline.nde_filter_index {
-                Some(nde_filter_index) => Some(&self.subtitles.filters[nde_filter_index]),
-                None => None,
-            },
-            None => None,
-        }
-    }
-
-    pub fn active_nde_filter_mut(&mut self) -> Option<&mut nde::Filter> {
-        match self.active_sline_mut() {
-            Some(active_sline) => match active_sline.nde_filter_index {
-                Some(nde_filter_index) => Some(&mut self.subtitles.filters[nde_filter_index]),
-                None => None,
-            },
-            None => None,
-        }
-    }
-
     /// Notifies all entities (like node editor panes) that keep some internal copy of the
     /// NDE filter list to update their internal representations
     pub fn update_filter_lists(&mut self) {
@@ -177,7 +143,7 @@ impl Application for Samaku {
                     shape: model::reticule::Shape::Cross,
                     position: nde::tags::Position { x: 300.0, y: 500.0 },
                     radius: 10.0,
-                    source_node_id: 0,
+                    source_node_index: 0,
                 }],
             },
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
@@ -330,7 +296,7 @@ impl Application for Samaku {
             }
             Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
             Self::Message::SetActiveSlineText(new_text) => {
-                if let Some(sline) = self.active_sline_mut() {
+                if let Some(sline) = self.subtitles.active_sline_mut(self.active_sline_index) {
                     sline.text = new_text;
                 }
             }
@@ -342,17 +308,22 @@ impl Application for Samaku {
                 self.update_filter_lists();
             }
             Self::Message::AssignFilterToActiveSline(filter_index) => {
-                if let Some(active_sline) = self.active_sline_mut() {
+                if let Some(active_sline) = self.subtitles.active_sline_mut(self.active_sline_index)
+                {
                     active_sline.nde_filter_index = Some(filter_index);
                 }
             }
             Self::Message::UnassignFilterFromActiveSline => {
-                if let Some(active_sline) = self.active_sline_mut() {
+                if let Some(active_sline) = self.subtitles.active_sline_mut(self.active_sline_index)
+                {
                     active_sline.nde_filter_index = None;
                 }
             }
             Self::Message::SetActiveFilterName(new_name) => {
-                if let Some(filter) = self.active_nde_filter_mut() {
+                if let Some(filter) = self
+                    .subtitles
+                    .active_nde_filter_mut(self.active_sline_index)
+                {
                     filter.name = new_name;
                     self.update_filter_lists();
                 }
@@ -361,7 +332,10 @@ impl Application for Samaku {
                 todo!()
             }
             Self::Message::AddNode(node_shell) => {
-                if let Some(filter) = self.active_nde_filter_mut() {
+                if let Some(filter) = self
+                    .subtitles
+                    .active_nde_filter_mut(self.active_sline_index)
+                {
                     let visual_node = nde::graph::VisualNode {
                         node: node_shell.instantiate(),
                         position: iced::Point::new(0.0, 0.0),
@@ -370,13 +344,19 @@ impl Application for Samaku {
                 }
             }
             Self::Message::MoveNode(node_index, x, y) => {
-                if let Some(filter) = self.active_nde_filter_mut() {
+                if let Some(filter) = self
+                    .subtitles
+                    .active_nde_filter_mut(self.active_sline_index)
+                {
                     let node = &mut filter.graph.nodes[node_index];
                     node.position = iced::Point::new(node.position.x + x, node.position.y + y);
                 }
             }
             Self::Message::ConnectNodes(link) => {
-                if let Some(filter) = self.active_nde_filter_mut() {
+                if let Some(filter) = self
+                    .subtitles
+                    .active_nde_filter_mut(self.active_sline_index)
+                {
                     let (start, end) = link.unwrap_sockets();
                     filter.graph.connect(
                         nde::graph::NextEndpoint {
@@ -391,7 +371,10 @@ impl Application for Samaku {
                 }
             }
             Self::Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
-                if let Some(filter) = self.active_nde_filter_mut() {
+                if let Some(filter) = self
+                    .subtitles
+                    .active_nde_filter_mut(self.active_sline_index)
+                {
                     let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
                         node_index: endpoint.node_index,
                         socket_index: endpoint.socket_index,
@@ -416,9 +399,20 @@ impl Application for Samaku {
                     }
                 }
             }
+            Self::Message::SetReticules(reticules) => {
+                self.reticules = reticules;
+            }
             Self::Message::UpdateReticulePosition(index, position) => {
                 if let Some(reticule) = self.reticules.get_mut(index) {
                     reticule.position = position;
+                    if let Some(filter) = self
+                        .subtitles
+                        .active_nde_filter_mut(self.active_sline_index)
+                    {
+                        if let Some(node) = filter.graph.nodes.get_mut(reticule.source_node_index) {
+                            node.node.reticule_update(&self.reticules);
+                        }
+                    }
                 } else {
                     println!("Failed to update position of reticule {index}");
                 }
