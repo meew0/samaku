@@ -1,6 +1,6 @@
 use iced::widget::canvas;
 
-use crate::{media, message, model, subtitle, view};
+use crate::{media, message, model, style, subtitle, view};
 
 #[derive(Debug, Clone, Default)]
 pub struct State {}
@@ -174,11 +174,44 @@ impl<'a> canvas::Program<message::Message> for ReticuleProgram<'a> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
 
         for reticule in self.reticules {
-            let circle = canvas::Path::circle(
-                reticule.iced_position(bounds.size(), self.storage_size),
-                reticule.radius,
-            );
-            frame.fill(&circle, iced::Color::BLACK);
+            let center_point = reticule.iced_position(bounds.size(), self.storage_size);
+
+            match reticule.shape {
+                model::reticule::Shape::Cross => {
+                    let back_x = canvas::Path::new(|p| {
+                        p.move_to(center_point + iced::Vector::new(-reticule.radius, 3.0));
+                        p.line_to(center_point + iced::Vector::new(reticule.radius, -3.0));
+                        p.line_to(center_point + iced::Vector::new(reticule.radius, 3.0));
+                        p.line_to(center_point + iced::Vector::new(-reticule.radius, -3.0));
+                        p.close();
+                    });
+
+                    let back_y = canvas::Path::new(|p| {
+                        p.move_to(center_point + iced::Vector::new(3.0, -reticule.radius));
+                        p.line_to(center_point + iced::Vector::new(-3.0, reticule.radius));
+                        p.line_to(center_point + iced::Vector::new(3.0, reticule.radius));
+                        p.line_to(center_point + iced::Vector::new(-3.0, -reticule.radius));
+                        p.close();
+                    });
+
+                    frame.fill(&back_x, iced::Color::BLACK);
+                    frame.fill(&back_y, iced::Color::BLACK);
+
+                    let thin_path = canvas::Path::new(|p| {
+                        p.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
+                        p.line_to(center_point + iced::Vector::new(reticule.radius, 0.0));
+                        p.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
+                        p.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
+                    });
+
+                    frame.stroke(
+                        &thin_path,
+                        canvas::Stroke::default()
+                            .with_color(style::SAMAKU_PRIMARY)
+                            .with_width(1.0),
+                    );
+                }
+            }
         }
 
         vec![frame.into_geometry()]
