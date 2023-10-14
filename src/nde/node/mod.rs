@@ -151,9 +151,10 @@ pub trait Node: Debug {
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
+    #[allow(unused_variables)]
     fn content<'a>(
         &self,
-        _self_index: usize,
+        self_index: usize,
     ) -> iced::Element<'a, message::Message, iced::Renderer> {
         iced::widget::text(self.name()).into()
     }
@@ -161,6 +162,7 @@ pub trait Node: Debug {
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.
+    #[allow(unused_variables)]
     fn reticule_update(
         &mut self,
         reticules: &mut model::reticule::Reticules,

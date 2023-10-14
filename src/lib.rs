@@ -411,19 +411,14 @@ impl Application for Samaku {
             }
             Self::Message::UpdateReticulePosition(index, position) => {
                 if let Some(reticules) = &mut self.reticules {
-                    if let Some(reticule) = reticules.list.get_mut(index) {
-                        if let Some(filter) = self
-                            .subtitles
-                            .active_nde_filter_mut(self.active_sline_index)
+                    if let Some(filter) = self
+                        .subtitles
+                        .active_nde_filter_mut(self.active_sline_index)
+                    {
+                        if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index)
                         {
-                            if let Some(node) =
-                                filter.graph.nodes.get_mut(reticules.source_node_index)
-                            {
-                                node.node.reticule_update(reticules, index, position);
-                            }
+                            node.node.reticule_update(reticules, index, position);
                         }
-                    } else {
-                        println!("Failed to update position of reticule {index}");
                     }
                 }
             }

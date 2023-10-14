@@ -599,6 +599,11 @@ pub struct FrameRate {
 }
 
 impl FrameRate {
+    /// Get the number of the closest frame before the given time point in milliseconds.
+    ///
+    /// # Panics
+    /// Panics if the resulting frame number would not fit into an `i32`.
+    #[must_use]
     pub fn ms_to_frame(&self, ass_ms: i64) -> i32 {
         // since the numerator is guaranteed to be smaller than i64 max
         #[allow(clippy::cast_possible_wrap)]
@@ -610,6 +615,7 @@ impl FrameRate {
             .expect("overflow while converting time to frame number")
     }
 
+    #[must_use]
     pub fn frame_to_ms(&self, frame: i32) -> i64 {
         #[allow(clippy::cast_possible_wrap)]
         let inv_numerator = i64::from(frame * 1000) * self.denominator as i64;
@@ -618,6 +624,7 @@ impl FrameRate {
         result
     }
 
+    #[must_use]
     pub fn frame_time_ms(&self) -> i64 {
         self.frame_to_ms(1)
     }
