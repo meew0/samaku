@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub use input::FrameRate as InputFrameRate;
@@ -158,7 +159,12 @@ pub trait Node: Debug {
     ) -> iced::Element<'a, message::Message, iced::Renderer> {
         iced::widget::text(self.name()).into()
     }
-
+    
+    /// Called when a message for this node is received.
+    #[allow(unused_variables)]
+    fn update(&mut self, message: message::Node) {
+    }
+    
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.
@@ -179,6 +185,7 @@ pub trait Node: Debug {
 
 pub enum Error {
     MismatchedTypes,
+    Empty,
 }
 
 /// An “empty shell” representation of the operation performed by a node. Used to represent the
@@ -205,7 +212,10 @@ impl Shell {
             Shell::InputFrameRate => Box::new(InputFrameRate {}),
             Shell::Italic => Box::new(Italic {}),
             Shell::SetPosition => Box::new(SetPosition {}),
-            Shell::MotionTrack => Box::new(MotionTrack {}),
+            Shell::MotionTrack => Box::new(MotionTrack {
+                region_center: nde::tags::Position { x: 100.0, y: 100.0 },
+                track: HashMap::new(),
+            }),
             Shell::SplitFrameByFrame => Box::new(SplitFrameByFrame {}),
         }
     }

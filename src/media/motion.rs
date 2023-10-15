@@ -21,22 +21,16 @@ pub struct PatchResponse {
     pub height: u32,
 }
 
-pub struct Tracker<V, P>
-where
-    P: FnMut(&V, i32, PatchRequest) -> PatchResponse,
-{
-    video: V,
-    patch_provider: P,
+pub struct Tracker<'a, V> {
+    video: &'a V,
+    patch_provider: fn(&V, i32, PatchRequest) -> PatchResponse,
     search_radius: f64,
     track: Vec<Region>,
     last_frame: i32,
     end_frame: i32,
 }
 
-impl<V, P> Tracker<V, P>
-where
-    P: FnMut(&V, i32, PatchRequest) -> PatchResponse,
-{
+impl<'a, V> Tracker<'a, V> {
     /// Create a new `MotionTracker`.
     /// The `initial_marker` should be an axis-aligned rectangle.
     /// `search_radius` is defined around the center of the `initial_marker`.
@@ -44,8 +38,8 @@ where
     /// `end_frame`: the last frame onto which the `initial_marker` will be tracked.
     /// `track` will be of size `end_frame - start_frame + 1`, if all goes well.
     pub fn new(
-        video: V,
-        patch_provider: P,
+        video: &'a V,
+        patch_provider: fn(&V, i32, PatchRequest) -> PatchResponse,
         initial_marker: Region,
         search_radius: f64,
         start_frame: i32,
@@ -63,6 +57,10 @@ where
 
     pub fn track(&self) -> &Vec<Region> {
         &self.track
+    }
+
+    pub fn last_tracked_frame(&self) -> i32 {
+        self.last_frame
     }
 
     pub fn update(&mut self, motion_model: Model) -> TrackResult {
@@ -153,7 +151,7 @@ mod tests {
 
         let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
         let mut tracker = Tracker::new(
-            video,
+            &video,
             video::Video::get_libmv_patch,
             initial_marker,
             60.0,

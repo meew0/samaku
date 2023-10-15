@@ -2,7 +2,7 @@
 //! of subtitles, as well as the logic for compiling them to ASS
 //! ones.
 
-use crate::{media, nde};
+use crate::{media, message, nde};
 
 pub mod ass;
 pub mod compile;
@@ -39,6 +39,13 @@ pub struct Sline {
     pub text: String,
 
     pub nde_filter_index: Option<usize>,
+}
+
+impl Sline {
+    #[must_use]
+    pub fn end(&self) -> StartTime {
+        StartTime(self.start.0 + self.duration.0)
+    }
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
@@ -350,6 +357,20 @@ impl SlineTrack {
                 None => None,
             },
             None => None,
+        }
+    }
+
+    /// Dispatch message to node
+    pub fn update_node(
+        &mut self,
+        active_sline_index: Option<usize>,
+        node_index: usize,
+        message: message::Node,
+    ) {
+        if let Some(filter) = self.active_nde_filter_mut(active_sline_index) {
+            if let Some(node) = filter.graph.nodes.get_mut(node_index) {
+                node.node.update(message);
+            }
         }
     }
 

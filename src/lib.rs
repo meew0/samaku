@@ -121,6 +121,24 @@ impl Samaku {
             }
         }
     }
+
+    /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
+    /// video is loaded.
+    pub fn current_frame(&self) -> Option<i32> {
+        match self.actual_frame {
+            Some((frame, _)) => Some(frame),
+            None => match self.video_metadata {
+                Some(metadata) => Some(
+                    self.shared
+                        .playback_position
+                        .current_frame(metadata.frame_rate)
+                        .try_into()
+                        .unwrap(),
+                ),
+                None => None,
+            },
+        }
+    }
 }
 
 impl Application for Samaku {
@@ -421,6 +439,34 @@ impl Application for Samaku {
                         }
                     }
                 }
+            }
+            Self::Message::TrackMotionForNode(node_index, initial_region) => {
+                if let Some(video_metadata) = self.video_metadata {
+                    let current_frame = self.current_frame().unwrap(); // video is loaded
+
+                    // Update the node's cached track to put the marker it requested at the
+                    // position of the current frame.
+                    // The node can't do this itself, because it does not know the number of
+                    // the current frame.
+                    self.subtitles.update_node(
+                        self.active_sline_index,
+                        node_index,
+                        message::Node::MotionTrackUpdate(current_frame, initial_region),
+                    );
+
+                    if let Some(sline) = self.subtitles.active_sline(self.active_sline_index) {
+                        self.workers.emit_track_motion_for_node(
+                            node_index,
+                            initial_region,
+                            current_frame,
+                            video_metadata.frame_rate.ms_to_frame(sline.end().0),
+                        );
+                    }
+                }
+            }
+            Self::Message::Node(node_index, node_message) => {
+                self.subtitles
+                    .update_node(self.active_sline_index, node_index, node_message);
             }
         }
 

@@ -6,6 +6,6 @@ pub use video::Video;
 
 mod audio;
 mod bindings;
-mod motion;
+pub mod motion;
 pub mod subtitle;
 mod video;

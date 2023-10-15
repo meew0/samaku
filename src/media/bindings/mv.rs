@@ -119,7 +119,7 @@ impl Point {
 
 /// Essentially what is shown as a “marker” in Blender's motion tracking UI,
 /// with four corners and a center.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Region {
     pub top_left: Point,
     pub top_right: Point,

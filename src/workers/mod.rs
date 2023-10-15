@@ -1,6 +1,6 @@
 use std::{cell::RefCell, thread};
 
-use crate::message;
+use crate::{media, message};
 
 mod cpal_playback;
 mod video_decoder;
@@ -75,5 +75,9 @@ impl Workers {
     pub fn emit_restart_audio(&self) {
         self.cpal_playback
             .dispatch(cpal_playback::Message::TryRestart);
+    }
+    
+    pub fn emit_track_motion_for_node(&self, node_index: usize, initial_region: media::motion::Region, start_frame: i32, end_frame: i32) {
+        self.video_decoder.dispatch(video_decoder::Message::TrackMotionForNode(node_index, initial_region, start_frame, end_frame));
     }
 }

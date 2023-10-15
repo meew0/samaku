@@ -15,6 +15,10 @@ pub enum Message {
     Pane(pane_grid::Pane, Pane),
     FocusedPane(Pane),
 
+    /// Message pertaining to a specific node. Will be dispatched to the given node,
+    /// if it exists.
+    Node(usize, Node),
+
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),
     ClosePane,
@@ -69,6 +73,8 @@ pub enum Message {
 
     SetReticules(model::reticule::Reticules),
     UpdateReticulePosition(usize, nde::tags::Position),
+
+    TrackMotionForNode(usize, media::motion::Region),
 }
 
 impl Message {
@@ -90,4 +96,9 @@ pub enum Pane {
     NodeEditorTranslationChanged(f32, f32),
     NodeEditorDangling(Option<(iced_node_editor::LogicalEndpoint, iced_node_editor::Link)>),
     NodeEditorFilterSelected(usize, pane::node_editor::FilterReference),
+}
+
+#[derive(Debug, Clone)]
+pub enum Node {
+    MotionTrackUpdate(i32, media::motion::Region),
 }
