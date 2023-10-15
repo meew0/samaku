@@ -788,9 +788,7 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn transparency_arg(&self, index: usize) -> Option<Transparency> {
-        #[allow(clippy::cast_possible_truncation)]
-        #[allow(clippy::cast_sign_loss)]
-        self.hex_arg(index).map(|val: i32| Transparency(val as u8))
+        self.hex_arg(index).map(Transparency)
     }
 
     fn colour_arg(&self, index: usize) -> Option<Colour> {
@@ -1793,12 +1791,12 @@ mod tests {
         assert_eq!(twa.transparency_arg(0), Some(Transparency(0)));
         assert_eq!(twa.transparency_arg(1), Some(Transparency(0xaa)));
         assert_eq!(twa.transparency_arg(2), Some(Transparency(0)));
-        assert_eq!(twa.transparency_arg(3), Some(Transparency(0x34)));
-        assert_eq!(twa.transparency_arg(4), Some(Transparency(0xaa)));
+        assert_eq!(twa.transparency_arg(3), Some(Transparency(0x1234)));
+        assert_eq!(twa.transparency_arg(4), Some(Transparency(0x123_4aa)));
         assert_eq!(twa.transparency_arg(14), Some(Transparency(0xff)));
-        assert_eq!(twa.transparency_arg(15), Some(Transparency(0xff)));
+        assert_eq!(twa.transparency_arg(15), Some(Transparency(0xfffff)));
         assert_eq!(twa.transparency_arg(16), Some(Transparency(0)));
-        assert_eq!(twa.transparency_arg(17), Some(Transparency(0x11)));
+        assert_eq!(twa.transparency_arg(17), Some(Transparency(0xffa_a11)));
 
         assert_eq!(twa.colour_arg(0), Some(Colour::BLACK));
         assert_eq!(

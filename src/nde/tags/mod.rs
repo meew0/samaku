@@ -6,6 +6,7 @@ pub use parse::parse;
 use crate::subtitle;
 
 mod emit;
+mod lerp;
 mod parse;
 
 /// Like an `Option`, but also represents the possibility that an ASS tag can be specified
@@ -52,6 +53,36 @@ impl<T> Resettable<T> {
             Override(ref x) => Override(x),
             Reset => Reset,
             Keep => Keep,
+        }
+    }
+}
+
+impl<T> lerp::Lerp for Resettable<T>
+where
+    T: lerp::Lerp,
+{
+    type Output = Resettable<T::Output>;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        match self {
+            Resettable::Keep => other.out(),
+            Resettable::Reset => match other {
+                Resettable::Reset | Resettable::Keep => Resettable::Reset,
+                Resettable::Override(value) => Resettable::Override(value.out()),
+            },
+            Resettable::Override(value1) => match other {
+                Resettable::Keep => Resettable::Override(value1.out()),
+                Resettable::Reset => Resettable::Reset,
+                Resettable::Override(value2) => Resettable::Override(value1.lerp(value2, power)),
+            },
+        }
+    }
+
+    fn out(self) -> Self::Output {
+        match self {
+            Resettable::Keep => Resettable::Keep,
+            Resettable::Reset => Resettable::Reset,
+            Resettable::Override(value) => Resettable::Override(value.out()),
         }
     }
 }
@@ -425,6 +456,45 @@ impl Local {
         }
     }
 
+    /// Interpolates properties linearly between `self` and `other`, according to the given `power`
+    /// linear interpolation parameter.
+    pub fn interpolate(&mut self, other: &Local, power: f64) {
+        use lerp::Lerp;
+
+        // Animatable tags
+        self.border = self.border.lerp(other.border, power);
+        self.shadow = self.shadow.lerp(other.shadow, power);
+        self.soften = self.soften.lerp(other.soften, power);
+        self.gaussian_blur = self.gaussian_blur.lerp(other.gaussian_blur, power);
+        self.font_size = self.font_size.lerp(other.font_size, power);
+        self.font_scale = self.font_scale.lerp(other.font_scale, power);
+        self.letter_spacing = self.letter_spacing.lerp(other.letter_spacing, power);
+        self.text_rotation = self.text_rotation.lerp(other.text_rotation, power);
+        self.text_shear = self.text_shear.lerp(other.text_shear, power);
+        self.primary_colour = self.primary_colour.lerp(other.primary_colour, power);
+        self.secondary_colour = self.secondary_colour.lerp(other.secondary_colour, power);
+        self.border_colour = self.border_colour.lerp(other.border_colour, power);
+        self.shadow_colour = self.shadow_colour.lerp(other.shadow_colour, power);
+        self.primary_transparency = self
+            .primary_transparency
+            .lerp(other.primary_transparency, power);
+        self.secondary_transparency = self
+            .secondary_transparency
+            .lerp(other.secondary_transparency, power);
+        self.border_transparency = self
+            .border_transparency
+            .lerp(other.border_transparency, power);
+        self.shadow_transparency = self
+            .shadow_transparency
+            .lerp(other.shadow_transparency, power);
+
+        // Non-animatable tags which it might still make sense to interpolate
+        self.font_weight = self.font_weight.lerp(other.font_weight, power);
+        self.drawing_baseline_offset = self
+            .drawing_baseline_offset
+            .lerp(other.drawing_baseline_offset, power);
+    }
+
     /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
     ///
     /// # Errors
@@ -716,6 +786,21 @@ impl Maybe2D {
     }
 }
 
+impl lerp::Lerp for Maybe2D {
+    type Output = Maybe2D;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        Maybe2D {
+            x: self.x.lerp(other.x, power),
+            y: self.y.lerp(other.y, power),
+        }
+    }
+
+    fn out(self) -> Self::Output {
+        self
+    }
+}
+
 struct ThreePartTagName<'a> {
     pub before: &'a str,
     pub middle: &'a str,
@@ -804,6 +889,22 @@ impl Maybe3D {
     }
 }
 
+impl lerp::Lerp for Maybe3D {
+    type Output = Maybe3D;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        Maybe3D {
+            x: self.x.lerp(other.x, power),
+            y: self.y.lerp(other.y, power),
+            z: self.z.lerp(other.z, power),
+        }
+    }
+
+    fn out(self) -> Self::Output {
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Colour {
     pub red: u8,
@@ -829,6 +930,23 @@ impl Colour {
     }
 }
 
+impl lerp::Lerp for Colour {
+    type Output = Colour;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        // TODO: colour spaces
+        Colour {
+            red: self.red.lerp(other.red, power),
+            green: self.green.lerp(other.green, power),
+            blue: self.blue.lerp(other.blue, power),
+        }
+    }
+
+    fn out(self) -> Self::Output {
+        self
+    }
+}
+
 impl emit::Value for Colour {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
@@ -842,15 +960,45 @@ impl emit::Value for Colour {
     }
 }
 
+/// A transparency value. The least significant 8 bits determine the rendered transparency:
+/// 0 represents “fully opaque” and 255 represents “fully transparent”. In this way it is exactly
+/// opposite to the usual idea of an alpha channel.
+///
+/// Note that like in libass, this is internally represented as a 32-bit signed integer and only
+/// truncated on render. This allows complex wrapping animations and the like. If you need the
+/// “rendered” 8-bit value, use the [`rendered`] function.  
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Transparency(u8);
+pub struct Transparency(i32);
+
+impl Transparency {
+    /// Returns the lowest 8 bits of the transparency value, corresponding to how it would be shown
+    /// on render.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn rendered(self) -> u8 {
+        self.0 as u8
+    }
+}
+
+impl lerp::Lerp for Transparency {
+    type Output = Transparency;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        Transparency(i32::from(self.rendered()).lerp(other.0, power))
+    }
+
+    fn out(self) -> Self::Output {
+        self
+    }
+}
 
 impl emit::Value for Transparency {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
-        write!(sink, "&H{:02X}&", self.0)
+        write!(sink, "&H{:X}&", self.0)
     }
 }
 
@@ -893,6 +1041,29 @@ pub enum FontWeight {
     Numeric(u32),
 }
 
+impl FontWeight {
+    #[must_use]
+    pub fn weight(&self) -> u32 {
+        match *self {
+            FontWeight::BoldToggle(true) => 700,
+            FontWeight::BoldToggle(false) => 400,
+            FontWeight::Numeric(weight) => weight,
+        }
+    }
+}
+
+impl lerp::Lerp for FontWeight {
+    type Output = FontWeight;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        FontWeight::Numeric(self.weight().lerp(other.weight(), power))
+    }
+
+    fn out(self) -> Self::Output {
+        self
+    }
+}
+
 impl emit::Value for FontWeight {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
@@ -907,7 +1078,7 @@ impl emit::Value for FontWeight {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FontSize {
-    /// Apply the given delta to the previously set font size. If the delta
+    /// Apply the given delta to the previously set font size.
     Delta(FontSizeDelta),
 
     /// Reset the font size to the style default, then apply the given delta.
@@ -984,6 +1155,31 @@ impl FontSize {
             _ => return Ok(()), // do not emit any other tag for a delta of zero
         };
         emit::simple_tag(sink, "fs", Some(&emit_value))
+    }
+}
+
+impl lerp::Lerp for FontSize {
+    type Output = FontSize;
+
+    fn lerp(self, other: Self, power: f64) -> Self::Output {
+        match self {
+            FontSize::Delta(delta1) => match other {
+                FontSize::Delta(delta2) => {
+                    FontSize::Delta(FontSizeDelta(delta1.0.lerp(delta2.0, power)))
+                }
+                _ => other,
+            },
+            FontSize::Reset(_) => other,
+            FontSize::Set(font_size1) => match other {
+                FontSize::Delta(delta) => FontSize::Set(font_size1 + delta.0 * power),
+                FontSize::Reset(delta) => FontSize::Reset(delta),
+                FontSize::Set(font_size2) => FontSize::Set(font_size1.lerp(font_size2, power)),
+            },
+        }
+    }
+
+    fn out(self) -> Self::Output {
+        self
     }
 }
 
@@ -1493,6 +1689,96 @@ mod tests {
 
         assert_eq!(a.italic, Override(true));
         assert_eq!(a.underline, Keep);
+    }
+
+    #[test]
+    fn interpolate() {
+        let mut local1 = Local {
+            font_weight: Resettable::Override(FontWeight::BoldToggle(false)),
+            border: Maybe2D {
+                x: Resettable::Override(2.0),
+                y: Resettable::Reset,
+            },
+            soften: Resettable::Keep,
+            gaussian_blur: Resettable::Override(3.0),
+            font_size: FontSize::Set(20.0),
+            font_scale: Maybe2D {
+                x: Resettable::Reset,
+                y: Resettable::Keep,
+            },
+            text_rotation: Maybe3D {
+                x: Resettable::Override(4.0),
+                y: Resettable::Reset,
+                z: Resettable::Keep,
+            },
+            primary_colour: Resettable::Override(Colour {
+                red: 10,
+                green: 20,
+                blue: 30,
+            }),
+            primary_transparency: Resettable::Override(Transparency(40)),
+            drawing_baseline_offset: Some(20.0),
+            ..Default::default()
+        };
+
+        let local2 = Local {
+            font_weight: Resettable::Override(FontWeight::Numeric(600)),
+            border: Maybe2D {
+                x: Resettable::Override(10.0),
+                y: Resettable::Override(11.0),
+            },
+            soften: Resettable::Override(12),
+            gaussian_blur: Resettable::Reset,
+            font_size: FontSize::Delta(FontSizeDelta(10.0)),
+            font_scale: Maybe2D {
+                x: Resettable::Reset,
+                y: Resettable::Reset,
+            },
+            text_rotation: Maybe3D {
+                x: Resettable::Keep,
+                y: Resettable::Keep,
+                z: Resettable::Keep,
+            },
+            primary_colour: Resettable::Override(Colour {
+                red: 100,
+                green: 200,
+                blue: 10,
+            }),
+            primary_transparency: Resettable::Override(Transparency(1040)),
+            drawing_baseline_offset: Some(50.0),
+            ..Default::default()
+        };
+
+        local1.interpolate(&local2, 0.5);
+
+        assert_eq!(
+            local1.font_weight,
+            Resettable::Override(FontWeight::Numeric(500))
+        );
+
+        assert_eq!(local1.border.x, Resettable::Override(6.0));
+        assert_eq!(local1.border.y, Resettable::Override(11.0));
+        assert_eq!(local1.soften, Resettable::Override(12));
+        assert_eq!(local1.gaussian_blur, Resettable::Reset);
+        assert_eq!(local1.font_size, FontSize::Set(25.0));
+        assert_eq!(local1.font_scale.x, Resettable::Reset);
+        assert_eq!(local1.font_scale.y, Resettable::Reset);
+        assert_eq!(local1.text_rotation.x, Resettable::Override(4.0));
+        assert_eq!(local1.text_rotation.y, Resettable::Reset);
+        assert_eq!(local1.text_rotation.z, Resettable::Keep);
+        assert_eq!(
+            local1.primary_colour,
+            Resettable::Override(Colour {
+                red: 55,
+                green: 110,
+                blue: 20,
+            })
+        );
+        assert_eq!(
+            local1.primary_transparency,
+            Resettable::Override(Transparency(540))
+        );
+        assert_eq!(local1.drawing_baseline_offset, Some(35.0));
     }
 
     #[test]
