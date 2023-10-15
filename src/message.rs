@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, model, nde, pane};
+use crate::{media, model, nde, pane, view};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -29,6 +29,12 @@ pub enum Message {
     /// Set the given pane to contain the given state.
     /// Can be used to change its type or possibly more
     SetPaneState(pane_grid::Pane, Box<pane::State>),
+
+    /// Show a toast notification
+    Toast(view::toast::Toast),
+
+    /// Dismiss a toast notification
+    CloseToast(usize),
 
     // Open a dialog to select the respective type of file.
     SelectVideoFile,

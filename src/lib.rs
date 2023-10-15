@@ -64,6 +64,9 @@ pub struct Samaku {
     /// Currently focused pane, if one exists.
     focus: Option<pane_grid::Pane>,
 
+    /// Toasts (notifications) to be shown over the UI.
+    toasts: Vec<view::toast::Toast>,
+
     /// Metadata of the currently loaded video, if and only if any is loaded.
     pub video_metadata: Option<media::VideoMetadata>,
 
@@ -163,6 +166,7 @@ impl Application for Samaku {
             Samaku {
                 panes,
                 focus: None,
+                toasts: vec![],
                 workers: workers::Workers::spawn_all(&shared_state),
                 actual_frame: None,
                 video_metadata: None,
@@ -235,6 +239,12 @@ impl Application for Samaku {
                         return pane::dispatch_update(pane_state, pane_message);
                     }
                 }
+            }
+            Self::Message::Toast(toast) => {
+                self.toasts.push(toast);
+            }
+            Self::Message::CloseToast(index) => {
+                self.toasts.remove(index);
             }
             Self::Message::SelectVideoFile => {
                 return Command::perform(
@@ -534,10 +544,15 @@ impl Application for Samaku {
         .spacing(5)
         .align_items(Alignment::Center);
 
-        container(iced::widget::column![title_row, pane_grid].spacing(10))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(5)
+        let content: Element<Self::Message> =
+            container(iced::widget::column![title_row, pane_grid].spacing(10))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(5)
+                .into();
+
+        view::toast::Manager::new(content, &self.toasts, message::Message::CloseToast)
+            .timeout(view::toast::DEFAULT_TIMEOUT)
             .into()
     }
 
