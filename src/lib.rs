@@ -124,19 +124,17 @@ impl Samaku {
 
     /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
     /// video is loaded.
+    /// 
+    /// # Panics
+    /// Panics if the frame number does not fit into an `i32`.
     pub fn current_frame(&self) -> Option<i32> {
         match self.actual_frame {
             Some((frame, _)) => Some(frame),
-            None => match self.video_metadata {
-                Some(metadata) => Some(
-                    self.shared
+            None => self.video_metadata.map(|metadata| self.shared
                         .playback_position
                         .current_frame(metadata.frame_rate)
                         .try_into()
-                        .unwrap(),
-                ),
-                None => None,
-            },
+                        .unwrap()),
         }
     }
 }

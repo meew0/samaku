@@ -55,14 +55,17 @@ impl<'a, V> Tracker<'a, V> {
         }
     }
 
+    #[must_use]
     pub fn track(&self) -> &Vec<Region> {
         &self.track
     }
 
+    #[must_use]
     pub fn last_tracked_frame(&self) -> i32 {
         self.last_frame
     }
 
+    #[allow(clippy::missing_panics_doc)] // the expectation should always be met
     pub fn update(&mut self, motion_model: Model) -> TrackResult {
         if self.last_frame == self.end_frame {
             return TrackResult::Termination;
@@ -80,9 +83,9 @@ impl<'a, V> Tracker<'a, V> {
             height: 2.0 * self.search_radius,
         };
 
-        let patch_response_1 = (self.patch_provider)(&self.video, self.last_frame, patch_request);
+        let patch_response_1 = (self.patch_provider)(self.video, self.last_frame, patch_request);
         let patch_response_2 =
-            (self.patch_provider)(&self.video, self.last_frame + 1, patch_request);
+            (self.patch_provider)(self.video, self.last_frame + 1, patch_request);
 
         let image1 = mv::MonochromeImage::new(
             patch_response_1.data.as_slice(),

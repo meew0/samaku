@@ -45,7 +45,7 @@ pub fn spawn(
                                             node_index,
                                             message::Node::MotionTrackUpdate(
                                                 tracker.last_tracked_frame(),
-                                                tracker.track().last().unwrap().clone(),
+                                                *tracker.track().last().unwrap(),
                                             ),
                                         ))
                                         .is_err()
@@ -109,7 +109,12 @@ pub fn spawn(
                             tracker_opt = None;
                             video_opt = Some(video);
                         }
-                        self::Message::TrackMotionForNode(new_node_index, initial_region, start_frame, end_frame) => {
+                        self::Message::TrackMotionForNode(
+                            new_node_index,
+                            initial_region,
+                            start_frame,
+                            end_frame,
+                        ) => {
                             if let Some(ref video) = video_opt {
                                 node_index = new_node_index;
                                 tracker_opt = Some(media::motion::Tracker::new(

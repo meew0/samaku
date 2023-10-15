@@ -109,6 +109,7 @@ pub struct Point {
 }
 
 impl Point {
+    #[must_use]
     pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
         Self {
             x: self.x + x_offset,
@@ -129,6 +130,7 @@ pub struct Region {
 }
 
 impl Region {
+    #[must_use]
     pub fn from_center_and_radius(center: Point, radius: f64) -> Self {
         Self {
             top_left: Point {
@@ -179,6 +181,7 @@ impl Region {
         (x, y)
     }
 
+    #[must_use]
     pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
         Self {
             top_left: self.top_left.offset(x_offset, y_offset),
@@ -277,7 +280,7 @@ mod tests {
         };
 
         let region1 = Region::from_center_and_radius(Point { x: 100.0, y: 100.0 }, 10.0);
-        let region2 = region1.clone();
+        let region2 = region1;
 
         // These appear to be the default settings used by Blender
         let options = TrackRegionOptions {
