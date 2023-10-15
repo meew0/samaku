@@ -25,6 +25,7 @@ pub mod subtitle;
 pub mod view;
 pub mod workers;
 
+/// Effectively samaku's main function. Creates and starts the application.
 #[allow(clippy::missing_errors_doc)]
 pub fn run() -> iced::Result {
     Samaku::run(Settings {
@@ -45,9 +46,15 @@ pub fn run() -> iced::Result {
 
 /// Global application state.
 pub struct Samaku {
+    /// Workers represent separate threads running certain CPU-intensive tasks, like video and audio
+    /// decoding. The `Workers` interface is available to send messages to them.
     workers: workers::Workers,
 
+    /// State that needs to be shared with the workers, like the playback position.
     shared: SharedState,
+
+    /// State that needs to be mutable in view code, like caching of results to avoid rerunning
+    /// certain calculations over and over.
     view: RefCell<ViewState>,
 
     /// The current state of the global pane grid.
@@ -124,17 +131,19 @@ impl Samaku {
 
     /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
     /// video is loaded.
-    /// 
+    ///
     /// # Panics
     /// Panics if the frame number does not fit into an `i32`.
     pub fn current_frame(&self) -> Option<i32> {
         match self.actual_frame {
             Some((frame, _)) => Some(frame),
-            None => self.video_metadata.map(|metadata| self.shared
-                        .playback_position
-                        .current_frame(metadata.frame_rate)
-                        .try_into()
-                        .unwrap()),
+            None => self.video_metadata.map(|metadata| {
+                self.shared
+                    .playback_position
+                    .current_frame(metadata.frame_rate)
+                    .try_into()
+                    .unwrap()
+            }),
         }
     }
 }
@@ -148,12 +157,14 @@ impl Application for Samaku {
     fn new(_flags: ()) -> (Self, Command<Self::Message>) {
         let (panes, _) = pane_grid::State::new(pane::State::Unassigned);
 
+        // Initial shared state...
         let shared_state = SharedState {
             audio: Arc::new(Mutex::new(None)),
             playback_position: Arc::new(model::playback::Position::default()),
         };
 
         (
+            // ...and initial global state
             Samaku {
                 panes,
                 focus: None,
@@ -169,6 +180,8 @@ impl Application for Samaku {
                 playing: false,
                 reticules: None,
             },
+            // Tell iced to load the UI font (Barlow) when loading the application, so it is
+            // immediately available for rendering.
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
         )
     }
@@ -177,6 +190,9 @@ impl Application for Samaku {
         String::from("samaku")
     }
 
+    /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
+    /// whatever processing is required, and updates the global state based on it. This will cause
+    /// iced to rerender the application afterwards.
     #[allow(clippy::too_many_lines)]
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         #[allow(clippy::match_same_arms)]
@@ -471,14 +487,21 @@ impl Application for Samaku {
         Command::none()
     }
 
+    /// Construct the user interface. Called whenever iced needs to rerender the application.
     fn view(&self) -> Element<Self::Message> {
         let focus = self.focus;
-        // let total_panes = self.panes.len();
 
+        // The pane grid makes up the main part of the application. All the fundamental
+        // functionality, like moving panes around, is provided by iced here; we just take care
+        // of filling the panes with content.
         let pane_grid =
             PaneGrid::new::<pane::State>(&self.panes, |pane, pane_state, _is_maximized| {
+                // This closure is called for every pane.
+
                 let is_focused = focus == Some(pane);
 
+                // Construct the user interface within the pane itself, based on whatever the pane
+                // struct wants to do.
                 let pane_view = pane::dispatch_view(pane, self, pane_state);
                 let title_bar =
                     pane_grid::TitleBar::new(pane_view.title)
@@ -503,6 +526,8 @@ impl Application for Samaku {
             .on_drag(Self::Message::DragPane)
             .on_resize(0, Self::Message::ResizePane);
 
+        // The title row — currently only contains the logo and the application name.
+        // TODO: add buttons/menus for loading/saving/etc
         let title_row = iced::widget::row![
             iced::widget::svg(iced::widget::svg::Handle::from_memory(resources::LOGO))
                 .width(30)
@@ -524,14 +549,17 @@ impl Application for Samaku {
     fn theme(&self) -> Self::Theme {
         style::samaku_theme()
     }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         use iced::futures::StreamExt;
 
+        // Handle incoming global events, like key presses
         let events = subscription::events_with(|event, status| {
             if let event::Status::Captured = status {
                 return None;
             }
 
+            // Call the function in the `keyboard` module for every key press.
             match event {
                 Event::Keyboard(iced::keyboard::Event::KeyPressed {
                     modifiers,
@@ -541,6 +569,13 @@ impl Application for Samaku {
             }
         });
 
+        // This is the magic code that allows us to listen to messages emitted by the workers.
+        // While `subscription` is called frequently, we specify the same ID (`TypeID` of `Workers`)
+        // every time, so only the result of the first `unfold` call is actually used, which is the
+        // only one where `self.workers.receiver.take()` produces a `Some` value. For all subsequent
+        // times `subscription` is called, the second argument will be `None` and would lead to a
+        // panic if it were unwrapped within the closure, but the closure is never called because
+        // the initially created subscription is never overwritten.
         let worker_messages = subscription::unfold(
             std::any::TypeId::of::<workers::Workers>(),
             self.workers.receiver.take(),

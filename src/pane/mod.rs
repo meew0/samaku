@@ -19,6 +19,8 @@ pub enum State {
     NodeEditor(node_editor::State),
 }
 
+/// Struct containing the elements to be shown in a pane and in its title bar, for use as the return
+/// type of each pane's `view` function.
 pub struct View<'a> {
     pub title: iced::Element<'a, message::Message>,
     pub content: iced::Element<'a, message::Message>,
