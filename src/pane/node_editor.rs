@@ -510,6 +510,16 @@ where
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
         nde::node::SocketType::MultipleEvents => (0.0, crate::style::SAMAKU_PRIMARY, ""),
         nde::node::SocketType::AnyEvents => (0.0, crate::style::SAMAKU_BACKGROUND, ""),
+        nde::node::SocketType::LocalTags => (
+            BLOB_RADIUS,
+            iced::Color::from_rgb(1.0, 1.0, 1.0),
+            "Local tags",
+        ),
+        nde::node::SocketType::GlobalTags => (
+            BLOB_RADIUS,
+            iced::Color::from_rgb(0.5, 0.5, 0.5),
+            "Global tags",
+        ),
         nde::node::SocketType::Position => (
             BLOB_RADIUS,
             iced::Color::from_rgb(0.09, 0.81, 0.48),
@@ -570,6 +580,7 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
                 "Input",
                 vec![
                     menu_item("Subtitle", nde::node::Shell::InputSline),
+                    menu_item("Tags", nde::node::Shell::InputTags),
                     menu_item("Position", nde::node::Shell::InputPosition),
                     menu_item("Rectangle", nde::node::Shell::InputRectangle),
                     menu_item("Frame rate", nde::node::Shell::InputFrameRate),
@@ -589,6 +600,7 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
             menu_item("Italicise", nde::node::Shell::Italic),
             menu_item("Set position", nde::node::Shell::SetPosition),
             menu_item("Motion track", nde::node::Shell::MotionTrack),
+            menu_item("Gradient", nde::node::Shell::Gradient),
         ],
     )
 }

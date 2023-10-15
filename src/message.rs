@@ -101,4 +101,5 @@ pub enum Pane {
 #[derive(Debug, Clone)]
 pub enum Node {
     MotionTrackUpdate(i32, media::motion::Region),
+    TextInputChanged(String),
 }

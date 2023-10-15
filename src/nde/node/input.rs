@@ -255,3 +255,65 @@ impl Node for Rectangle {
         iced::Size::new(200.0, 125.0)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Tags {
+    pub value: String,
+}
+
+impl Node for Tags {
+    fn name(&self) -> &'static str {
+        "Input: Tags"
+    }
+
+    fn desired_inputs(&self) -> &[SocketType] {
+        &[]
+    }
+
+    fn predicted_outputs(&self) -> &[SocketType] {
+        &[SocketType::LocalTags, SocketType::GlobalTags]
+    }
+
+    fn run(&self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+        if self.value.contains('{') || self.value.contains('}') {
+            return Err(Error::ContainsBrackets);
+        }
+
+        let block = format!("{{{}}}", self.value);
+        let (global, spans) = nde::tags::parse_raw(&block);
+
+        assert_eq!(spans.len(), 2);
+        let nde::Span::Tags(local, _) = spans.into_iter().nth(1).unwrap() else {
+            panic!("span should be `Tags`")
+        };
+
+        Ok(vec![
+            SocketValue::LocalTags(Box::new(local)),
+            SocketValue::GlobalTags(global),
+        ])
+    }
+
+    fn content<'a>(
+        &self,
+        self_index: usize,
+    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+        let input =
+            iced::widget::text_input("\\1c&HFF0000&", &self.value).on_input(move |new_text| {
+                message::Message::Node(self_index, message::Node::TextInputChanged(new_text))
+            });
+
+        let column = iced::widget::column![iced::widget::text(self.name()), input];
+
+        column.align_items(iced::Alignment::Center).into()
+    }
+
+    fn update(&mut self, message: message::Node) {
+        if let message::Node::TextInputChanged(value) = message {
+            self.value = value;
+        }
+    }
+
+    fn content_size(&self) -> iced::Size {
+        iced::Size::new(400.0, 125.0)
+    }
+}

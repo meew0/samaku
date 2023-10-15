@@ -2,6 +2,7 @@ use std::{fmt::Debug, ops::Add};
 
 pub use emit::emit;
 pub use parse::parse;
+pub use parse::raw as parse_raw;
 
 use crate::subtitle;
 

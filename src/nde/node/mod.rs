@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub use clip::Rectangle as ClipRectangle;
+pub use gradient::Gradient;
 pub use input::FrameRate as InputFrameRate;
 pub use input::Position as InputPosition;
 pub use input::Rectangle as InputRectangle;
 pub use input::Sline as InputSline;
+pub use input::Tags as InputTags;
 pub use motion_track::MotionTrack;
 pub use output::Output;
 pub use positioning::SetPosition;
@@ -15,6 +17,7 @@ pub use style_basic::Italic;
 use crate::{media, message, model, nde, subtitle};
 
 mod clip;
+mod gradient;
 mod input;
 mod motion_track;
 mod output;
@@ -38,6 +41,9 @@ pub enum SocketValue<'a> {
     /// A collection of events. Can have any length.
     MultipleEvents(Vec<super::Event>),
 
+    LocalTags(Box<super::tags::Local>),
+    GlobalTags(Box<super::tags::Global>),
+
     Position(nde::tags::Position),
     Rectangle(nde::tags::Rectangle),
 
@@ -55,6 +61,8 @@ impl<'a> SocketValue<'a> {
         match self {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
+            SocketValue::LocalTags(_) => Some(SocketType::LocalTags),
+            SocketValue::GlobalTags(_) => Some(SocketType::GlobalTags),
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
             SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
@@ -97,6 +105,27 @@ impl<'a> SocketValue<'a> {
             _ => Err(Error::MismatchedTypes),
         }
     }
+
+    /// Assumes `self` contains events of some kind, and calls the given mutable closure for each
+    /// given event.
+    ///
+    /// # Errors
+    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
+    pub fn each_event<F>(&self, mut func: F) -> Result<(), Error>
+    where
+        F: FnMut(&super::Event),
+    {
+        match self {
+            SocketValue::IndividualEvent(event) => func(event.as_ref()),
+            SocketValue::MultipleEvents(events) => {
+                for event in events {
+                    func(event);
+                }
+            }
+            _ => return Err(Error::MismatchedTypes),
+        }
+        Ok(())
+    }
 }
 
 macro_rules! retrieve {
@@ -116,6 +145,8 @@ pub enum SocketType {
     IndividualEvent,
     MultipleEvents,
     AnyEvents,
+    LocalTags,
+    GlobalTags,
     Position,
     Rectangle,
     FrameRate,
@@ -191,6 +222,8 @@ pub trait Node: Debug {
 pub enum Error {
     MismatchedTypes,
     Empty,
+    InvertedRectangle,
+    ContainsBrackets,
 }
 
 /// An “empty shell” representation of the operation performed by a node. Used to represent the
@@ -198,6 +231,7 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub enum Shell {
     InputSline,
+    InputTags,
     InputPosition,
     InputRectangle,
     InputFrameRate,
@@ -206,6 +240,7 @@ pub enum Shell {
     MotionTrack,
     SplitFrameByFrame,
     ClipRectangle,
+    Gradient,
 }
 
 impl Shell {
@@ -213,6 +248,9 @@ impl Shell {
     pub fn instantiate(&self) -> Box<dyn Node> {
         match self {
             Shell::InputSline => Box::new(InputSline {}),
+            Shell::InputTags => Box::new(InputTags {
+                value: String::new(),
+            }),
             Shell::InputPosition => Box::new(InputPosition {
                 value: nde::tags::Position { x: 0.0, y: 0.0 },
             }),
@@ -233,6 +271,7 @@ impl Shell {
             }),
             Shell::SplitFrameByFrame => Box::new(SplitFrameByFrame {}),
             Shell::ClipRectangle => Box::new(ClipRectangle {}),
+            Shell::Gradient => Box::new(Gradient {}),
         }
     }
 }

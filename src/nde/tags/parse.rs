@@ -18,6 +18,7 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
     (global, simplified)
 }
 
+#[must_use]
 pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
     let mut last_local = Box::new(Local::empty());

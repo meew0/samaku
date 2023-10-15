@@ -83,10 +83,8 @@ impl Node for MotionTrack {
     }
 
     fn update(&mut self, message: message::Node) {
-        match message {
-            message::Node::MotionTrackUpdate(relative_frame, region) => {
-                self.track.insert(relative_frame, region);
-            }
+        if let message::Node::MotionTrackUpdate(relative_frame, region) = message {
+            self.track.insert(relative_frame, region);
         }
     }
 
