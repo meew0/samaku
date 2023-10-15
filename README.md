@@ -71,3 +71,12 @@ Currently only tested on Linux.
 
 For actually using samaku, please also take a look at `src/keyboard.rs`, which defines global keyboard shortcuts for
 functionality that is not yet mapped to any buttons or the like in the UI.
+
+## Licence notes
+
+samaku as a whole is licenced under the GPLv3, whose text is available in the `LICENSE-GPL` file in the project root.
+It also includes some code from [arch1t3cht's Aegisub fork](https://github.com/arch1t3cht/Aegisub/), specifically the
+`vapoursynth/aegisub_vs.py` script, as well as the scripts in the `src/media/default_scripts` folder, which are all
+licensed under the [BSD 3-clause licence](https://github.com/arch1t3cht/Aegisub/blob/feature/LICENCE).
+
+I eventually plan to extract parts of the code and make it available under more permissive licences.
