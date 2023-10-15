@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 use rustsynth_sys as vs;
 
+use crate::model;
+
 use super::c_string;
 
 fn vs_assert(ret: i32, message: &str) {
@@ -604,21 +606,23 @@ impl FrameRate {
     /// # Panics
     /// Panics if the resulting frame number would not fit into an `i32`.
     #[must_use]
-    pub fn ms_to_frame(&self, ass_ms: i64) -> i32 {
+    pub fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
         // since the numerator is guaranteed to be smaller than i64 max
         #[allow(clippy::cast_possible_wrap)]
         let numerator = ass_ms * self.numerator as i64;
         #[allow(clippy::cast_possible_wrap)]
         let denominator = 1000 * self.denominator as i64;
-        (numerator / denominator)
-            .try_into()
-            .expect("overflow while converting time to frame number")
+        model::FrameNumber(
+            (numerator / denominator)
+                .try_into()
+                .expect("overflow while converting time to frame number"),
+        )
     }
 
     #[must_use]
-    pub fn frame_to_ms(&self, frame: i32) -> i64 {
+    pub fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
         #[allow(clippy::cast_possible_wrap)]
-        let inv_numerator = i64::from(frame * 1000) * self.denominator as i64;
+        let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
         #[allow(clippy::cast_possible_wrap)]
         let result = inv_numerator / self.numerator as i64;
         result
@@ -626,7 +630,7 @@ impl FrameRate {
 
     #[must_use]
     pub fn frame_time_ms(&self) -> i64 {
-        self.frame_to_ms(1)
+        self.frame_to_ms(model::FrameNumber(1))
     }
 }
 

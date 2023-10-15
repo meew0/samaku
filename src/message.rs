@@ -43,7 +43,7 @@ pub enum Message {
     VideoLoaded(Box<media::VideoMetadata>),
 
     /// A video frame has been decoded and is available to be displayed.
-    VideoFrameAvailable(i32, iced::widget::image::Handle),
+    VideoFrameAvailable(model::FrameNumber, iced::widget::image::Handle),
 
     /// An audio file has been selected and should be loaded.
     AudioFileSelected(std::path::PathBuf),
@@ -58,7 +58,7 @@ pub enum Message {
     PlaybackStep,
 
     // Change the playback state in the given way.
-    PlaybackAdvanceFrames(i32),
+    PlaybackAdvanceFrames(model::FrameDelta),
     PlaybackAdvanceSeconds(f64),
     TogglePlayback,
 
@@ -131,8 +131,8 @@ pub enum Pane {
 #[derive(Debug, Clone)]
 pub enum Node {
     /// A new marker is available for the currently running motion track.
-    MotionTrackUpdate(i32, media::motion::Region),
-    
+    MotionTrackUpdate(model::FrameNumber, media::motion::Region),
+
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),
 }

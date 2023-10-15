@@ -3,7 +3,7 @@ use std::sync::{
     Mutex,
 };
 
-use crate::media;
+use crate::{media, model};
 
 pub struct Position {
     // Position in terms of `rate`. Always guaranteed to be correct,
@@ -36,11 +36,20 @@ impl Position {
         self.position() as f64 / f64::from(self.rate())
     }
 
-    pub fn current_frame(&self, frame_rate: media::FrameRate) -> u64 {
+    /// Converts the playback position into a frame number (rounding down) using the given frame
+    /// rate. Avoids floating point imprecisions where possible.
+    ///
+    /// # Panics
+    /// Panics if the frame number does not fit into a 32-bit signed integer.
+    pub fn current_frame(&self, frame_rate: media::FrameRate) -> model::FrameNumber {
         let numerator = self.position() * frame_rate.numerator;
         let denominator = frame_rate.denominator * u64::from(self.rate());
 
-        numerator / denominator
+        model::FrameNumber(
+            (numerator / denominator)
+                .try_into()
+                .expect("frame number overflow"),
+        )
     }
 
     /// Adds the given `delta` number of ticks to the playback state. May be negative.
@@ -63,8 +72,8 @@ impl Position {
         self.add_ticks(delta_ticks);
     }
 
-    pub fn add_frames(&self, delta_frames: i32, frame_rate: media::FrameRate) {
-        self.add_seconds(f64::from(delta_frames) / f64::from(frame_rate));
+    pub fn add_frames(&self, delta_frames: model::FrameDelta, frame_rate: media::FrameRate) {
+        self.add_seconds(f64::from(delta_frames.0) / f64::from(frame_rate));
     }
 }
 

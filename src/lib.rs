@@ -77,7 +77,7 @@ pub struct Samaku {
     /// together with the image it represents.
     /// Will be slightly different from the information in
     /// `playback_state` due to decoding latency etc.
-    pub actual_frame: Option<(i32, iced::widget::image::Handle)>,
+    pub actual_frame: Option<(model::FrameNumber, iced::widget::image::Handle)>,
 
     /// Our own representation of whether playback is currently running or not.
     /// Setting this does nothing; it is updated by playback controller workers.
@@ -131,18 +131,13 @@ impl Samaku {
 
     /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
     /// video is loaded.
-    ///
-    /// # Panics
-    /// Panics if the frame number does not fit into an `i32`.
-    pub fn current_frame(&self) -> Option<i32> {
+    pub fn current_frame(&self) -> Option<model::FrameNumber> {
         match self.actual_frame {
             Some((frame, _)) => Some(frame),
             None => self.video_metadata.map(|metadata| {
                 self.shared
                     .playback_position
                     .current_frame(metadata.frame_rate)
-                    .try_into()
-                    .unwrap()
             }),
         }
     }

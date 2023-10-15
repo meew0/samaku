@@ -1,12 +1,17 @@
 use std::{sync::Arc, thread};
 
-use crate::{media, message};
+use crate::{media, message, model};
 
 #[derive(Debug, Clone)]
 pub enum Message {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
-    TrackMotionForNode(usize, media::motion::Region, i32, i32),
+    TrackMotionForNode(
+        usize,
+        media::motion::Region,
+        model::FrameNumber,
+        model::FrameNumber,
+    ),
 }
 
 #[allow(clippy::too_many_lines)]
@@ -22,7 +27,7 @@ pub fn spawn(
         .name("samaku_video_decoder".to_string())
         .spawn(move || {
             let mut video_opt: Option<media::Video> = None;
-            let mut last_frame: i32 = -1;
+            let mut last_frame = model::FrameNumber(-1);
 
             let mut node_index = 0;
             let mut tracker_opt: Option<media::motion::Tracker<media::Video>> = None;
@@ -78,10 +83,8 @@ pub fn spawn(
                             // and whether the frame has actually changed, and if it has,
                             // decode the new frame
                             if let Some(ref video) = video_opt {
-                                let new_frame: i32 = playback_position
-                                    .current_frame(video.metadata.frame_rate)
-                                    .try_into()
-                                    .expect("frame number overflow");
+                                let new_frame =
+                                    playback_position.current_frame(video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
                                     let handle = video.get_iced_frame(new_frame);

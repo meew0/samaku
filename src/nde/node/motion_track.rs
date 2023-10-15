@@ -7,7 +7,7 @@ use super::{Error, Node, SocketType, SocketValue};
 #[derive(Debug)]
 pub struct MotionTrack {
     pub region_center: nde::tags::Position,
-    pub track: HashMap<i32, media::motion::Region>,
+    pub track: HashMap<model::FrameNumber, media::motion::Region>,
 }
 
 impl Node for MotionTrack {

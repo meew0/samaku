@@ -4,6 +4,7 @@ use iced::{
 };
 
 use crate::message::Message;
+use crate::model;
 
 pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Option<Message> {
     match key_code {
@@ -13,8 +14,8 @@ pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Opti
         KeyCode::V => Some(Message::SelectVideoFile),
         KeyCode::B => Some(Message::SelectSubtitleFile),
         KeyCode::N => Some(Message::SelectAudioFile),
-        KeyCode::Comma => Some(Message::PlaybackAdvanceFrames(-1)),
-        KeyCode::Period => Some(Message::PlaybackAdvanceFrames(1)),
+        KeyCode::Comma => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(-1))),
+        KeyCode::Period => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(1))),
         KeyCode::Left => Some(Message::PlaybackAdvanceSeconds(-1.0)),
         KeyCode::Right => Some(Message::PlaybackAdvanceSeconds(1.0)),
         KeyCode::Space => Some(Message::TogglePlayback),

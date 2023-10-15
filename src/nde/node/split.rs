@@ -1,4 +1,4 @@
-use crate::{nde, subtitle};
+use crate::{model, nde, subtitle};
 
 use super::{Error, Node, SocketType, SocketValue};
 
@@ -29,13 +29,17 @@ impl Node for FrameByFrame {
 
         loop {
             let static_start = frame_rate.frame_to_ms(frame);
-            
-            if static_start < event.start.0 { continue; }
-            if static_start > end { break; }
-            
+
+            if static_start < event.start.0 {
+                continue;
+            }
+            if static_start > end {
+                break;
+            }
+
             res.push(event.make_static(subtitle::StartTime(static_start), static_duration));
-            
-            frame += 1;
+
+            frame += model::FrameDelta(1);
         }
 
         Ok(vec![SocketValue::MultipleEvents(res)])

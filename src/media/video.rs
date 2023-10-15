@@ -2,6 +2,8 @@ use std::path::Path;
 
 pub use vapoursynth::FrameRate;
 
+use crate::model;
+
 use super::bindings::{c_string, vapoursynth};
 
 const DEFAULT_SCRIPT: &str = include_str!("default_scripts/video.py");
@@ -150,8 +152,8 @@ impl Video {
         }
     }
 
-    fn get_frame_internal(&self, n: i32) -> vapoursynth::Frame {
-        let vs_frame = self.node.get_frame(n).unwrap();
+    fn get_frame_internal(&self, n: model::FrameNumber) -> vapoursynth::Frame {
+        let vs_frame = self.node.get_frame(n.0).unwrap();
 
         let video_format = vs_frame.get_video_format().unwrap();
         assert!(video_format.is_rgb24(), "Frame is not in RGB24 format");
@@ -164,7 +166,7 @@ impl Video {
     /// # Panics
     /// Panics if the frame could not be retrieved.
     #[must_use]
-    pub fn get_iced_frame(&self, n: i32) -> iced::widget::image::Handle {
+    pub fn get_iced_frame(&self, n: model::FrameNumber) -> iced::widget::image::Handle {
         let instant = std::time::Instant::now();
         let vs_frame = self.get_frame_internal(n);
         let elapsed_obtain = instant.elapsed();
@@ -223,7 +225,7 @@ impl Video {
 
         let elapsed_copy = instant2.elapsed();
         println!(
-            "Frame profiling [display]: obtaining frame {n} took {elapsed_obtain:.2?}, packing it took {elapsed_copy:.2?}",
+            "Frame profiling [display]: obtaining frame {n:?} took {elapsed_obtain:.2?}, packing it took {elapsed_copy:.2?}",
         );
 
         iced::widget::image::Handle::from_pixels(width, height, out)
@@ -236,7 +238,7 @@ impl Video {
     #[must_use]
     pub fn get_libmv_patch(
         &self,
-        n: i32,
+        n: model::FrameNumber,
         request: super::motion::PatchRequest,
     ) -> super::motion::PatchResponse {
         // The conversion coefficients used by Blender, divided by 255
@@ -308,7 +310,7 @@ impl Video {
 
         let elapsed_copy = instant2.elapsed();
         println!(
-            "Frame profiling [motion tracking]: obtaining frame {n} took {elapsed_obtain:.2?}, converting it took {elapsed_copy:.2?}"
+            "Frame profiling [motion tracking]: obtaining frame {n:?} took {elapsed_obtain:.2?}, converting it took {elapsed_copy:.2?}"
         );
 
         super::motion::PatchResponse {

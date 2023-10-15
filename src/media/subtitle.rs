@@ -1,6 +1,6 @@
 pub use ass::Image;
 
-use crate::{subtitle, view};
+use crate::{model, subtitle, view};
 
 use super::bindings::{ass, c_string};
 
@@ -119,7 +119,7 @@ impl Renderer {
         &mut self,
         subtitles: &OpaqueTrack,
         base: iced::widget::image::Handle,
-        frame: i32,
+        frame: model::FrameNumber,
         frame_rate: super::video::FrameRate,
         frame_size: subtitle::Resolution,
         storage_size: subtitle::Resolution,

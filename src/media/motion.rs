@@ -2,6 +2,8 @@ pub use mv::MotionModel as Model;
 pub use mv::Point;
 pub use mv::Region;
 
+use crate::model;
+
 use super::bindings::mv;
 
 #[derive(Debug, Clone, Copy)]
@@ -23,11 +25,11 @@ pub struct PatchResponse {
 
 pub struct Tracker<'a, V> {
     video: &'a V,
-    patch_provider: fn(&V, i32, PatchRequest) -> PatchResponse,
+    patch_provider: fn(&V, model::FrameNumber, PatchRequest) -> PatchResponse,
     search_radius: f64,
     track: Vec<Region>,
-    last_frame: i32,
-    end_frame: i32,
+    last_frame: model::FrameNumber,
+    end_frame: model::FrameNumber,
 }
 
 impl<'a, V> Tracker<'a, V> {
@@ -39,11 +41,11 @@ impl<'a, V> Tracker<'a, V> {
     /// `track` will be of size `end_frame - start_frame + 1`, if all goes well.
     pub fn new(
         video: &'a V,
-        patch_provider: fn(&V, i32, PatchRequest) -> PatchResponse,
+        patch_provider: fn(&V, model::FrameNumber, PatchRequest) -> PatchResponse,
         initial_marker: Region,
         search_radius: f64,
-        start_frame: i32,
-        end_frame: i32,
+        start_frame: model::FrameNumber,
+        end_frame: model::FrameNumber,
     ) -> Self {
         Self {
             video,
@@ -61,7 +63,7 @@ impl<'a, V> Tracker<'a, V> {
     }
 
     #[must_use]
-    pub fn last_tracked_frame(&self) -> i32 {
+    pub fn last_tracked_frame(&self) -> model::FrameNumber {
         self.last_frame
     }
 
@@ -85,7 +87,7 @@ impl<'a, V> Tracker<'a, V> {
 
         let patch_response_1 = (self.patch_provider)(self.video, self.last_frame, patch_request);
         let patch_response_2 =
-            (self.patch_provider)(self.video, self.last_frame + 1, patch_request);
+            (self.patch_provider)(self.video, self.last_frame + model::FrameDelta(1), patch_request);
 
         let image1 = mv::MonochromeImage::new(
             patch_response_1.data.as_slice(),
@@ -128,7 +130,7 @@ impl<'a, V> Tracker<'a, V> {
                     f64::from(patch_response_2.left),
                     f64::from(patch_response_2.top),
                 ));
-                self.last_frame += 1;
+                self.last_frame += model::FrameDelta(1);
                 TrackResult::Success
             }
             None => TrackResult::Failure,
@@ -145,8 +147,8 @@ pub enum TrackResult {
 
 #[cfg(test)]
 mod tests {
-    use super::super::video;
     use super::*;
+    use super::super::video;
 
     #[test]
     fn motion_track() {
@@ -158,8 +160,8 @@ mod tests {
             video::Video::get_libmv_patch,
             initial_marker,
             60.0,
-            0,
-            99,
+            model::FrameNumber(0),
+            model::FrameNumber(99),
         );
 
         let mut last_result = TrackResult::Success;
