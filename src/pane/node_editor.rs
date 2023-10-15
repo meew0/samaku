@@ -515,6 +515,11 @@ where
             iced::Color::from_rgb(0.09, 0.81, 0.48),
             "Position",
         ),
+        nde::node::SocketType::Rectangle => (
+            BLOB_RADIUS,
+            iced::Color::from_rgb(0.19, 0.90, 0.90),
+            "Rectangle",
+        ),
         nde::node::SocketType::FrameRate => (
             BLOB_RADIUS,
             iced::Color::from_rgb(0.73, 0.38, 0.76),
@@ -566,6 +571,7 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
                 vec![
                     menu_item("Subtitle", nde::node::Shell::InputSline),
                     menu_item("Position", nde::node::Shell::InputPosition),
+                    menu_item("Rectangle", nde::node::Shell::InputRectangle),
                     menu_item("Frame rate", nde::node::Shell::InputFrameRate),
                 ],
             ),
@@ -575,6 +581,10 @@ fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Rendere
                     "Frame by frame",
                     nde::node::Shell::SplitFrameByFrame,
                 )],
+            ),
+            sub_menu(
+                "Clip",
+                vec![menu_item("Rectangular", nde::node::Shell::ClipRectangle)],
             ),
             menu_item("Italicise", nde::node::Shell::Italic),
             menu_item("Set position", nde::node::Shell::SetPosition),

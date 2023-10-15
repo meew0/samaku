@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+pub use clip::Rectangle as ClipRectangle;
 pub use input::FrameRate as InputFrameRate;
 pub use input::Position as InputPosition;
+pub use input::Rectangle as InputRectangle;
 pub use input::Sline as InputSline;
 pub use motion_track::MotionTrack;
 pub use output::Output;
@@ -12,6 +14,7 @@ pub use style_basic::Italic;
 
 use crate::{media, message, model, nde, subtitle};
 
+mod clip;
 mod input;
 mod motion_track;
 mod output;
@@ -36,6 +39,7 @@ pub enum SocketValue<'a> {
     MultipleEvents(Vec<super::Event>),
 
     Position(nde::tags::Position),
+    Rectangle(nde::tags::Rectangle),
 
     FrameRate(media::FrameRate),
 
@@ -52,6 +56,7 @@ impl<'a> SocketValue<'a> {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
             SocketValue::Position(_) => Some(SocketType::Position),
+            SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
             SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
             SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
         }
@@ -112,6 +117,7 @@ pub enum SocketType {
     MultipleEvents,
     AnyEvents,
     Position,
+    Rectangle,
     FrameRate,
 
     /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
@@ -159,12 +165,11 @@ pub trait Node: Debug {
     ) -> iced::Element<'a, message::Message, iced::Renderer> {
         iced::widget::text(self.name()).into()
     }
-    
+
     /// Called when a message for this node is received.
     #[allow(unused_variables)]
-    fn update(&mut self, message: message::Node) {
-    }
-    
+    fn update(&mut self, message: message::Node) {}
+
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.
@@ -194,11 +199,13 @@ pub enum Error {
 pub enum Shell {
     InputSline,
     InputPosition,
+    InputRectangle,
     InputFrameRate,
     Italic,
     SetPosition,
     MotionTrack,
     SplitFrameByFrame,
+    ClipRectangle,
 }
 
 impl Shell {
@@ -209,6 +216,14 @@ impl Shell {
             Shell::InputPosition => Box::new(InputPosition {
                 value: nde::tags::Position { x: 0.0, y: 0.0 },
             }),
+            Shell::InputRectangle => Box::new(InputRectangle {
+                value: nde::tags::Rectangle {
+                    x1: 100,
+                    y1: 100,
+                    x2: 200,
+                    y2: 200,
+                },
+            }),
             Shell::InputFrameRate => Box::new(InputFrameRate {}),
             Shell::Italic => Box::new(Italic {}),
             Shell::SetPosition => Box::new(SetPosition {}),
@@ -217,6 +232,7 @@ impl Shell {
                 track: HashMap::new(),
             }),
             Shell::SplitFrameByFrame => Box::new(SplitFrameByFrame {}),
+            Shell::ClipRectangle => Box::new(ClipRectangle {}),
         }
     }
 }

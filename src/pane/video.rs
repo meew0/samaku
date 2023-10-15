@@ -218,9 +218,49 @@ impl<'a> canvas::Program<message::Message> for ReticuleProgram<'a> {
                             .with_width(1.0),
                     );
                 }
+                model::reticule::Shape::CornerTopLeft => {
+                    corner(&mut frame, center_point, reticule.radius, 1.0, 1.0);
+                }
+                model::reticule::Shape::CornerTopRight => {
+                    corner(&mut frame, center_point, reticule.radius, -1.0, 1.0);
+                }
+                model::reticule::Shape::CornerBottomLeft => {
+                    corner(&mut frame, center_point, reticule.radius, 1.0, -1.0);
+                }
+                model::reticule::Shape::CornerBottomRight => {
+                    corner(&mut frame, center_point, reticule.radius, -1.0, -1.0);
+                }
             }
         }
 
         vec![frame.into_geometry()]
     }
+}
+
+fn corner(
+    frame: &mut canvas::Frame,
+    center_point: iced::Point,
+    radius: f32,
+    x_sign: f32,
+    y_sign: f32,
+) {
+    let path = canvas::Path::new(|p| {
+        p.move_to(center_point + iced::Vector::new(x_sign * radius * 1.5, 0.0));
+        p.line_to(center_point);
+        p.line_to(center_point + iced::Vector::new(0.0, y_sign * radius * 1.5));
+    });
+
+    frame.stroke(
+        &path,
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_PRIMARY)
+            .with_width(1.0),
+    );
+
+    frame.stroke(
+        &canvas::Path::circle(center_point, radius),
+        canvas::Stroke::default()
+            .with_color(iced::Color::BLACK)
+            .with_width(1.0),
+    );
 }

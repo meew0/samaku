@@ -46,4 +46,8 @@ impl Reticule {
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
     Cross,
+    CornerTopLeft,
+    CornerTopRight,
+    CornerBottomLeft,
+    CornerBottomRight,
 }

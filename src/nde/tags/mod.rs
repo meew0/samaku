@@ -715,7 +715,7 @@ impl emit::Tag for PositionOrMove {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
