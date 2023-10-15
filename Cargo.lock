@@ -3313,6 +3313,7 @@ dependencies = [
  "rfd",
  "rustsynth-sys",
  "smol",
+ "thiserror",
 ]
 
 [[package]]

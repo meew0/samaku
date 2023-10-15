@@ -842,14 +842,14 @@ pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
 
 const PRELUDE: &str = include_str!("../default_scripts/prelude.py");
 
-pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Script {
+pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Option<Script> {
     let mut core = Core::create_core(0).unwrap();
     let Some(mut script) = core.create_script() else {
         // This matches how it's done in aegi, where a core is only ever specifically freed
         // when script creation fails. Doing it otherwise leads to “double free of core”
         // errors.
         core.free();
-        panic!("Could not create script");
+        return None;
     };
     script.eval_set_working_dir(1);
 
@@ -876,11 +876,14 @@ pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Script {
     let mut vs_script_code = String::from(PRELUDE);
     vs_script_code.push_str(script_code);
 
-    script
+    if let Some(error_code) = script
         .evaluate_buffer(c_string(vs_script_code), c_string("samaku"))
-        .unwrap();
+        .err() {
+        println!("Failed to evaluate buffer: error code {error_code}");
+        return None;
+    }
 
     core.remove_log_handler(handle);
 
-    script
+    Some(script)
 }

@@ -101,16 +101,31 @@ pub fn spawn(
                         }
                         self::Message::LoadVideo(path_buf) => {
                             // Load new video
-                            let video = media::Video::load(path_buf);
-                            let metadata_box = Box::new(video.metadata);
-                            if tx_out
-                                .unbounded_send(message::Message::VideoLoaded(metadata_box))
-                                .is_err()
-                            {
-                                return;
+                            match media::Video::load(path_buf) {
+                                Ok(video) => {
+                                    let metadata_box = Box::new(video.metadata);
+                                    if tx_out
+                                        .unbounded_send(message::Message::VideoLoaded(metadata_box))
+                                        .is_err()
+                                    {
+                                        return;
+                                    }
+                                    tracker_opt = None;
+                                    video_opt = Some(video);
+                                }
+                                Err(err) => {
+                                    // Display the error to the user as a toast
+                                    if tx_out
+                                        .unbounded_send(message::toast_danger(
+                                            "Failed to load video".to_string(),
+                                            err.to_string(),
+                                        ))
+                                        .is_err()
+                                    {
+                                        return;
+                                    }
+                                }
                             }
-                            tracker_opt = None;
-                            video_opt = Some(video);
                         }
                         self::Message::TrackMotionForNode(
                             new_node_index,

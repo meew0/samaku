@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn motion_track() {
-        let video = video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv"));
+        let video = video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv")).unwrap();
 
         let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
         let mut tracker = Tracker::new(

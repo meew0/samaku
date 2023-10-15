@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use thiserror::Error;
+
 pub use vapoursynth::FrameRate;
 
 use crate::model;
@@ -28,8 +30,8 @@ pub struct Video {
 impl Video {
     /// Load the video from the given file using Vapoursynth and LSMASHSource.
     ///
-    /// # Panics
-    /// Panics in the following scenarios:
+    /// # Errors
+    /// Returns an error in the following scenarios:
     ///  1. Failed to open the file
     ///  2. The file is not a video
     ///  3. The video format is non-constant
@@ -37,17 +39,22 @@ impl Video {
     ///  5. The video does not contain any frames, or the frame data cannot be read
     ///  6. The Vapoursynth resize plugin is unavailable
     ///  7. The colour space conversion to RGB24 fails
-    pub fn load<P: AsRef<Path>>(filename: P) -> Video {
-        let script = vapoursynth::open_script(DEFAULT_SCRIPT, filename);
+    pub fn load<P: AsRef<Path>>(filename: P) -> Result<Video, LoadError> {
+        let Some(script) = vapoursynth::open_script(DEFAULT_SCRIPT, filename) else {
+            return Err(LoadError::FailedToOpen);
+        };
 
-        let node: vapoursynth::Node = script.get_output_node(0).expect("output node should be available (most likely, the script failed to execute — maybe the input file does not exist, or is not a video?)"); // Panic (1)
+        let Some(node) = script.get_output_node(0) else {
+            return Err(LoadError::FailedToGetNode);
+        };
         println!("Output node is video: {}", node.is_video());
 
-        let vi = node.get_video_info().expect("failed to get video info"); // Panic (2)
-        assert!(
-            vi.is_constant_video_format(),
-            "video format is not constant"
-        ); // Panic (3)
+        let Some(vi) = node.get_video_info() else {
+            return Err(LoadError::NotAVideo);
+        };
+        if !vi.is_constant_video_format() {
+            return Err(LoadError::NonConstantFormat);
+        }
 
         let width = vi.get_width();
         let height = vi.get_height();
@@ -55,8 +62,9 @@ impl Video {
         let frame_rate = vi.get_frame_rate();
         println!("Frame rate: {frame_rate:?}");
 
-        let mut clipinfo_owned =
-            vapoursynth::OwnedMap::create_map().expect("map creation should succeed"); // Panic (4)
+        let Some(mut clipinfo_owned) = vapoursynth::OwnedMap::create_map() else {
+            return Err(LoadError::VsAllocError);
+        };
         let clipinfo = clipinfo_owned.as_mut();
         script.get_variable(c_string(KF_KEY), clipinfo);
         script.get_variable(c_string(TC_KEY), clipinfo);
@@ -79,9 +87,13 @@ impl Video {
         // TODO: keyframes and timecodes
         println!("num_kf: {num_kf}, num_tc: {num_tc}, has_audio: {has_audio}");
 
-        // Panic (5) x 2
-        let frame = node.get_frame(0).unwrap();
-        let props = frame.get_properties_ro().unwrap();
+        let frame = match node.get_frame(0) {
+            Ok(frame) => frame,
+            Err(str) => return Err(LoadError::NoFrames(str)),
+        };
+        let Some(props) = frame.get_properties_ro() else {
+            return Err(LoadError::FramePropertiesFailed);
+        };
 
         #[allow(clippy::cast_precision_loss)]
         let dar = match props.get_int(c_string("_SARNum").as_c_str(), 0) {
@@ -103,45 +115,15 @@ impl Video {
         let out_node = if vi.is_rgb24() {
             node
         } else {
-            let mut resize = script
-                .get_core()
-                .get_resize_plugin()
-                .expect("resize plugin should be available"); // Panic (6)
-
-            let mut args_owned =
-                vapoursynth::OwnedMap::create_map().expect("map creation should succeed"); // Panic (4)
-            let args = args_owned.as_mut();
-            vapoursynth::init_resize(&vi, args, &props);
-            args.append_node(c_string("clip").as_c_str(), &node);
-
-            let mut result_owned = resize.invoke(c_string("Bicubic").as_c_str(), args.as_const());
-            let result = result_owned.as_mut();
-
-            if let Some(err) = result.as_const().get_error() {
-                panic!("Failed to convert to RGB24: {err}"); // Panic (7)
+            match Self::convert_to_rgb24(&script, &node, &vi, &props) {
+                Ok(value) => value,
+                Err(value) => {
+                    return Err(value);
+                }
             }
-
-            let new_node = result
-                .as_const()
-                .get_node(c_string("clip").as_c_str(), 0)
-                .expect("RGB24 output node should be available"); // Panic (7)
-
-            let new_frame = new_node
-                .get_frame(0)
-                .expect("RGB24 frame should be available"); // Panic (7)
-            let new_color_space = vapoursynth::color_matrix_description(
-                &new_node
-                    .get_video_info()
-                    .expect("RGB24 video info should be available"), // Panic (7)
-                &new_frame
-                    .get_properties_ro()
-                    .expect("RGB24 frame properties should be available"), // Panic (7)
-            );
-            println!("New color space: {new_color_space}");
-            new_node
         };
 
-        Video {
+        Ok(Video {
             _script: script,
             node: out_node,
             metadata: Metadata {
@@ -149,7 +131,57 @@ impl Video {
                 width,
                 height,
             },
+        })
+    }
+
+    fn convert_to_rgb24(
+        script: &vapoursynth::Script,
+        node: &vapoursynth::Node,
+        vi: &vapoursynth::VideoInfo,
+        props: &vapoursynth::ConstMap,
+    ) -> Result<vapoursynth::Node, LoadError> {
+        let Some(mut resize) = script.get_core().get_resize_plugin() else {
+            return Err(LoadError::ResizePluginUnavailable);
+        };
+
+        let Some(mut args_owned) = vapoursynth::OwnedMap::create_map() else {
+            return Err(LoadError::VsAllocError);
+        };
+        let args = args_owned.as_mut();
+        vapoursynth::init_resize(vi, args, props);
+        args.append_node(c_string("clip").as_c_str(), node);
+
+        let mut result_owned = resize.invoke(c_string("Bicubic").as_c_str(), args.as_const());
+        let result = result_owned.as_mut();
+
+        if let Some(err) = result.as_const().get_error() {
+            return Err(LoadError::ColourSpaceConversionFailedDetail(err));
         }
+
+        let new_node = match result.as_const().get_node(c_string("clip").as_c_str(), 0) {
+            Ok(new_node) => new_node,
+            Err(error_code) => {
+                return Err(LoadError::ColourSpaceConversionFailedDetail(format!(
+                    "[get_node] error code: {error_code}"
+                )));
+            }
+        };
+
+        let new_frame = match new_node.get_frame(0) {
+            Ok(new_frame) => new_frame,
+            Err(err) => return Err(LoadError::ColourSpaceConversionFailedDetail(err)),
+        };
+
+        let Some(new_video_info) = new_node.get_video_info() else {
+            return Err(LoadError::ColourSpaceConversionFailed);
+        };
+        let Some(new_properties) = new_frame.get_properties_ro() else {
+            return Err(LoadError::ColourSpaceConversionFailed);
+        };
+        let new_color_space =
+            vapoursynth::color_matrix_description(&new_video_info, &new_properties);
+        println!("New color space: {new_color_space}");
+        Ok(new_node)
     }
 
     fn get_frame_internal(&self, n: model::FrameNumber) -> vapoursynth::Frame {
@@ -321,4 +353,37 @@ impl Video {
             height: true_height,
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum LoadError {
+    #[error("Failed to open file (file does not exist, or its format is unsupported)")]
+    FailedToOpen,
+
+    #[error("Failed to read output node of Vapoursynth script")]
+    FailedToGetNode,
+
+    #[error("File opened is not a video file")]
+    NotAVideo,
+
+    #[error("Video format is not constant")]
+    NonConstantFormat,
+
+    #[error("Failed to create Vapoursynth data structures")]
+    VsAllocError,
+
+    #[error("Failed to get first frame from video ({0})")]
+    NoFrames(String),
+
+    #[error("Failed to get properties of first frame")]
+    FramePropertiesFailed,
+
+    #[error("Vapoursynth resize plugin is unavailable, please install it")]
+    ResizePluginUnavailable,
+
+    #[error("Colour space conversion failed ({0})")]
+    ColourSpaceConversionFailedDetail(String),
+
+    #[error("Colour space conversion failed")]
+    ColourSpaceConversionFailed,
 }
