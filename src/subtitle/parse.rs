@@ -21,6 +21,10 @@ use super::{
 /// # Errors
 /// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
 /// The parser is quite tolerant, so this should not happen often.
+///
+/// # Panics
+/// Panics if there are more styles than would fit into an `i32`.
+#[allow(clippy::too_many_lines)]
 pub async fn parse(
     mut input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
 ) -> Result<AssFile, Error> {
@@ -33,6 +37,7 @@ pub async fn parse(
 
     let mut current_attachment: Option<Attachment> = None;
 
+    let mut style_lookup: HashMap<String, usize> = HashMap::new();
     let mut styles: Vec<Style> = vec![];
     let mut raw_slines_and_style_names: Vec<(Sline, String)> = vec![];
     let mut script_info = ScriptInfo::default();
@@ -101,10 +106,16 @@ pub async fn parse(
                 section.push_str(&line_string);
             }
             ParseState::Styles => {
-                styles.push(parse_style_line(line)?);
+                if line.starts_with("Style:") {
+                    let style = parse_style_line(line)?;
+                    style_lookup.insert(style.name.clone(), styles.len());
+                    styles.push(style);
+                }
             }
             ParseState::Events => {
-                raw_slines_and_style_names.push(parse_event_line(line)?);
+                if line.starts_with("Dialogue:") || line.starts_with("Comment:") {
+                    raw_slines_and_style_names.push(parse_event_line(line)?);
+                }
             }
             ParseState::ScriptInfo => {
                 parse_script_info_line(line, &mut script_info)?;
@@ -126,14 +137,33 @@ pub async fn parse(
         }
     }
 
+    // Match event style names to styles, and construct sline track
+    let mut slines: Vec<Sline> = vec![];
+    for (mut raw_sline, style_name) in raw_slines_and_style_names {
+        if let Some(style_index) = style_lookup.get(&style_name) {
+            raw_sline.style_index = (*style_index).try_into().unwrap();
+            slines.push(raw_sline);
+        } else {
+            return Err(Error::UnmatchedStyle(style_name));
+        }
+    }
+
+    // TODO: Deserialise NDE filters from extradata
+
+    let subtitles = SlineTrack {
+        slines,
+        styles,
+        filters: vec![],
+    };
+
     Ok(AssFile {
-        subtitles: SlineTrack::default(),
+        subtitles,
         side_data: SideData {
             script_info,
             extradata,
             aegi_metadata,
             attachments,
-            other_sections: HashMap::default(),
+            other_sections: opaque_sections,
         },
     })
 }
@@ -163,6 +193,9 @@ pub enum Error {
     #[error("Malformed style line")]
     MalformedStyleLine,
 
+    #[error("Style line must have the “Style” key")]
+    StyleLineInvalidKey,
+
     #[error("Invalid event type for line: {0}")]
     InvalidEventType(String),
 
@@ -180,6 +213,9 @@ pub enum Error {
 
     #[error("Found invalid alignment value in style")]
     InvalidAlignment,
+
+    #[error("Style mentioned in event does not exist: {0}")]
+    UnmatchedStyle(String),
 }
 
 fn parse_style_line(line: &str) -> Result<Style, Error> {
@@ -188,7 +224,7 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     };
 
     if key != "Style" {
-        return Err(Error::MalformedStyleLine);
+        return Err(Error::StyleLineInvalidKey);
     }
 
     let mut split = value.splitn(23, ',');
@@ -627,10 +663,31 @@ fn aegi_inline_string_decode(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
+    use smol::io::AsyncBufReadExt;
 
     use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
+    use crate::test_utils::test_file;
 
     use super::*;
+
+    #[test]
+    fn sections_file() -> Result<(), Error> {
+        let path = test_file("test_files/extra_sections.ass");
+
+        let ass_file = smol::block_on(async {
+            let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
+            parse(lines).await
+        })?;
+
+        assert_eq!(ass_file.side_data.script_info.playback_resolution.x, 1920);
+        assert_eq!(ass_file.side_data.attachments.len(), 1);
+        assert_matches!(
+            ass_file.side_data.attachments[0].attachment_type,
+            AttachmentType::Graphic
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn inline_decode() {
