@@ -26,6 +26,11 @@ pub async fn parse(
 ) -> Result<AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
 
+    // Data of opaque/unknown sections
+    let mut header = String::new();
+    let mut section = String::new();
+    let mut opaque_sections: HashMap<String, String> = HashMap::new();
+
     let mut current_attachment: Option<Attachment> = None;
 
     let mut styles: Vec<Style> = vec![];
@@ -58,6 +63,15 @@ pub async fn parse(
 
         if line.starts_with('[') && line.ends_with(']') {
             // Section header
+
+            // Finalise opaque section, if it exists
+            if !header.is_empty() {
+                opaque_sections.insert(header, section);
+
+                header = String::new();
+                section = String::new();
+            }
+
             if line.eq_ignore_ascii_case("[v4 styles]") {
                 return Err(Error::V4StylesFound);
             } else if line.eq_ignore_ascii_case("[v4+ styles]") {
@@ -76,13 +90,16 @@ pub async fn parse(
                 state = ParseState::Fonts;
             } else {
                 state = ParseState::Unknown;
+                header.push_str(&line[1..(line.len() - 1)]);
             }
 
             continue;
         }
 
         match state {
-            ParseState::Unknown => todo!(),
+            ParseState::Unknown => {
+                section.push_str(&line_string);
+            }
             ParseState::Styles => {
                 styles.push(parse_style_line(line)?);
             }
