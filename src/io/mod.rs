@@ -13,6 +13,7 @@ pub struct AssFile {
 pub struct SideData {
     script_info: subtitle::ScriptInfo,
     extradata: Extradata,
+    aegi_metadata: HashMap<String, String>,
     other_sections: HashMap<String, String>,
 }
 

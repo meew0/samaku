@@ -1,7 +1,8 @@
+use std::collections::HashMap;
+
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use smol::stream::StreamExt;
-use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::subtitle;
@@ -21,6 +22,7 @@ pub async fn parse(
     let mut attachment: Option<()> = None;
     let mut script_info = subtitle::ScriptInfo::default();
     let mut extradata = super::Extradata::default();
+    let mut aegi_metadata = HashMap::new();
 
     while let Some(line_result) = input.next().await {
         let line_string = line_result.map_err(Error::IoError)?;
@@ -63,7 +65,9 @@ pub async fn parse(
             ParseState::ScriptInfo => {
                 parse_script_info_line(line, &mut script_info)?;
             }
-            ParseState::AegiMetadata => todo!(),
+            ParseState::AegiMetadata => {
+                parse_aegi_metadata_line(line, &mut aegi_metadata);
+            }
             ParseState::Extradata => {
                 parse_extradata_line(line, &mut extradata);
             }
@@ -77,6 +81,7 @@ pub async fn parse(
         side_data: SideData {
             script_info,
             extradata,
+            aegi_metadata,
             other_sections: HashMap::default(),
         },
     })
@@ -115,13 +120,10 @@ fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) ->
         }
     }
 
-    let Some(colon_pos) = line.find(':') else {
+    let Some((key, value)) = parse_kv_generic(line) else {
         // ignore lines without a colon
         return Ok(());
     };
-
-    let key = &line[0..colon_pos];
-    let value = line[(colon_pos + 1)..].trim_start();
 
     if key == "PlayResX" {
         if let Ok(int_value) = value.parse::<i32>() {
@@ -158,6 +160,12 @@ fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) ->
     Ok(())
 }
 
+fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, String>) {
+    if let Some((key, value)) = parse_kv_generic(line) {
+        aegi_metadata.insert(key.to_string(), value.to_string());
+    };
+}
+
 static EXTRADATA_REGEX: OnceCell<Regex> = OnceCell::new();
 
 fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
@@ -186,6 +194,18 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
         extradata.next_id = extradata.next_id.max(id + 1);
         extradata.entries.insert(id, ExtradataEntry { key, value });
     }
+}
+
+/// Parse a generic key/value line of the form `Key: Value`.
+fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
+    let Some(colon_pos) = line.find(':') else {
+        // ignore lines without a colon
+        return None;
+    };
+
+    let key = &line[0..colon_pos];
+    let value = line[(colon_pos + 1)..].trim_start();
+    Some((key, value))
 }
 
 fn aegi_inline_string_decode(input: &str) -> String {
@@ -259,6 +279,14 @@ mod tests {
         assert_eq!(value, "samaku test");
 
         Ok(())
+    }
+
+    #[test]
+    fn aegi_metadata() {
+        let mut a = HashMap::new();
+        parse_aegi_metadata_line("Key: Value", &mut a);
+        assert_matches!(a.get("Key"), Some(value));
+        assert_eq!(value, "Value");
     }
 
     #[test]
