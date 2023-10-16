@@ -15,7 +15,8 @@ pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 1
 
 #[test]
 fn libass_parse_comparison() {
-    let track = media::subtitle::OpaqueTrack::parse(&ASS_FILE.to_owned()).to_sline_track();
+    let opaque_track = media::subtitle::OpaqueTrack::parse(&ASS_FILE.to_owned());
+    let track = opaque_track.to_sline_track();
 
     let mut indirect_renderer = media::subtitle::Renderer::new();
     let mut direct_renderer = media::subtitle::Renderer::new();
@@ -35,12 +36,18 @@ fn libass_parse_comparison() {
             name: Cow::Borrowed(""),
             effect: Cow::Borrowed(""),
         };
-        let direct_opaque =
-            media::subtitle::OpaqueTrack::from_compiled(std::iter::once(&direct), &track);
+        let direct_opaque = media::subtitle::OpaqueTrack::from_compiled(
+            std::iter::once(&direct),
+            &track.styles,
+            &opaque_track.script_info(),
+        );
 
         let indirect = parse_round_trip(sline);
-        let indirect_opaque =
-            media::subtitle::OpaqueTrack::from_compiled(std::iter::once(&indirect), &track);
+        let indirect_opaque = media::subtitle::OpaqueTrack::from_compiled(
+            std::iter::once(&indirect),
+            &track.styles,
+            &opaque_track.script_info(),
+        );
 
         'inner: for now_offset in (0..sline.duration.0).step_by(100) {
             let now = sline.start.0 + now_offset;

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::ffi::CStr;
 
 use libass_sys as libass;
@@ -366,9 +367,20 @@ impl Track {
         }
     }
 
-    pub fn header(&self) -> subtitle::ass::TrackHeader {
-        subtitle::ass::TrackHeader {
-            play_res: subtitle::Resolution {
+    pub fn header(&self) -> subtitle::ScriptInfo {
+        let mut extra_info: HashMap<String, String> = HashMap::new();
+
+        if let Some(language) = unsafe { string_from_libass((*self.track).Language) } {
+            extra_info.insert("Language".to_string(), language);
+        }
+
+        if let Some(title) = unsafe { string_from_libass((*self.track).name) } {
+            extra_info.insert("Title".to_string(), title);
+        }
+
+        subtitle::ScriptInfo {
+            extra_info,
+            playback_resolution: subtitle::Resolution {
                 x: unsafe { (*self.track).PlayResX },
                 y: unsafe { (*self.track).PlayResY },
             },
@@ -376,7 +388,6 @@ impl Track {
             wrap_style: subtitle::WrapStyle::from(unsafe { (*self.track).WrapStyle }),
             scaled_border_and_shadow: unsafe { (*self.track).ScaledBorderAndShadow } != 0,
             kerning: unsafe { (*self.track).Kerning } != 0,
-            language: unsafe { str_from_libass((*self.track).Language) },
             ycbcr_matrix: match unsafe { (*self.track).YCbCrMatrix } {
                 libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::ass::YCbCrMatrix::Default,
                 libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::ass::YCbCrMatrix::Unknown,
@@ -399,25 +410,24 @@ impl Track {
                 // that use a matrix other than `NONE`.
                 _ => subtitle::ass::YCbCrMatrix::None,
             },
-            name: unsafe { str_from_libass((*self.track).name) },
         }
     }
 
-    pub fn set_header(&mut self, header: &subtitle::ass::TrackHeader) {
+    pub fn set_header(&mut self, header: &subtitle::ScriptInfo) {
         unsafe {
-            (*self.track).PlayResX = header.play_res.x;
-            (*self.track).PlayResY = header.play_res.y;
+            (*self.track).PlayResX = header.playback_resolution.x;
+            (*self.track).PlayResY = header.playback_resolution.y;
             (*self.track).Timer = header.timer;
             (*self.track).WrapStyle = header.wrap_style as i32;
             (*self.track).ScaledBorderAndShadow = i32::from(header.scaled_border_and_shadow);
             (*self.track).Kerning = i32::from(header.kerning);
             (*self.track).YCbCrMatrix = header.ycbcr_matrix as u32;
 
-            (*self.track).Language = match header.language {
+            (*self.track).Language = match header.extra_info.get("Language") {
                 Some(language) => malloc_string(language),
                 None => std::ptr::null_mut(),
             };
-            (*self.track).name = match header.name {
+            (*self.track).name = match header.extra_info.get("Title") {
                 Some(name) => malloc_string(name),
                 None => std::ptr::null_mut(),
             };

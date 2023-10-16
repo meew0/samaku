@@ -30,19 +30,6 @@ pub struct Event<'a> {
     pub effect: Cow<'a, str>,
 }
 
-/// Header fields for an ASS script/track
-#[derive(Debug, Clone)]
-pub struct TrackHeader<'a> {
-    pub play_res: super::Resolution,
-    pub timer: f64,
-    pub wrap_style: super::WrapStyle,
-    pub scaled_border_and_shadow: bool,
-    pub kerning: bool,
-    pub language: Option<&'a str>,
-    pub ycbcr_matrix: YCbCrMatrix,
-    pub name: Option<&'a str>,
-}
-
 /// See <https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152>
 #[derive(Debug, Clone, Copy)]
 pub enum YCbCrMatrix {

@@ -2,6 +2,8 @@
 //! of subtitles, as well as the logic for compiling them to ASS
 //! ones.
 
+use std::collections::HashMap;
+
 use crate::{media, message, nde};
 
 pub mod ass;
@@ -308,7 +310,6 @@ pub struct SlineTrack {
     pub slines: Vec<Sline>,
     pub styles: Vec<Style>,
     pub filters: Vec<nde::Filter>,
-    pub playback_resolution: Resolution,
 }
 
 impl SlineTrack {
@@ -413,10 +414,34 @@ impl Default for SlineTrack {
             slines: vec![],
             styles: vec![],
             filters: vec![],
+        }
+    }
+}
+
+pub struct ScriptInfo {
+    pub wrap_style: WrapStyle,
+    pub scaled_border_and_shadow: bool,
+    pub kerning: bool,
+    pub timer: f64,
+    pub ycbcr_matrix: ass::YCbCrMatrix,
+    pub playback_resolution: Resolution,
+    pub extra_info: HashMap<String, String>,
+}
+
+impl Default for ScriptInfo {
+    fn default() -> Self {
+        Self {
+            wrap_style: WrapStyle::SmartEven,
+            scaled_border_and_shadow: true,
+            kerning: true,
+            timer: 0.0,
+            ycbcr_matrix: ass::YCbCrMatrix::None,
 
             // This is not the default libass uses (which is 324x288),
             // but it seems like a reasonable default for a modern age.
             playback_resolution: Resolution { x: 1920, y: 1080 },
+
+            extra_info: HashMap::new(),
         }
     }
 }

@@ -30,29 +30,21 @@ impl OpaqueTrack {
     /// Panics if libass fails to construct a new subtitle track.
     pub fn from_compiled<'a>(
         events: impl IntoIterator<Item = &'a subtitle::ass::Event<'a>>,
-        metadata: &subtitle::SlineTrack,
+        styles: &[subtitle::Style],
+        metadata: &subtitle::ScriptInfo,
     ) -> OpaqueTrack {
         let mut track = ass::LIBRARY
             .new_track()
             .expect("failed to construct new track");
 
-        track.set_header(&subtitle::ass::TrackHeader {
-            play_res: metadata.playback_resolution,
-            timer: 0.0,
-            wrap_style: subtitle::WrapStyle::SmartEven,
-            scaled_border_and_shadow: true,
-            kerning: false,
-            language: None,
-            ycbcr_matrix: subtitle::ass::YCbCrMatrix::None,
-            name: None,
-        });
+        track.set_header(metadata);
 
         for event in events {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
         }
 
-        for style in &metadata.styles {
+        for style in styles {
             track.alloc_style();
             *track.styles_mut().last_mut().unwrap() = ass::style_to_raw(style);
         }
@@ -62,14 +54,16 @@ impl OpaqueTrack {
 
     #[must_use]
     pub fn to_sline_track(&self) -> subtitle::SlineTrack {
-        let header = self.internal.header();
-
         subtitle::SlineTrack {
             slines: self.slines(),
             styles: self.styles(),
             filters: vec![],
-            playback_resolution: header.play_res,
         }
+    }
+
+    #[must_use]
+    pub fn script_info(&self) -> subtitle::ScriptInfo {
+        self.internal.header()
     }
 
     #[must_use]

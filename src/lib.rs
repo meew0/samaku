@@ -13,6 +13,7 @@ use iced::{Application, Command, Element, Length, Settings, Subscription};
 
 use crate::pane::State;
 
+pub mod io;
 pub mod keyboard;
 pub mod media;
 pub mod message;
@@ -72,6 +73,10 @@ pub struct Samaku {
 
     /// Currently loaded subtitles, if present.
     pub subtitles: subtitle::SlineTrack,
+
+    /// Metadata of loaded script, containing information like the playback resolution, the
+    /// YCbCr matrix, etc.
+    pub script_info: subtitle::ScriptInfo,
 
     /// Index of currently active sline, if one exists.
     pub active_sline_index: Option<usize>,
@@ -171,6 +176,7 @@ impl Application for Samaku {
                 actual_frame: None,
                 video_metadata: None,
                 subtitles: subtitle::SlineTrack::default(),
+                script_info: subtitle::ScriptInfo::default(),
                 active_sline_index: None,
                 shared: shared_state,
                 view: RefCell::new(ViewState {
