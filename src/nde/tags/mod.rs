@@ -1008,6 +1008,8 @@ pub struct Alignment {
 }
 
 impl Alignment {
+    /// Try to convert an old, SSA-style, packed (non-numpad) alignment value into an [`Alignment`].
+    /// Returns `None` if the input value is not a valid packed alignment.
     #[must_use]
     pub fn try_unpack(packed: i32) -> Option<Self> {
         let vertical_opt: Option<VerticalAlignment> = match packed & 0b1100 {
@@ -1033,7 +1035,52 @@ impl Alignment {
         }
     }
 
-    // Convert to a number to be used in the `\an` formatting tag.
+    /// Try to convert a numpad-style alignment into an [`Alignment`]. Returns `None` if the input
+    /// value is not a valid numpad-style alignment.
+    #[must_use]
+    pub fn try_from_an(an: i32) -> Option<Self> {
+        match an {
+            1 => Some(Self {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Left,
+            }),
+            2 => Some(Self {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Center,
+            }),
+            3 => Some(Self {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Right,
+            }),
+            4 => Some(Self {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Left,
+            }),
+            5 => Some(Self {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Center,
+            }),
+            6 => Some(Self {
+                vertical: VerticalAlignment::Center,
+                horizontal: HorizontalAlignment::Right,
+            }),
+            7 => Some(Self {
+                vertical: VerticalAlignment::Top,
+                horizontal: HorizontalAlignment::Left,
+            }),
+            8 => Some(Self {
+                vertical: VerticalAlignment::Top,
+                horizontal: HorizontalAlignment::Center,
+            }),
+            9 => Some(Self {
+                vertical: VerticalAlignment::Top,
+                horizontal: HorizontalAlignment::Right,
+            }),
+            _ => None,
+        }
+    }
+
+    /// Convert to a number to be used in the `\an` formatting tag.
     #[must_use]
     pub fn as_an(&self) -> i32 {
         match self.vertical {

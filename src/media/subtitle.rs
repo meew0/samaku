@@ -199,7 +199,7 @@ pub fn ass_image_to_iced(
     let mut out = vec![0; out_len];
 
     let (Colour { red, green, blue }, transparency) =
-        subtitle::unpack_colour_and_transparency(ass_image.metadata.color);
+        subtitle::unpack_colour_and_transparency_rgbt(ass_image.metadata.color);
     let alpha: u16 = 255 - u16::from(transparency.rendered());
 
     let stride: usize = ass_image

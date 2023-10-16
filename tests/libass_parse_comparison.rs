@@ -142,7 +142,7 @@ struct AssImage {
 
 impl AssImage {
     pub fn from<BH: BuildHasher>(image: &media::subtitle::Image, build_hasher: &BH) -> Self {
-        let (colour, transparency) = subtitle::unpack_colour_and_transparency(image.metadata.color);
+        let (colour, transparency) = subtitle::unpack_colour_and_transparency_rgbt(image.metadata.color);
 
         Self {
             width: image.metadata.w,

@@ -131,9 +131,10 @@ pub struct Resolution {
     pub y: i32,
 }
 
-/// Converts a libass 32-bit packed colour into a `Colour`.
+/// Converts a libass-style (RGBT — most signficant byte is the red channel, least significant byte
+/// is the transparency) 32-bit packed colour into a pair of [`Colour`] and [`Transparency`].
 #[must_use]
-pub fn unpack_colour_and_transparency(packed: u32) -> (Colour, Transparency) {
+pub fn unpack_colour_and_transparency_rgbt(packed: u32) -> (Colour, Transparency) {
     #[allow(clippy::unreadable_literal)]
     let colour = Colour {
         red: ((packed & 0xff000000) >> 24) as u8,
@@ -147,9 +148,27 @@ pub fn unpack_colour_and_transparency(packed: u32) -> (Colour, Transparency) {
     (colour, transparency)
 }
 
-/// Converts a colour into the 32 bit packed value used in libass.
+/// Converts an ASS file-style (TBGR — most signficant byte is the transparency, least significant
+/// byte is the red channel) 32-bit packed colour into a pair of [`Colour`] and [`Transparency`].
 #[must_use]
-pub fn pack_colour_and_transparency(colour: Colour, transparency: Transparency) -> u32 {
+pub fn unpack_colour_and_transparency_tbgr(packed: u32) -> (Colour, Transparency) {
+    #[allow(clippy::unreadable_literal)]
+        let colour = Colour {
+        red: (packed & 0x000000ff) as u8,
+        green: ((packed & 0x0000ff00) >> 8) as u8,
+        blue: ((packed & 0x00ff0000) >> 16) as u8,
+    };
+    #[allow(clippy::unreadable_literal)]
+        #[allow(clippy::cast_possible_wrap)]
+        let transparency = Transparency(((packed & 0xff000000) >> 24) as i32);
+    
+    (colour, transparency)
+}
+
+/// Converts a colour and transparency into an RGBT-format (MSB red, LSB transparency)
+/// 32-bit integer.
+#[must_use]
+pub fn pack_colour_and_transparency_rgbt(colour: Colour, transparency: Transparency) -> u32 {
     u32::from(colour.red) << 24
         | u32::from(colour.green) << 16
         | u32::from(colour.blue) << 8
@@ -244,8 +263,8 @@ pub struct Style {
     pub angle: Angle,
 
     pub border_style: BorderStyle,
-    pub outline: f64,
-    pub shadow: f64,
+    pub border_width: f64,
+    pub shadow_distance: f64,
 
     pub alignment: Alignment,
     pub margins: Margins,

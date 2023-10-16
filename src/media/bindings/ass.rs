@@ -262,13 +262,13 @@ pub fn event_to_raw(event: &subtitle::CompiledEvent) -> RawEvent {
 
 pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
     let (primary_colour, primary_transparency) =
-        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
     let (secondary_colour, secondary_transparency) =
-        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
     let (border_colour, border_transparency) =
-        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
     let (shadow_colour, shadow_transparency) =
-        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
 
     subtitle::Style {
         name: string_from_libass(raw_style.Name).expect("style name should never be null"),
@@ -294,8 +294,8 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
         spacing: raw_style.Spacing,
         angle: subtitle::Angle(raw_style.Angle),
         border_style: subtitle::BorderStyle::from(raw_style.BorderStyle),
-        outline: raw_style.Outline,
-        shadow: raw_style.Shadow,
+        border_width: raw_style.Outline,
+        shadow_distance: raw_style.Shadow,
         alignment: Alignment::try_unpack(raw_style.Alignment)
             .expect("received invalid alignment value from libass"),
         margins: Margins {
@@ -314,19 +314,19 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
         Name: malloc_string(style.name.as_str()),
         FontName: malloc_string(style.font_name.as_str()),
         FontSize: style.font_size,
-        PrimaryColour: subtitle::pack_colour_and_transparency(
+        PrimaryColour: subtitle::pack_colour_and_transparency_rgbt(
             style.primary_colour,
             style.primary_transparency,
         ),
-        SecondaryColour: subtitle::pack_colour_and_transparency(
+        SecondaryColour: subtitle::pack_colour_and_transparency_rgbt(
             style.secondary_colour,
             style.secondary_transparency,
         ),
-        OutlineColour: subtitle::pack_colour_and_transparency(
+        OutlineColour: subtitle::pack_colour_and_transparency_rgbt(
             style.border_colour,
             style.border_transparency,
         ),
-        BackColour: subtitle::pack_colour_and_transparency(
+        BackColour: subtitle::pack_colour_and_transparency_rgbt(
             style.shadow_colour,
             style.shadow_transparency,
         ),
@@ -339,8 +339,8 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
         Spacing: style.spacing,
         Angle: style.angle.0,
         BorderStyle: style.border_style as i32,
-        Outline: style.outline,
-        Shadow: style.shadow,
+        Outline: style.border_width,
+        Shadow: style.shadow_distance,
         Alignment: style.alignment.pack(),
         MarginL: style.margins.left,
         MarginR: style.margins.right,

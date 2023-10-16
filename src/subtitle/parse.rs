@@ -7,9 +7,13 @@ use regex::Regex;
 use smol::stream::StreamExt;
 use thiserror::Error;
 
+use crate::nde::tags::{Alignment, Colour, Transparency};
+use crate::subtitle;
+
 use super::{
-    AssFile, Attachment, AttachmentType, Duration, EventType, Extradata, ExtradataEntry, Margins,
-    ScriptInfo, SideData, Sline, SlineTrack, StartTime, YCbCrMatrix,
+    Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, EventType, Extradata,
+    ExtradataEntry, JustifyMode, Margins, Scale, ScriptInfo, SideData, Sline, SlineTrack,
+    StartTime, Style, YCbCrMatrix,
 };
 
 /// Parse the given stream of lines into an [`AssFile`].
@@ -24,6 +28,8 @@ pub async fn parse(
 
     let mut current_attachment: Option<Attachment> = None;
 
+    let mut styles: Vec<Style> = vec![];
+    let mut raw_slines_and_style_names: Vec<(Sline, String)> = vec![];
     let mut script_info = ScriptInfo::default();
     let mut extradata = Extradata::default();
     let mut aegi_metadata = HashMap::new();
@@ -53,9 +59,9 @@ pub async fn parse(
         if line.starts_with('[') && line.ends_with(']') {
             // Section header
             if line.eq_ignore_ascii_case("[v4 styles]") {
-                state = ParseState::Styles(0);
+                return Err(Error::V4StylesFound);
             } else if line.eq_ignore_ascii_case("[v4+ styles]") {
-                state = ParseState::Styles(1);
+                state = ParseState::Styles;
             } else if line.eq_ignore_ascii_case("[events]") {
                 state = ParseState::Events;
             } else if line.eq_ignore_ascii_case("[script info]") {
@@ -77,8 +83,12 @@ pub async fn parse(
 
         match state {
             ParseState::Unknown => todo!(),
-            ParseState::Styles(_) => todo!(),
-            ParseState::Events => todo!(),
+            ParseState::Styles => {
+                styles.push(parse_style_line(line)?);
+            }
+            ParseState::Events => {
+                raw_slines_and_style_names.push(parse_event_line(line)?);
+            }
             ParseState::ScriptInfo => {
                 parse_script_info_line(line, &mut script_info)?;
             }
@@ -113,7 +123,7 @@ pub async fn parse(
 
 enum ParseState {
     Unknown,
-    Styles(u8),
+    Styles,
     Events,
     ScriptInfo,
     AegiMetadata,
@@ -130,20 +140,118 @@ pub enum Error {
     #[error("Script type must be v4.00+, all other versions are unsupported")]
     UnsupportedScriptType,
 
+    #[error("V4 Styles (not V4+) are unsupported")]
+    V4StylesFound,
+
+    #[error("Malformed style line")]
+    MalformedStyleLine,
+
     #[error("Invalid event type for line: {0}")]
     InvalidEventType(String),
 
     #[error("Truncated event or style line")]
     TruncatedLine,
 
-    #[error("Could not parse number: {0}")]
+    #[error("Could not parse integer: {0}")]
     ParseIntError(std::num::ParseIntError),
+
+    #[error("Could not parse float: {0}")]
+    ParseFloatError(std::num::ParseFloatError),
 
     #[error("Found invalid timecode: {0}")]
     InvalidTimecode(String),
+
+    #[error("Found invalid alignment value in style")]
+    InvalidAlignment,
 }
 
-static EXTRADATA_TEST_REGEX: OnceCell<Regex> = OnceCell::new();
+fn parse_style_line(line: &str) -> Result<Style, Error> {
+    let Some((key, value)) = parse_kv_generic(line) else {
+        return Err(Error::MalformedStyleLine);
+    };
+
+    if key != "Style" {
+        return Err(Error::MalformedStyleLine);
+    }
+
+    let mut split = value.splitn(23, ',');
+
+    let name = next_split_trim::<true>(&mut split)?.to_string();
+    let font_name = next_split_trim::<true>(&mut split)?.to_string();
+    let font_size = next_split_f64(&mut split)?;
+
+    let (primary_colour, primary_transparency) =
+        parse_packed_colour_and_transparency(next_split_trim::<true>(&mut split)?)?;
+    let (secondary_colour, secondary_transparency) =
+        parse_packed_colour_and_transparency(next_split_trim::<true>(&mut split)?)?;
+    let (border_colour, border_transparency) =
+        parse_packed_colour_and_transparency(next_split_trim::<true>(&mut split)?)?;
+    let (shadow_colour, shadow_transparency) =
+        parse_packed_colour_and_transparency(next_split_trim::<true>(&mut split)?)?;
+
+    let bold = next_split_bool(&mut split)?;
+    let italic = next_split_bool(&mut split)?;
+    let underline = next_split_bool(&mut split)?;
+    let strike_out = next_split_bool(&mut split)?;
+
+    let scale_x = next_split_f64(&mut split)?;
+    let scale_y = next_split_f64(&mut split)?;
+
+    let spacing = next_split_f64(&mut split)?;
+    let angle = Angle(next_split_f64(&mut split)?);
+
+    let border_style = BorderStyle::from(next_split_i32(&mut split)?);
+    let border_width = next_split_f64(&mut split)?;
+    let shadow_distance = next_split_f64(&mut split)?;
+    let alignment =
+        Alignment::try_from_an(next_split_i32(&mut split)?).ok_or(Error::InvalidAlignment)?;
+
+    let margin_l = next_split_i32(&mut split)?;
+    let margin_r = next_split_i32(&mut split)?;
+    let margin_v = next_split_i32(&mut split)?;
+
+    let encoding = next_split_i32(&mut split)?;
+
+    let style = Style {
+        name,
+        font_name,
+        font_size,
+        primary_colour,
+        secondary_colour,
+        border_colour,
+        shadow_colour,
+        primary_transparency,
+        secondary_transparency,
+        border_transparency,
+        shadow_transparency,
+        bold,
+        italic,
+        underline,
+        strike_out,
+        scale: Scale {
+            x: scale_x,
+            y: scale_y,
+        },
+        spacing,
+        angle,
+        border_style,
+        border_width,
+        shadow_distance,
+        alignment,
+        margins: Margins {
+            left: margin_l,
+            right: margin_r,
+            vertical: margin_v,
+        },
+        encoding,
+
+        // These two do not appear to be represented in Aegisub-flavour .ass files
+        blur: 0.0,
+        justify: JustifyMode::Auto,
+    };
+
+    Ok(style)
+}
 
 fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
     let (event_type, fields_str) = if let Some(fields_str) = line.strip_prefix("Dialogue: ") {
@@ -158,29 +266,21 @@ fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
 
     // TODO: `Marked=`?
     // https://github.com/arch1t3cht/Aegisub/blob/d8c611d662480aea1fae6c438892b4327447765a/src/ass_dialogue.cpp#L106
-    let layer = next_split_trim(&mut split, true)?
-        .parse::<i32>()
-        .map_err(Error::ParseIntError)?;
+    let layer = next_split_i32(&mut split)?;
 
-    let start = parse_timecode(next_split_trim(&mut split, true)?)?;
-    let end = parse_timecode(next_split_trim(&mut split, true)?)?;
-    let style = next_split_trim(&mut split, true)?.to_string();
-    let actor = next_split_trim(&mut split, true)?.to_string();
+    let start = parse_timecode(next_split_trim::<true>(&mut split)?)?;
+    let end = parse_timecode(next_split_trim::<true>(&mut split)?)?;
+    let style = next_split_trim::<true>(&mut split)?.to_string();
+    let actor = next_split_trim::<true>(&mut split)?.to_string();
 
-    let margin_l = next_split_trim(&mut split, true)?
-        .parse::<i32>()
-        .map_err(Error::ParseIntError)?;
-    let margin_r = next_split_trim(&mut split, true)?
-        .parse::<i32>()
-        .map_err(Error::ParseIntError)?;
-    let margin_v = next_split_trim(&mut split, true)?
-        .parse::<i32>()
-        .map_err(Error::ParseIntError)?;
+    let margin_l = next_split_i32(&mut split)?;
+    let margin_r = next_split_i32(&mut split)?;
+    let margin_v = next_split_i32(&mut split)?;
 
-    let effect = next_split_trim(&mut split, true)?.to_string();
+    let effect = next_split_trim::<true>(&mut split)?.to_string();
 
     // Aegisub only trims the event text at its end. We match that behaviour, because why not.
-    let mut text = next_split_trim(&mut split, false)?;
+    let mut text = next_split_trim::<false>(&mut split)?;
 
     let mut extradata_ids: Vec<usize> = vec![];
 
@@ -398,18 +498,36 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<usize>, usize)> {
     None
 }
 
-fn next_split_trim<'a>(
+fn next_split_trim<'a, const TRIM_START: bool>(
     split: &'a mut std::str::SplitN<char>,
-    trim_start: bool,
 ) -> Result<&'a str, Error> {
     match split.next() {
-        Some(str) => Ok(if trim_start {
+        Some(str) => Ok(if TRIM_START {
             str.trim()
         } else {
             str.trim_end()
         }),
         None => Err(Error::TruncatedLine),
     }
+}
+
+fn next_split_i32(split: &mut std::str::SplitN<char>) -> Result<i32, Error> {
+    next_split_trim::<true>(split)?
+        .parse::<i32>()
+        .map_err(Error::ParseIntError)
+}
+
+fn next_split_f64(split: &mut std::str::SplitN<char>) -> Result<f64, Error> {
+    next_split_trim::<true>(split)?
+        .parse::<f64>()
+        .map_err(Error::ParseFloatError)
+}
+
+fn next_split_bool(split: &mut std::str::SplitN<char>) -> Result<bool, Error> {
+    Ok(next_split_trim::<true>(split)?
+        .parse::<u8>()
+        .map_err(Error::ParseIntError)?
+        != 0)
 }
 
 /// Parse a generic key/value line of the form `Key: Value`.
@@ -440,6 +558,19 @@ fn parse_timecode(timecode: &str) -> Result<i64, Error> {
     let centis = captures[4].parse::<i64>().unwrap();
 
     Ok(((hours * 60 + minutes) * 60 + seconds) * 1000 + centis * 10)
+}
+
+fn parse_packed_colour_and_transparency(
+    packed_colour_hex: &str,
+) -> Result<(Colour, Transparency), Error> {
+    let prefix_stripped = packed_colour_hex
+        .strip_prefix("&H")
+        .or_else(|| packed_colour_hex.strip_prefix("&h"))
+        .unwrap_or(packed_colour_hex);
+    let suffix_stripped = prefix_stripped.strip_suffix('&').unwrap_or(prefix_stripped);
+    let number = u32::from_str_radix(suffix_stripped, 16).map_err(Error::ParseIntError)?;
+
+    Ok(subtitle::unpack_colour_and_transparency_tbgr(number))
 }
 
 fn aegi_inline_string_decode(input: &str) -> String {
@@ -480,7 +611,7 @@ fn aegi_inline_string_decode(input: &str) -> String {
 mod tests {
     use assert_matches2::assert_matches;
 
-    use crate::nde::tags::WrapStyle;
+    use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
 
     use super::*;
 
@@ -492,6 +623,75 @@ mod tests {
         assert_eq!(aegi_inline_string_decode("abc#2"), "abc#2");
         assert_eq!(aegi_inline_string_decode("abc#2ä"), "abc#2ä");
         assert_eq!(aegi_inline_string_decode("abc#GGd"), "abc\0d");
+    }
+
+    #[test]
+    fn style() -> Result<(), Error> {
+        let style = parse_style_line("Style: Default,Arial,20,&H000000FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1")?;
+
+        assert_eq!(style.name, "Default");
+        assert_eq!(style.font_name, "Arial");
+        assert!((style.font_size - 20.0).abs() < f64::EPSILON);
+        assert_eq!(
+            style.primary_colour,
+            Colour {
+                red: 255,
+                green: 0,
+                blue: 0,
+            }
+        );
+        assert_eq!(
+            style.secondary_colour,
+            Colour {
+                red: 255,
+                green: 255,
+                blue: 255,
+            }
+        );
+        assert_eq!(
+            style.border_colour,
+            Colour {
+                red: 0,
+                green: 0,
+                blue: 0,
+            }
+        );
+        assert_eq!(
+            style.shadow_colour,
+            Colour {
+                red: 0,
+                green: 0,
+                blue: 0,
+            }
+        );
+        assert_eq!(style.primary_transparency, Transparency(0));
+        assert_eq!(style.secondary_transparency, Transparency(0));
+        assert_eq!(style.border_transparency, Transparency(255));
+        assert_eq!(style.shadow_transparency, Transparency(0));
+        assert!(style.bold);
+        assert!(!style.italic);
+        assert!(!style.underline);
+        assert!(!style.strike_out);
+        assert!((style.scale.x - 100.0).abs() < f64::EPSILON);
+        assert!((style.scale.y - 100.0).abs() < f64::EPSILON);
+        assert!((style.spacing - 0.0).abs() < f64::EPSILON);
+        assert_eq!(style.angle, Angle(0.0));
+        assert_eq!(style.border_style, BorderStyle::Default);
+        assert!((style.border_width - 2.0).abs() < f64::EPSILON);
+        assert!((style.shadow_distance - 2.0).abs() < f64::EPSILON);
+        assert_eq!(
+            style.alignment,
+            Alignment {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Center,
+            }
+        );
+        assert_eq!(style.margins.left, 10);
+        assert_eq!(style.margins.right, 10);
+        assert_eq!(style.margins.vertical, 10);
+        assert_eq!(style.encoding, 1);
+
+        Ok(())
     }
 
     #[test]
