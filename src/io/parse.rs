@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::subtitle;
 
-use super::{AssFile, Extradata, ExtradataEntry, SideData};
+use super::{AssFile, Attachment, AttachmentType, Extradata, ExtradataEntry, SideData};
 
 /// Parse the given stream of lines into an [`AssFile`].
 ///
@@ -19,18 +19,32 @@ pub async fn parse(
 ) -> Result<super::AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
 
-    let mut attachment: Option<()> = None;
+    let mut current_attachment: Option<Attachment> = None;
+
     let mut script_info = subtitle::ScriptInfo::default();
-    let mut extradata = super::Extradata::default();
+    let mut extradata = Extradata::default();
     let mut aegi_metadata = HashMap::new();
+    let mut attachments = vec![];
 
     while let Some(line_result) = input.next().await {
         let line_string = line_result.map_err(Error::IoError)?;
         let line = line_string.trim();
 
-        if attachment.is_some() {
-            // TODO
-            continue;
+        if let Some(mut attachment) = current_attachment.take() {
+            match parse_attachment_line(line, &mut attachment) {
+                AttachmentParseResult::NotFinished => {
+                    current_attachment = Some(attachment);
+                    continue;
+                }
+                AttachmentParseResult::FinishedAndLineConsumed => {
+                    attachments.push(attachment);
+                    continue;
+                }
+                AttachmentParseResult::FinishedWithoutConsumingLine => {
+                    attachments.push(attachment);
+                    // Do not continue the loop — we need to run the line parsing code below
+                }
+            }
         }
 
         if line.starts_with('[') && line.ends_with(']') {
@@ -71,8 +85,14 @@ pub async fn parse(
             ParseState::Extradata => {
                 parse_extradata_line(line, &mut extradata);
             }
-            ParseState::Graphics => todo!(),
-            ParseState::Fonts => todo!(),
+            ParseState::Graphics => {
+                current_attachment =
+                    parse_attachment_header(line, "filename: ", AttachmentType::Graphic);
+            }
+            ParseState::Fonts => {
+                current_attachment =
+                    parse_attachment_header(line, "fontname: ", AttachmentType::Font);
+            }
         }
     }
 
@@ -82,6 +102,7 @@ pub async fn parse(
             script_info,
             extradata,
             aegi_metadata,
+            attachments,
             other_sections: HashMap::default(),
         },
     })
@@ -194,6 +215,51 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
         extradata.next_id = extradata.next_id.max(id + 1);
         extradata.entries.insert(id, ExtradataEntry { key, value });
     }
+}
+
+fn parse_attachment_header(
+    line: &str,
+    filename_key: &str,
+    attachment_type: AttachmentType,
+) -> Option<Attachment> {
+    line.strip_prefix(filename_key).map(|filename| Attachment {
+        attachment_type,
+        filename: filename.to_string(),
+        data: vec![],
+    })
+}
+
+fn parse_attachment_line(line: &str, attachment: &mut Attachment) -> AttachmentParseResult {
+    let is_filename = line.starts_with("filename: ") || line.starts_with("fontname: ");
+    let mut valid_data = !line.is_empty() && line.len() <= 80;
+    for byte in line.bytes() {
+        if !(33..=97).contains(&byte) {
+            valid_data = false;
+            break;
+        }
+    }
+
+    if !valid_data || is_filename {
+        return AttachmentParseResult::FinishedWithoutConsumingLine;
+    }
+
+    attachment_add_data(line, attachment);
+
+    if line.len() < 80 {
+        AttachmentParseResult::FinishedAndLineConsumed
+    } else {
+        AttachmentParseResult::NotFinished
+    }
+}
+
+enum AttachmentParseResult {
+    NotFinished,
+    FinishedAndLineConsumed,
+    FinishedWithoutConsumingLine,
+}
+
+fn attachment_add_data(line: &str, attachment: &mut Attachment) {
+    attachment.data.extend_from_slice(line.as_bytes());
 }
 
 /// Parse a generic key/value line of the form `Key: Value`.

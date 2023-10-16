@@ -14,6 +14,7 @@ pub struct SideData {
     script_info: subtitle::ScriptInfo,
     extradata: Extradata,
     aegi_metadata: HashMap<String, String>,
+    attachments: Vec<Attachment>,
     other_sections: HashMap<String, String>,
 }
 
@@ -34,4 +35,17 @@ impl Extradata {
 pub struct ExtradataEntry {
     key: String,
     value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Attachment {
+    attachment_type: AttachmentType,
+    filename: String,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AttachmentType {
+    Font,
+    Graphic,
 }
