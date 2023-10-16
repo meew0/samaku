@@ -7,7 +7,7 @@ use libass_sys as libass;
 
 use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
-use crate::subtitle::{Margins, YCbCrMatrix};
+use crate::subtitle::{EventType, Margins, YCbCrMatrix};
 
 pub type CString = std::ffi::CString;
 
@@ -235,6 +235,10 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
             vertical: raw_event.MarginV,
         },
         text: string_from_libass(raw_event.Text).expect("event text should never be null"),
+        actor: string_from_libass(raw_event.Name).unwrap_or_default(),
+        effect: string_from_libass(raw_event.Effect).unwrap_or_default(),
+        event_type: EventType::Dialogue,
+        extradata_ids: vec![],
         nde_filter_index: None,
     }
 }

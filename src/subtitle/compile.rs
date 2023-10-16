@@ -147,17 +147,8 @@ mod tests {
         let sline = Sline {
             start: StartTime(0),
             duration: Duration(1000),
-            layer_index: 0,
-            style_index: 0,
-            margins: Margins {
-                left: 0,
-                right: 0,
-                vertical: 0,
-            },
             text: "This text will become italic".to_string(),
-
-            // This should not matter
-            nde_filter_index: Some(1234),
+            ..Default::default()
         };
 
         let mut counter = 0;

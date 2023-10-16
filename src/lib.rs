@@ -339,6 +339,10 @@ impl Application for Samaku {
                         vertical: 50,
                     },
                     text: "Sphinx of black quartz, judge my vow".to_string(),
+                    actor: String::new(),
+                    effect: String::new(),
+                    event_type: subtitle::EventType::Dialogue,
+                    extradata_ids: vec![],
                     nde_filter_index: None,
                 };
                 self.subtitles.slines.push(new_sline);

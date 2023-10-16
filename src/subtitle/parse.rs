@@ -8,8 +8,8 @@ use smol::stream::StreamExt;
 use thiserror::Error;
 
 use super::{
-    AssFile, Attachment, AttachmentType, Extradata, ExtradataEntry, ScriptInfo, SideData,
-    SlineTrack, YCbCrMatrix,
+    AssFile, Attachment, AttachmentType, Duration, EventType, Extradata, ExtradataEntry, Margins,
+    ScriptInfo, SideData, Sline, SlineTrack, StartTime, YCbCrMatrix,
 };
 
 /// Parse the given stream of lines into an [`AssFile`].
@@ -129,6 +129,87 @@ pub enum Error {
 
     #[error("Script type must be v4.00+, all other versions are unsupported")]
     UnsupportedScriptType,
+
+    #[error("Invalid event type for line: {0}")]
+    InvalidEventType(String),
+
+    #[error("Truncated event or style line")]
+    TruncatedLine,
+
+    #[error("Could not parse number: {0}")]
+    ParseIntError(std::num::ParseIntError),
+
+    #[error("Found invalid timecode: {0}")]
+    InvalidTimecode(String),
+}
+
+static EXTRADATA_TEST_REGEX: OnceCell<Regex> = OnceCell::new();
+
+fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
+    let (event_type, fields_str) = if let Some(fields_str) = line.strip_prefix("Dialogue: ") {
+        (EventType::Dialogue, fields_str)
+    } else if let Some(fields_str) = line.strip_prefix("Comment: ") {
+        (EventType::Comment, fields_str)
+    } else {
+        return Err(Error::InvalidEventType(line.to_string()));
+    };
+
+    let mut split = fields_str.splitn(10, ',');
+
+    // TODO: `Marked=`?
+    // https://github.com/arch1t3cht/Aegisub/blob/d8c611d662480aea1fae6c438892b4327447765a/src/ass_dialogue.cpp#L106
+    let layer = next_split_trim(&mut split, true)?
+        .parse::<i32>()
+        .map_err(Error::ParseIntError)?;
+
+    let start = parse_timecode(next_split_trim(&mut split, true)?)?;
+    let end = parse_timecode(next_split_trim(&mut split, true)?)?;
+    let style = next_split_trim(&mut split, true)?.to_string();
+    let actor = next_split_trim(&mut split, true)?.to_string();
+
+    let margin_l = next_split_trim(&mut split, true)?
+        .parse::<i32>()
+        .map_err(Error::ParseIntError)?;
+    let margin_r = next_split_trim(&mut split, true)?
+        .parse::<i32>()
+        .map_err(Error::ParseIntError)?;
+    let margin_v = next_split_trim(&mut split, true)?
+        .parse::<i32>()
+        .map_err(Error::ParseIntError)?;
+
+    let effect = next_split_trim(&mut split, true)?.to_string();
+
+    // Aegisub only trims the event text at its end. We match that behaviour, because why not.
+    let mut text = next_split_trim(&mut split, false)?;
+
+    let mut extradata_ids: Vec<usize> = vec![];
+
+    if text.starts_with("{=") {
+        if let Some((new_extradata_ids, after)) = parse_extradata_references(text) {
+            extradata_ids = new_extradata_ids;
+            text = &text[after..];
+        }
+    }
+
+    let new_sline = Sline {
+        start: StartTime(start),
+        duration: Duration(end - start),
+        layer_index: layer,
+        style_index: 0,
+        margins: Margins {
+            left: margin_l,
+            right: margin_r,
+            vertical: margin_v,
+        },
+        text: text.to_string(),
+        actor,
+        effect,
+        event_type,
+        extradata_ids,
+        nde_filter_index: None,
+    };
+
+    Ok((new_sline, style))
 }
 
 fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<(), Error> {
@@ -265,6 +346,72 @@ fn attachment_add_data(line: &str, attachment: &mut Attachment) {
     attachment.data.extend_from_slice(line.as_bytes());
 }
 
+fn parse_extradata_references(text: &str) -> Option<(Vec<usize>, usize)> {
+    let mut res = vec![];
+    let mut match_start: Option<usize> = None;
+
+    for (i, char) in text.char_indices() {
+        println!("{i} {char} {match_start:?}");
+
+        if i == 0 {
+            if char == '{' {
+                continue;
+            }
+
+            return None;
+        }
+
+        match char {
+            '=' => {
+                if let Some(match_start) = match_start.take() {
+                    res.push(text[match_start..i].parse::<usize>().unwrap());
+                } else if i != 1 {
+                    // Double `=` are not allowed
+                    return None;
+                }
+            }
+            '0'..='9' => {
+                if i == 1 {
+                    // Needs a `=` before
+                    return None;
+                }
+
+                match_start.get_or_insert(i);
+            }
+            '}' => {
+                return if let Some(match_start) = match_start.take() {
+                    res.push(text[match_start..i].parse::<usize>().unwrap());
+                    Some((res, i + 1))
+                } else {
+                    // Empty block
+                    None
+                };
+            }
+            _ => {
+                // Invalid character
+                return None;
+            }
+        }
+    }
+
+    // If we reached this point, we never hit the closing bracket, which is invalid
+    None
+}
+
+fn next_split_trim<'a>(
+    split: &'a mut std::str::SplitN<char>,
+    trim_start: bool,
+) -> Result<&'a str, Error> {
+    match split.next() {
+        Some(str) => Ok(if trim_start {
+            str.trim()
+        } else {
+            str.trim_end()
+        }),
+        None => Err(Error::TruncatedLine),
+    }
+}
+
 /// Parse a generic key/value line of the form `Key: Value`.
 fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
     let Some(colon_pos) = line.find(':') else {
@@ -275,6 +422,24 @@ fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
     let key = &line[0..colon_pos];
     let value = line[(colon_pos + 1)..].trim_start();
     Some((key, value))
+}
+
+static TIMECODE_REGEX: OnceCell<Regex> = OnceCell::new();
+
+fn parse_timecode(timecode: &str) -> Result<i64, Error> {
+    let timecode_regex =
+        TIMECODE_REGEX.get_or_init(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
+
+    let Some(captures) = timecode_regex.captures(timecode) else {
+        return Err(Error::InvalidTimecode(timecode.to_string()));
+    };
+
+    let hours = captures[1].parse::<i64>().unwrap();
+    let minutes = captures[2].parse::<i64>().unwrap();
+    let seconds = captures[3].parse::<i64>().unwrap();
+    let centis = captures[4].parse::<i64>().unwrap();
+
+    Ok(((hours * 60 + minutes) * 60 + seconds) * 1000 + centis * 10)
 }
 
 fn aegi_inline_string_decode(input: &str) -> String {
@@ -313,8 +478,9 @@ fn aegi_inline_string_decode(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::nde::tags::WrapStyle;
     use assert_matches2::assert_matches;
+
+    use crate::nde::tags::WrapStyle;
 
     use super::*;
 
@@ -326,6 +492,27 @@ mod tests {
         assert_eq!(aegi_inline_string_decode("abc#2"), "abc#2");
         assert_eq!(aegi_inline_string_decode("abc#2ä"), "abc#2ä");
         assert_eq!(aegi_inline_string_decode("abc#GGd"), "abc\0d");
+    }
+
+    #[test]
+    fn event() -> Result<(), Error> {
+        let (sline, style_name) = parse_event_line(
+            r"Dialogue: 0,0:00:05.00,0:00:07.00,Default,,1,2,3,,{=8=10}{\fs100}asdhasjkldhsajk",
+        )?;
+
+        assert_eq!(style_name, "Default");
+        assert_eq!(sline.layer_index, 0);
+        assert_eq!(sline.start, StartTime(5000));
+        assert_eq!(sline.duration, Duration(2000));
+        assert_eq!(sline.margins.left, 1);
+        assert_eq!(sline.margins.right, 2);
+        assert_eq!(sline.margins.vertical, 3);
+        assert_eq!(sline.extradata_ids.as_slice(), &[8, 10]);
+        assert_eq!(sline.actor, "");
+        assert_eq!(sline.effect, "");
+        assert_eq!(sline.text, r"{\fs100}asdhasjkldhsajk");
+
+        Ok(())
     }
 
     #[test]
@@ -371,5 +558,28 @@ mod tests {
             entry.value,
             "249.07;213.54|2170.22;302.89|2209.38;1199.91|-158.29;1040.20"
         );
+    }
+
+    #[test]
+    fn extradata_references() {
+        assert_matches!(parse_extradata_references("{}a"), None);
+        assert_matches!(parse_extradata_references("{=}a"), None);
+        assert_matches!(parse_extradata_references("{1}a"), None);
+        assert_matches!(parse_extradata_references("{=1}a"), Some((e, after)));
+        assert_eq!(e.as_slice(), &[1]);
+        assert_eq!(after, 4);
+        assert_matches!(parse_extradata_references("{=1=2}a"), Some((e, after)));
+        assert_eq!(e.as_slice(), &[1, 2]);
+        assert_eq!(after, 6);
+        assert_matches!(
+            parse_extradata_references("{=1234567890}a"),
+            Some((e, after))
+        );
+        assert_eq!(e.as_slice(), &[1_234_567_890]);
+        assert_eq!(after, 13);
+        assert_matches!(parse_extradata_references("{==1}a"), None);
+        assert_matches!(parse_extradata_references("{=1=2"), None);
+        assert_matches!(parse_extradata_references("{=1a}b"), None);
+        assert_matches!(parse_extradata_references("{=1ä}b"), None);
     }
 }

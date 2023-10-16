@@ -13,6 +13,8 @@ PlayResY: 1080
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
+Active Line: 4
+Video Position: 264
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -42,12 +44,14 @@ WQ"$!1)#!A)#!A5$!Q5+"Q9(#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+#AI+
 0R"``]1!&"%"!!!!!!!!!!!!!!!!!!!!!0`;!!A"!A%"0R"``]1!&"!"!!!!!!!!!!!!!!!!!!!!!0`;
 !!A"!1!"0R"``^E
 
+
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{=7}{\fs100\fax0.522578\fscx117.71\fscy341.79\frz5.1788\frx26.5434\fry7.5064\xbord2.36\ybord6.84\xshad2.36\yshad6.84\org(901.38,638.14)\pos(870.62,809.04)}This is a test. A
-Dialogue: 0,0:00:05.00,0:00:07.00,Default,,0,0,0,,{=0}
+Dialogue: 0,0:00:05.00,0:00:07.00,Default,,0,0,0,,{=8=10}{\fs100\fax-0.026050\fscx94.50\fscy120.88\frz-2.4609\frx1.7828\fry6.3730\xbord1.89\ybord2.42\xshad1.89\yshad2.42\org(1101.56,997.6)\pos(1102.79,1058.04)}asdhasjkldhsajk
 Dialogue: 0,0:00:07.00,0:00:09.00,Default,,0,0,0,,
-Dialogue: 0,0:00:09.00,0:00:11.00,Default,,0,0,0,,{=1}
+Dialogue: 0,0:00:09.00,0:00:11.00,Default,,0,0,0,,{=9}
+Dialogue: 0,0:00:11.00,0:00:13.00,Default,,0,0,0,, ajkla 
 
 [Aegisub Extradata]
 Data: 0,_aegi_folddata,e0;1;1
@@ -58,3 +62,6 @@ Data: 4,_aegi_perspective_ambient_plane,e3202.90;-34.72#7C639.98;769.76#7C1818.8
 Data: 5,_aegi_perspective_ambient_plane,e3202.90;-34.72#7C779.98;193.76#7C1818.80;401.61#7C2241.02;269.47
 Data: 6,_aegi_perspective_ambient_plane,e-55718.44;1167.88#7C1666.93;1167.88#7C1666.94;12768.38#7C-55718.61;12768.28
 Data: 7,_aegi_perspective_ambient_plane,e3288.17;357.56#7C1404.58;1074.93#7C7.73;3634.69#7C3931.86;-359.75
+Data: 8,_aegi_folddata,e0;0;1
+Data: 9,_aegi_folddata,e1;0;1
+Data: 10,_aegi_perspective_ambient_plane,e374.10;816.00#7C1591.90;920.00#7C1591.90;1120.00#7C328.10;1120.00

@@ -15,7 +15,7 @@ pub mod parse;
 /// in samaku terms, is one conceptual individual “subtitle”,
 /// that is, a dialogue line, a complex sign, etc.
 /// It may compile to multiple underlying ASS [`Event`]s.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Sline {
     /// The time in milliseconds when this line first appears.
     pub start: StartTime,
@@ -42,6 +42,15 @@ pub struct Sline {
     /// formatting tags.
     pub text: String,
 
+    pub actor: String,
+    pub effect: String,
+
+    /// Whether this line is a comment or not.
+    pub event_type: EventType,
+
+    /// Extradata entries referenced by this line.
+    pub extradata_ids: Vec<usize>,
+
     pub nde_filter_index: Option<usize>,
 }
 
@@ -50,6 +59,13 @@ impl Sline {
     pub fn end(&self) -> StartTime {
         StartTime(self.start.0 + self.duration.0)
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum EventType {
+    #[default]
+    Dialogue,
+    Comment,
 }
 
 /// An event in true ASS terms, that is, one subtitle line
@@ -83,14 +99,14 @@ pub struct CompiledEvent<'a> {
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StartTime(pub i64);
 
 /// The duration for which an element is shown, in milliseconds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Duration(pub i64);
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Angle(pub f64);
 
 /// 1.0 represents 100%
@@ -102,7 +118,7 @@ pub struct Scale {
 
 /// Element- or style-specific left, right, and vertical margins
 /// in pixels, corresponding to ASS `MarginL` etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Margins {
     pub left: i32,
     pub right: i32,
