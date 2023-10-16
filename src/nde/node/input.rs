@@ -1,6 +1,6 @@
 use crate::{message, model, nde};
 
-use super::{Error, LeafInputType, Node, SocketType, SocketValue};
+use super::{Error, LeafInputType, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone)]
 pub struct Sline {}
@@ -39,6 +39,13 @@ impl Node for Sline {
     }
 }
 
+inventory::submit! {
+    Shell::new(
+        &["Input", "Subtitle line"],
+        || Box::new(Sline {})
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct FrameRate {}
 
@@ -59,6 +66,13 @@ impl Node for FrameRate {
         super::retrieve!(inputs[0], SocketValue::FrameRate(frame_rate));
         Ok(vec![SocketValue::FrameRate(*frame_rate)])
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Input", "Frame rate"],
+        || Box::new(FrameRate {})
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +138,18 @@ impl Node for Position {
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 125.0)
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Input", "Position"],
+        || Box::new(Position {
+            value: nde::tags::Position {
+                x: 100.0,
+                y: 100.0,
+            }
+        })
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -256,6 +282,20 @@ impl Node for Rectangle {
     }
 }
 
+inventory::submit! {
+    Shell::new(
+        &["Input", "Rectangle"],
+        || Box::new(Rectangle {
+            value: nde::tags::Rectangle {
+                x1: 100,
+                y1: 100,
+                x2: 200,
+                y2: 200,
+            }
+        })
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct Tags {
     pub value: String,
@@ -316,4 +356,13 @@ impl Node for Tags {
     fn content_size(&self) -> iced::Size {
         iced::Size::new(400.0, 125.0)
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Input", "Tags"],
+        || Box::new(Tags {
+            value: String::new()
+        })
+    )
 }

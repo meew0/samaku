@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, SocketType, SocketValue};
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Rectangle {}
@@ -28,4 +28,11 @@ impl Node for Rectangle {
         })?;
         Ok(vec![socket_value])
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Clip", "Rectangular"],
+        || Box::new(Rectangle {})
+    )
 }

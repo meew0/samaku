@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, SocketType, SocketValue};
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Gradient {}
@@ -63,4 +63,11 @@ impl Node for Gradient {
         })?;
         Ok(vec![SocketValue::MultipleEvents(events)])
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Gradient"],
+        || Box::new(Gradient {})
+    )
 }

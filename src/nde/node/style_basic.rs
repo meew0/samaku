@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, SocketType, SocketValue};
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct Italic {}
@@ -26,4 +26,11 @@ impl Node for Italic {
         })?;
         Ok(vec![socket_value])
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Style", "Italicise"],
+        || Box::new(Italic {})
+    )
 }

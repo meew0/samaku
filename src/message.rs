@@ -89,7 +89,7 @@ pub enum Message {
     DeleteFilter(usize), // NYI
 
     // Create and update nodes in the current NDE filter.
-    AddNode(nde::node::Shell),
+    AddNode(nde::node::Constructor),
     MoveNode(usize, f32, f32),
     ConnectNodes(iced_node_editor::Link),
     DisconnectNodes(

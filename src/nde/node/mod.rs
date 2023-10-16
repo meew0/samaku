@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub use clip::Rectangle as ClipRectangle;
@@ -226,52 +225,23 @@ pub enum Error {
     ContainsBrackets,
 }
 
-/// An “empty shell” representation of the operation performed by a node. Used to represent the
-/// idea of a node e.g. in the `AddNode` message.
-#[derive(Debug, Clone)]
-pub enum Shell {
-    InputSline,
-    InputTags,
-    InputPosition,
-    InputRectangle,
-    InputFrameRate,
-    Italic,
-    SetPosition,
-    MotionTrack,
-    SplitFrameByFrame,
-    ClipRectangle,
-    Gradient,
+pub type Constructor = fn() -> Box<dyn Node>;
+
+/// Represents the idea of a node, with any specific type information being erased. We use the
+/// `inventory` crate to collect node shells, to be able to iterate over them in all places where
+/// we need a list of registered nodes (like in the node editor “Add” menu)
+pub struct Shell {
+    pub menu_path: &'static [&'static str],
+    pub constructor: Constructor,
 }
 
 impl Shell {
-    #[must_use]
-    pub fn instantiate(&self) -> Box<dyn Node> {
-        match self {
-            Shell::InputSline => Box::new(InputSline {}),
-            Shell::InputTags => Box::new(InputTags {
-                value: String::new(),
-            }),
-            Shell::InputPosition => Box::new(InputPosition {
-                value: nde::tags::Position { x: 0.0, y: 0.0 },
-            }),
-            Shell::InputRectangle => Box::new(InputRectangle {
-                value: nde::tags::Rectangle {
-                    x1: 100,
-                    y1: 100,
-                    x2: 200,
-                    y2: 200,
-                },
-            }),
-            Shell::InputFrameRate => Box::new(InputFrameRate {}),
-            Shell::Italic => Box::new(Italic {}),
-            Shell::SetPosition => Box::new(SetPosition {}),
-            Shell::MotionTrack => Box::new(MotionTrack {
-                region_center: nde::tags::Position { x: 100.0, y: 100.0 },
-                track: HashMap::new(),
-            }),
-            Shell::SplitFrameByFrame => Box::new(SplitFrameByFrame {}),
-            Shell::ClipRectangle => Box::new(ClipRectangle {}),
-            Shell::Gradient => Box::new(Gradient {}),
+    pub const fn new(menu_path: &'static [&'static str], constructor: Constructor) -> Self {
+        Self {
+            menu_path,
+            constructor,
         }
     }
 }
+
+inventory::collect!(Shell);

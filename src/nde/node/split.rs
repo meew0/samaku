@@ -1,6 +1,6 @@
 use crate::{model, nde, subtitle};
 
-use super::{Error, Node, SocketType, SocketValue};
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct FrameByFrame {}
@@ -44,4 +44,11 @@ impl Node for FrameByFrame {
 
         Ok(vec![SocketValue::MultipleEvents(res)])
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Split", "Frame by frame"],
+        || Box::new(FrameByFrame {})
+    )
 }

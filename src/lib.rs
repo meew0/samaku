@@ -375,13 +375,13 @@ impl Application for Samaku {
             Self::Message::DeleteFilter(_filter_index) => {
                 todo!()
             }
-            Self::Message::AddNode(node_shell) => {
+            Self::Message::AddNode(node_constructor) => {
                 if let Some(filter) = self
                     .subtitles
                     .active_nde_filter_mut(self.active_sline_index)
                 {
                     let visual_node = nde::graph::VisualNode {
-                        node: node_shell.instantiate(),
+                        node: node_constructor(),
                         position: iced::Point::new(0.0, 0.0),
                     };
                     filter.graph.nodes.push(visual_node);

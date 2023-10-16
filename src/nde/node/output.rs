@@ -23,3 +23,5 @@ impl Node for Output {
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }
 }
+
+// Do not inventory::submit this node, as the user should not be able to add it manually.

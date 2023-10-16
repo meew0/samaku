@@ -1,5 +1,8 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
+
+use once_cell::sync::OnceCell;
 
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
 use crate::{message, nde, style, subtitle, view};
@@ -556,13 +559,14 @@ where
 
 fn menu_item(
     label: &str,
-    node_shell: nde::node::Shell,
+    node_constructor: nde::node::Constructor,
 ) -> iced_aw::menu::MenuTree<message::Message, iced::Renderer> {
-    iced_aw::menu_tree!(
-        view::menu::labeled_button(label, message::Message::AddNode(node_shell))
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
+    iced_aw::menu_tree!(view::menu::labeled_button(
+        label,
+        message::Message::AddNode(node_constructor)
     )
+    .width(iced::Length::Fill)
+    .height(iced::Length::Fill))
 }
 
 fn sub_menu<'a>(
@@ -573,36 +577,109 @@ fn sub_menu<'a>(
 }
 
 fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer> {
+    let shell_tree = SHELL_TREE.get_or_init(collect_menu);
+
     iced_aw::helpers::menu_tree(
         iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
-        vec![
-            sub_menu(
-                "Input",
-                vec![
-                    menu_item("Subtitle", nde::node::Shell::InputSline),
-                    menu_item("Tags", nde::node::Shell::InputTags),
-                    menu_item("Position", nde::node::Shell::InputPosition),
-                    menu_item("Rectangle", nde::node::Shell::InputRectangle),
-                    menu_item("Frame rate", nde::node::Shell::InputFrameRate),
-                ],
-            ),
-            sub_menu(
-                "Split",
-                vec![menu_item(
-                    "Frame by frame",
-                    nde::node::Shell::SplitFrameByFrame,
-                )],
-            ),
-            sub_menu(
-                "Clip",
-                vec![menu_item("Rectangular", nde::node::Shell::ClipRectangle)],
-            ),
-            menu_item("Italicise", nde::node::Shell::Italic),
-            menu_item("Set position", nde::node::Shell::SetPosition),
-            menu_item("Motion track", nde::node::Shell::MotionTrack),
-            menu_item("Gradient", nde::node::Shell::Gradient),
-        ],
+        children_from_shell_tree(shell_tree),
     )
+}
+
+fn children_from_shell_tree(
+    tree: &ShellMap,
+) -> Vec<iced_aw::menu::MenuTree<message::Message, iced::Renderer>> {
+    let mut children = vec![];
+
+    for (name, child) in tree {
+        match child {
+            MenuShell::Item(constructor) => children.push(menu_item(name.as_str(), *constructor)),
+            MenuShell::SubMenu(sub_tree) => {
+                children.push(sub_menu(name.as_str(), children_from_shell_tree(sub_tree)));
+            }
+        }
+    }
+
+    children
+}
+
+type ShellMap = BTreeMap<String, MenuShell>;
+
+static SHELL_TREE: OnceCell<ShellMap> = OnceCell::new();
+
+enum MenuShell {
+    Item(nde::node::Constructor),
+    SubMenu(ShellMap),
+}
+
+/// Collect the `inventory` of node shells and create a menu tree from it, which will later need
+/// to be converted into iced_aw widgets.
+fn collect_menu() -> ShellMap {
+    let mut menu: ShellMap = BTreeMap::new();
+
+    for node_shell in inventory::iter::<nde::node::Shell> {
+        if node_shell.menu_path.is_empty() {
+            continue;
+        }
+
+        match collect_internal_recursive(&mut menu, node_shell.menu_path, node_shell.constructor) {
+            Ok(_) => {}
+            Err(CollectError::DuplicateItem) => panic!(
+                "Found duplicate item while collecting node with menu path: {:?}",
+                node_shell.menu_path
+            ),
+            Err(CollectError::ItemOverSubMenu) => panic!(
+                "Tried to insert node item with menu path {:?}, but found an existing sub menu",
+                node_shell.menu_path
+            ),
+            Err(CollectError::SubMenuOverItem) => panic!(
+                "Tried to insert sub menu for node with menu path {:?}, but found an existing item",
+                node_shell.menu_path
+            ),
+        }
+    }
+
+    menu
+}
+
+fn collect_internal_recursive(
+    menu: &mut ShellMap,
+    path: &[&str],
+    constructor: nde::node::Constructor,
+) -> Result<(), CollectError> {
+    assert!(!path.is_empty());
+
+    if path.len() == 1 {
+        // Only the last element remains, which must be inserted as an item.
+        match menu.get(path[0]) {
+            Some(MenuShell::Item(_)) => return Err(CollectError::DuplicateItem),
+            Some(MenuShell::SubMenu(_)) => return Err(CollectError::ItemOverSubMenu),
+            None => {
+                menu.insert(path[0].to_string(), MenuShell::Item(constructor));
+            }
+        }
+
+        Ok(())
+    } else {
+        // Insert the first element as a sub menu.
+        let sub_menu = match menu.get_mut(path[0]) {
+            Some(MenuShell::Item(_)) => return Err(CollectError::SubMenuOverItem),
+            Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
+            None => {
+                menu.insert(path[0].to_string(), MenuShell::SubMenu(BTreeMap::new()));
+                match menu.get_mut(path[0]) {
+                    Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
+                    _ => panic!(),
+                }
+            }
+        };
+        collect_internal_recursive(sub_menu, &path[1..], constructor)
+    }
+}
+
+enum CollectError {
+    DuplicateItem,
+    ItemOverSubMenu,
+    SubMenuOverItem,
 }
 
 pub fn update(

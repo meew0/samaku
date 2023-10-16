@@ -1,5 +1,6 @@
-use super::{Error, Node, SocketType, SocketValue};
 use crate::nde;
+
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct SetPosition {}
@@ -30,4 +31,11 @@ impl Node for SetPosition {
             Err(Error::MismatchedTypes)
         }
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Set position"],
+        || Box::new(SetPosition {})
+    )
 }

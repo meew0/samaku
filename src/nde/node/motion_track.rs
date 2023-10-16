@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{media, message, model, nde};
 
-use super::{Error, Node, SocketType, SocketValue};
+use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug)]
 pub struct MotionTrack {
@@ -105,4 +105,17 @@ impl Node for MotionTrack {
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 150.0)
     }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Motion track"],
+        || Box::new(MotionTrack {
+            region_center: nde::tags::Position {
+                x: 100.0,
+                y: 100.0,
+            },
+            track: HashMap::new(),
+        })
+    )
 }
