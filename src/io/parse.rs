@@ -1,20 +1,29 @@
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use smol::stream::StreamExt;
+use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::subtitle;
 
 use super::{AssFile, Extradata, ExtradataEntry, SideData};
 
+/// Parse the given stream of lines into an [`AssFile`].
+///
+/// # Errors
+/// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
+/// The parser is quite tolerant, so this should not happen often.
 pub async fn parse(
     mut input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
-) -> smol::io::Result<super::AssFile> {
+) -> Result<super::AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
+
     let mut attachment: Option<()> = None;
+    let mut script_info = subtitle::ScriptInfo::default();
+    let mut extradata = super::Extradata::default();
 
     while let Some(line_result) = input.next().await {
-        let line_string = line_result?;
+        let line_string = line_result.map_err(Error::IoError)?;
         let line = line_string.trim();
 
         if attachment.is_some() {
@@ -48,26 +57,27 @@ pub async fn parse(
         }
 
         match state {
-            ParseState::Unknown => {}
-            ParseState::Styles(_) => {}
-            ParseState::Events => {}
-            ParseState::ScriptInfo => {}
-            ParseState::AegiMetadata => {}
-            ParseState::Extradata => {}
-            ParseState::Graphics => {}
-            ParseState::Fonts => {}
+            ParseState::Unknown => todo!(),
+            ParseState::Styles(_) => todo!(),
+            ParseState::Events => todo!(),
+            ParseState::ScriptInfo => {
+                parse_script_info_line(line, &mut script_info)?;
+            }
+            ParseState::AegiMetadata => todo!(),
+            ParseState::Extradata => {
+                parse_extradata_line(line, &mut extradata);
+            }
+            ParseState::Graphics => todo!(),
+            ParseState::Fonts => todo!(),
         }
     }
 
     Ok(AssFile {
-        subtitles: Default::default(),
+        subtitles: subtitle::SlineTrack::default(),
         side_data: SideData {
-            script_info: Default::default(),
-            extradata: Extradata {
-                entries: Default::default(),
-                next_id: 0,
-            },
-            other_sections: Default::default(),
+            script_info,
+            extradata,
+            other_sections: HashMap::default(),
         },
     })
 }
@@ -84,7 +94,10 @@ enum ParseState {
 }
 
 #[derive(Error, Debug)]
-enum Error {
+pub enum Error {
+    #[error("IO error: {0}")]
+    IoError(smol::io::Error),
+
     #[error("Script type must be v4.00+, all other versions are unsupported")]
     UnsupportedScriptType,
 }
@@ -95,8 +108,8 @@ fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) ->
         return Ok(());
     }
 
-    if line.starts_with("ScriptType:") {
-        let version_str = &line[11..].trim().to_ascii_lowercase();
+    if let Some(value) = line.strip_prefix("ScriptType:") {
+        let version_str = value.trim().to_ascii_lowercase();
         if version_str != "v4.00+" {
             return Err(Error::UnsupportedScriptType);
         }
@@ -123,7 +136,7 @@ fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) ->
             script_info.wrap_style = int_value.into();
         }
     } else if key == "ScaledBorderAndShadow" {
-        script_info.scaled_border_and_shadow = (key != "no");
+        script_info.scaled_border_and_shadow = key != "no";
     } else if key == "YCbCr Matrix" {
         script_info.ycbcr_matrix = match value {
             "TV.601" => subtitle::ass::YCbCrMatrix::Bt601Tv,
@@ -155,7 +168,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id) = id_str.parse::<u32>() else {
             println!("invalid extradata ID: {id_str}");
-            return;
+            return; // ignore
         };
 
         let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
@@ -240,7 +253,7 @@ mod tests {
         assert_eq!(info.playback_resolution.x, 1920);
         assert_eq!(info.playback_resolution.y, 1080);
         assert_eq!(info.wrap_style, subtitle::WrapStyle::EndOfLine);
-        assert_eq!(info.scaled_border_and_shadow, true);
+        assert!(info.scaled_border_and_shadow);
         assert_matches!(info.ycbcr_matrix, subtitle::ass::YCbCrMatrix::Bt709Tv);
         assert_matches!(info.extra_info.get("Title"), Some(value));
         assert_eq!(value, "samaku test");

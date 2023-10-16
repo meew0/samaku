@@ -306,6 +306,7 @@ pub struct Style {
 /// Ordered collection of [`Sline`]s with associated data.
 /// For now, it's just a wrapper around [`Vec`].
 /// Might become more advanced in the future.
+#[derive(Default)]
 pub struct SlineTrack {
     pub slines: Vec<Sline>,
     pub styles: Vec<Style>,
@@ -405,16 +406,6 @@ impl SlineTrack {
         }
 
         compiled
-    }
-}
-
-impl Default for SlineTrack {
-    fn default() -> Self {
-        Self {
-            slines: vec![],
-            styles: vec![],
-            filters: vec![],
-        }
     }
 }
 
