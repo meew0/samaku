@@ -13,7 +13,6 @@ use iced::{Application, Command, Element, Length, Settings, Subscription};
 
 use crate::pane::State;
 
-pub mod io;
 pub mod keyboard;
 pub mod media;
 pub mod message;

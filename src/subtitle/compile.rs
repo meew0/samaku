@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use crate::{media, nde};
 
-pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::ass::Event<'a> {
-    let event = super::ass::Event {
+pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::CompiledEvent<'a> {
+    let event = super::CompiledEvent {
         start: sline.start,
         duration: sline.duration,
         layer_index: sline.layer_index,
@@ -110,7 +110,7 @@ pub fn nde<'a, 'b>(
 }
 
 pub struct NdeResult<'a, 'b> {
-    pub events: Option<Vec<super::ass::Event<'a>>>,
+    pub events: Option<Vec<super::CompiledEvent<'a>>>,
     pub intermediates: Vec<NodeState<'b>>,
 }
 

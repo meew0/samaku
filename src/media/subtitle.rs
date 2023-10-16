@@ -1,5 +1,6 @@
 pub use ass::Image;
 
+use crate::nde::tags::Colour;
 use crate::{model, subtitle, view};
 
 use super::bindings::{ass, c_string};
@@ -29,7 +30,7 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to construct a new subtitle track.
     pub fn from_compiled<'a>(
-        events: impl IntoIterator<Item = &'a subtitle::ass::Event<'a>>,
+        events: impl IntoIterator<Item = &'a subtitle::CompiledEvent<'a>>,
         styles: &[subtitle::Style],
         metadata: &subtitle::ScriptInfo,
     ) -> OpaqueTrack {
@@ -197,13 +198,9 @@ pub fn ass_image_to_iced(
     // Potential optimisation: allocate as 32-bit, transmute to 8-bit later
     let mut out = vec![0; out_len];
 
-    let subtitle::Colour {
-        red,
-        green,
-        blue,
-        transparency,
-    } = subtitle::Colour::unpack(ass_image.metadata.color);
-    let alpha: u16 = 255 - u16::from(transparency);
+    let (Colour { red, green, blue }, transparency) =
+        subtitle::unpack_colour_and_transparency(ass_image.metadata.color);
+    let alpha: u16 = 255 - u16::from(transparency.rendered());
 
     let stride: usize = ass_image
         .metadata

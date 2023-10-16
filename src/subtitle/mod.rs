@@ -2,12 +2,14 @@
 //! of subtitles, as well as the logic for compiling them to ASS
 //! ones.
 
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 
+use crate::nde::tags::{Alignment, Colour, Transparency, WrapStyle};
 use crate::{media, message, nde};
 
-pub mod ass;
 pub mod compile;
+pub mod parse;
 
 /// An `Sline` (“samaku line”/“subtitle line”/“sign or line”/etc.),
 /// in samaku terms, is one conceptual individual “subtitle”,
@@ -50,6 +52,36 @@ impl Sline {
     }
 }
 
+/// An event in true ASS terms, that is, one subtitle line
+/// as it would be found in e.g. Aegisub. Not to be used
+/// as the source for anything; only as an intermediate
+/// in the conversion to events as used by libass directly
+/// (`ASS_Event`)
+///
+/// See [`Sline`] docs for other fields.
+#[derive(Debug, Clone)]
+pub struct CompiledEvent<'a> {
+    pub start: StartTime,
+    pub duration: Duration,
+    pub layer_index: i32,
+    pub style_index: i32,
+    pub margins: Margins,
+    pub text: Cow<'a, str>,
+
+    /// Not really clear what this is,
+    /// it seems to be used for duplicate checking within libass,
+    /// and also potentially for layer-independent Z ordering (?)
+    pub read_order: i32,
+
+    /// Name a.k.a. Actor (does nothing)
+    pub name: Cow<'a, str>,
+
+    /// Can be used to store arbitrary user data,
+    /// but libass also parses this and has some special behaviour
+    /// for certain values (e.g. `Banner;`)
+    pub effect: Cow<'a, str>,
+}
+
 /// The time at which an element starts to be shown, in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StartTime(pub i64);
@@ -83,122 +115,29 @@ pub struct Resolution {
     pub y: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Colour {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
+/// Converts a libass 32-bit packed colour into a `Colour`.
+#[must_use]
+pub fn unpack_colour_and_transparency(packed: u32) -> (Colour, Transparency) {
+    #[allow(clippy::unreadable_literal)]
+    let colour = Colour {
+        red: ((packed & 0xff000000) >> 24) as u8,
+        green: ((packed & 0x00ff0000) >> 16) as u8,
+        blue: ((packed & 0x0000ff00) >> 8) as u8,
+    };
+    #[allow(clippy::unreadable_literal)]
+    #[allow(clippy::cast_possible_wrap)]
+    let transparency = Transparency((packed & 0x000000ff) as i32);
 
-    /// How transparent this colour is. 255 means fully transparent.
-    /// Corresponds to what libass confusingly calls “alpha”. To avoid this confusion,
-    /// the term “alpha” will never be used in samaku.
-    pub transparency: u8,
+    (colour, transparency)
 }
 
-impl Colour {
-    /// Converts a libass 32-bit packed colour into a `Colour`.
-    #[must_use]
-    pub fn unpack(packed: u32) -> Self {
-        #[allow(clippy::unreadable_literal)]
-        Self {
-            red: ((packed & 0xff000000) >> 24) as u8,
-            green: ((packed & 0x00ff0000) >> 16) as u8,
-            blue: ((packed & 0x0000ff00) >> 8) as u8,
-            transparency: (packed & 0x000000ff) as u8,
-        }
-    }
-
-    /// Converts a colour into the 32 bit packed value used in libass.
-    #[must_use]
-    pub fn pack(&self) -> u32 {
-        u32::from(self.red) << 24
-            | u32::from(self.green) << 16
-            | u32::from(self.blue) << 8
-            | u32::from(self.transparency)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Alignment {
-    pub vertical: VerticalAlignment,
-    pub horizontal: HorizontalAlignment,
-}
-
-impl Alignment {
-    #[must_use]
-    pub fn try_unpack(packed: i32) -> Option<Self> {
-        let vertical_opt: Option<VerticalAlignment> = match packed & 0b1100 {
-            x if x == VerticalAlignment::Sub as i32 => Some(VerticalAlignment::Sub),
-            x if x == VerticalAlignment::Center as i32 => Some(VerticalAlignment::Center),
-            x if x == VerticalAlignment::Top as i32 => Some(VerticalAlignment::Top),
-            _ => None,
-        };
-
-        let horizontal_opt: Option<HorizontalAlignment> = match packed & 0b0011 {
-            x if x == HorizontalAlignment::Left as i32 => Some(HorizontalAlignment::Left),
-            x if x == HorizontalAlignment::Center as i32 => Some(HorizontalAlignment::Center),
-            x if x == HorizontalAlignment::Right as i32 => Some(HorizontalAlignment::Right),
-            _ => None,
-        };
-
-        match vertical_opt {
-            Some(vertical) => horizontal_opt.map(|horizontal| Self {
-                vertical,
-                horizontal,
-            }),
-            None => None,
-        }
-    }
-
-    // Convert to a number to be used in the `\an` formatting tag.
-    #[must_use]
-    pub fn as_an(&self) -> i32 {
-        match self.vertical {
-            VerticalAlignment::Sub => match self.horizontal {
-                HorizontalAlignment::Left => 1,
-                HorizontalAlignment::Center => 2,
-                HorizontalAlignment::Right => 3,
-            },
-            VerticalAlignment::Center => match self.horizontal {
-                HorizontalAlignment::Left => 4,
-                HorizontalAlignment::Center => 5,
-                HorizontalAlignment::Right => 6,
-            },
-            VerticalAlignment::Top => match self.horizontal {
-                HorizontalAlignment::Left => 7,
-                HorizontalAlignment::Center => 8,
-                HorizontalAlignment::Right => 9,
-            },
-        }
-    }
-
-    #[must_use]
-    pub fn pack(&self) -> i32 {
-        self.vertical as i32 | self.horizontal as i32
-    }
-}
-
-impl Default for Alignment {
-    fn default() -> Self {
-        Self {
-            vertical: VerticalAlignment::Sub,
-            horizontal: HorizontalAlignment::Center,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerticalAlignment {
-    Sub = 0,
-    Center = 4,
-    Top = 8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HorizontalAlignment {
-    Left = 1,
-    Center = 2,
-    Right = 3,
+/// Converts a colour into the 32 bit packed value used in libass.
+#[must_use]
+pub fn pack_colour_and_transparency(colour: Colour, transparency: Transparency) -> u32 {
+    u32::from(colour.red) << 24
+        | u32::from(colour.green) << 16
+        | u32::from(colour.blue) << 8
+        | u32::from(transparency.rendered())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,25 +184,20 @@ impl From<i32> for BorderStyle {
     }
 }
 
-/// See <http://www.tcax.org/docs/ass-specs.htm>
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WrapStyle {
-    SmartEven = 0,
-    EndOfLine = 1,
-    None = 2,
-    SmartLower = 3,
-}
-
-impl From<i32> for WrapStyle {
-    fn from(value: i32) -> Self {
-        match value {
-            x if x == Self::SmartEven as i32 => Self::SmartEven,
-            x if x == Self::EndOfLine as i32 => Self::EndOfLine,
-            x if x == Self::None as i32 => Self::None,
-            x if x == Self::SmartLower as i32 => Self::SmartLower,
-            _ => Self::SmartEven,
-        }
-    }
+/// See <https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152>
+#[derive(Debug, Clone, Copy)]
+pub enum YCbCrMatrix {
+    Default = 0,
+    Unknown,
+    None,
+    Bt601Tv,
+    Bt601Pc,
+    Bt709Tv,
+    Bt709Pc,
+    Smtpe240MTv,
+    Smtpe240MPc,
+    FccTv,
+    FccPc,
 }
 
 #[derive(Debug, Clone)]
@@ -276,8 +210,13 @@ pub struct Style {
 
     pub primary_colour: Colour,
     pub secondary_colour: Colour,
-    pub outline_colour: Colour,
-    pub back_colour: Colour,
+    pub border_colour: Colour,
+    pub shadow_colour: Colour,
+
+    pub primary_transparency: Transparency,
+    pub secondary_transparency: Transparency,
+    pub border_transparency: Transparency,
+    pub shadow_transparency: Transparency,
 
     pub bold: bool,
     pub italic: bool,
@@ -383,9 +322,9 @@ impl SlineTrack {
         _frame_start: i32,
         _frame_count: i32,
         frame_rate: media::FrameRate,
-    ) -> Vec<self::ass::Event> {
+    ) -> Vec<CompiledEvent> {
         let mut counter = 0;
-        let mut compiled: Vec<self::ass::Event> = vec![];
+        let mut compiled: Vec<CompiledEvent> = vec![];
 
         for sline in &self.slines {
             match sline.nde_filter_index {
@@ -414,7 +353,7 @@ pub struct ScriptInfo {
     pub scaled_border_and_shadow: bool,
     pub kerning: bool,
     pub timer: f64,
-    pub ycbcr_matrix: ass::YCbCrMatrix,
+    pub ycbcr_matrix: YCbCrMatrix,
     pub playback_resolution: Resolution,
     pub extra_info: HashMap<String, String>,
 }
@@ -426,7 +365,7 @@ impl Default for ScriptInfo {
             scaled_border_and_shadow: true,
             kerning: true,
             timer: 0.0,
-            ycbcr_matrix: ass::YCbCrMatrix::None,
+            ycbcr_matrix: YCbCrMatrix::None,
 
             // This is not the default libass uses (which is 324x288),
             // but it seems like a reasonable default for a modern age.
@@ -435,4 +374,49 @@ impl Default for ScriptInfo {
             extra_info: HashMap::new(),
         }
     }
+}
+
+pub struct AssFile {
+    subtitles: SlineTrack,
+    side_data: SideData,
+}
+
+pub struct SideData {
+    script_info: ScriptInfo,
+    extradata: Extradata,
+    aegi_metadata: HashMap<String, String>,
+    attachments: Vec<Attachment>,
+    other_sections: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Extradata {
+    entries: BTreeMap<u32, ExtradataEntry>,
+    next_id: u32,
+}
+
+impl Extradata {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtradataEntry {
+    key: String,
+    value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Attachment {
+    attachment_type: AttachmentType,
+    filename: String,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AttachmentType {
+    Font,
+    Graphic,
 }

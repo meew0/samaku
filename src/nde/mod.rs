@@ -38,7 +38,7 @@ pub struct Event {
 
 impl Event {
     #[must_use]
-    pub fn to_ass_event(&self) -> subtitle::ass::Event<'static> {
+    pub fn to_ass_event(&self) -> subtitle::CompiledEvent<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
@@ -60,7 +60,7 @@ impl Event {
 
         let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
-        subtitle::ass::Event {
+        subtitle::CompiledEvent {
             start: self.start,
             duration: self.duration,
             layer_index: self.layer_index,

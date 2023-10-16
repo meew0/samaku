@@ -1,5 +1,4 @@
 use crate::nde::Span;
-use crate::subtitle;
 
 /// Converts the given `spans` together with the given `global` tag overrides into a string of
 /// ASS tag blocks, to be used by e.g. libass.
@@ -213,24 +212,6 @@ impl Value for String {
         W: std::fmt::Write,
     {
         sink.write_str(self)
-    }
-}
-
-impl Value for subtitle::Alignment {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        self.as_an().emit_value(sink)
-    }
-}
-
-impl Value for subtitle::WrapStyle {
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        (*self as i32).emit_value(sink)
     }
 }
 

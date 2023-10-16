@@ -7,6 +7,7 @@ use std::hash::BuildHasher;
 
 use samaku::media;
 use samaku::nde;
+use samaku::nde::tags::{Colour, Transparency};
 use samaku::subtitle;
 
 pub const ASS_FILE: &str = include_str!("../test_files/parse_edge_cases.ass");
@@ -25,7 +26,7 @@ fn libass_parse_comparison() {
     let mut found_any_difference = false;
 
     for sline in track.slines.iter() {
-        let direct = subtitle::ass::Event {
+        let direct = subtitle::CompiledEvent {
             start: sline.start,
             duration: sline.duration,
             layer_index: sline.layer_index,
@@ -110,11 +111,11 @@ fn libass_parse_comparison() {
     assert!(!found_any_difference);
 }
 
-fn parse_round_trip(sline: &subtitle::Sline) -> subtitle::ass::Event {
+fn parse_round_trip(sline: &subtitle::Sline) -> subtitle::CompiledEvent {
     let (global, spans) = nde::tags::parse(&sline.text);
     let emitted = nde::tags::emit(&global, &spans);
 
-    subtitle::ass::Event {
+    subtitle::CompiledEvent {
         start: sline.start,
         duration: sline.duration,
         layer_index: sline.layer_index,
@@ -134,19 +135,23 @@ struct AssImage {
     dest_x: i32,
     dest_y: i32,
     stride: i32,
-    colour: subtitle::Colour,
+    colour: Colour,
+    transparency: Transparency,
     data_hash: u64,
 }
 
 impl AssImage {
     pub fn from<BH: BuildHasher>(image: &media::subtitle::Image, build_hasher: &BH) -> Self {
+        let (colour, transparency) = subtitle::unpack_colour_and_transparency(image.metadata.color);
+
         Self {
             width: image.metadata.w,
             height: image.metadata.h,
             dest_x: image.metadata.dst_x,
             dest_y: image.metadata.dst_y,
             stride: image.metadata.stride,
-            colour: subtitle::Colour::unpack(image.metadata.color),
+            colour,
+            transparency,
             data_hash: build_hasher.hash_one(image.bitmap),
         }
     }

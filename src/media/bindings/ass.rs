@@ -5,7 +5,9 @@ use std::ffi::CStr;
 
 use libass_sys as libass;
 
+use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
+use crate::subtitle::{Margins, YCbCrMatrix};
 
 pub type CString = std::ffi::CString;
 
@@ -237,7 +239,7 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
     }
 }
 
-pub fn event_to_raw(event: &subtitle::ass::Event) -> RawEvent {
+pub fn event_to_raw(event: &subtitle::CompiledEvent) -> RawEvent {
     RawEvent {
         Start: event.start.0,
         Duration: event.duration.0,
@@ -255,15 +257,28 @@ pub fn event_to_raw(event: &subtitle::ass::Event) -> RawEvent {
 }
 
 pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
+    let (primary_colour, primary_transparency) =
+        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+    let (secondary_colour, secondary_transparency) =
+        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+    let (border_colour, border_transparency) =
+        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+    let (shadow_colour, shadow_transparency) =
+        subtitle::unpack_colour_and_transparency(raw_style.PrimaryColour);
+
     subtitle::Style {
         name: string_from_libass(raw_style.Name).expect("style name should never be null"),
         font_name: string_from_libass(raw_style.FontName)
             .expect("style font name should never be null"),
         font_size: raw_style.FontSize,
-        primary_colour: subtitle::Colour::unpack(raw_style.PrimaryColour),
-        secondary_colour: subtitle::Colour::unpack(raw_style.SecondaryColour),
-        outline_colour: subtitle::Colour::unpack(raw_style.OutlineColour),
-        back_colour: subtitle::Colour::unpack(raw_style.BackColour),
+        primary_colour,
+        secondary_colour,
+        border_colour,
+        shadow_colour,
+        primary_transparency,
+        secondary_transparency,
+        border_transparency,
+        shadow_transparency,
         bold: raw_style.Bold != 0,
         italic: raw_style.Italic != 0,
         underline: raw_style.Underline != 0,
@@ -277,9 +292,9 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
         border_style: subtitle::BorderStyle::from(raw_style.BorderStyle),
         outline: raw_style.Outline,
         shadow: raw_style.Shadow,
-        alignment: subtitle::Alignment::try_unpack(raw_style.Alignment)
+        alignment: Alignment::try_unpack(raw_style.Alignment)
             .expect("received invalid alignment value from libass"),
-        margins: subtitle::Margins {
+        margins: Margins {
             left: raw_style.MarginL,
             right: raw_style.MarginR,
             vertical: raw_style.MarginV,
@@ -295,10 +310,22 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
         Name: malloc_string(style.name.as_str()),
         FontName: malloc_string(style.font_name.as_str()),
         FontSize: style.font_size,
-        PrimaryColour: style.primary_colour.pack(),
-        SecondaryColour: style.secondary_colour.pack(),
-        OutlineColour: style.outline_colour.pack(),
-        BackColour: style.back_colour.pack(),
+        PrimaryColour: subtitle::pack_colour_and_transparency(
+            style.primary_colour,
+            style.primary_transparency,
+        ),
+        SecondaryColour: subtitle::pack_colour_and_transparency(
+            style.secondary_colour,
+            style.secondary_transparency,
+        ),
+        OutlineColour: subtitle::pack_colour_and_transparency(
+            style.border_colour,
+            style.border_transparency,
+        ),
+        BackColour: subtitle::pack_colour_and_transparency(
+            style.shadow_colour,
+            style.shadow_transparency,
+        ),
         Bold: i32::from(style.bold),
         Italic: i32::from(style.italic),
         Underline: i32::from(style.underline),
@@ -385,30 +412,26 @@ impl Track {
                 y: unsafe { (*self.track).PlayResY },
             },
             timer: unsafe { (*self.track).Timer },
-            wrap_style: subtitle::WrapStyle::from(unsafe { (*self.track).WrapStyle }),
+            wrap_style: WrapStyle::from(unsafe { (*self.track).WrapStyle }),
             scaled_border_and_shadow: unsafe { (*self.track).ScaledBorderAndShadow } != 0,
             kerning: unsafe { (*self.track).Kerning } != 0,
             ycbcr_matrix: match unsafe { (*self.track).YCbCrMatrix } {
-                libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::ass::YCbCrMatrix::Default,
-                libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::ass::YCbCrMatrix::Unknown,
+                libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => YCbCrMatrix::Default,
+                libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => YCbCrMatrix::Unknown,
                 // implied by `_` arm
-                // libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::ass::YCbCrMatrix::None,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::ass::YCbCrMatrix::Bt601Tv,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::ass::YCbCrMatrix::Bt601Pc,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::ass::YCbCrMatrix::Bt709Tv,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => subtitle::ass::YCbCrMatrix::Bt709Pc,
-                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => {
-                    subtitle::ass::YCbCrMatrix::Smtpe240MPc
-                }
-                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => {
-                    subtitle::ass::YCbCrMatrix::Smtpe240MTv
-                }
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => subtitle::ass::YCbCrMatrix::FccTv,
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => subtitle::ass::YCbCrMatrix::FccPc,
+                // libass::ASS_YCbCrMatrix::YCBCR_NONE => YCbCrMatrix::None,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => YCbCrMatrix::Bt601Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => YCbCrMatrix::Bt601Pc,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => YCbCrMatrix::Bt709Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => YCbCrMatrix::Bt709Pc,
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => YCbCrMatrix::Smtpe240MPc,
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => YCbCrMatrix::Smtpe240MTv,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => YCbCrMatrix::FccTv,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => YCbCrMatrix::FccPc,
 
                 // Honestly, it's debatable if we should even support tracks
                 // that use a matrix other than `NONE`.
-                _ => subtitle::ass::YCbCrMatrix::None,
+                _ => YCbCrMatrix::None,
             },
         }
     }

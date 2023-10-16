@@ -51,7 +51,7 @@ pub enum SocketValue<'a> {
     Sline(&'a subtitle::Sline),
 
     /// Compiled events that are ready to copy into libass.
-    CompiledEvents(Vec<subtitle::ass::Event<'static>>),
+    CompiledEvents(Vec<subtitle::CompiledEvent<'static>>),
 }
 
 impl<'a> SocketValue<'a> {

@@ -1,3 +1,5 @@
+//! Functions for parsing `.ass` files. For parsing ASS override tags, see [`nde::tags::parse`]
+
 use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
@@ -5,9 +7,10 @@ use regex::Regex;
 use smol::stream::StreamExt;
 use thiserror::Error;
 
-use crate::subtitle;
-
-use super::{AssFile, Attachment, AttachmentType, Extradata, ExtradataEntry, SideData};
+use super::{
+    AssFile, Attachment, AttachmentType, Extradata, ExtradataEntry, ScriptInfo, SideData,
+    SlineTrack, YCbCrMatrix,
+};
 
 /// Parse the given stream of lines into an [`AssFile`].
 ///
@@ -16,12 +19,12 @@ use super::{AssFile, Attachment, AttachmentType, Extradata, ExtradataEntry, Side
 /// The parser is quite tolerant, so this should not happen often.
 pub async fn parse(
     mut input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
-) -> Result<super::AssFile, Error> {
+) -> Result<AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
 
     let mut current_attachment: Option<Attachment> = None;
 
-    let mut script_info = subtitle::ScriptInfo::default();
+    let mut script_info = ScriptInfo::default();
     let mut extradata = Extradata::default();
     let mut aegi_metadata = HashMap::new();
     let mut attachments = vec![];
@@ -97,7 +100,7 @@ pub async fn parse(
     }
 
     Ok(AssFile {
-        subtitles: subtitle::SlineTrack::default(),
+        subtitles: SlineTrack::default(),
         side_data: SideData {
             script_info,
             extradata,
@@ -128,7 +131,7 @@ pub enum Error {
     UnsupportedScriptType,
 }
 
-fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) -> Result<(), Error> {
+fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<(), Error> {
     if line.starts_with(';') {
         // Comment
         return Ok(());
@@ -162,15 +165,15 @@ fn parse_script_info_line(line: &str, script_info: &mut subtitle::ScriptInfo) ->
         script_info.scaled_border_and_shadow = key != "no";
     } else if key == "YCbCr Matrix" {
         script_info.ycbcr_matrix = match value {
-            "TV.601" => subtitle::ass::YCbCrMatrix::Bt601Tv,
-            "PC.601" => subtitle::ass::YCbCrMatrix::Bt601Pc,
-            "TV.709" => subtitle::ass::YCbCrMatrix::Bt709Tv,
-            "PC.709" => subtitle::ass::YCbCrMatrix::Bt709Pc,
-            "TV.FCC" => subtitle::ass::YCbCrMatrix::FccTv,
-            "PC.FCC" => subtitle::ass::YCbCrMatrix::FccPc,
-            "TV.240M" => subtitle::ass::YCbCrMatrix::Smtpe240MTv,
-            "PC.240M" => subtitle::ass::YCbCrMatrix::Smtpe240MPc,
-            _ => subtitle::ass::YCbCrMatrix::None,
+            "TV.601" => YCbCrMatrix::Bt601Tv,
+            "PC.601" => YCbCrMatrix::Bt601Pc,
+            "TV.709" => YCbCrMatrix::Bt709Tv,
+            "PC.709" => YCbCrMatrix::Bt709Pc,
+            "TV.FCC" => YCbCrMatrix::FccTv,
+            "PC.FCC" => YCbCrMatrix::FccPc,
+            "TV.240M" => YCbCrMatrix::Smtpe240MTv,
+            "PC.240M" => YCbCrMatrix::Smtpe240MPc,
+            _ => YCbCrMatrix::None,
         };
     } else {
         script_info
@@ -310,6 +313,7 @@ fn aegi_inline_string_decode(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::nde::tags::WrapStyle;
     use assert_matches2::assert_matches;
 
     use super::*;
@@ -326,7 +330,7 @@ mod tests {
 
     #[test]
     fn script_info() -> Result<(), Error> {
-        let mut info = subtitle::ScriptInfo::default();
+        let mut info = ScriptInfo::default();
 
         parse_script_info_line("Title: samaku test", &mut info)?;
         parse_script_info_line("ScriptType: v4.00+", &mut info)?;
@@ -338,9 +342,9 @@ mod tests {
 
         assert_eq!(info.playback_resolution.x, 1920);
         assert_eq!(info.playback_resolution.y, 1080);
-        assert_eq!(info.wrap_style, subtitle::WrapStyle::EndOfLine);
+        assert_eq!(info.wrap_style, WrapStyle::EndOfLine);
         assert!(info.scaled_border_and_shadow);
-        assert_matches!(info.ycbcr_matrix, subtitle::ass::YCbCrMatrix::Bt709Tv);
+        assert_matches!(info.ycbcr_matrix, YCbCrMatrix::Bt709Tv);
         assert_matches!(info.extra_info.get("Title"), Some(value));
         assert_eq!(value, "samaku test");
 

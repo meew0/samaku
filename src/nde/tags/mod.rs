@@ -4,8 +4,6 @@ pub use emit::emit;
 pub use parse::parse;
 pub use parse::raw as parse_raw;
 
-use crate::subtitle;
-
 mod emit;
 mod lerp;
 mod parse;
@@ -144,8 +142,8 @@ pub struct Global {
     pub vector_clip: Option<Clip<Drawing>>,
     pub origin: Option<Position>,
     pub fade: Option<Fade>,
-    pub wrap_style: Resettable<subtitle::WrapStyle>,
-    pub alignment: Resettable<subtitle::Alignment>,
+    pub wrap_style: Resettable<WrapStyle>,
+    pub alignment: Resettable<Alignment>,
     pub animations: Vec<Animation<GlobalAnimatable>>,
 }
 
@@ -969,7 +967,7 @@ impl emit::Value for Colour {
 /// truncated on render. This allows complex wrapping animations and the like. If you need the
 /// “rendered” 8-bit value, use the [`rendered`] function.  
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Transparency(i32);
+pub struct Transparency(pub i32);
 
 impl Transparency {
     /// Returns the lowest 8 bits of the transparency value, corresponding to how it would be shown
@@ -1001,6 +999,98 @@ impl emit::Value for Transparency {
     {
         write!(sink, "&H{:X}&", self.0)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Alignment {
+    pub vertical: VerticalAlignment,
+    pub horizontal: HorizontalAlignment,
+}
+
+impl Alignment {
+    #[must_use]
+    pub fn try_unpack(packed: i32) -> Option<Self> {
+        let vertical_opt: Option<VerticalAlignment> = match packed & 0b1100 {
+            x if x == VerticalAlignment::Sub as i32 => Some(VerticalAlignment::Sub),
+            x if x == VerticalAlignment::Center as i32 => Some(VerticalAlignment::Center),
+            x if x == VerticalAlignment::Top as i32 => Some(VerticalAlignment::Top),
+            _ => None,
+        };
+
+        let horizontal_opt: Option<HorizontalAlignment> = match packed & 0b0011 {
+            x if x == HorizontalAlignment::Left as i32 => Some(HorizontalAlignment::Left),
+            x if x == HorizontalAlignment::Center as i32 => Some(HorizontalAlignment::Center),
+            x if x == HorizontalAlignment::Right as i32 => Some(HorizontalAlignment::Right),
+            _ => None,
+        };
+
+        match vertical_opt {
+            Some(vertical) => horizontal_opt.map(|horizontal| Self {
+                vertical,
+                horizontal,
+            }),
+            None => None,
+        }
+    }
+
+    // Convert to a number to be used in the `\an` formatting tag.
+    #[must_use]
+    pub fn as_an(&self) -> i32 {
+        match self.vertical {
+            VerticalAlignment::Sub => match self.horizontal {
+                HorizontalAlignment::Left => 1,
+                HorizontalAlignment::Center => 2,
+                HorizontalAlignment::Right => 3,
+            },
+            VerticalAlignment::Center => match self.horizontal {
+                HorizontalAlignment::Left => 4,
+                HorizontalAlignment::Center => 5,
+                HorizontalAlignment::Right => 6,
+            },
+            VerticalAlignment::Top => match self.horizontal {
+                HorizontalAlignment::Left => 7,
+                HorizontalAlignment::Center => 8,
+                HorizontalAlignment::Right => 9,
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn pack(&self) -> i32 {
+        self.vertical as i32 | self.horizontal as i32
+    }
+}
+
+impl Default for Alignment {
+    fn default() -> Self {
+        Self {
+            vertical: VerticalAlignment::Sub,
+            horizontal: HorizontalAlignment::Center,
+        }
+    }
+}
+
+impl emit::Value for Alignment {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        self.as_an().emit_value(sink)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerticalAlignment {
+    Sub = 0,
+    Center = 4,
+    Top = 8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HorizontalAlignment {
+    Left = 1,
+    Center = 2,
+    Right = 3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1573,6 +1663,36 @@ impl emit::Value for Drawing {
     }
 }
 
+/// See <http://www.tcax.org/docs/ass-specs.htm>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrapStyle {
+    SmartEven = 0,
+    EndOfLine = 1,
+    None = 2,
+    SmartLower = 3,
+}
+
+impl From<i32> for WrapStyle {
+    fn from(value: i32) -> Self {
+        match value {
+            x if x == Self::SmartEven as i32 => Self::SmartEven,
+            x if x == Self::EndOfLine as i32 => Self::EndOfLine,
+            x if x == Self::None as i32 => Self::None,
+            x if x == Self::SmartLower as i32 => Self::SmartLower,
+            _ => Self::SmartEven,
+        }
+    }
+}
+
+impl emit::Value for WrapStyle {
+    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
+    where
+        W: std::fmt::Write,
+    {
+        (*self as i32).emit_value(sink)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1806,10 +1926,10 @@ mod tests {
                 fade_out_start: Milliseconds(500),
                 fade_out_end: Milliseconds(600),
             })),
-            wrap_style: Resettable::Override(subtitle::WrapStyle::SmartEven),
-            alignment: Resettable::Override(subtitle::Alignment {
-                vertical: subtitle::VerticalAlignment::Sub,
-                horizontal: subtitle::HorizontalAlignment::Left,
+            wrap_style: Resettable::Override(WrapStyle::SmartEven),
+            alignment: Resettable::Override(Alignment {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Left,
             }),
             animations: vec![],
         };

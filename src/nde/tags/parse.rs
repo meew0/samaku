@@ -1,10 +1,9 @@
-use crate::nde::tags::{
-    Clip, FontSize, Maybe2D, Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle,
-    Resettable,
-};
 use crate::nde::Span;
-use crate::subtitle::{Alignment, HorizontalAlignment, VerticalAlignment, WrapStyle};
 
+use super::{
+    Alignment, Clip, FontSize, HorizontalAlignment, Maybe2D, Milliseconds, Move, MoveTiming,
+    Position, PositionOrMove, Rectangle, Resettable, VerticalAlignment, WrapStyle,
+};
 use super::{
     Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, Drawing, Fade, FontSizeDelta,
     FontWeight, Global, GlobalAnimatable, KaraokeEffect, Local, LocalAnimatable, SimpleFade,
