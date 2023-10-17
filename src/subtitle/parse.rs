@@ -251,15 +251,15 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     let underline = next_split_bool(&mut split)?;
     let strike_out = next_split_bool(&mut split)?;
 
-    let scale_x = next_split_f64(&mut split)?;
-    let scale_y = next_split_f64(&mut split)?;
+    let scale_x = next_split_f64(&mut split)?.max(0.0) / 100.0;
+    let scale_y = next_split_f64(&mut split)?.max(0.0) / 100.0;
 
-    let spacing = next_split_f64(&mut split)?;
+    let spacing = next_split_f64(&mut split)?.max(0.0);
     let angle = Angle(next_split_f64(&mut split)?);
 
     let border_style = BorderStyle::from(next_split_i32(&mut split)?);
-    let border_width = next_split_f64(&mut split)?;
-    let shadow_distance = next_split_f64(&mut split)?;
+    let border_width = next_split_f64(&mut split)?.max(0.0);
+    let shadow_distance = next_split_f64(&mut split)?.max(0.0);
     let alignment =
         Alignment::try_from_an(next_split_i32(&mut split)?).ok_or(Error::InvalidAlignment)?;
 
@@ -792,8 +792,8 @@ mod tests {
         assert!(!style.italic);
         assert!(!style.underline);
         assert!(!style.strike_out);
-        assert!((style.scale.x - 100.0).abs() < f64::EPSILON);
-        assert!((style.scale.y - 100.0).abs() < f64::EPSILON);
+        assert!((style.scale.x - 1.0).abs() < f64::EPSILON);
+        assert!((style.scale.y - 1.0).abs() < f64::EPSILON);
         assert!((style.spacing - 0.0).abs() < f64::EPSILON);
         assert_eq!(style.angle, Angle(0.0));
         assert_eq!(style.border_style, BorderStyle::Default);
