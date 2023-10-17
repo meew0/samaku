@@ -48,6 +48,10 @@ pub enum Message {
     /// other metadata intact.
     OpenSubtitleFile,
 
+    /// Save subtitle file — storing slines as they are represented internally, with NDE filters
+    /// reproduced intact as extradata
+    SaveSubtitleFile,
+
     /// A video file has been selected and should be loaded.
     VideoFileSelected(std::path::PathBuf),
 

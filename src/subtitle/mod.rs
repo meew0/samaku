@@ -6,10 +6,13 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Index, IndexMut};
 
+pub use emit::emit;
+
 use crate::nde::tags::{Alignment, Colour, Transparency, WrapStyle};
 use crate::{media, message, nde};
 
 pub mod compile;
+mod emit;
 pub mod parse;
 
 /// An `Sline` (“samaku line”/“subtitle line”/“sign or line”/etc.),

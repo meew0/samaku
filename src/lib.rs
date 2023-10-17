@@ -23,6 +23,7 @@ pub mod pane;
 pub mod resources;
 pub mod style;
 pub mod subtitle;
+pub mod version;
 pub mod view;
 pub mod workers;
 
@@ -342,6 +343,24 @@ impl Application for Samaku {
                         });
                     }
                 }
+            }
+            Self::Message::SaveSubtitleFile => {
+                let mut data = String::new();
+                subtitle::emit(
+                    &mut data,
+                    &self.script_info,
+                    &self.subtitles,
+                    &self.side_data,
+                )
+                .unwrap();
+
+                let future = async {
+                    if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
+                        smol::fs::write(handle.path(), data).await.unwrap();
+                    }
+                };
+
+                return Command::perform(future, |_| Self::Message::None);
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
                 self.actual_frame = Some((new_frame, handle));

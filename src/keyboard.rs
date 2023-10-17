@@ -15,6 +15,7 @@ pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Opti
         KeyCode::B => Some(Message::ImportSubtitleFile),
         KeyCode::N => Some(Message::SelectAudioFile),
         KeyCode::O => Some(Message::OpenSubtitleFile),
+        KeyCode::S => Some(Message::SaveSubtitleFile),
         KeyCode::Comma => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(-1))),
         KeyCode::Period => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(1))),
         KeyCode::Left => Some(Message::PlaybackAdvanceSeconds(-1.0)),
