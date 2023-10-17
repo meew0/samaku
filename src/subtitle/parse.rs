@@ -12,8 +12,8 @@ use crate::{nde, subtitle};
 
 use super::{
     Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, EventType, Extradata,
-    ExtradataEntry, JustifyMode, Margins, Scale, ScriptInfo, SideData, Sline, SlineTrack,
-    StartTime, Style, YCbCrMatrix,
+    ExtradataEntry, ExtradataId, JustifyMode, Margins, Scale, ScriptInfo, SideData, Sline,
+    SlineTrack, StartTime, Style, YCbCrMatrix,
 };
 
 /// Parse the given stream of lines into an [`AssFile`].
@@ -151,14 +151,13 @@ pub async fn parse(
     let subtitles = SlineTrack {
         slines,
         styles,
-        filters: vec![],
+        extradata,
     };
 
     Ok(AssFile {
         subtitles,
         side_data: SideData {
             script_info,
-            extradata,
             aegi_metadata,
             attachments,
             other_sections: opaque_sections,
@@ -333,7 +332,7 @@ fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
     // Aegisub only trims the event text at its end. We match that behaviour, because why not.
     let mut text = next_split_trim::<false>(&mut split)?;
 
-    let mut extradata_ids: Vec<usize> = vec![];
+    let mut extradata_ids: Vec<ExtradataId> = vec![];
 
     if text.starts_with("{=") {
         if let Some((new_extradata_ids, after)) = parse_extradata_references(text) {
@@ -357,7 +356,6 @@ fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
         effect,
         event_type,
         extradata_ids,
-        nde_filter_index: None,
     };
 
     Ok((new_sline, style))
@@ -430,7 +428,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
 
     if let Some(captures) = extradata_regex.captures(line) {
         let id_str = captures.get(1).unwrap().as_str();
-        let Ok(id) = id_str.parse::<u32>() else {
+        let Ok(id_num) = id_str.parse::<u32>() else {
             println!("invalid extradata ID: {id_str}");
             return; // ignore
         };
@@ -447,9 +445,16 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
             String::new()
         };
 
-        extradata.next_id = extradata.next_id.max(id + 1);
-        extradata.entries.insert(id, ExtradataEntry { key, value });
+        extradata.next_id = extradata.next_id.max(ExtradataId(id_num + 1));
+        extradata
+            .entries
+            .insert(ExtradataId(id_num), parse_extradata_entry(key, value));
     }
+}
+
+fn parse_extradata_entry(key: String, value: String) -> ExtradataEntry {
+    // TODO: deserialise NDE filters
+    ExtradataEntry::Opaque { key, value }
 }
 
 fn parse_attachment_header(
@@ -497,13 +502,11 @@ fn attachment_add_data(line: &str, attachment: &mut Attachment) {
     attachment.data.extend_from_slice(line.as_bytes());
 }
 
-fn parse_extradata_references(text: &str) -> Option<(Vec<usize>, usize)> {
+fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
     let mut res = vec![];
     let mut match_start: Option<usize> = None;
 
     for (i, char) in text.char_indices() {
-        println!("{i} {char} {match_start:?}");
-
         if i == 0 {
             if char == '{' {
                 continue;
@@ -515,7 +518,7 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<usize>, usize)> {
         match char {
             '=' => {
                 if let Some(match_start) = match_start.take() {
-                    res.push(text[match_start..i].parse::<usize>().unwrap());
+                    res.push(ExtradataId(text[match_start..i].parse::<u32>().unwrap()));
                 } else if i != 1 {
                     // Double `=` are not allowed
                     return None;
@@ -531,7 +534,7 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<usize>, usize)> {
             }
             '}' => {
                 return if let Some(match_start) = match_start.take() {
-                    res.push(text[match_start..i].parse::<usize>().unwrap());
+                    res.push(ExtradataId(text[match_start..i].parse::<u32>().unwrap()));
                     Some((res, i + 1))
                 } else {
                     // Empty block
@@ -779,7 +782,10 @@ mod tests {
         assert_eq!(sline.margins.left, 1);
         assert_eq!(sline.margins.right, 2);
         assert_eq!(sline.margins.vertical, 3);
-        assert_eq!(sline.extradata_ids.as_slice(), &[8, 10]);
+        assert_eq!(
+            sline.extradata_ids.as_slice(),
+            &[ExtradataId(8), ExtradataId(10)]
+        );
         assert_eq!(sline.actor, "");
         assert_eq!(sline.effect, "");
         assert_eq!(sline.text, r"{\fs100}asdhasjkldhsajk");
@@ -822,12 +828,13 @@ mod tests {
     fn extradata_line() {
         let mut extradata = Extradata::new();
         parse_extradata_line("Data: 2,_aegi_perspective_ambient_plane,e249.07;213.54#7C2170.22;302.89#7C2209.38;1199.91#7C-158.29;1040.20", &mut extradata);
-        assert_eq!(extradata.next_id, 3);
+        assert_eq!(extradata.next_id, ExtradataId(3));
 
-        let entry = extradata.entries.get(&2_u32).unwrap();
-        assert_eq!(entry.key, "_aegi_perspective_ambient_plane");
+        let entry = &extradata[ExtradataId(2)];
+        assert_matches!(entry, ExtradataEntry::Opaque { key, value });
+        assert_eq!(key, "_aegi_perspective_ambient_plane");
         assert_eq!(
-            entry.value,
+            value,
             "249.07;213.54|2170.22;302.89|2209.38;1199.91|-158.29;1040.20"
         );
     }
@@ -838,16 +845,16 @@ mod tests {
         assert_matches!(parse_extradata_references("{=}a"), None);
         assert_matches!(parse_extradata_references("{1}a"), None);
         assert_matches!(parse_extradata_references("{=1}a"), Some((e, after)));
-        assert_eq!(e.as_slice(), &[1]);
+        assert_eq!(e.as_slice(), &[ExtradataId(1)]);
         assert_eq!(after, 4);
         assert_matches!(parse_extradata_references("{=1=2}a"), Some((e, after)));
-        assert_eq!(e.as_slice(), &[1, 2]);
+        assert_eq!(e.as_slice(), &[ExtradataId(1), ExtradataId(2)]);
         assert_eq!(after, 6);
         assert_matches!(
             parse_extradata_references("{=1234567890}a"),
             Some((e, after))
         );
-        assert_eq!(e.as_slice(), &[1_234_567_890]);
+        assert_eq!(e.as_slice(), &[ExtradataId(1_234_567_890)]);
         assert_eq!(after, 13);
         assert_matches!(parse_extradata_references("{==1}a"), None);
         assert_matches!(parse_extradata_references("{=1=2"), None);

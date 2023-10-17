@@ -20,7 +20,7 @@ pub struct State {
 impl State {
     pub fn update_filter_names(&mut self, subtitles: &subtitle::SlineTrack) {
         self.filters.clear();
-        for (i, filter) in subtitles.filters.iter().enumerate() {
+        for (i, filter) in subtitles.extradata.iter_filters() {
             self.filters.push(FilterReference {
                 name: filter.name.clone(),
                 index: i,
@@ -56,7 +56,7 @@ impl Default for State {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FilterReference {
     pub name: String,
-    pub index: usize,
+    pub index: subtitle::ExtradataId,
 }
 
 impl Display for FilterReference {
@@ -113,11 +113,12 @@ pub fn view<'a>(
         Some(active_sline_index) => {
             // There is an active sline, check whether it has an NDE filter
             let active_sline = &global_state.subtitles.slines[active_sline_index];
-            match active_sline.nde_filter_index {
-                Some(nde_filter_index) => {
-                    // It has an NDE filter
-                    let nde_filter = &global_state.subtitles.filters[nde_filter_index];
-
+            match &global_state
+                .subtitles
+                .extradata
+                .nde_filter_for_sline(active_sline)
+            {
+                Some(nde_filter) => {
                     // Before doing much of anything else, we need to run the NDE filter —
                     // not to get the output events, but for the intermediate state,
                     // which lets us determine what style to draw nodes in, as well as provide

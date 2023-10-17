@@ -239,7 +239,6 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
         effect: string_from_libass(raw_event.Effect).unwrap_or_default(),
         event_type: EventType::Dialogue,
         extradata_ids: vec![],
-        nde_filter_index: None,
     }
 }
 

@@ -102,18 +102,20 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
             ColumnField::SelectButton => iced::widget::button(" ")
                 .on_press(message::Message::SelectSline(row_index))
                 .into(),
-            ColumnField::FilterName => iced::widget::text(match row.nde_filter_index {
-                Some(index) => {
-                    let stored_name = &self.0.subtitles.filters[index].name;
-                    if stored_name.is_empty() {
-                        "(unnamed filter)"
-                    } else {
-                        stored_name
+            ColumnField::FilterName => {
+                iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_sline(row) {
+                    Some(filter) => {
+                        let stored_name = &filter.name;
+                        if stored_name.is_empty() {
+                            "(unnamed filter)"
+                        } else {
+                            stored_name
+                        }
                     }
-                }
-                None => "",
-            })
-            .into(),
+                    None => "",
+                })
+                .into()
+            }
             ColumnField::Start => iced::widget::text(format!("{}", row.start.0)).into(),
             ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
             ColumnField::Text => iced::widget::text(row.text.to_string()).into(),

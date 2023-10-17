@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, model, nde, pane, view};
+use crate::{media, model, nde, pane, subtitle, view};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -83,10 +83,10 @@ pub enum Message {
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,
-    AssignFilterToActiveSline(usize),
+    AssignFilterToActiveSline(subtitle::ExtradataId),
     UnassignFilterFromActiveSline,
     SetActiveFilterName(String),
-    DeleteFilter(usize), // NYI
+    DeleteFilter(subtitle::ExtradataId), // NYI
 
     // Create and update nodes in the current NDE filter.
     AddNode(nde::node::Constructor),

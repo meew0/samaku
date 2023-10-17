@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::ops::{Index, IndexMut};
 
 use crate::nde::tags::{Alignment, Colour, Transparency, WrapStyle};
 use crate::{media, message, nde};
@@ -49,15 +50,27 @@ pub struct Sline {
     pub event_type: EventType,
 
     /// Extradata entries referenced by this line.
-    pub extradata_ids: Vec<usize>,
-
-    pub nde_filter_index: Option<usize>,
+    pub extradata_ids: Vec<ExtradataId>,
 }
 
 impl Sline {
     #[must_use]
     pub fn end(&self) -> StartTime {
         StartTime(self.start.0 + self.duration.0)
+    }
+
+    /// Unassigns the NDE filter from this sline, if one is assigned. Otherwise, nothing will
+    /// happen.
+    pub fn unassign_nde_filter(&mut self, extradata: &Extradata) {
+        self.extradata_ids
+            .retain(|id| !matches!(extradata[*id], ExtradataEntry::NdeFilter(_)));
+    }
+
+    /// Assign an NDE filter to this sline, unassigning the previously assigned filter, if one
+    /// existed.
+    pub fn assign_nde_filter(&mut self, id: ExtradataId, extradata: &Extradata) {
+        self.unassign_nde_filter(extradata);
+        self.extradata_ids.push(id);
     }
 }
 
@@ -153,15 +166,15 @@ pub fn unpack_colour_and_transparency_rgbt(packed: u32) -> (Colour, Transparency
 #[must_use]
 pub fn unpack_colour_and_transparency_tbgr(packed: u32) -> (Colour, Transparency) {
     #[allow(clippy::unreadable_literal)]
-        let colour = Colour {
+    let colour = Colour {
         red: (packed & 0x000000ff) as u8,
         green: ((packed & 0x0000ff00) >> 8) as u8,
         blue: ((packed & 0x00ff0000) >> 16) as u8,
     };
     #[allow(clippy::unreadable_literal)]
-        #[allow(clippy::cast_possible_wrap)]
-        let transparency = Transparency(((packed & 0xff000000) >> 24) as i32);
-    
+    #[allow(clippy::cast_possible_wrap)]
+    let transparency = Transparency(((packed & 0xff000000) >> 24) as i32);
+
     (colour, transparency)
 }
 
@@ -284,7 +297,7 @@ pub struct Style {
 pub struct SlineTrack {
     pub slines: Vec<Sline>,
     pub styles: Vec<Style>,
-    pub filters: Vec<nde::Filter>,
+    pub extradata: Extradata,
 }
 
 impl SlineTrack {
@@ -313,11 +326,8 @@ impl SlineTrack {
 
     #[must_use]
     pub fn active_nde_filter(&self, active_sline_index: Option<usize>) -> Option<&nde::Filter> {
-        match self.active_sline(active_sline_index) {
-            Some(active_sline) => match active_sline.nde_filter_index {
-                Some(nde_filter_index) => Some(&self.filters[nde_filter_index]),
-                None => None,
-            },
+        match active_sline_index.map(|index| &self.slines[index]) {
+            Some(active_sline) => self.extradata.nde_filter_for_sline(active_sline),
             None => None,
         }
     }
@@ -327,11 +337,8 @@ impl SlineTrack {
         &mut self,
         active_sline_index: Option<usize>,
     ) -> Option<&mut nde::Filter> {
-        match self.active_sline(active_sline_index) {
-            Some(active_sline) => match active_sline.nde_filter_index {
-                Some(nde_filter_index) => Some(&mut self.filters[nde_filter_index]),
-                None => None,
-            },
+        match active_sline_index.map(|index| &self.slines[index]) {
+            Some(active_sline) => self.extradata.nde_filter_for_sline_mut(active_sline),
             None => None,
         }
     }
@@ -362,10 +369,9 @@ impl SlineTrack {
         let mut compiled: Vec<CompiledEvent> = vec![];
 
         for sline in &self.slines {
-            match sline.nde_filter_index {
-                Some(filter_index) => {
-                    let graph = &self.filters[filter_index].graph;
-                    match compile::nde(sline, graph, frame_rate, &mut counter) {
+            match self.extradata.nde_filter_for_sline(sline) {
+                Some(filter) => {
+                    match compile::nde(sline, &filter.graph, frame_rate, &mut counter) {
                         Ok(mut nde_result) => match &mut nde_result.events {
                             Some(events) => compiled.append(events),
                             None => println!("No output from NDE filter"),
@@ -418,29 +424,118 @@ pub struct AssFile {
 
 pub struct SideData {
     script_info: ScriptInfo,
-    extradata: Extradata,
     aegi_metadata: HashMap<String, String>,
     attachments: Vec<Attachment>,
     other_sections: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExtradataId(u32);
+
+#[derive(Debug, Default)]
 pub struct Extradata {
-    entries: BTreeMap<u32, ExtradataEntry>,
-    next_id: u32,
+    entries: BTreeMap<ExtradataId, ExtradataEntry>,
+    next_id: ExtradataId,
 }
+
+pub type IterFilters<'a> = std::iter::FilterMap<
+    std::collections::btree_map::Iter<'a, ExtradataId, ExtradataEntry>,
+    fn((&'a ExtradataId, &'a ExtradataEntry)) -> Option<(ExtradataId, &'a nde::Filter)>,
+>;
 
 impl Extradata {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Append a new extradata entry. Returns the newly created ID of the appended entry.
+    pub fn push(&mut self, entry: ExtradataEntry) -> ExtradataId {
+        let new_id = self.next_id;
+        self.entries.insert(new_id, entry);
+        self.next_id = ExtradataId(new_id.0 + 1);
+
+        new_id
+    }
+
+    /// Append a new filter. Returns the newly created extradata ID.
+    pub fn push_filter(&mut self, filter: nde::Filter) -> ExtradataId {
+        self.push(ExtradataEntry::NdeFilter(filter))
+    }
+
+    /// Iterate over all existing NDE filters with their indices.
+    pub fn iter_filters(&self) -> IterFilters {
+        self.entries
+            .iter()
+            .filter_map(|(index, entry)| match entry {
+                ExtradataEntry::NdeFilter(filter) => Some((*index, filter)),
+                _ => None,
+            })
+    }
+
+    /// Returns the assigned NDE filter for a given sline, if one exists.
+    #[must_use]
+    pub fn nde_filter_for_sline(&self, sline: &Sline) -> Option<&nde::Filter> {
+        for extradata_id in &sline.extradata_ids {
+            if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
+                return Some(filter);
+            }
+        }
+
+        return None;
+    }
+
+    /// Get a mutable reference to the NDE filter assigned to the given sline, if one is assigned.
+    ///
+    /// # Panics
+    /// This function should never panic in safe operation.
+    #[must_use]
+    pub fn nde_filter_for_sline_mut(&mut self, sline: &Sline) -> Option<&mut nde::Filter> {
+        // We have to implement it in this roundabout way because of borrow checker limitations;
+        // if we simply return the filter reference in the loop, the borrow checker cannot prove
+        // that the mutable reference is unique.
+        let mut maybe_filter_id: Option<ExtradataId> = None;
+        for extradata_id in &sline.extradata_ids {
+            if let ExtradataEntry::NdeFilter(_) = &self[*extradata_id] {
+                maybe_filter_id = Some(*extradata_id);
+                break;
+            }
+        }
+
+        let Some(filter_id) = maybe_filter_id else {
+            return None;
+        };
+
+        let ExtradataEntry::NdeFilter(filter) = &mut self[filter_id] else {
+            panic!();
+        };
+
+        Some(filter)
+    }
 }
 
-#[derive(Debug, Clone)]
-pub struct ExtradataEntry {
-    key: String,
-    value: String,
+impl Index<ExtradataId> for Extradata {
+    type Output = ExtradataEntry;
+
+    fn index(&self, id: ExtradataId) -> &ExtradataEntry {
+        self.entries
+            .get(&id)
+            .unwrap_or_else(|| panic!("Tried to get non-existent extradata entry with {id:?}"))
+    }
+}
+
+impl IndexMut<ExtradataId> for Extradata {
+    fn index_mut(&mut self, id: ExtradataId) -> &mut ExtradataEntry {
+        self.entries
+            .get_mut(&id)
+            .unwrap_or_else(|| panic!("Tried to get_mut non-existent extradata entry with {id:?}"))
+    }
+}
+
+#[derive(Debug)]
+pub enum ExtradataEntry {
+    NdeFilter(nde::Filter),
+    Opaque { key: String, value: String },
 }
 
 #[derive(Debug, Clone)]

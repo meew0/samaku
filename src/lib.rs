@@ -343,7 +343,6 @@ impl Application for Samaku {
                     effect: String::new(),
                     event_type: subtitle::EventType::Dialogue,
                     extradata_ids: vec![],
-                    nde_filter_index: None,
                 };
                 self.subtitles.slines.push(new_sline);
             }
@@ -354,22 +353,26 @@ impl Application for Samaku {
                 }
             }
             Self::Message::CreateEmptyFilter => {
-                self.subtitles.filters.push(nde::Filter {
+                self.subtitles.extradata.push_filter(nde::Filter {
                     name: String::new(),
                     graph: nde::graph::Graph::identity(),
                 });
                 self.update_filter_lists();
             }
             Self::Message::AssignFilterToActiveSline(filter_index) => {
-                if let Some(active_sline) = self.subtitles.active_sline_mut(self.active_sline_index)
+                if let Some(active_sline) = self
+                    .active_sline_index
+                    .map(|index| &mut self.subtitles.slines[index])
                 {
-                    active_sline.nde_filter_index = Some(filter_index);
+                    active_sline.assign_nde_filter(filter_index, &self.subtitles.extradata);
                 }
             }
             Self::Message::UnassignFilterFromActiveSline => {
-                if let Some(active_sline) = self.subtitles.active_sline_mut(self.active_sline_index)
+                if let Some(active_sline) = self
+                    .active_sline_index
+                    .map(|index| &mut self.subtitles.slines[index])
                 {
-                    active_sline.nde_filter_index = None;
+                    active_sline.unassign_nde_filter(&self.subtitles.extradata);
                 }
             }
             Self::Message::SetActiveFilterName(new_name) => {
