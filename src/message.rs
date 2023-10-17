@@ -117,7 +117,6 @@ pub enum Message {
 
 impl Message {
     /// Returns a function that maps Some(x) to some message, and None to Message::None.
-    #[must_use]
     pub fn map_option<A, F1: FnOnce(A) -> Self>(f1: F1) -> impl FnOnce(Option<A>) -> Self {
         |a_opt| match a_opt {
             Some(a) => f1(a),
@@ -126,7 +125,6 @@ impl Message {
     }
 
     /// Returns a function that maps Ok(x) to some message, and Err(y) to some other message.
-    #[must_use]
     pub fn map_result<A, B, F1: FnOnce(A) -> Self, F2: FnOnce(B) -> Self>(
         f_ok: F1,
         f_err: F2,
