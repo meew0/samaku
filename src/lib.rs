@@ -198,7 +198,7 @@ impl Application for Samaku {
     }
 
     fn title(&self) -> String {
-        String::from("samaku")
+        format!("samaku {}", version::Long)
     }
 
     /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
