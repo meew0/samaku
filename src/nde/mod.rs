@@ -9,7 +9,7 @@ pub mod graph;
 pub mod node;
 pub mod tags;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Filter {
     pub name: String,
     pub graph: Graph,
@@ -151,5 +151,53 @@ impl Span {
     /// Returns `true` if this `Span` is `Reset` or `ResetToStyle`.
     fn is_reset(&self) -> bool {
         matches!(self, Self::Reset | Self::ResetToStyle(_))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serde() {
+        let mut graph = Graph::from_single_intermediate(Box::new(node::ClipRectangle {}));
+        graph.nodes.push(graph::VisualNode {
+            node: Box::new(node::InputRectangle {
+                value: tags::Rectangle {
+                    x1: 100,
+                    y1: 200,
+                    x2: 300,
+                    y2: 400,
+                },
+            }),
+            position: iced::Point::new(0.0, 400.0),
+        });
+
+        graph.connections.insert(
+            graph::NextEndpoint {
+                node_index: 1,
+                socket_index: 1,
+            },
+            graph::PreviousEndpoint {
+                node_index: 3,
+                socket_index: 0,
+            },
+        );
+
+        let filter = Filter {
+            graph,
+            name: "test filter".to_string(),
+        };
+
+        let mut data: Vec<u8> = vec![];
+        ciborium::into_writer(&filter, &mut data).unwrap();
+        println!("serialised filter: {data:02x?}");
+
+        let deserialised_filter = ciborium::from_reader::<Filter, _>(data.as_slice()).unwrap();
+        assert_eq!(deserialised_filter.graph.nodes.len(), 4);
+        assert_eq!(
+            deserialised_filter.graph.nodes[3].position,
+            iced::Point::new(0.0, 400.0)
+        );
     }
 }

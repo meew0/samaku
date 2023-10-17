@@ -2,9 +2,10 @@ use crate::nde;
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Gradient {}
 
+#[typetag::serde]
 impl Node for Gradient {
     fn name(&self) -> &'static str {
         "Gradient"

@@ -2,10 +2,11 @@ use crate::nde;
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug)]
-pub struct Rectangle {}
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ClipRectangle {}
 
-impl Node for Rectangle {
+#[typetag::serde]
+impl Node for ClipRectangle {
     fn name(&self) -> &'static str {
         "Rectangular clip"
     }
@@ -33,6 +34,6 @@ impl Node for Rectangle {
 inventory::submit! {
     Shell::new(
         &["Clip", "Rectangular"],
-        || Box::new(Rectangle {})
+        || Box::new(ClipRectangle {})
     )
 }

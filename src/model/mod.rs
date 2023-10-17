@@ -4,11 +4,11 @@ pub mod playback;
 pub mod reticule;
 
 /// Identifies a video frame by number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FrameNumber(pub i32);
 
 /// A difference in counted video frames.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FrameDelta(pub i32);
 
 impl Add<FrameDelta> for FrameNumber {

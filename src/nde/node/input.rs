@@ -2,10 +2,11 @@ use crate::{message, model, nde};
 
 use super::{Error, LeafInputType, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug, Clone)]
-pub struct Sline {}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InputSline {}
 
-impl Node for Sline {
+#[typetag::serde]
+impl Node for InputSline {
     fn name(&self) -> &'static str {
         "Input: Subtitle line"
     }
@@ -42,14 +43,15 @@ impl Node for Sline {
 inventory::submit! {
     Shell::new(
         &["Input", "Subtitle line"],
-        || Box::new(Sline {})
+        || Box::new(InputSline {})
     )
 }
 
-#[derive(Debug, Clone)]
-pub struct FrameRate {}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InputFrameRate {}
 
-impl Node for FrameRate {
+#[typetag::serde]
+impl Node for InputFrameRate {
     fn name(&self) -> &'static str {
         "Input: Frame rate"
     }
@@ -71,16 +73,17 @@ impl Node for FrameRate {
 inventory::submit! {
     Shell::new(
         &["Input", "Frame rate"],
-        || Box::new(FrameRate {})
+        || Box::new(InputFrameRate {})
     )
 }
 
-#[derive(Debug, Clone)]
-pub struct Position {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InputPosition {
     pub value: nde::tags::Position,
 }
 
-impl Node for Position {
+#[typetag::serde]
+impl Node for InputPosition {
     fn name(&self) -> &'static str {
         "Input: Position"
     }
@@ -143,7 +146,7 @@ impl Node for Position {
 inventory::submit! {
     Shell::new(
         &["Input", "Position"],
-        || Box::new(Position {
+        || Box::new(InputPosition {
             value: nde::tags::Position {
                 x: 100.0,
                 y: 100.0,
@@ -152,12 +155,12 @@ inventory::submit! {
     )
 }
 
-#[derive(Debug, Clone)]
-pub struct Rectangle {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InputRectangle {
     pub value: nde::tags::Rectangle,
 }
 
-impl Rectangle {
+impl InputRectangle {
     fn reticule_update_internal(&self, reticules: &mut [model::reticule::Reticule]) {
         reticules[0].position = nde::tags::Position {
             x: f64::from(self.value.x1),
@@ -178,7 +181,8 @@ impl Rectangle {
     }
 }
 
-impl Node for Rectangle {
+#[typetag::serde]
+impl Node for InputRectangle {
     fn name(&self) -> &'static str {
         "Input: Rectangle"
     }
@@ -285,7 +289,7 @@ impl Node for Rectangle {
 inventory::submit! {
     Shell::new(
         &["Input", "Rectangle"],
-        || Box::new(Rectangle {
+        || Box::new(InputRectangle {
             value: nde::tags::Rectangle {
                 x1: 100,
                 y1: 100,
@@ -296,12 +300,13 @@ inventory::submit! {
     )
 }
 
-#[derive(Debug, Clone)]
-pub struct Tags {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InputTags {
     pub value: String,
 }
 
-impl Node for Tags {
+#[typetag::serde]
+impl Node for InputTags {
     fn name(&self) -> &'static str {
         "Input: Tags"
     }
@@ -361,7 +366,7 @@ impl Node for Tags {
 inventory::submit! {
     Shell::new(
         &["Input", "Tags"],
-        || Box::new(Tags {
+        || Box::new(InputTags {
             value: String::new()
         })
     )

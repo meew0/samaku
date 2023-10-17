@@ -2,9 +2,10 @@ use crate::nde;
 
 use super::{Error, Node, SocketType, SocketValue};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Output {}
 
+#[typetag::serde]
 impl Node for Output {
     fn name(&self) -> &'static str {
         "Output"

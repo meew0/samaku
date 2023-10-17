@@ -4,12 +4,13 @@ use crate::{media, message, model, nde};
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
     pub region_center: nde::tags::Position,
     pub track: HashMap<model::FrameNumber, media::motion::Region>,
 }
 
+#[typetag::serde]
 impl Node for MotionTrack {
     fn name(&self) -> &'static str {
         "Motion track"

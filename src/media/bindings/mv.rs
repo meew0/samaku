@@ -102,7 +102,7 @@ impl<'a> MonochromeImage<'a> {
 }
 
 /// Indexed in pixels from the top left, may have fractional precision.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -120,7 +120,7 @@ impl Point {
 
 /// Essentially what is shown as a “marker” in Blender's motion tracking UI,
 /// with four corners and a center.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Region {
     pub top_left: Point,
     pub top_right: Point,

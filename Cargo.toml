@@ -24,6 +24,9 @@ fast-float = "0.2"
 thiserror = "1.0"
 inventory = "0.3.12"
 regex = "1.10.1"
+serde = "1.0.189"
+typetag = "0.2.13"
+ciborium = "0.2.1"
 
 [dev-dependencies]
 assert_matches2 = "0.1"

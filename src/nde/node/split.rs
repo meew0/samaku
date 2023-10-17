@@ -2,10 +2,11 @@ use crate::{model, nde, subtitle};
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug)]
-pub struct FrameByFrame {}
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct SplitFrameByFrame {}
 
-impl Node for FrameByFrame {
+#[typetag::serde]
+impl Node for SplitFrameByFrame {
     fn name(&self) -> &'static str {
         "Split frame by frame"
     }
@@ -49,6 +50,6 @@ impl Node for FrameByFrame {
 inventory::submit! {
     Shell::new(
         &["Split", "Frame by frame"],
-        || Box::new(FrameByFrame {})
+        || Box::new(SplitFrameByFrame {})
     )
 }

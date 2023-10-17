@@ -714,7 +714,7 @@ impl emit::Tag for PositionOrMove {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
@@ -1665,7 +1665,7 @@ impl<T: emit::Value> emit::Tag for Clip<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Rectangle {
     pub x1: i32,
     pub y1: i32,

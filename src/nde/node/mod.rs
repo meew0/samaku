@@ -1,16 +1,21 @@
+// `typetag` for (de)serialising trait objects requires that every struct that implements `Node`
+// must have a unique name. So even if it would lead to more concise code, we can't have the
+// individual node structs be named e.g. `clip::Rectangle` and `input::Rectangle`.
+#![allow(clippy::module_name_repetitions)]
+
 use std::fmt::Debug;
 
-pub use clip::Rectangle as ClipRectangle;
+pub use clip::ClipRectangle;
 pub use gradient::Gradient;
-pub use input::FrameRate as InputFrameRate;
-pub use input::Position as InputPosition;
-pub use input::Rectangle as InputRectangle;
-pub use input::Sline as InputSline;
-pub use input::Tags as InputTags;
+pub use input::InputFrameRate;
+pub use input::InputPosition;
+pub use input::InputRectangle;
+pub use input::InputSline;
+pub use input::InputTags;
 pub use motion_track::MotionTrack;
 pub use output::Output;
 pub use positioning::SetPosition;
-pub use split::FrameByFrame as SplitFrameByFrame;
+pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
 use crate::{media, message, model, nde, subtitle};
@@ -171,6 +176,7 @@ pub enum LeafInputType {
     FrameRate,
 }
 
+#[typetag::serde(tag = "type")]
 pub trait Node: Debug {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
