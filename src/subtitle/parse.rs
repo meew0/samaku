@@ -124,7 +124,7 @@ pub async fn parse(
                 parse_aegi_metadata_line(line, &mut aegi_metadata);
             }
             ParseState::Extradata => {
-                parse_extradata_line(line, &mut extradata);
+                parse_extradata_line(line, &mut extradata)?;
             }
             ParseState::Graphics => {
                 current_attachment =
@@ -213,6 +213,18 @@ pub enum Error {
 
     #[error("Style mentioned in event does not exist: {0}")]
     UnmatchedStyle(String),
+
+    #[error("Invalid NDE filter format identifier: {0:?}")]
+    InvalidNdeFilterFormat(Option<char>),
+
+    #[error("Failed to decode base64 data for NDE filter: {0}")]
+    NdeFilterBase64DecodeError(data_encoding::DecodeError),
+
+    #[error("Failed to decompress NDE filter: {0}")]
+    NdeFilterDecompressError(miniz_oxide::inflate::DecompressError),
+
+    #[error("Failed to deserialise NDE filter: {0}")]
+    NdeFilterDeserialiseError(String),
 }
 
 fn parse_style_line(line: &str) -> Result<Style, Error> {
@@ -422,7 +434,7 @@ fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, Stri
 
 static EXTRADATA_REGEX: OnceCell<Regex> = OnceCell::new();
 
-fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
+fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Error> {
     let extradata_regex = EXTRADATA_REGEX
         .get_or_init(|| Regex::new("Data:[[:space:]]*(\\d+),([^,]+),(.)(.*)").unwrap());
 
@@ -430,7 +442,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id_num) = id_str.parse::<u32>() else {
             println!("invalid extradata ID: {id_str}");
-            return; // ignore
+            return Ok(()); // ignore
         };
 
         let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
@@ -448,13 +460,33 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) {
         extradata.next_id = extradata.next_id.max(ExtradataId(id_num + 1));
         extradata
             .entries
-            .insert(ExtradataId(id_num), parse_extradata_entry(key, value));
+            .insert(ExtradataId(id_num), parse_extradata_entry(key, value)?);
     }
+
+    Ok(())
 }
 
-fn parse_extradata_entry(key: String, value: String) -> ExtradataEntry {
-    // TODO: deserialise NDE filters
-    ExtradataEntry::Opaque { key, value }
+fn parse_extradata_entry(key: String, value: String) -> Result<ExtradataEntry, Error> {
+    if key == "_samaku_nde_filter" {
+        let first_char = value.chars().next();
+        if first_char == Some('1') {
+            let base64 = &value.as_bytes()[1..];
+            let decoded = data_encoding::BASE64
+                .decode(base64)
+                .map_err(Error::NdeFilterBase64DecodeError)?;
+            let decompressed =
+                miniz_oxide::inflate::decompress_to_vec_with_limit(decoded.as_slice(), 1_000_000)
+                    .map_err(Error::NdeFilterDecompressError)?;
+            let filter = ciborium::from_reader::<nde::Filter, _>(decompressed.as_slice())
+                .map_err(|de_error| Error::NdeFilterDeserialiseError(format!("{de_error:?}")))?;
+
+            Ok(ExtradataEntry::NdeFilter(filter))
+        } else {
+            Err(Error::InvalidNdeFilterFormat(first_char))
+        }
+    } else {
+        Ok(ExtradataEntry::Opaque { key, value })
+    }
 }
 
 fn parse_attachment_header(
@@ -687,6 +719,13 @@ mod tests {
             AttachmentType::Graphic
         );
 
+        let sline5 = &ass_file.subtitles.slines[5];
+        assert_matches!(
+            ass_file.subtitles.extradata.nde_filter_for_sline(sline5),
+            Some(filter)
+        );
+        assert_eq!(filter.graph.nodes.len(), 4);
+
         Ok(())
     }
 
@@ -827,7 +866,7 @@ mod tests {
     #[test]
     fn extradata_line() {
         let mut extradata = Extradata::new();
-        parse_extradata_line("Data: 2,_aegi_perspective_ambient_plane,e249.07;213.54#7C2170.22;302.89#7C2209.38;1199.91#7C-158.29;1040.20", &mut extradata);
+        parse_extradata_line("Data: 2,_aegi_perspective_ambient_plane,e249.07;213.54#7C2170.22;302.89#7C2209.38;1199.91#7C-158.29;1040.20", &mut extradata).unwrap();
         assert_eq!(extradata.next_id, ExtradataId(3));
 
         let entry = &extradata[ExtradataId(2)];

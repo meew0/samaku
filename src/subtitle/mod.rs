@@ -465,6 +465,7 @@ impl Extradata {
 
     /// Iterate over all existing NDE filters with their indices.
     pub fn iter_filters(&self) -> IterFilters {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         self.entries
             .iter()
             .filter_map(|(index, entry)| match entry {
@@ -482,7 +483,7 @@ impl Extradata {
             }
         }
 
-        return None;
+        None
     }
 
     /// Get a mutable reference to the NDE filter assigned to the given sline, if one is assigned.
