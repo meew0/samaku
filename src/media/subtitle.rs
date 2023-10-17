@@ -20,7 +20,12 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to parse the data.
     pub fn parse(data: &String) -> OpaqueTrack {
-        let track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
+        let mut track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
+
+        println!("events: {:#?}", track.events());
+        println!("styles: {:#?}", track.styles());
+
+        track.events_mut()[0].Style = 0;
 
         OpaqueTrack { internal: track }
     }
@@ -47,7 +52,9 @@ impl OpaqueTrack {
 
         for style in styles {
             track.alloc_style();
-            *track.styles_mut().last_mut().unwrap() = ass::style_to_raw(style);
+            let raw_style = ass::style_to_raw(style);
+            println!("{raw_style:?}");
+            *track.styles_mut().last_mut().unwrap() = raw_style;
         }
 
         OpaqueTrack { internal: track }

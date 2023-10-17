@@ -707,6 +707,16 @@ mod tests {
             parse(lines).await
         })?;
 
+        assert_eq!(ass_file.subtitles.styles.len(), 1);
+        assert_eq!(
+            ass_file.subtitles.styles[0].primary_colour,
+            Colour {
+                red: 255,
+                green: 0,
+                blue: 0,
+            }
+        );
+
         assert_eq!(ass_file.script_info.playback_resolution.x, 1920);
         assert_eq!(ass_file.side_data.attachments.len(), 1);
         assert_matches!(
@@ -715,6 +725,7 @@ mod tests {
         );
 
         let sline5 = &ass_file.subtitles.slines[5];
+        assert_eq!(sline5.style_index, 0);
         assert_matches!(
             ass_file.subtitles.extradata.nde_filter_for_sline(sline5),
             Some(filter)

@@ -263,11 +263,11 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
     let (primary_colour, primary_transparency) =
         subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
     let (secondary_colour, secondary_transparency) =
-        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.SecondaryColour);
     let (border_colour, border_transparency) =
-        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.OutlineColour);
     let (shadow_colour, shadow_transparency) =
-        subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
+        subtitle::unpack_colour_and_transparency_rgbt(raw_style.BackColour);
 
     subtitle::Style {
         name: string_from_libass(raw_style.Name).expect("style name should never be null"),
