@@ -302,6 +302,7 @@ impl Application for Samaku {
             Self::Message::SubtitleFileReadForImport(content) => {
                 let ass = media::subtitle::OpaqueTrack::parse(&content);
                 self.subtitles = ass.to_sline_track();
+                self.script_info = ass.script_info();
             }
             Self::Message::OpenSubtitleFile => {
                 let future = async {
