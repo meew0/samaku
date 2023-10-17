@@ -10,6 +10,7 @@ use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
+use smol::io::AsyncBufReadExt;
 
 use crate::pane::State;
 
@@ -76,6 +77,10 @@ pub struct Samaku {
     /// Metadata of loaded script, containing information like the playback resolution, the
     /// YCbCr matrix, etc.
     pub script_info: subtitle::ScriptInfo,
+
+    /// Additional metadata which is useful less often, like Aegisub-specific metadata or
+    /// .ass file attachments.
+    pub side_data: subtitle::SideData,
 
     /// Index of currently active sline, if one exists.
     pub active_sline_index: Option<usize>,
@@ -176,6 +181,7 @@ impl Application for Samaku {
                 video_metadata: None,
                 subtitles: subtitle::SlineTrack::default(),
                 script_info: subtitle::ScriptInfo::default(),
+                side_data: subtitle::SideData::default(),
                 active_sline_index: None,
                 shared: shared_state,
                 view: RefCell::new(ViewState {
@@ -279,7 +285,7 @@ impl Application for Samaku {
                 *audio_lock = Some(media::Audio::load(path_buf));
                 self.workers.emit_restart_audio();
             }
-            Self::Message::SelectSubtitleFile => {
+            Self::Message::ImportSubtitleFile => {
                 let future = async {
                     match rfd::AsyncFileDialog::new().pick_file().await {
                         Some(handle) => {
@@ -290,12 +296,51 @@ impl Application for Samaku {
                 };
                 return Command::perform(
                     future,
-                    Self::Message::map_option(Self::Message::SubtitleFileRead),
+                    Self::Message::map_option(Self::Message::SubtitleFileReadForImport),
                 );
             }
-            Self::Message::SubtitleFileRead(content) => {
+            Self::Message::SubtitleFileReadForImport(content) => {
                 let ass = media::subtitle::OpaqueTrack::parse(&content);
                 self.subtitles = ass.to_sline_track();
+            }
+            Self::Message::OpenSubtitleFile => {
+                let future = async {
+                    match rfd::AsyncFileDialog::new().pick_file().await {
+                        Some(handle) => match smol::fs::File::open(handle.path()).await {
+                            Ok(file) => {
+                                let lines = smol::io::BufReader::new(file).lines();
+                                subtitle::AssFile::parse(lines).await.map(Box::new)
+                            }
+                            Err(io_err) => Err(subtitle::parse::Error::IoError(io_err)),
+                        },
+                        None => Err(subtitle::parse::Error::NoFileSelected),
+                    }
+                };
+
+                // The reason we need to block here, instead of asynchronously executing the future,
+                // is that otherwise we would have to pass the resulting `AssFile` via a `Message`.
+                // This requires it to be cloneable, because messages need to be cloneable in the
+                // general case (for example when retained within widgets, like buttons), even
+                // though it would not actually need to be cloned in this specific case. It is
+                // possible to make `AssFile`s cloneable using type-erased cloning of trait objects,
+                // and in fact we likely want to do this someday to implement duplication of NDE
+                // filters, but I think `AssFile`s should not actually be cloneable entirely.
+                let result = smol::block_on(future);
+
+                match result {
+                    Ok(ass_file) => {
+                        self.script_info = ass_file.script_info;
+                        self.subtitles = ass_file.subtitles;
+                        self.side_data = ass_file.side_data;
+                    }
+                    Err(err) => {
+                        self.toasts.push(view::toast::Toast {
+                            title: "Error while loading subtitle file".to_string(),
+                            body: err.to_string(),
+                            status: view::toast::Status::Danger,
+                        });
+                    }
+                }
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
                 self.actual_frame = Some((new_frame, handle));

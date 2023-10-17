@@ -418,15 +418,32 @@ impl Default for ScriptInfo {
 }
 
 pub struct AssFile {
-    subtitles: SlineTrack,
-    side_data: SideData,
+    pub script_info: ScriptInfo,
+    pub subtitles: SlineTrack,
+    pub side_data: SideData,
 }
 
+impl AssFile {
+    /// Parse the given stream of lines into an [`AssFile`].
+    ///
+    /// # Errors
+    /// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
+    /// The parser is quite tolerant, so this should not happen often.
+    ///
+    /// # Panics
+    /// Panics if there are more styles than would fit into an `i32`.
+    pub async fn parse(
+        input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
+    ) -> Result<AssFile, parse::Error> {
+        parse::parse(input).await
+    }
+}
+
+#[derive(Default)]
 pub struct SideData {
-    script_info: ScriptInfo,
-    aegi_metadata: HashMap<String, String>,
-    attachments: Vec<Attachment>,
-    other_sections: HashMap<String, String>,
+    pub aegi_metadata: HashMap<String, String>,
+    pub attachments: Vec<Attachment>,
+    pub other_sections: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

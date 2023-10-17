@@ -39,7 +39,14 @@ pub enum Message {
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
     SelectAudioFile,
-    SelectSubtitleFile,
+
+    /// Import — use libass for parsing the .ass file. This will strip all extra
+    /// Aegisub-/samaku-specific data.
+    ImportSubtitleFile,
+
+    /// Open — use our own parser for .ass parsing. This will load NDE filters and keep
+    /// other metadata intact.
+    OpenSubtitleFile,
 
     /// A video file has been selected and should be loaded.
     VideoFileSelected(std::path::PathBuf),
@@ -55,7 +62,7 @@ pub enum Message {
     AudioFileSelected(std::path::PathBuf),
 
     /// A subtitle file has been selected and read, and its contents are now available.
-    SubtitleFileRead(String),
+    SubtitleFileReadForImport(String),
 
     /// The playback position has changed, so there might now be a new frame to decode.
     ///
@@ -110,10 +117,23 @@ pub enum Message {
 
 impl Message {
     /// Returns a function that maps Some(x) to some message, and None to Message::None.
+    #[must_use]
     pub fn map_option<A, F1: FnOnce(A) -> Self>(f1: F1) -> impl FnOnce(Option<A>) -> Self {
         |a_opt| match a_opt {
             Some(a) => f1(a),
             None => Self::None,
+        }
+    }
+
+    /// Returns a function that maps Ok(x) to some message, and Err(y) to some other message.
+    #[must_use]
+    pub fn map_result<A, B, F1: FnOnce(A) -> Self, F2: FnOnce(B) -> Self>(
+        f_ok: F1,
+        f_err: F2,
+    ) -> impl FnOnce(Result<A, B>) -> Self {
+        |result| match result {
+            Ok(a) => f_ok(a),
+            Err(b) => f_err(b),
         }
     }
 }

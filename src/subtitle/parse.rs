@@ -16,16 +16,8 @@ use super::{
     SlineTrack, StartTime, Style, YCbCrMatrix,
 };
 
-/// Parse the given stream of lines into an [`AssFile`].
-///
-/// # Errors
-/// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
-/// The parser is quite tolerant, so this should not happen often.
-///
-/// # Panics
-/// Panics if there are more styles than would fit into an `i32`.
 #[allow(clippy::too_many_lines)]
-pub async fn parse(
+pub(super) async fn parse(
     mut input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
 ) -> Result<AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
@@ -155,9 +147,9 @@ pub async fn parse(
     };
 
     Ok(AssFile {
+        script_info,
         subtitles,
         side_data: SideData {
-            script_info,
             aegi_metadata,
             attachments,
             other_sections: opaque_sections,
@@ -178,6 +170,9 @@ enum ParseState {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("No file was selected")]
+    NoFileSelected,
+
     #[error("IO error: {0}")]
     IoError(smol::io::Error),
 
@@ -712,7 +707,7 @@ mod tests {
             parse(lines).await
         })?;
 
-        assert_eq!(ass_file.side_data.script_info.playback_resolution.x, 1920);
+        assert_eq!(ass_file.script_info.playback_resolution.x, 1920);
         assert_eq!(ass_file.side_data.attachments.len(), 1);
         assert_matches!(
             ass_file.side_data.attachments[0].attachment_type,
