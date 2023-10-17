@@ -20,13 +20,7 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to parse the data.
     pub fn parse(data: &String) -> OpaqueTrack {
-        let mut track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
-
-        println!("events: {:#?}", track.events());
-        println!("styles: {:#?}", track.styles());
-
-        track.events_mut()[0].Style = 0;
-
+        let track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
         OpaqueTrack { internal: track }
     }
 
@@ -45,16 +39,16 @@ impl OpaqueTrack {
 
         track.set_header(metadata);
 
+        assert_eq!(track.events().len(), 0); // No events should exist yet
         for event in events {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
         }
 
-        for style in styles {
-            track.alloc_style();
-            let raw_style = ass::style_to_raw(style);
-            println!("{raw_style:?}");
-            *track.styles_mut().last_mut().unwrap() = raw_style;
+        track.resize_styles(styles.len());
+        assert_eq!(track.styles().len(), styles.len());
+        for (raw_style, style) in track.styles_mut().iter_mut().zip(styles) {
+            *raw_style = ass::style_to_raw(style);
         }
 
         OpaqueTrack { internal: track }
@@ -239,5 +233,258 @@ pub fn ass_image_to_iced(
         handle,
         x: ass_image.metadata.dst_x,
         y: ass_image.metadata.dst_y,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::media;
+    use crate::nde::tags::Transparency;
+
+    use super::*;
+
+    /// Test to verify that our handling of events and their styles is lossless.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn style_colours() {
+        const ASS_FILE: &str = include_str!("../../test_files/style_colours.ass");
+        const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 108 };
+        const FRAME_RATE: media::FrameRate = media::FrameRate {
+            numerator: 24,
+            denominator: 1,
+        };
+
+        // Expected colours
+        const WHITE: Colour = Colour {
+            red: 255,
+            green: 255,
+            blue: 255,
+        };
+        const BLACK: Colour = Colour {
+            red: 0,
+            green: 0,
+            blue: 0,
+        };
+        const OPAQUE: Transparency = Transparency(0);
+        const PRIMARY_2_COLOUR: Colour = Colour {
+            red: 53,
+            green: 162,
+            blue: 228,
+        };
+        const PRIMARY_2_TRANSPARENCY: Transparency = Transparency(18);
+        const BORDER_2_COLOUR: Colour = Colour {
+            red: 179,
+            green: 230,
+            blue: 68,
+        };
+        const BORDER_2_TRANSPARENCY: Transparency = Transparency(66);
+        const SHADOW_2_COLOUR: Colour = Colour {
+            red: 189,
+            green: 25,
+            blue: 113,
+        };
+        const SHADOW_2_TRANSPARENCY: Transparency = Transparency(136);
+
+        let opaque_track = OpaqueTrack::parse(&ASS_FILE.to_owned());
+
+        // There will be one extra for libass' default style
+        assert_eq!(opaque_track.styles().len(), 3);
+        let default = opaque_track.internal.events()[0].Style;
+        let alternate = opaque_track.internal.events()[1].Style;
+        println!("{default} {alternate}");
+
+        #[allow(clippy::cast_sign_loss)]
+        let default_usize = default as usize;
+        #[allow(clippy::cast_sign_loss)]
+        let alternate_usize = alternate as usize;
+
+        // Verify that colours are as we expect
+        assert_eq!(opaque_track.styles()[default_usize].primary_colour, WHITE);
+        assert_eq!(
+            opaque_track.styles()[default_usize].primary_transparency,
+            OPAQUE
+        );
+        assert_eq!(opaque_track.styles()[default_usize].border_colour, BLACK);
+        assert_eq!(
+            opaque_track.styles()[default_usize].border_transparency,
+            OPAQUE
+        );
+        assert_eq!(opaque_track.styles()[default_usize].shadow_colour, BLACK);
+        assert_eq!(
+            opaque_track.styles()[default_usize].shadow_transparency,
+            OPAQUE
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].primary_colour,
+            PRIMARY_2_COLOUR
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].primary_transparency,
+            PRIMARY_2_TRANSPARENCY
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].border_colour,
+            BORDER_2_COLOUR
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].border_transparency,
+            BORDER_2_TRANSPARENCY
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].shadow_colour,
+            SHADOW_2_COLOUR
+        );
+        assert_eq!(
+            opaque_track.styles()[alternate_usize].shadow_transparency,
+            SHADOW_2_TRANSPARENCY
+        );
+
+        // Render the opaque track directly with libass
+        let mut renderer = Renderer::new();
+        let mut colours: Vec<u32> = vec![];
+        renderer.render_subtitles_with_callback(
+            &opaque_track,
+            1000,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &mut |image| colours.push(image.metadata.color),
+        );
+
+        // We cannot assume libass to consistently order the images, so sort the vec
+        colours.sort_unstable();
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[0]),
+            (BLACK, OPAQUE)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[1]),
+            (BLACK, OPAQUE)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[2]),
+            (WHITE, OPAQUE)
+        );
+
+        // And again for the other line
+        colours.clear();
+        renderer.render_subtitles_with_callback(
+            &opaque_track,
+            3000,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &mut |image| colours.push(image.metadata.color),
+        );
+        colours.sort_unstable();
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[0]),
+            (PRIMARY_2_COLOUR, PRIMARY_2_TRANSPARENCY)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[1]),
+            (BORDER_2_COLOUR, BORDER_2_TRANSPARENCY)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[2]),
+            (SHADOW_2_COLOUR, SHADOW_2_TRANSPARENCY)
+        );
+
+        // Do the whole thing again, going through a round trip of ass -> sline -> ass
+        let sline_track = opaque_track.to_sline_track();
+        assert_eq!(sline_track.slines[0].style_index, default);
+        assert_eq!(sline_track.slines[1].style_index, alternate);
+        assert_eq!(sline_track.styles[default_usize].primary_colour, WHITE);
+        assert_eq!(
+            sline_track.styles[default_usize].primary_transparency,
+            OPAQUE
+        );
+        assert_eq!(sline_track.styles[default_usize].border_colour, BLACK);
+        assert_eq!(
+            sline_track.styles[default_usize].border_transparency,
+            OPAQUE
+        );
+        assert_eq!(sline_track.styles[default_usize].shadow_colour, BLACK);
+        assert_eq!(
+            sline_track.styles[default_usize].shadow_transparency,
+            OPAQUE
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].primary_colour,
+            PRIMARY_2_COLOUR
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].primary_transparency,
+            PRIMARY_2_TRANSPARENCY
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].border_colour,
+            BORDER_2_COLOUR
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].border_transparency,
+            BORDER_2_TRANSPARENCY
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].shadow_colour,
+            SHADOW_2_COLOUR
+        );
+        assert_eq!(
+            sline_track.styles[alternate_usize].shadow_transparency,
+            SHADOW_2_TRANSPARENCY
+        );
+
+        let compiled_events = sline_track.compile(24, 1, FRAME_RATE);
+        assert_eq!(compiled_events[0].style_index, default);
+        assert_eq!(compiled_events[1].style_index, alternate);
+
+        let script_info = subtitle::ScriptInfo {
+            playback_resolution: FRAME_SIZE,
+            ..Default::default()
+        };
+
+        let opaque2 =
+            OpaqueTrack::from_compiled(&compiled_events, &sline_track.styles, &script_info);
+        renderer = Renderer::new();
+        colours.clear();
+        renderer.render_subtitles_with_callback(
+            &opaque2,
+            1000,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &mut |image| colours.push(image.metadata.color),
+        );
+        colours.sort_unstable();
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[0]),
+            (BLACK, OPAQUE)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[1]),
+            (BLACK, OPAQUE)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[2]),
+            (WHITE, OPAQUE)
+        );
+        colours.clear();
+        renderer.render_subtitles_with_callback(
+            &opaque2,
+            3000,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &mut |image| colours.push(image.metadata.color),
+        );
+        colours.sort_unstable();
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[0]),
+            (PRIMARY_2_COLOUR, PRIMARY_2_TRANSPARENCY)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[1]),
+            (BORDER_2_COLOUR, BORDER_2_TRANSPARENCY)
+        );
+        assert_eq!(
+            subtitle::unpack_colour_and_transparency_rgbt(colours[2]),
+            (SHADOW_2_COLOUR, SHADOW_2_TRANSPARENCY)
+        );
     }
 }

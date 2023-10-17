@@ -391,9 +391,20 @@ impl Track {
         }
     }
 
-    pub fn alloc_style(&mut self) {
+    /// Resizes the internal styles array to have `count` entries.
+    pub fn resize_styles(&mut self, count: usize) {
+        let i32_count: i32 = count.try_into().unwrap();
+
         unsafe {
-            libass::ass_alloc_style(self.track);
+            let num_to_alloc = i32_count - (*self.track).max_styles;
+            if num_to_alloc > 0 {
+                (*self.track).n_styles = (*self.track).max_styles;
+                for _ in 0..num_to_alloc {
+                    libass::ass_alloc_style(self.track);
+                }
+                assert_eq!((*self.track).n_styles, i32_count);
+            }
+            (*self.track).n_styles = i32_count;
         }
     }
 
