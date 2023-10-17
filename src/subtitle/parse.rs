@@ -8,7 +8,7 @@ use smol::stream::StreamExt;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
-use crate::subtitle;
+use crate::{nde, subtitle};
 
 use super::{
     Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, EventType, Extradata,
@@ -147,8 +147,6 @@ pub async fn parse(
             return Err(Error::UnmatchedStyle(style_name));
         }
     }
-
-    // TODO: Deserialise NDE filters from extradata
 
     let subtitles = SlineTrack {
         slines,

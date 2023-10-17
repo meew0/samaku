@@ -981,6 +981,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
+name = "data-encoding"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2e66c9d817f1720209181c316d28635c050fa304f9c79e47a520882661b7308"
+
+[[package]]
 name = "data-url"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3317,6 +3323,7 @@ dependencies = [
  "ciborium",
  "cpal",
  "criterion",
+ "data-encoding",
  "fast-float",
  "iced",
  "iced_aw",
@@ -3326,6 +3333,7 @@ dependencies = [
  "libass-sys",
  "libc",
  "libmv-capi-sys",
+ "miniz_oxide",
  "once_cell",
  "regex",
  "rfd",

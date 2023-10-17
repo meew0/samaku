@@ -193,6 +193,19 @@ mod tests {
         ciborium::into_writer(&filter, &mut data).unwrap();
         println!("serialised filter: {data:02x?}");
 
+        let b64 = data_encoding::BASE64.encode(data.as_slice());
+        println!("serialised filter b64: len {} data {}", b64.len(), b64);
+
+        for level in 0..=10 {
+            let b64z = data_encoding::BASE64
+                .encode(miniz_oxide::deflate::compress_to_vec(data.as_slice(), level).as_slice());
+            println!(
+                "serialised filter compressed (level {level}): len {} data {}",
+                b64z.len(),
+                b64z
+            );
+        }
+
         let deserialised_filter = ciborium::from_reader::<Filter, _>(data.as_slice()).unwrap();
         assert_eq!(deserialised_filter.graph.nodes.len(), 4);
         assert_eq!(

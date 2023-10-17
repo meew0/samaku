@@ -13,8 +13,8 @@ PlayResY: 1080
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Active Line: 4
-Video Position: 264
+Active Line: 5
+Video Position: 312
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -51,7 +51,8 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{=7}{\fs100\fax0.522578\fscx11
 Dialogue: 0,0:00:05.00,0:00:07.00,Default,,0,0,0,,{=8=10}{\fs100\fax-0.026050\fscx94.50\fscy120.88\frz-2.4609\frx1.7828\fry6.3730\xbord1.89\ybord2.42\xshad1.89\yshad2.42\org(1101.56,997.6)\pos(1102.79,1058.04)}asdhasjkldhsajk
 Dialogue: 0,0:00:07.00,0:00:09.00,Default,,0,0,0,,
 Dialogue: 0,0:00:09.00,0:00:11.00,Default,,0,0,0,,{=9}
-Dialogue: 0,0:00:11.00,0:00:13.00,Default,,0,0,0,, ajkla 
+Dialogue: 0,0:00:11.00,0:00:13.00,Default,,0,0,0,, ajkla
+Dialogue: 0,0:00:13.00,0:00:15.00,Default,,0,0,0,,{=11}{\fs500\pos(376,418)}aaaa
 
 [Aegisub Extradata]
 Data: 0,_aegi_folddata,e0;1;1
@@ -65,3 +66,4 @@ Data: 7,_aegi_perspective_ambient_plane,e3288.17;357.56#7C1404.58;1074.93#7C7.73
 Data: 8,_aegi_folddata,e0;0;1
 Data: 9,_aegi_folddata,e1;0;1
 Data: 10,_aegi_perspective_ambient_plane,e374.10;816.00#7C1591.90;920.00#7C1591.90;1120.00#7C328.10;1120.00
+Data: 10,_samaku_nde_filter,eomRuYW1la3Rlc3QgZmlsdGVyZWdyYXBoomVub2Rlc4SiZG5vZGWhZHR5cGVmT3V0cHV0aHBvc2l0aW9uomF4+WCwYXn5AACiZG5vZGWhZHR5cGVtQ2xpcFJlY3RhbmdsZWhwb3NpdGlvbqJhePlcsGF5+QAAomRub2RloWR0eXBlaklucHV0U2xpbmVocG9zaXRpb26iYXj5AABhefkAAKJkbm9kZaJkdHlwZW5JbnB1dFJlY3RhbmdsZWV2YWx1ZaRieDEYZGJ5MRjIYngyGQEsYnkyGQGQaHBvc2l0aW9uomF4+QAAYXn5XkBrY29ubmVjdGlvbnOjompub2RlX2luZGV4AWxzb2NrZXRfaW5kZXgBompub2RlX2luZGV4A2xzb2NrZXRfaW5kZXgAompub2RlX2luZGV4AGxzb2NrZXRfaW5kZXgAompub2RlX2luZGV4AWxzb2NrZXRfaW5kZXgAompub2RlX2luZGV4AWxzb2NrZXRfaW5kZXgAompub2RlX2luZGV4Amxzb2NrZXRfaW5kZXgA
