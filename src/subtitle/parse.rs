@@ -379,6 +379,9 @@ fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<()
         if version_str != "v4.00+" {
             return Err(Error::UnsupportedScriptType);
         }
+
+        // Don't read this one as K/V data later on
+        return Ok(());
     }
 
     let Some((key, value)) = parse_kv_generic(line) else {
