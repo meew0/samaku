@@ -351,6 +351,15 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+pub enum Feature {
+    IncompatibleExtensions = libass::ASS_Feature::ASS_FEATURE_INCOMPATIBLE_EXTENSIONS,
+    BidiBrackets = libass::ASS_Feature::ASS_FEATURE_BIDI_BRACKETS,
+    WholeTextLayout = libass::ASS_Feature::ASS_FEATURE_WHOLE_TEXT_LAYOUT,
+    WrapUnicode = libass::ASS_Feature::ASS_FEATURE_WRAP_UNICODE,
+}
+
 #[derive(Debug)]
 pub struct Track {
     track: *mut libass::ASS_Track,
@@ -468,6 +477,17 @@ impl Track {
                 Some(name) => malloc_string(name),
                 None => std::ptr::null_mut(),
             };
+        }
+    }
+
+    pub fn set_feature(&mut self, feature: Feature, enable: bool) -> Result<(), ()> {
+        let err_val =
+            unsafe { libass::ass_track_set_feature(self.track, feature as u32, i32::from(enable)) };
+
+        if err_val < 0 {
+            Err(())
+        } else {
+            Ok(())
         }
     }
 }
