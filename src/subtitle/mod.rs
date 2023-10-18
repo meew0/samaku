@@ -263,8 +263,12 @@ pub enum YCbCrMatrix {
     FccPc,
 }
 
-/// libass font encoding parameter (corresponding to “Encoding” in styles).
-/// As far as I can tell, libass only supports two valid values: (`-1` and `0`).
+/// libass font encoding parameter (corresponding to “Encoding” in styles). If this is set to a
+/// value other than `1` or `-1`, libass will avoid selecting fonts that lack coverage in the
+/// legacy Windows codepage specified by the value.
+///
+/// See the following libass issue for a detailed explanation:
+/// https://github.com/libass/libass/issues/662
 #[derive(Debug, Clone, Copy)]
 pub struct FontEncoding(pub i32);
 
@@ -309,8 +313,10 @@ pub struct Style {
     pub alignment: Alignment,
     pub margins: Margins,
 
-    /// “Windows font charset number”
-    /// `-1` = autodetect, Aegisub's default seems to be `1`
+    /// Specify which Windows codepage you require glyph coverage for.
+    ///
+    /// See the following libass issue for a detailed explanation:
+    /// https://github.com/libass/libass/issues/662
     pub encoding: FontEncoding,
 
     pub blur: f64,
