@@ -16,6 +16,7 @@ use crate::{media, message, nde, style};
 pub mod compile;
 mod emit;
 pub mod parse;
+mod uu;
 
 /// An `Sline` (“samaku line”/“subtitle line”/“sign or line”/etc.),
 /// in samaku terms, is one conceptual individual “subtitle”,
@@ -510,8 +511,8 @@ impl AssFile {
     ///
     /// # Panics
     /// Panics if there are more styles than would fit into an `i32`.
-    pub async fn parse(
-        input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
+    pub async fn parse<R: smol::io::AsyncBufRead + Unpin>(
+        input: smol::io::Lines<R>,
     ) -> Result<AssFile, parse::Error> {
         parse::parse(input).await
     }
@@ -631,7 +632,7 @@ impl IndexMut<ExtradataId> for Extradata {
 #[derive(Debug)]
 pub enum ExtradataEntry {
     NdeFilter(nde::Filter),
-    Opaque { key: String, value: String },
+    Opaque { key: String, value: Vec<u8> },
 }
 
 #[derive(Debug, Clone)]
@@ -641,8 +642,119 @@ pub struct Attachment {
     uu_data: String,
 }
 
+impl Attachment {
+    /// Decode the UU-encoded data contained within this attachment to raw binary data.
+    ///
+    /// # Errors
+    /// Returns a `DecodeError` if the contained data is invalid.
+    pub fn decode(&self) -> Result<Vec<u8>, data_encoding::DecodeError> {
+        uu::decode(&self.uu_data)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttachmentType {
     Font,
     Graphic,
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_matches2::assert_matches;
+    use smol::io::AsyncBufReadExt;
+
+    use crate::test_utils::test_file;
+
+    use super::*;
+
+    #[test]
+    fn attachment_decode() {
+        let path = test_file("test_files/extra_sections.ass");
+        let ass_file = parse::tests::parse_blocking(&path).unwrap();
+
+        assert_eq!(ass_file.side_data.attachments.len(), 1);
+        let at1 = &ass_file.side_data.attachments[0];
+        assert_eq!(at1.attachment_type, AttachmentType::Graphic);
+
+        let source_data = std::fs::read(test_file("test_files/4x4.jpg")).unwrap();
+        let decoded = at1.decode().unwrap();
+        assert_eq!(decoded, source_data);
+    }
+
+    #[test]
+    fn extradata_round_trip() {
+        const SHORT_VALUE: &[u8] = b"\x00123456789";
+        const LONG_VALUE: &[u8] = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09";
+
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            ExtradataId(0),
+            ExtradataEntry::Opaque {
+                key: "short".to_string(),
+                value: SHORT_VALUE.to_vec(),
+            },
+        );
+        entries.insert(
+            ExtradataId(1),
+            ExtradataEntry::Opaque {
+                key: "long".to_string(),
+                value: LONG_VALUE.to_vec(),
+            },
+        );
+
+        let ass_file = AssFile {
+            script_info: ScriptInfo::default(),
+            subtitles: SlineTrack {
+                slines: vec![],
+                styles: vec![],
+                extradata: Extradata {
+                    entries,
+                    next_id: ExtradataId(2),
+                },
+            },
+            side_data: SideData::default(),
+        };
+
+        let mut emitted = String::new();
+        emit::emit(
+            &mut emitted,
+            &ass_file.script_info,
+            &ass_file.subtitles,
+            &ass_file.side_data,
+        )
+        .unwrap();
+
+        // Make sure the short one was inline-encoded and the long one UU-encoded
+        assert!(emitted.contains("short,e#00"));
+        assert!(emitted.contains("long,u!"));
+
+        let parsed = smol::block_on(async {
+            AssFile::parse(smol::io::BufReader::new(emitted.as_bytes()).lines()).await
+        })
+        .unwrap();
+
+        assert_eq!(parsed.subtitles.extradata.entries.len(), 2);
+        assert_eq!(parsed.subtitles.extradata.next_id, ExtradataId(2));
+
+        let e0 = parsed
+            .subtitles
+            .extradata
+            .entries
+            .get(&ExtradataId(0))
+            .unwrap();
+        let e1 = parsed
+            .subtitles
+            .extradata
+            .entries
+            .get(&ExtradataId(1))
+            .unwrap();
+
+        assert_matches!(e0, ExtradataEntry::Opaque { key: k0, value: v0 });
+        assert_matches!(e1, ExtradataEntry::Opaque { key: k1, value: v1 });
+
+        assert_eq!(k0, "short");
+        assert_eq!(v0, SHORT_VALUE);
+        assert_eq!(k1, "long");
+        assert_eq!(v1, LONG_VALUE);
+    }
 }

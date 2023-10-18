@@ -302,9 +302,17 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
             ExtradataEntry::Opaque { key, value } => {
                 emit_aegi_inline_string(writer, key)?;
 
-                // TODO: uuencode data unsuitable for inline encoding
-                write!(writer, ",e")?;
-                emit_aegi_inline_string(writer, value)?;
+                // The value can be specified using inline or UU encoding. Aegisub uses inline
+                // encoding by default, but switches to UU encoding if it would be shorter.
+                // If the input data is not valid UTF-8, the inline encoded result will not be,
+                // either; Aegisub does not care about this but we do.
+                if let Some(inline_encoded) = try_inline_encode(value) {
+                    write!(writer, ",e{inline_encoded}")?;
+                } else {
+                    // Fall back to UU encoding
+                    let uu_encoded = super::uu::encode(value);
+                    write!(writer, ",u{uu_encoded}")?;
+                }
             }
         }
 
@@ -312,6 +320,23 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
     }
 
     write!(writer, "{NEWLINE}")
+}
+
+/// Try to inline encode some arbitrary binary data. Returns `Some(_)` if both the conversion
+/// succeeded and the inline encoded data would be shorter than the equivalent UU-encoded data.
+fn try_inline_encode(data: &[u8]) -> Option<String> {
+    if let Ok(utf8_str) = std::str::from_utf8(data) {
+        let mut inline_encoded = String::new();
+        if emit_aegi_inline_string(&mut inline_encoded, utf8_str).is_err() {
+            return None;
+        }
+
+        if 4 * data.len() >= 3 * inline_encoded.len() {
+            return Some(inline_encoded);
+        }
+    }
+
+    None
 }
 
 const COMPRESSION_LEVEL: u8 = 6;

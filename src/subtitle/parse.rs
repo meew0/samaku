@@ -17,8 +17,8 @@ use super::{
 };
 
 #[allow(clippy::too_many_lines)]
-pub(super) async fn parse(
-    mut input: smol::io::Lines<smol::io::BufReader<smol::fs::File>>,
+pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
+    mut input: smol::io::Lines<R>,
 ) -> Result<AssFile, Error> {
     let mut state = ParseState::ScriptInfo;
 
@@ -210,7 +210,7 @@ pub enum Error {
     UnmatchedStyle(String),
 
     #[error("Invalid NDE filter format identifier: {0:?}")]
-    InvalidNdeFilterFormat(Option<char>),
+    InvalidNdeFilterFormat(Option<u8>),
 
     #[error("Failed to decode base64 data for NDE filter: {0}")]
     NdeFilterBase64DecodeError(data_encoding::DecodeError),
@@ -220,6 +220,15 @@ pub enum Error {
 
     #[error("Failed to deserialise NDE filter: {0}")]
     NdeFilterDeserialiseError(String),
+
+    #[error("Failed to decode UU-encoded extradata")]
+    UuDecodeError(data_encoding::DecodeError),
+
+    #[error("Invalid extradata value type: {0}")]
+    InvalidExtradataValueType(String),
+
+    #[error("Invalid extradata ID: {0}")]
+    InvalidExtradataId(String),
 }
 
 fn parse_style_line(line: &str) -> Result<Style, Error> {
@@ -439,8 +448,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
     if let Some(captures) = extradata_regex.captures(line) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id_num) = id_str.parse::<u32>() else {
-            println!("invalid extradata ID: {id_str}");
-            return Ok(()); // ignore
+            return Err(Error::InvalidExtradataId(id_str.to_string()));
         };
 
         let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
@@ -448,11 +456,11 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
         let value_raw = captures.get(4).unwrap().as_str();
 
         let value = if value_type == "e" {
-            aegi_inline_string_decode(value_raw)
+            aegi_inline_string_decode(value_raw).into_bytes()
         } else if value_type == "u" {
-            todo!()
+            super::uu::decode(value_raw).map_err(Error::UuDecodeError)?
         } else {
-            String::new()
+            return Err(Error::InvalidExtradataValueType(value_type.to_string()));
         };
 
         extradata.next_id = extradata.next_id.max(ExtradataId(id_num + 1));
@@ -464,11 +472,11 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
     Ok(())
 }
 
-fn parse_extradata_entry(key: String, value: String) -> Result<ExtradataEntry, Error> {
+fn parse_extradata_entry(key: String, value: Vec<u8>) -> Result<ExtradataEntry, Error> {
     if key == "_samaku_nde_filter" {
-        let first_char = value.chars().next();
-        if first_char == Some('1') {
-            let base64 = &value.as_bytes()[1..];
+        let first_char = value.first().copied();
+        if first_char == Some(b'1') {
+            let base64 = &value[1..];
             let decoded = data_encoding::BASE64
                 .decode(base64)
                 .map_err(Error::NdeFilterBase64DecodeError)?;
@@ -692,23 +700,27 @@ fn aegi_inline_string_decode(input: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use assert_matches2::assert_matches;
     use smol::io::AsyncBufReadExt;
+    use std::path::Path;
 
     use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
     use crate::test_utils::test_file;
 
     use super::*;
 
+    pub fn parse_blocking(path: &Path) -> Result<AssFile, Error> {
+        smol::block_on(async {
+            let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
+            parse(lines).await
+        })
+    }
+
     #[test]
     fn sections_file() -> Result<(), Error> {
         let path = test_file("test_files/extra_sections.ass");
-
-        let ass_file = smol::block_on(async {
-            let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
-            parse(lines).await
-        })?;
+        let ass_file = parse_blocking(&path)?;
 
         assert_eq!(ass_file.subtitles.styles.len(), 1);
         assert_eq!(
@@ -883,7 +895,7 @@ mod tests {
         assert_eq!(key, "_aegi_perspective_ambient_plane");
         assert_eq!(
             value,
-            "249.07;213.54|2170.22;302.89|2209.38;1199.91|-158.29;1040.20"
+            b"249.07;213.54|2170.22;302.89|2209.38;1199.91|-158.29;1040.20"
         );
     }
 
