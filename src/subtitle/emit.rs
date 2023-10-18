@@ -5,7 +5,10 @@ use std::fmt::{Error, Write};
 use crate::nde::tags::{Colour, Transparency};
 use crate::version;
 
-use super::{Attachment, AttachmentType, ScriptInfo, SideData, SlineTrack, Style, YCbCrMatrix};
+use super::{
+    Attachment, AttachmentType, EventType, ScriptInfo, SideData, Sline, SlineTrack, Style,
+    YCbCrMatrix,
+};
 
 const NEWLINE: &str = "\n";
 const STYLE_FORMAT: &str = "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding";
@@ -39,6 +42,7 @@ pub fn emit<W: Write>(
         &side_data.attachments,
         AttachmentType::Font,
     )?;
+    emit_events(writer, &subtitles.slines, &subtitles.styles)?;
 
     Ok(())
 }
@@ -216,6 +220,61 @@ fn emit_attachments<W: Write>(
     Ok(())
 }
 
+fn emit_events<W: Write>(writer: &mut W, slines: &[Sline], styles: &[Style]) -> Result<(), Error> {
+    if slines.is_empty() {
+        return Ok(());
+    }
+
+    write!(writer, "[Events]{NEWLINE}")?;
+    write!(writer, "{EVENT_FORMAT}{NEWLINE}")?;
+
+    for sline in slines {
+        write!(
+            writer,
+            "{}: {},",
+            event_type_name(sline.event_type),
+            sline.layer_index,
+        )?;
+        emit_timecode(writer, sline.start.0)?;
+        write!(writer, ",")?;
+        emit_timecode(writer, sline.end().0)?;
+        write!(writer, ",")?;
+        emit_aegi_inline_string(
+            writer,
+            &styles[usize::try_from(sline.style_index).unwrap()].name,
+        )?;
+        write!(writer, ",")?;
+        emit_aegi_inline_string(writer, &sline.actor)?;
+        write!(
+            writer,
+            ",{},{},{},",
+            sline.margins.left, sline.margins.right, sline.margins.vertical
+        )?;
+        emit_aegi_inline_string(writer, &sline.effect)?;
+        write!(writer, ",")?;
+
+        // Write extradata ID block
+        if !sline.extradata_ids.is_empty() {
+            write!(writer, "{{")?;
+            for extradata_id in &sline.extradata_ids {
+                write!(writer, "={}", extradata_id.0)?;
+            }
+            write!(writer, "}}")?;
+        }
+
+        // Skip newlines in sline text, should they exist
+        for char in sline.text.chars() {
+            match char {
+                '\r' | '\n' => {}
+                other => write!(writer, "{other}")?,
+            }
+        }
+        write!(writer, "{NEWLINE}")?;
+    }
+
+    write!(writer, "{NEWLINE}")
+}
+
 fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {
     for (key, value) in kvs {
         write!(writer, "{key}: {value}{NEWLINE}")?;
@@ -244,6 +303,35 @@ fn yes_or_no(value: bool) -> &'static str {
     }
 }
 
+fn emit_timecode<W: Write>(writer: &mut W, time: i64) -> Result<(), Error> {
+    let pos = time.max(0); // avoid negative numbers
+
+    let hours = pos / 3_600_000;
+    let minutes = (pos % 3_600_000) / 60_000;
+    let seconds = (pos % 60_000) / 1000;
+    let centiseconds = (pos % 1000) / 10;
+
+    write!(
+        writer,
+        "{hours:02}:{minutes:02}:{seconds:02}.{centiseconds:02}"
+    )
+}
+
+fn emit_aegi_inline_string<W: Write>(writer: &mut W, str: &str) -> Result<(), Error> {
+    for char in str.chars() {
+        match char {
+            '\x00'..='\x1F' | '\x23' | '\x2C' | '\x3A' | '\x7C' => {
+                write!(writer, "#{:02X}", char as u8)?;
+            }
+            _ => {
+                writer.write_char(char)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 // Why do ass files use -1 for true???
 fn negative_bool(value: bool) -> &'static str {
     if value {
@@ -268,5 +356,29 @@ fn ycbcr_matrix_name(matrix: YCbCrMatrix) -> &'static str {
         Smtpe240MPc => "PC.240M",
         FccTv => "TV.FCC",
         FccPc => "PC.FCC",
+    }
+}
+
+fn event_type_name(event_type: EventType) -> &'static str {
+    use EventType::*;
+
+    match event_type {
+        Dialogue => "Dialogue",
+        Comment => "Comment",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inline_encode() -> Result<(), Error> {
+        let mut string = String::new();
+
+        emit_aegi_inline_string(&mut string, "\x00\x1F\x20abc\x23defä")?;
+        assert_eq!(string, "#00#1F\x20abc#23defä");
+
+        Ok(())
     }
 }
