@@ -1,13 +1,10 @@
 use crate::nde::Span;
 
 use super::{
-    Alignment, Clip, FontSize, HorizontalAlignment, Maybe2D, Milliseconds, Move, MoveTiming,
-    Position, PositionOrMove, Rectangle, Resettable, VerticalAlignment, WrapStyle,
-};
-use super::{
-    Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, Drawing, Fade, FontSizeDelta,
-    FontWeight, Global, GlobalAnimatable, KaraokeEffect, Local, LocalAnimatable, SimpleFade,
-    Transparency,
+    Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, Drawing,
+    Fade, FontSize, FontSizeDelta, FontWeight, Global, GlobalAnimatable, HorizontalAlignment,
+    KaraokeEffect, Local, LocalAnimatable, Maybe2D, Milliseconds, Move, MoveTiming, Position,
+    PositionOrMove, Rectangle, Resettable, SimpleFade, Transparency, VerticalAlignment, WrapStyle,
 };
 
 #[must_use]

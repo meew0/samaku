@@ -12,8 +12,6 @@ use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
 use smol::io::AsyncBufReadExt;
 
-use crate::pane::State;
-
 pub mod keyboard;
 pub mod media;
 pub mod message;
@@ -124,7 +122,7 @@ impl Samaku {
     /// NDE filter list to update their internal representations
     pub fn update_filter_lists(&mut self) {
         for pane in self.panes.panes.values_mut() {
-            if let State::NodeEditor(node_editor_state) = pane {
+            if let pane::State::NodeEditor(node_editor_state) = pane {
                 node_editor_state.update_filter_names(&self.subtitles);
             }
         }
@@ -360,7 +358,7 @@ impl Application for Samaku {
                     }
                 };
 
-                return Command::perform(future, |_| Self::Message::None);
+                return Command::perform(future, |()| Self::Message::None);
             }
             Self::Message::VideoFrameAvailable(new_frame, handle) => {
                 self.actual_frame = Some((new_frame, handle));

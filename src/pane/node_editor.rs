@@ -623,7 +623,7 @@ fn collect_menu() -> ShellMap {
         }
 
         match collect_internal_recursive(&mut menu, node_shell.menu_path, node_shell.constructor) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(CollectError::DuplicateItem) => panic!(
                 "Found duplicate item while collecting node with menu path: {:?}",
                 node_shell.menu_path
