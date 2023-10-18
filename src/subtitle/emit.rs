@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::{Error, Write};
 
 use crate::version;
@@ -17,6 +18,7 @@ pub fn emit<W: Write>(
     side_data: &SideData,
 ) -> Result<(), Error> {
     emit_script_info(writer, script_info)?;
+    emit_aegi_metadata(writer, &side_data.aegi_metadata)?;
 
     Ok(())
 }
@@ -63,7 +65,27 @@ fn emit_script_info<W: Write>(writer: &mut W, script_info: &ScriptInfo) -> Resul
         script_info.playback_resolution.y
     )?;
 
-    for (key, value) in &script_info.extra_info {
+    emit_kvs(writer, &script_info.extra_info)?;
+    write!(writer, "{NEWLINE}")?;
+
+    Ok(())
+}
+
+fn emit_aegi_metadata<W: Write>(
+    writer: &mut W,
+    aegi_metadata: &HashMap<String, String>,
+) -> Result<(), Error> {
+    if aegi_metadata.is_empty() {
+        return Ok(());
+    }
+
+    write!(writer, "[Aegisub Project Garbage]{NEWLINE}")?;
+    emit_kvs(writer, aegi_metadata)?;
+    write!(writer, "{NEWLINE}")
+}
+
+fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {
+    for (key, value) in kvs {
         write!(writer, "{key}: {value}{NEWLINE}")?;
     }
 
