@@ -638,10 +638,10 @@ pub enum ExtradataEntry {
 pub struct Attachment {
     attachment_type: AttachmentType,
     filename: String,
-    data: Vec<u8>,
+    uu_data: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttachmentType {
     Font,
     Graphic,

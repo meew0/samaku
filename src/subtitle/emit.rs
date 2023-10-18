@@ -5,7 +5,7 @@ use std::fmt::{Error, Write};
 use crate::nde::tags::{Colour, Transparency};
 use crate::version;
 
-use super::{ScriptInfo, SideData, SlineTrack, Style, YCbCrMatrix};
+use super::{Attachment, AttachmentType, ScriptInfo, SideData, SlineTrack, Style, YCbCrMatrix};
 
 const NEWLINE: &str = "\n";
 const STYLE_FORMAT: &str = "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding";
@@ -25,6 +25,20 @@ pub fn emit<W: Write>(
     emit_script_info(writer, script_info)?;
     emit_aegi_metadata(writer, &side_data.aegi_metadata)?;
     emit_styles(writer, &subtitles.styles)?;
+    emit_attachments(
+        writer,
+        "Graphics",
+        "filename",
+        &side_data.attachments,
+        AttachmentType::Graphic,
+    )?;
+    emit_attachments(
+        writer,
+        "Fonts",
+        "fontname",
+        &side_data.attachments,
+        AttachmentType::Font,
+    )?;
 
     Ok(())
 }
@@ -165,6 +179,41 @@ fn emit_styles<W: Write>(writer: &mut W, styles: &[Style]) -> Result<(), Error> 
     }
 
     write!(writer, "{NEWLINE}")
+}
+
+fn emit_attachments<W: Write>(
+    writer: &mut W,
+    section_name: &str,
+    filename_key: &str,
+    attachments: &[Attachment],
+    type_filter: AttachmentType,
+) -> Result<(), Error> {
+    let mut header_written = false;
+
+    for attachment in attachments {
+        if attachment.attachment_type == type_filter {
+            if !header_written {
+                write!(writer, "[{section_name}]{NEWLINE}")?;
+                header_written = true;
+            }
+
+            write!(writer, "{filename_key}: {}{NEWLINE}", attachment.filename)?;
+            let mut slice = attachment.uu_data.as_str();
+
+            while !slice.is_empty() {
+                let split_point = slice.len().min(80);
+                let (to_write, new_slice) = slice.split_at(split_point);
+                write!(writer, "{to_write}{NEWLINE}")?;
+                slice = new_slice;
+            }
+        }
+    }
+
+    if header_written {
+        write!(writer, "{NEWLINE}")?;
+    }
+
+    Ok(())
 }
 
 fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {

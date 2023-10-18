@@ -492,7 +492,7 @@ fn parse_attachment_header(
     line.strip_prefix(filename_key).map(|filename| Attachment {
         attachment_type,
         filename: filename.to_string(),
-        data: vec![],
+        uu_data: String::new(),
     })
 }
 
@@ -526,7 +526,7 @@ enum AttachmentParseResult {
 }
 
 fn attachment_add_data(line: &str, attachment: &mut Attachment) {
-    attachment.data.extend_from_slice(line.as_bytes());
+    attachment.uu_data.push_str(line);
 }
 
 fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
