@@ -12,8 +12,8 @@ use crate::{nde, subtitle};
 
 use super::{
     Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, EventType, Extradata,
-    ExtradataEntry, ExtradataId, JustifyMode, Margins, Scale, ScriptInfo, SideData, Sline,
-    SlineTrack, StartTime, Style, YCbCrMatrix,
+    ExtradataEntry, ExtradataId, FontEncoding, JustifyMode, Margins, Scale, ScriptInfo, SideData,
+    Sline, SlineTrack, StartTime, Style, YCbCrMatrix,
 };
 
 #[allow(clippy::too_many_lines)]
@@ -267,7 +267,7 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     let margin_r = next_split_i32(&mut split)?;
     let margin_v = next_split_i32(&mut split)?;
 
-    let encoding = next_split_i32(&mut split)?;
+    let encoding = FontEncoding(next_split_i32(&mut split)?);
 
     let style = Style {
         name,
@@ -809,7 +809,7 @@ mod tests {
         assert_eq!(style.margins.left, 10);
         assert_eq!(style.margins.right, 10);
         assert_eq!(style.margins.vertical, 10);
-        assert_eq!(style.encoding, 1);
+        assert_eq!(style.encoding.0, 1);
 
         Ok(())
     }

@@ -20,10 +20,14 @@ pub const SAMAKU_TEXT: Color = Color::from_rgb(
     0xee as f32 / 255.0,
 );
 
+pub const SAMAKU_PRIMARY_RED: u8 = 0xff;
+pub const SAMAKU_PRIMARY_GREEN: u8 = 0xb6;
+pub const SAMAKU_PRIMARY_BLUE: u8 = 0x0a;
+
 pub const SAMAKU_PRIMARY: Color = Color::from_rgb(
-    0xff as f32 / 255.0,
-    0xb6 as f32 / 255.0,
-    0x0a as f32 / 255.0,
+    SAMAKU_PRIMARY_RED as f32 / 255.0,
+    SAMAKU_PRIMARY_GREEN as f32 / 255.0,
+    SAMAKU_PRIMARY_BLUE as f32 / 255.0,
 );
 
 pub const SAMAKU_INACTIVE: Color = Color::from_rgb(

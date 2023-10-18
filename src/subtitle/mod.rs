@@ -8,8 +8,10 @@ use std::ops::{Index, IndexMut};
 
 pub use emit::emit;
 
-use crate::nde::tags::{Alignment, Colour, Transparency, WrapStyle};
-use crate::{media, message, nde};
+use crate::nde::tags::{
+    Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
+};
+use crate::{media, message, nde, style};
 
 pub mod compile;
 mod emit;
@@ -132,6 +134,16 @@ pub struct Scale {
     pub y: f64,
 }
 
+impl Scale {
+    pub const UNIT: Scale = Scale { x: 1.0, y: 1.0 };
+}
+
+impl Default for Scale {
+    fn default() -> Self {
+        Scale::UNIT
+    }
+}
+
 /// Element- or style-specific left, right, and vertical margins
 /// in pixels, corresponding to ASS `MarginL` etc.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -251,6 +263,18 @@ pub enum YCbCrMatrix {
     FccPc,
 }
 
+/// libass font encoding parameter (corresponding to “Encoding” in styles).
+/// As far as I can tell, libass only supports two valid values: (`-1` and `0`).
+#[derive(Debug, Clone, Copy)]
+pub struct FontEncoding(pub i32);
+
+impl FontEncoding {
+    /// libass-specific value that supposedly autodetects the required encoding, and also causes
+    /// text to be layouted/shaped across override boundaries, which breaks VSFilter compatibility
+    /// but is desirable for certain cursive scripts.
+    pub const LIBASS_AUTODETECT: FontEncoding = FontEncoding(-1);
+}
+
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Style {
@@ -287,10 +311,55 @@ pub struct Style {
 
     /// “Windows font charset number”
     /// `-1` = autodetect, Aegisub's default seems to be `1`
-    pub encoding: i32,
+    pub encoding: FontEncoding,
 
     pub blur: f64,
     pub justify: JustifyMode,
+}
+
+impl Default for Style {
+    /// Samaku's default style.
+    fn default() -> Self {
+        Self {
+            name: "Default".to_string(),
+            font_name: "Arial".to_string(),
+            font_size: 120.0,
+            primary_colour: Colour::WHITE,
+            secondary_colour: Colour {
+                red: style::SAMAKU_PRIMARY_RED,
+                green: style::SAMAKU_PRIMARY_GREEN,
+                blue: style::SAMAKU_PRIMARY_BLUE,
+            },
+            border_colour: Colour::BLACK,
+            shadow_colour: Colour::BLACK,
+            primary_transparency: Transparency::OPAQUE,
+            secondary_transparency: Transparency::OPAQUE,
+            border_transparency: Transparency::OPAQUE,
+            shadow_transparency: Transparency(128),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale: Scale::UNIT,
+            spacing: 0.0,
+            angle: Angle(0.0),
+            border_style: BorderStyle::Default,
+            border_width: 5.0,
+            shadow_distance: 5.0,
+            alignment: Alignment {
+                vertical: VerticalAlignment::Sub,
+                horizontal: HorizontalAlignment::Center,
+            },
+            margins: Margins {
+                left: 30,
+                right: 30,
+                vertical: 30,
+            },
+            encoding: FontEncoding::LIBASS_AUTODETECT,
+            blur: 0.0,
+            justify: JustifyMode::Auto,
+        }
+    }
 }
 
 /// Ordered collection of [`Sline`]s with associated data.

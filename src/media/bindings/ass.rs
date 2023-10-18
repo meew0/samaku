@@ -7,7 +7,7 @@ use libass_sys as libass;
 
 use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
-use crate::subtitle::{EventType, Margins, YCbCrMatrix};
+use crate::subtitle::{EventType, FontEncoding, Margins, YCbCrMatrix};
 
 pub type CString = std::ffi::CString;
 
@@ -302,7 +302,7 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
             right: raw_style.MarginR,
             vertical: raw_style.MarginV,
         },
-        encoding: raw_style.Encoding,
+        encoding: FontEncoding(raw_style.Encoding),
         blur: raw_style.Blur,
         justify: subtitle::JustifyMode::from(raw_style.Justify),
     }
@@ -344,7 +344,7 @@ pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
         MarginL: style.margins.left,
         MarginR: style.margins.right,
         MarginV: style.margins.vertical,
-        Encoding: style.encoding,
+        Encoding: style.encoding.0,
         treat_fontname_as_pattern: 0, // unused within libass
         Blur: style.blur,
         Justify: style.justify as i32,

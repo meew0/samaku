@@ -912,8 +912,13 @@ pub struct Colour {
 }
 
 impl Colour {
-    #[cfg(test)]
-    const BLACK: Self = Self {
+    pub const WHITE: Self = Self {
+        red: 255,
+        green: 255,
+        blue: 255,
+    };
+
+    pub const BLACK: Self = Self {
         red: 0,
         green: 0,
         blue: 0,
@@ -970,6 +975,8 @@ impl emit::Value for Colour {
 pub struct Transparency(pub i32);
 
 impl Transparency {
+    pub const OPAQUE: Transparency = Transparency(0);
+
     /// Returns the lowest 8 bits of the transparency value, corresponding to how it would be shown
     /// on render.
     #[must_use]
