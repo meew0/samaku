@@ -355,7 +355,7 @@ fn emit_timecode<W: Write>(writer: &mut W, time: i64) -> Result<(), Error> {
 
     write!(
         writer,
-        "{hours:02}:{minutes:02}:{seconds:02}.{centiseconds:02}"
+        "{hours}:{minutes:02}:{seconds:02}.{centiseconds:02}"
     )
 }
 
