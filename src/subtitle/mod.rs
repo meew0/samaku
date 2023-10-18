@@ -670,7 +670,7 @@ mod tests {
     #[test]
     fn attachment_decode() {
         let path = test_file("test_files/extra_sections.ass");
-        let ass_file = parse::tests::parse_blocking(&path).unwrap();
+        let ass_file = parse::tests::parse_blocking(&path);
 
         assert_eq!(ass_file.side_data.attachments.len(), 1);
         let at1 = &ass_file.side_data.attachments[0];

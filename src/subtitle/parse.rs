@@ -710,17 +710,23 @@ pub mod tests {
 
     use super::*;
 
-    pub fn parse_blocking(path: &Path) -> Result<AssFile, Error> {
+    /// Parse the given file path to an `AssFile`
+    ///
+    /// # Panics
+    /// Panics if any error occurs (IO or parsing)
+    #[must_use]
+    pub fn parse_blocking(path: &Path) -> AssFile {
         smol::block_on(async {
             let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
             parse(lines).await
         })
+        .unwrap()
     }
 
     #[test]
-    fn sections_file() -> Result<(), Error> {
+    fn sections_file() {
         let path = test_file("test_files/extra_sections.ass");
-        let ass_file = parse_blocking(&path)?;
+        let ass_file = parse_blocking(&path);
 
         assert_eq!(ass_file.subtitles.styles.len(), 1);
         assert_eq!(
@@ -746,8 +752,6 @@ pub mod tests {
             Some(filter)
         );
         assert_eq!(filter.graph.nodes.len(), 4);
-
-        Ok(())
     }
 
     #[test]
