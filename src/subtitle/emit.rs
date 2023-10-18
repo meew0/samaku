@@ -1,11 +1,16 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Error, Write};
 
+use crate::nde::tags::{Colour, Transparency};
 use crate::version;
 
-use super::{ScriptInfo, SideData, SlineTrack, YCbCrMatrix};
+use super::{ScriptInfo, SideData, SlineTrack, Style, YCbCrMatrix};
 
 const NEWLINE: &str = "\n";
+const STYLE_FORMAT: &str = "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding";
+const EVENT_FORMAT: &str =
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text";
 
 /// Write the given ASS file data as an .ass file to the given writer.
 ///
@@ -19,6 +24,7 @@ pub fn emit<W: Write>(
 ) -> Result<(), Error> {
     emit_script_info(writer, script_info)?;
     emit_aegi_metadata(writer, &side_data.aegi_metadata)?;
+    emit_styles(writer, &subtitles.styles)?;
 
     Ok(())
 }
@@ -84,6 +90,83 @@ fn emit_aegi_metadata<W: Write>(
     write!(writer, "{NEWLINE}")
 }
 
+#[allow(clippy::similar_names)] // For scale_x/y_percent. Apparently it is not possible to allow this for an individual binding
+fn emit_styles<W: Write>(writer: &mut W, styles: &[Style]) -> Result<(), Error> {
+    // Ensure there is always at least one style to write
+    let styles = if styles.is_empty() {
+        Cow::Owned(vec![Style::default()])
+    } else {
+        Cow::Borrowed(styles)
+    };
+
+    write!(writer, "[V4+ Styles]{NEWLINE}")?;
+    write!(writer, "{STYLE_FORMAT}{NEWLINE}")?;
+
+    for style in &*styles {
+        let safe_name = style.name.replace(',', ";");
+        let safe_font_name = style.font_name.replace(',', ";");
+
+        write!(
+            writer,
+            "Style: {safe_name},{safe_font_name},{},",
+            style.font_size
+        )?;
+
+        emit_colour_and_transparency_to_packed(
+            writer,
+            style.primary_colour,
+            style.primary_transparency,
+        )?;
+        write!(writer, ",")?;
+        emit_colour_and_transparency_to_packed(
+            writer,
+            style.secondary_colour,
+            style.secondary_transparency,
+        )?;
+        write!(writer, ",")?;
+        emit_colour_and_transparency_to_packed(
+            writer,
+            style.border_colour,
+            style.border_transparency,
+        )?;
+        write!(writer, ",")?;
+        emit_colour_and_transparency_to_packed(
+            writer,
+            style.shadow_colour,
+            style.shadow_transparency,
+        )?;
+
+        let bold = negative_bool(style.bold);
+        let italic = negative_bool(style.italic);
+        let underline = negative_bool(style.underline);
+        let strike_out = negative_bool(style.strike_out);
+        let scale_x_percent = style.scale.x * 100.0;
+        let scale_y_percent = style.scale.y * 100.0;
+
+        write!(
+            writer,
+            ",{bold},{italic},{underline},{strike_out},{scale_x_percent},{scale_y_percent},"
+        )?;
+
+        write!(
+            writer,
+            "{},{},{},{},{},{},{},{},{},{}{NEWLINE}",
+            style.spacing,
+            style.angle.0,
+            style.border_style as i32,
+            style.border_width,
+            style.shadow_distance,
+            style.alignment.as_an(),
+            style.margins.left,
+            style.margins.right,
+            style.margins.vertical,
+            style.encoding.0
+        )?;
+    }
+
+    write!(writer, "{NEWLINE}")
+}
+
 fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {
     for (key, value) in kvs {
         write!(writer, "{key}: {value}{NEWLINE}")?;
@@ -92,11 +175,32 @@ fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(
     Ok(())
 }
 
+fn emit_colour_and_transparency_to_packed<W: Write>(
+    writer: &mut W,
+    colour: Colour,
+    transparency: Transparency,
+) -> Result<(), Error> {
+    write!(
+        writer,
+        "&H{:02X}{:02X}{:02X}{:02X}",
+        transparency.0, colour.blue, colour.green, colour.red
+    )
+}
+
 fn yes_or_no(value: bool) -> &'static str {
     if value {
         "yes"
     } else {
         "no"
+    }
+}
+
+// Why do ass files use -1 for true???
+fn negative_bool(value: bool) -> &'static str {
+    if value {
+        "-1"
+    } else {
+        "0"
     }
 }
 
