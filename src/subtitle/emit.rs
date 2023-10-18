@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::fmt::{Error, Write};
 
 use crate::nde::tags::{Colour, Transparency};
-use crate::version;
+use crate::{nde, version};
 
 use super::{
-    Attachment, AttachmentType, EventType, ScriptInfo, SideData, Sline, SlineTrack, Style,
-    YCbCrMatrix,
+    Attachment, AttachmentType, EventType, Extradata, ExtradataEntry, ScriptInfo, SideData, Sline,
+    SlineTrack, Style, YCbCrMatrix,
 };
 
 const NEWLINE: &str = "\n";
@@ -43,6 +43,7 @@ pub fn emit<W: Write>(
         AttachmentType::Font,
     )?;
     emit_events(writer, &subtitles.slines, &subtitles.styles)?;
+    emit_extradata(writer, &subtitles.extradata)?;
 
     Ok(())
 }
@@ -275,6 +276,55 @@ fn emit_events<W: Write>(writer: &mut W, slines: &[Sline], styles: &[Style]) -> 
     write!(writer, "{NEWLINE}")
 }
 
+fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(), Error> {
+    if extradata.entries.is_empty() {
+        return Ok(());
+    }
+
+    write!(writer, "[Aegisub Extradata]{NEWLINE}")?;
+
+    for (id, entry) in &extradata.entries {
+        write!(writer, "Data: {},", id.0)?;
+
+        match entry {
+            ExtradataEntry::NdeFilter(filter) => {
+                let serialised = match serialise_nde_filter(filter) {
+                    Ok(serialised) => serialised,
+                    Err(err) => {
+                        println!("Error in NDE filter serialisation: {err}");
+                        println!("NDE filter in question: {filter:?}");
+                        return Err(Error);
+                    }
+                };
+
+                write!(writer, "_samaku_nde_filter,e1{serialised}")?;
+            }
+            ExtradataEntry::Opaque { key, value } => {
+                emit_aegi_inline_string(writer, key)?;
+
+                // TODO: uuencode data unsuitable for inline encoding
+                write!(writer, ",e")?;
+                emit_aegi_inline_string(writer, value)?;
+            }
+        }
+
+        write!(writer, "{NEWLINE}")?;
+    }
+
+    write!(writer, "{NEWLINE}")
+}
+
+const COMPRESSION_LEVEL: u8 = 6;
+
+fn serialise_nde_filter(filter: &nde::Filter) -> Result<String, String> {
+    let mut data: Vec<u8> = vec![];
+    ciborium::into_writer(&filter, &mut data).map_err(|err| err.to_string())?;
+
+    Ok(data_encoding::BASE64.encode(
+        miniz_oxide::deflate::compress_to_vec(data.as_slice(), COMPRESSION_LEVEL).as_slice(),
+    ))
+}
+
 fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {
     for (key, value) in kvs {
         write!(writer, "{key}: {value}{NEWLINE}")?;
@@ -293,14 +343,6 @@ fn emit_colour_and_transparency_to_packed<W: Write>(
         "&H{:02X}{:02X}{:02X}{:02X}",
         transparency.0, colour.blue, colour.green, colour.red
     )
-}
-
-fn yes_or_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }
 
 fn emit_timecode<W: Write>(writer: &mut W, time: i64) -> Result<(), Error> {
@@ -330,6 +372,14 @@ fn emit_aegi_inline_string<W: Write>(writer: &mut W, str: &str) -> Result<(), Er
     }
 
     Ok(())
+}
+
+fn yes_or_no(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
 }
 
 // Why do ass files use -1 for true???
