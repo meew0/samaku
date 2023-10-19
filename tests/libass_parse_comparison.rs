@@ -25,17 +25,15 @@ fn libass_parse_comparison() {
 
     let mut found_any_difference = false;
 
-    for sline in track.slines.iter() {
-        let direct = subtitle::CompiledEvent {
-            start: sline.start,
-            duration: sline.duration,
-            layer_index: sline.layer_index,
-            style_index: sline.style_index,
-            margins: sline.margins,
-            text: Cow::Borrowed(&sline.text),
-            read_order: 0,
-            name: Cow::Borrowed(""),
-            effect: Cow::Borrowed(""),
+    for event in track.events.iter() {
+        let direct = subtitle::Event {
+            start: event.start,
+            duration: event.duration,
+            layer_index: event.layer_index,
+            style_index: event.style_index,
+            margins: event.margins,
+            text: Cow::Borrowed(&event.text),
+            ..Default::default()
         };
         let direct_opaque = media::subtitle::OpaqueTrack::from_compiled(
             std::iter::once(&direct),
@@ -43,15 +41,15 @@ fn libass_parse_comparison() {
             &opaque_track.script_info(),
         );
 
-        let indirect = parse_round_trip(sline);
+        let indirect = parse_round_trip(event);
         let indirect_opaque = media::subtitle::OpaqueTrack::from_compiled(
             std::iter::once(&indirect),
             &track.styles,
             &opaque_track.script_info(),
         );
 
-        'inner: for now_offset in (0..sline.duration.0).step_by(100) {
-            let now = sline.start.0 + now_offset;
+        'inner: for now_offset in (0..event.duration.0).step_by(100) {
+            let now = event.start.0 + now_offset;
 
             let mut direct_images: Vec<AssImage> = vec![];
             let mut indirect_images: Vec<AssImage> = vec![];
@@ -79,7 +77,7 @@ fn libass_parse_comparison() {
                 println!(" - Indirect text: {}", indirect.text);
                 println!(
                     " - At time point: {} ms from start time ({} ms)",
-                    now_offset, sline.start.0
+                    now_offset, event.start.0
                 );
                 if direct_images.len() != indirect_images.len() {
                     println!(
@@ -111,20 +109,18 @@ fn libass_parse_comparison() {
     assert!(!found_any_difference);
 }
 
-fn parse_round_trip(sline: &subtitle::Sline) -> subtitle::CompiledEvent {
-    let (global, spans) = nde::tags::parse(&sline.text);
+fn parse_round_trip(event: &subtitle::Event) -> subtitle::Event<'static> {
+    let (global, spans) = nde::tags::parse(&event.text);
     let emitted = nde::tags::emit(&global, &spans);
 
-    subtitle::CompiledEvent {
-        start: sline.start,
-        duration: sline.duration,
-        layer_index: sline.layer_index,
-        style_index: sline.style_index,
-        margins: sline.margins,
+    subtitle::Event {
+        start: event.start,
+        duration: event.duration,
+        layer_index: event.layer_index,
+        style_index: event.style_index,
+        margins: event.margins,
         text: Cow::Owned(emitted),
-        read_order: 0,
-        name: Cow::Borrowed(""),
-        effect: Cow::Borrowed(""),
+        ..Default::default()
     }
 }
 
@@ -142,7 +138,8 @@ struct AssImage {
 
 impl AssImage {
     pub fn from<BH: BuildHasher>(image: &media::subtitle::Image, build_hasher: &BH) -> Self {
-        let (colour, transparency) = subtitle::unpack_colour_and_transparency_rgbt(image.metadata.color);
+        let (colour, transparency) =
+            subtitle::unpack_colour_and_transparency_rgbt(image.metadata.color);
 
         Self {
             width: image.metadata.w,

@@ -46,7 +46,7 @@ impl Graph {
                     position: iced::Point { x: 400.0, y: 100.0 },
                 },
                 VisualNode {
-                    node: Box::new(node::InputSline {}),
+                    node: Box::new(node::InputEvent {}),
                     position: iced::Point { x: 100.0, y: 100.0 },
                 },
             ],
@@ -91,7 +91,7 @@ impl Graph {
                     position: iced::Point { x: 300.0, y: 0.0 },
                 },
                 VisualNode {
-                    node: Box::new(node::InputSline {}),
+                    node: Box::new(node::InputEvent {}),
                     position: iced::Point { x: 0.0, y: 0.0 },
                 },
             ],

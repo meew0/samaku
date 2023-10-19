@@ -3,16 +3,16 @@ use crate::{message, model, nde};
 use super::{Error, LeafInputType, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InputSline {}
+pub struct InputEvent {}
 
 #[typetag::serde]
-impl Node for InputSline {
+impl Node for InputEvent {
     fn name(&self) -> &'static str {
         "Input: Subtitle line"
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::LeafInput(LeafInputType::Sline)]
+        &[SocketType::LeafInput(LeafInputType::Event)]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
@@ -20,18 +20,18 @@ impl Node for InputSline {
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
-        let SocketValue::Sline(sline) = inputs[0] else {
+        let SocketValue::SourceEvent(source_event) = inputs[0] else {
             return Err(Error::MismatchedTypes);
         };
 
-        let (global, spans) = nde::tags::parse(&sline.text);
+        let (global, spans) = nde::tags::parse(&source_event.text);
 
         let event = nde::Event {
-            start: sline.start,
-            duration: sline.duration,
-            layer_index: sline.layer_index,
-            style_index: sline.style_index,
-            margins: sline.margins,
+            start: source_event.start,
+            duration: source_event.duration,
+            layer_index: source_event.layer_index,
+            style_index: source_event.style_index,
+            margins: source_event.margins,
             global_tags: *global,
             overrides: nde::tags::Local::empty(),
             text: spans,
@@ -43,7 +43,7 @@ impl Node for InputSline {
 inventory::submit! {
     Shell::new(
         &["Input", "Subtitle line"],
-        || Box::new(InputSline {})
+        || Box::new(InputEvent {})
     )
 }
 

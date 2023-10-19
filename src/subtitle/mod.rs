@@ -18,61 +18,70 @@ mod emit;
 pub mod parse;
 mod uu;
 
-/// An `Sline` (“samaku line”/“subtitle line”/“sign or line”/etc.),
-/// in samaku terms, is one conceptual individual “subtitle”,
-/// that is, a dialogue line, a complex sign, etc.
-/// It may compile to multiple underlying ASS [`Event`]s.
+/// “Event” is the unambiguous term for a subtitle line, or a typeset sign, or a frame-by-frame
+/// or clipped part of a sign. It is shown from a specific start time on for a specific duration,
+/// contains text and override tags, and certain other metadata.
+///
+/// samaku uses events in two main forms: ones that own their data (usually `Event<'static>`)
+/// stored in the global state, and derived ones that will reference the data in some other event,
+/// for example as a result of compilation.
+///
+/// We extend libass' simple model of events with certain extra properties, like references to
+/// external “extradata”, most notably NDE filters.
 #[derive(Debug, Clone, Default)]
-pub struct Sline {
-    /// The time in milliseconds when this line first appears.
+pub struct Event<'a> {
+    /// The instant, in milliseconds, when this line first appears.
     pub start: StartTime,
 
-    /// The time in milliseconds for which this line is shown
-    /// beginning at the `start` time.
+    /// The time in milliseconds for which this event is shown, beginning at the `start` time.
     pub duration: Duration,
 
-    /// The layer index on which this line is shown. Elements on
-    /// layers with higher numbers are shown above those on layers
-    /// with lower numbers.
+    /// The layer index on which this event is shown. Events on layers with higher numbers are
+    /// shown above those on layers with lower numbers.
     pub layer_index: i32,
 
-    /// The index of the style used for the line. If no style with
-    /// this index exists, the default style (index 0) is used
-    /// instead, which always exists.
+    /// The index of the style used for the event. If no style with this index exists, the default
+    /// style (index 0) is used instead, which is guaranteed to always exist.
     pub style_index: i32,
 
-    /// If this line is not manually positioned using `\pos` tags,
-    /// these margins determine its offset from the frame border.
+    /// If this event is not manually positioned using `\pos` tags, these margins determine its
+    /// offset from the frame border.
     pub margins: Margins,
 
-    /// The text shown for this line, potentially including ASS
-    /// formatting tags.
-    pub text: String,
+    /// The text shown for this event, potentially including ASS formatting tags.
+    pub text: Cow<'a, str>,
 
-    pub actor: String,
-    pub effect: String,
+    /// The ASS “Actor”/“Name” field. Has no effect on rendering whatsoever; purely used for
+    /// reference when authoring subtitles.
+    pub actor: Cow<'a, str>,
 
-    /// Whether this line is a comment or not.
+    /// The ASS “Effect” field. Certain special values for this field cause different rendering
+    /// behaviour in libass, but it may also be used for reference when authoring.
+    pub effect: Cow<'a, str>,
+
+    /// The “type” of event this is — most importantly, whether it is a comment or not, but in the
+    /// future we may desire to define even more types of events.
     pub event_type: EventType,
 
-    /// Extradata entries referenced by this line.
+    /// Extradata entries referenced by this line. Most notably, this may include a reference to
+    /// an NDE filter.
     pub extradata_ids: Vec<ExtradataId>,
 }
 
-impl Sline {
+impl<'a> Event<'a> {
     #[must_use]
     pub fn end(&self) -> StartTime {
         StartTime(self.start.0 + self.duration.0)
     }
 
-    /// Unassigns the NDE filter from this sline, if one is assigned. Otherwise, nothing will
+    /// Unassigns the NDE filter from this event, if one is assigned. Otherwise, nothing will
     /// happen.
     pub fn unassign_nde_filter(&mut self, extradata: &Extradata) {
         self.extradata_ids
             .retain(|id| !matches!(extradata[*id], ExtradataEntry::NdeFilter(_)));
     }
 
-    /// Assign an NDE filter to this sline, unassigning the previously assigned filter, if one
+    /// Assign an NDE filter to this event, unassigning the previously assigned filter, if one
     /// existed.
     pub fn assign_nde_filter(&mut self, id: ExtradataId, extradata: &Extradata) {
         self.unassign_nde_filter(extradata);
@@ -85,36 +94,6 @@ pub enum EventType {
     #[default]
     Dialogue,
     Comment,
-}
-
-/// An event in true ASS terms, that is, one subtitle line
-/// as it would be found in e.g. Aegisub. Not to be used
-/// as the source for anything; only as an intermediate
-/// in the conversion to events as used by libass directly
-/// (`ASS_Event`)
-///
-/// See [`Sline`] docs for other fields.
-#[derive(Debug, Clone)]
-pub struct CompiledEvent<'a> {
-    pub start: StartTime,
-    pub duration: Duration,
-    pub layer_index: i32,
-    pub style_index: i32,
-    pub margins: Margins,
-    pub text: Cow<'a, str>,
-
-    /// Not really clear what this is,
-    /// it seems to be used for duplicate checking within libass,
-    /// and also potentially for layer-independent Z ordering (?)
-    pub read_order: i32,
-
-    /// Name a.k.a. Actor (does nothing)
-    pub name: Cow<'a, str>,
-
-    /// Can be used to store arbitrary user data,
-    /// but libass also parses this and has some special behaviour
-    /// for certain values (e.g. `Banner;`)
-    pub effect: Cow<'a, str>,
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
@@ -369,44 +348,47 @@ impl Default for Style {
     }
 }
 
-/// Ordered collection of [`Sline`]s with associated data.
+/// Ordered collection of [`Event`]s with associated data.
 /// For now, it's just a wrapper around [`Vec`].
 /// Might become more advanced in the future.
 #[derive(Default)]
 pub struct SlineTrack {
-    pub slines: Vec<Sline>,
+    pub events: Vec<Event<'static>>,
     pub styles: Vec<Style>,
     pub extradata: Extradata,
 }
 
 impl SlineTrack {
-    /// Returns true if and only if there are no slines in this track
+    /// Returns true if and only if there are no events in this track
     /// (there may still be some styles)
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.slines.is_empty()
+        self.events.is_empty()
     }
 
     #[must_use]
-    pub fn active_sline(&self, active_sline_index: Option<usize>) -> Option<&Sline> {
-        match active_sline_index {
-            Some(active_sline_index) => Some(&self.slines[active_sline_index]),
+    pub fn active_event(&self, active_event_index: Option<usize>) -> Option<&Event<'static>> {
+        match active_event_index {
+            Some(active_event_index) => Some(&self.events[active_event_index]),
             None => None,
         }
     }
 
     #[must_use]
-    pub fn active_sline_mut(&mut self, active_sline_index: Option<usize>) -> Option<&mut Sline> {
-        match active_sline_index {
-            Some(active_sline_index) => Some(&mut self.slines[active_sline_index]),
+    pub fn active_event_mut(
+        &mut self,
+        active_event_index: Option<usize>,
+    ) -> Option<&mut Event<'static>> {
+        match active_event_index {
+            Some(active_event_index) => Some(&mut self.events[active_event_index]),
             None => None,
         }
     }
 
     #[must_use]
-    pub fn active_nde_filter(&self, active_sline_index: Option<usize>) -> Option<&nde::Filter> {
-        match active_sline_index.map(|index| &self.slines[index]) {
-            Some(active_sline) => self.extradata.nde_filter_for_sline(active_sline),
+    pub fn active_nde_filter(&self, active_event_index: Option<usize>) -> Option<&nde::Filter> {
+        match active_event_index.map(|index| &self.events[index]) {
+            Some(active_event) => self.extradata.nde_filter_for_event(active_event),
             None => None,
         }
     }
@@ -414,10 +396,10 @@ impl SlineTrack {
     #[must_use]
     pub fn active_nde_filter_mut(
         &mut self,
-        active_sline_index: Option<usize>,
+        active_event_index: Option<usize>,
     ) -> Option<&mut nde::Filter> {
-        match active_sline_index.map(|index| &self.slines[index]) {
-            Some(active_sline) => self.extradata.nde_filter_for_sline_mut(active_sline),
+        match active_event_index.map(|index| &self.events[index]) {
+            Some(active_event) => self.extradata.nde_filter_for_event_mut(active_event),
             None => None,
         }
     }
@@ -425,11 +407,11 @@ impl SlineTrack {
     /// Dispatch message to node
     pub fn update_node(
         &mut self,
-        active_sline_index: Option<usize>,
+        active_event_index: Option<usize>,
         node_index: usize,
         message: message::Node,
     ) {
-        if let Some(filter) = self.active_nde_filter_mut(active_sline_index) {
+        if let Some(filter) = self.active_nde_filter_mut(active_event_index) {
             if let Some(node) = filter.graph.nodes.get_mut(node_index) {
                 node.node.update(message);
             }
@@ -438,29 +420,26 @@ impl SlineTrack {
 
     /// Compile subtitles in the given frame range to ASS.
     #[must_use]
-    pub fn compile(
-        &self,
+    pub fn compile<'a>(
+        &'a self,
         _frame_start: i32,
         _frame_count: i32,
         frame_rate: media::FrameRate,
-    ) -> Vec<CompiledEvent> {
-        let mut counter = 0;
-        let mut compiled: Vec<CompiledEvent> = vec![];
+    ) -> Vec<Event<'a>> {
+        let mut compiled: Vec<Event<'a>> = vec![];
 
-        for sline in &self.slines {
-            match self.extradata.nde_filter_for_sline(sline) {
-                Some(filter) => {
-                    match compile::nde(sline, &filter.graph, frame_rate, &mut counter) {
-                        Ok(mut nde_result) => match &mut nde_result.events {
-                            Some(events) => compiled.append(events),
-                            None => println!("No output from NDE filter"),
-                        },
-                        Err(error) => {
-                            println!("Got NdeError while running NDE filter: {error:?}");
-                        }
+        for event in &self.events {
+            match self.extradata.nde_filter_for_event(event) {
+                Some(filter) => match compile::nde(event, &filter.graph, frame_rate) {
+                    Ok(mut nde_result) => match &mut nde_result.events {
+                        Some(events) => compiled.append(events),
+                        None => println!("No output from NDE filter"),
+                    },
+                    Err(error) => {
+                        println!("Got NdeError while running NDE filter: {error:?}");
                     }
-                }
-                None => compiled.push(compile::trivial(sline, &mut counter)),
+                },
+                None => compiled.push(compile::trivial(event)),
             }
         }
 
@@ -570,10 +549,10 @@ impl Extradata {
             })
     }
 
-    /// Returns the assigned NDE filter for a given sline, if one exists.
+    /// Returns the assigned NDE filter for a given event, if one exists.
     #[must_use]
-    pub fn nde_filter_for_sline(&self, sline: &Sline) -> Option<&nde::Filter> {
-        for extradata_id in &sline.extradata_ids {
+    pub fn nde_filter_for_event(&self, event: &Event) -> Option<&nde::Filter> {
+        for extradata_id in &event.extradata_ids {
             if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
                 return Some(filter);
             }
@@ -582,17 +561,17 @@ impl Extradata {
         None
     }
 
-    /// Get a mutable reference to the NDE filter assigned to the given sline, if one is assigned.
+    /// Get a mutable reference to the NDE filter assigned to the given event, if one is assigned.
     ///
     /// # Panics
     /// This function should never panic in safe operation.
     #[must_use]
-    pub fn nde_filter_for_sline_mut(&mut self, sline: &Sline) -> Option<&mut nde::Filter> {
+    pub fn nde_filter_for_event_mut(&mut self, event: &Event) -> Option<&mut nde::Filter> {
         // We have to implement it in this roundabout way because of borrow checker limitations;
         // if we simply return the filter reference in the loop, the borrow checker cannot prove
         // that the mutable reference is unique.
         let mut maybe_filter_id: Option<ExtradataId> = None;
-        for extradata_id in &sline.extradata_ids {
+        for extradata_id in &event.extradata_ids {
             if let ExtradataEntry::NdeFilter(_) = &self[*extradata_id] {
                 maybe_filter_id = Some(*extradata_id);
                 break;
@@ -705,7 +684,7 @@ mod tests {
         let ass_file = AssFile {
             script_info: ScriptInfo::default(),
             subtitles: SlineTrack {
-                slines: vec![],
+                events: vec![],
                 styles: vec![],
                 extradata: Extradata {
                     entries,

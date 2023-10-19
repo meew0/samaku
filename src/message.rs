@@ -48,7 +48,7 @@ pub enum Message {
     /// other metadata intact.
     OpenSubtitleFile,
 
-    /// Save subtitle file — storing slines as they are represented internally, with NDE filters
+    /// Save subtitle file — storing events as they are represented internally, with NDE filters
     /// reproduced intact as extradata
     SaveSubtitleFile,
 
@@ -83,19 +83,19 @@ pub enum Message {
     /// Does not cause the playback state itself to change.
     Playing(bool),
 
-    /// Add an empty sline to the end of the track.
-    AddSline,
+    /// Add an empty event to the end of the track.
+    AddEvent,
 
-    /// Set the given sline to be active.
-    SelectSline(usize),
+    /// Set the given event to be active.
+    SelectEvent(usize),
 
-    /// Set the text of the active sline.
-    SetActiveSlineText(String),
+    /// Set the text of the active event.
+    SetActiveEventText(String),
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,
-    AssignFilterToActiveSline(subtitle::ExtradataId),
-    UnassignFilterFromActiveSline,
+    AssignFilterToActiveEvent(subtitle::ExtradataId),
+    UnassignFilterFromActiveEvent,
     SetActiveFilterName(String),
     DeleteFilter(subtitle::ExtradataId), // NYI
 

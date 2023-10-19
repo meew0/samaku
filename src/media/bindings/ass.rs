@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CStr;
 
@@ -223,8 +224,8 @@ impl Drop for Renderer {
 pub type RawEvent = libass::ASS_Event;
 pub type RawStyle = libass::ASS_Style;
 
-pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
-    subtitle::Sline {
+pub fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
+    subtitle::Event {
         start: subtitle::StartTime(raw_event.Start),
         duration: subtitle::Duration(raw_event.Duration),
         style_index: raw_event.Style,
@@ -234,22 +235,24 @@ pub fn raw_event_to_sline(raw_event: &RawEvent) -> subtitle::Sline {
             right: raw_event.MarginR,
             vertical: raw_event.MarginV,
         },
-        text: string_from_libass(raw_event.Text).expect("event text should never be null"),
-        actor: string_from_libass(raw_event.Name).unwrap_or_default(),
-        effect: string_from_libass(raw_event.Effect).unwrap_or_default(),
+        text: Cow::Owned(
+            string_from_libass(raw_event.Text).expect("event text should never be null"),
+        ),
+        actor: Cow::Owned(string_from_libass(raw_event.Name).unwrap_or_default()),
+        effect: Cow::Owned(string_from_libass(raw_event.Effect).unwrap_or_default()),
         event_type: EventType::Dialogue,
         extradata_ids: vec![],
     }
 }
 
-pub fn event_to_raw(event: &subtitle::CompiledEvent) -> RawEvent {
+pub fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
     RawEvent {
         Start: event.start.0,
         Duration: event.duration.0,
-        ReadOrder: event.read_order,
+        ReadOrder: read_order,
         Layer: event.layer_index,
         Style: event.style_index,
-        Name: malloc_string(event.name.as_ref()),
+        Name: malloc_string(event.actor.as_ref()),
         MarginL: event.margins.left,
         MarginR: event.margins.right,
         MarginV: event.margins.vertical,

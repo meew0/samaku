@@ -2,24 +2,23 @@ use std::borrow::Cow;
 
 use crate::{media, nde};
 
-pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::CompiledEvent<'a> {
-    let event = super::CompiledEvent {
-        start: sline.start,
-        duration: sline.duration,
-        layer_index: sline.layer_index,
-        style_index: sline.style_index,
-        margins: sline.margins,
-        text: Cow::from(sline.text.as_str()),
-        read_order: *counter,
-        name: Cow::from(""),
-        effect: Cow::from(""),
-    };
-
-    *counter += 1;
-    event
+#[must_use]
+pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
+    super::Event {
+        start: event.start,
+        duration: event.duration,
+        layer_index: event.layer_index,
+        style_index: event.style_index,
+        margins: event.margins,
+        text: Cow::Borrowed(&event.text),
+        actor: Cow::Borrowed(&event.actor),
+        effect: Cow::Borrowed(&event.effect),
+        event_type: super::EventType::Dialogue,
+        extradata_ids: vec![],
+    }
 }
 
-/// Applies the given `filter` to the given `sline`, and returns the resulting events plus certain
+/// Applies the given `filter` to the given `event`, and returns the resulting events plus certain
 /// intermediate values. The `counter` is counted up for every created event and used as its read
 /// index.
 ///
@@ -29,17 +28,16 @@ pub fn trivial<'a>(sline: &'a super::Sline, counter: &mut i32) -> super::Compile
 /// # Panics
 /// Panics if the filter's output node does not provide a [`SocketValue::CompiledEvents`].
 pub fn nde<'a, 'b>(
-    sline: &'a super::Sline,
+    event: &'a super::Event<'static>,
     filter: &'b nde::graph::Graph,
     frame_rate: media::FrameRate,
-    counter: &mut i32,
 ) -> Result<NdeResult<'a, 'b>, NdeError> {
     let mut intermediates: Vec<NodeState> = vec![NodeState::Inactive; filter.nodes.len()];
     let mut process_queue = match filter.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
     };
-    let sline_value = nde::node::SocketValue::Sline(sline);
+    let source_event_value = nde::node::SocketValue::SourceEvent(event);
     let frame_rate_value = nde::node::SocketValue::FrameRate(frame_rate);
 
     // Go through the process queue and process the individual nodes
@@ -53,8 +51,8 @@ pub fn nde<'a, 'b>(
         for (i, desired_input) in desired_inputs.iter().enumerate() {
             if let nde::node::SocketType::LeafInput(desired_leaf_input) = desired_input {
                 match desired_leaf_input {
-                    nde::node::LeafInputType::Sline => {
-                        inputs[i] = &sline_value;
+                    nde::node::LeafInputType::Event => {
+                        inputs[i] = &source_event_value;
                     }
                     nde::node::LeafInputType::FrameRate => {
                         inputs[i] = &frame_rate_value;
@@ -86,17 +84,10 @@ pub fn nde<'a, 'b>(
             let first_output = output_node_outputs.swap_remove(0);
 
             match first_output {
-                nde::node::SocketValue::CompiledEvents(mut events) => {
-                    for event in &mut events {
-                        event.read_order = *counter;
-                        *counter += 1;
-                    }
-
-                    Ok(NdeResult {
-                        events: Some(events),
-                        intermediates,
-                    })
-                }
+                nde::node::SocketValue::CompiledEvents(events) => Ok(NdeResult {
+                    events: Some(events),
+                    intermediates,
+                }),
                 _ => {
                     panic!("the output of the output node should be a CompiledEvents socket value")
                 }
@@ -110,7 +101,7 @@ pub fn nde<'a, 'b>(
 }
 
 pub struct NdeResult<'a, 'b> {
-    pub events: Option<Vec<super::CompiledEvent<'a>>>,
+    pub events: Option<Vec<super::Event<'a>>>,
     pub intermediates: Vec<NodeState<'b>>,
 }
 
@@ -144,23 +135,20 @@ mod tests {
             nde::graph::DfsResult::ProcessQueue(VecDeque::from([2, 1, 0]))
         );
 
-        let sline = Sline {
+        let event = Event {
             start: StartTime(0),
             duration: Duration(1000),
-            text: "This text will become italic".to_string(),
+            text: Cow::Owned("This text will become italic".to_string()),
             ..Default::default()
         };
 
-        let mut counter = 0;
-
         let result = nde(
-            &sline,
+            &event,
             &filter,
             media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
-            &mut counter,
         )
         .expect("there should be no error");
 

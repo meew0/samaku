@@ -3,6 +3,7 @@
 #![allow(clippy::enum_glob_use)]
 #![allow(clippy::doc_markdown)] // Useful to have in general, but too many false positives — perhaps worth revisiting later?
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
@@ -81,8 +82,8 @@ pub struct Samaku {
     /// .ass file attachments.
     pub side_data: subtitle::SideData,
 
-    /// Index of currently active sline, if one exists.
-    pub active_sline_index: Option<usize>,
+    /// Index of currently selected event, if one exists.
+    pub active_event_index: Option<usize>,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -181,7 +182,7 @@ impl Application for Samaku {
                 subtitles: subtitle::SlineTrack::default(),
                 script_info: subtitle::ScriptInfo::default(),
                 side_data: subtitle::SideData::default(),
-                active_sline_index: None,
+                active_event_index: None,
                 shared: shared_state,
                 view: RefCell::new(ViewState {
                     subtitle_renderer: media::subtitle::Renderer::new(),
@@ -390,8 +391,8 @@ impl Application for Samaku {
             Self::Message::Playing(playing) => {
                 self.playing = playing;
             }
-            Self::Message::AddSline => {
-                let new_sline = subtitle::Sline {
+            Self::Message::AddEvent => {
+                let new_event = subtitle::Event {
                     start: subtitle::StartTime(0),
                     duration: subtitle::Duration(5000),
                     layer_index: 0,
@@ -401,18 +402,18 @@ impl Application for Samaku {
                         right: 50,
                         vertical: 50,
                     },
-                    text: "Sphinx of black quartz, judge my vow".to_string(),
-                    actor: String::new(),
-                    effect: String::new(),
+                    text: Cow::Owned("Sphinx of black quartz, judge my vow".to_string()),
+                    actor: Cow::Owned(String::new()),
+                    effect: Cow::Owned(String::new()),
                     event_type: subtitle::EventType::Dialogue,
                     extradata_ids: vec![],
                 };
-                self.subtitles.slines.push(new_sline);
+                self.subtitles.events.push(new_event);
             }
-            Self::Message::SelectSline(index) => self.active_sline_index = Some(index),
-            Self::Message::SetActiveSlineText(new_text) => {
-                if let Some(sline) = self.subtitles.active_sline_mut(self.active_sline_index) {
-                    sline.text = new_text;
+            Self::Message::SelectEvent(index) => self.active_event_index = Some(index),
+            Self::Message::SetActiveEventText(new_text) => {
+                if let Some(event) = self.subtitles.active_event_mut(self.active_event_index) {
+                    event.text = Cow::Owned(new_text);
                 }
             }
             Self::Message::CreateEmptyFilter => {
@@ -422,26 +423,26 @@ impl Application for Samaku {
                 });
                 self.update_filter_lists();
             }
-            Self::Message::AssignFilterToActiveSline(filter_index) => {
-                if let Some(active_sline) = self
-                    .active_sline_index
-                    .map(|index| &mut self.subtitles.slines[index])
+            Self::Message::AssignFilterToActiveEvent(filter_index) => {
+                if let Some(active_event) = self
+                    .active_event_index
+                    .map(|index| &mut self.subtitles.events[index])
                 {
-                    active_sline.assign_nde_filter(filter_index, &self.subtitles.extradata);
+                    active_event.assign_nde_filter(filter_index, &self.subtitles.extradata);
                 }
             }
-            Self::Message::UnassignFilterFromActiveSline => {
-                if let Some(active_sline) = self
-                    .active_sline_index
-                    .map(|index| &mut self.subtitles.slines[index])
+            Self::Message::UnassignFilterFromActiveEvent => {
+                if let Some(active_event) = self
+                    .active_event_index
+                    .map(|index| &mut self.subtitles.events[index])
                 {
-                    active_sline.unassign_nde_filter(&self.subtitles.extradata);
+                    active_event.unassign_nde_filter(&self.subtitles.extradata);
                 }
             }
             Self::Message::SetActiveFilterName(new_name) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_sline_index)
+                    .active_nde_filter_mut(self.active_event_index)
                 {
                     filter.name = new_name;
                     self.update_filter_lists();
@@ -453,7 +454,7 @@ impl Application for Samaku {
             Self::Message::AddNode(node_constructor) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_sline_index)
+                    .active_nde_filter_mut(self.active_event_index)
                 {
                     let visual_node = nde::graph::VisualNode {
                         node: node_constructor(),
@@ -465,7 +466,7 @@ impl Application for Samaku {
             Self::Message::MoveNode(node_index, x, y) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_sline_index)
+                    .active_nde_filter_mut(self.active_event_index)
                 {
                     let node = &mut filter.graph.nodes[node_index];
                     node.position = iced::Point::new(node.position.x + x, node.position.y + y);
@@ -474,7 +475,7 @@ impl Application for Samaku {
             Self::Message::ConnectNodes(link) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_sline_index)
+                    .active_nde_filter_mut(self.active_event_index)
                 {
                     let (start, end) = link.unwrap_sockets();
                     filter.graph.connect(
@@ -492,7 +493,7 @@ impl Application for Samaku {
             Self::Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_sline_index)
+                    .active_nde_filter_mut(self.active_event_index)
                 {
                     let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
                         node_index: endpoint.node_index,
@@ -525,7 +526,7 @@ impl Application for Samaku {
                 if let Some(reticules) = &mut self.reticules {
                     if let Some(filter) = self
                         .subtitles
-                        .active_nde_filter_mut(self.active_sline_index)
+                        .active_nde_filter_mut(self.active_event_index)
                     {
                         if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index)
                         {
@@ -543,24 +544,24 @@ impl Application for Samaku {
                     // The node can't do this itself, because it does not know the number of
                     // the current frame.
                     self.subtitles.update_node(
-                        self.active_sline_index,
+                        self.active_event_index,
                         node_index,
                         message::Node::MotionTrackUpdate(current_frame, initial_region),
                     );
 
-                    if let Some(sline) = self.subtitles.active_sline(self.active_sline_index) {
+                    if let Some(event) = self.subtitles.active_event(self.active_event_index) {
                         self.workers.emit_track_motion_for_node(
                             node_index,
                             initial_region,
                             current_frame,
-                            video_metadata.frame_rate.ms_to_frame(sline.end().0),
+                            video_metadata.frame_rate.ms_to_frame(event.end().0),
                         );
                     }
                 }
             }
             Self::Message::Node(node_index, node_message) => {
                 self.subtitles
-                    .update_node(self.active_sline_index, node_index, node_message);
+                    .update_node(self.active_event_index, node_index, node_message);
             }
         }
 

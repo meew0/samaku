@@ -6,7 +6,7 @@ use crate::nde::tags::{Colour, Transparency};
 use crate::{nde, version};
 
 use super::{
-    Attachment, AttachmentType, EventType, Extradata, ExtradataEntry, ScriptInfo, SideData, Sline,
+    Attachment, AttachmentType, Event, EventType, Extradata, ExtradataEntry, ScriptInfo, SideData,
     SlineTrack, Style, YCbCrMatrix,
 };
 
@@ -42,7 +42,7 @@ pub fn emit<W: Write>(
         &side_data.attachments,
         AttachmentType::Font,
     )?;
-    emit_events(writer, &subtitles.slines, &subtitles.styles)?;
+    emit_events(writer, &subtitles.events, &subtitles.styles)?;
     emit_extradata(writer, &subtitles.extradata)?;
 
     Ok(())
@@ -221,50 +221,50 @@ fn emit_attachments<W: Write>(
     Ok(())
 }
 
-fn emit_events<W: Write>(writer: &mut W, slines: &[Sline], styles: &[Style]) -> Result<(), Error> {
-    if slines.is_empty() {
+fn emit_events<W: Write>(writer: &mut W, events: &[Event], styles: &[Style]) -> Result<(), Error> {
+    if events.is_empty() {
         return Ok(());
     }
 
     write!(writer, "[Events]{NEWLINE}")?;
     write!(writer, "{EVENT_FORMAT}{NEWLINE}")?;
 
-    for sline in slines {
+    for event in events {
         write!(
             writer,
             "{}: {},",
-            event_type_name(sline.event_type),
-            sline.layer_index,
+            event_type_name(event.event_type),
+            event.layer_index,
         )?;
-        emit_timecode(writer, sline.start.0)?;
+        emit_timecode(writer, event.start.0)?;
         write!(writer, ",")?;
-        emit_timecode(writer, sline.end().0)?;
+        emit_timecode(writer, event.end().0)?;
         write!(writer, ",")?;
         emit_aegi_inline_string(
             writer,
-            &styles[usize::try_from(sline.style_index).unwrap()].name,
+            &styles[usize::try_from(event.style_index).unwrap()].name,
         )?;
         write!(writer, ",")?;
-        emit_aegi_inline_string(writer, &sline.actor)?;
+        emit_aegi_inline_string(writer, &event.actor)?;
         write!(
             writer,
             ",{},{},{},",
-            sline.margins.left, sline.margins.right, sline.margins.vertical
+            event.margins.left, event.margins.right, event.margins.vertical
         )?;
-        emit_aegi_inline_string(writer, &sline.effect)?;
+        emit_aegi_inline_string(writer, &event.effect)?;
         write!(writer, ",")?;
 
         // Write extradata ID block
-        if !sline.extradata_ids.is_empty() {
+        if !event.extradata_ids.is_empty() {
             write!(writer, "{{")?;
-            for extradata_id in &sline.extradata_ids {
+            for extradata_id in &event.extradata_ids {
                 write!(writer, "={}", extradata_id.0)?;
             }
             write!(writer, "}}")?;
         }
 
-        // Skip newlines in sline text, should they exist
-        for char in sline.text.chars() {
+        // Skip newlines in event text, should they exist
+        for char in event.text.chars() {
             match char {
                 '\r' | '\n' => {}
                 other => write!(writer, "{other}")?,

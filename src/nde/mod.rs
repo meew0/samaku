@@ -38,7 +38,7 @@ pub struct Event {
 
 impl Event {
     #[must_use]
-    pub fn to_ass_event(&self) -> subtitle::CompiledEvent<'static> {
+    pub fn to_ass_event(&self) -> subtitle::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
@@ -60,16 +60,17 @@ impl Event {
 
         let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
-        subtitle::CompiledEvent {
+        subtitle::Event {
             start: self.start,
             duration: self.duration,
             layer_index: self.layer_index,
             style_index: self.style_index,
             margins: self.margins,
             text: Cow::from(compiled_text),
-            read_order: 0,
-            name: Cow::from(""),
+            actor: Cow::from(""),
             effect: Cow::from(""),
+            event_type: subtitle::EventType::Dialogue,
+            extradata_ids: vec![],
         }
     }
 

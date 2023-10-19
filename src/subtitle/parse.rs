@@ -1,5 +1,6 @@
 //! Functions for parsing `.ass` files. For parsing ASS override tags, see [`nde::tags::parse`]
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
@@ -11,9 +12,9 @@ use crate::nde::tags::{Alignment, Colour, Transparency};
 use crate::{nde, subtitle};
 
 use super::{
-    Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, EventType, Extradata,
+    Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, Event, EventType, Extradata,
     ExtradataEntry, ExtradataId, FontEncoding, JustifyMode, Margins, Scale, ScriptInfo, SideData,
-    Sline, SlineTrack, StartTime, Style, YCbCrMatrix,
+    SlineTrack, StartTime, Style, YCbCrMatrix,
 };
 
 #[allow(clippy::too_many_lines)]
@@ -31,7 +32,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     let mut style_lookup: HashMap<String, usize> = HashMap::new();
     let mut styles: Vec<Style> = vec![];
-    let mut raw_slines_and_style_names: Vec<(Sline, String)> = vec![];
+    let mut raw_events_and_style_names: Vec<(Event, String)> = vec![];
     let mut script_info = ScriptInfo::default();
     let mut extradata = Extradata::default();
     let mut aegi_metadata = HashMap::new();
@@ -106,7 +107,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
             }
             ParseState::Events => {
                 if line.starts_with("Dialogue:") || line.starts_with("Comment:") {
-                    raw_slines_and_style_names.push(parse_event_line(line)?);
+                    raw_events_and_style_names.push(parse_event_line(line)?);
                 }
             }
             ParseState::ScriptInfo => {
@@ -130,18 +131,18 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     }
 
     // Match event style names to styles, and construct sline track
-    let mut slines: Vec<Sline> = vec![];
-    for (mut raw_sline, style_name) in raw_slines_and_style_names {
+    let mut events: Vec<Event> = vec![];
+    for (mut raw_event, style_name) in raw_events_and_style_names {
         if let Some(style_index) = style_lookup.get(&style_name) {
-            raw_sline.style_index = (*style_index).try_into().unwrap();
-            slines.push(raw_sline);
+            raw_event.style_index = (*style_index).try_into().unwrap();
+            events.push(raw_event);
         } else {
             return Err(Error::UnmatchedStyle(style_name));
         }
     }
 
     let subtitles = SlineTrack {
-        slines,
+        events,
         styles,
         extradata,
     };
@@ -319,7 +320,7 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     Ok(style)
 }
 
-fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
+fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
     let (event_type, fields_str) = if let Some(fields_str) = line.strip_prefix("Dialogue: ") {
         (EventType::Dialogue, fields_str)
     } else if let Some(fields_str) = line.strip_prefix("Comment: ") {
@@ -357,7 +358,7 @@ fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
         }
     }
 
-    let new_sline = Sline {
+    let new_event = Event {
         start: StartTime(start),
         duration: Duration(end - start),
         layer_index: layer,
@@ -367,14 +368,14 @@ fn parse_event_line(line: &str) -> Result<(Sline, String), Error> {
             right: margin_r,
             vertical: margin_v,
         },
-        text: text.to_string(),
-        actor,
-        effect,
+        text: Cow::Owned(text.to_string()),
+        actor: Cow::Owned(actor),
+        effect: Cow::Owned(effect),
         event_type,
         extradata_ids,
     };
 
-    Ok((new_sline, style))
+    Ok((new_event, style))
 }
 
 fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<(), Error> {
@@ -745,10 +746,10 @@ pub mod tests {
             AttachmentType::Graphic
         );
 
-        let sline5 = &ass_file.subtitles.slines[5];
-        assert_eq!(sline5.style_index, 0);
+        let event5 = &ass_file.subtitles.events[5];
+        assert_eq!(event5.style_index, 0);
         assert_matches!(
-            ass_file.subtitles.extradata.nde_filter_for_sline(sline5),
+            ass_file.subtitles.extradata.nde_filter_for_event(event5),
             Some(filter)
         );
         assert_eq!(filter.graph.nodes.len(), 4);
@@ -835,24 +836,24 @@ pub mod tests {
 
     #[test]
     fn event() -> Result<(), Error> {
-        let (sline, style_name) = parse_event_line(
+        let (event, style_name) = parse_event_line(
             r"Dialogue: 0,0:00:05.00,0:00:07.00,Default,,1,2,3,,{=8=10}{\fs100}asdhasjkldhsajk",
         )?;
 
         assert_eq!(style_name, "Default");
-        assert_eq!(sline.layer_index, 0);
-        assert_eq!(sline.start, StartTime(5000));
-        assert_eq!(sline.duration, Duration(2000));
-        assert_eq!(sline.margins.left, 1);
-        assert_eq!(sline.margins.right, 2);
-        assert_eq!(sline.margins.vertical, 3);
+        assert_eq!(event.layer_index, 0);
+        assert_eq!(event.start, StartTime(5000));
+        assert_eq!(event.duration, Duration(2000));
+        assert_eq!(event.margins.left, 1);
+        assert_eq!(event.margins.right, 2);
+        assert_eq!(event.margins.vertical, 3);
         assert_eq!(
-            sline.extradata_ids.as_slice(),
+            event.extradata_ids.as_slice(),
             &[ExtradataId(8), ExtradataId(10)]
         );
-        assert_eq!(sline.actor, "");
-        assert_eq!(sline.effect, "");
-        assert_eq!(sline.text, r"{\fs100}asdhasjkldhsajk");
+        assert_eq!(event.actor, "");
+        assert_eq!(event.effect, "");
+        assert_eq!(event.text, r"{\fs100}asdhasjkldhsajk");
 
         Ok(())
     }

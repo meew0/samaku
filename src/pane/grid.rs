@@ -80,7 +80,7 @@ impl Display for ColumnField {
 impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     for (&'a crate::Samaku, &'a Column)
 {
-    type Row = subtitle::Sline;
+    type Row = subtitle::Event<'static>;
 
     fn header(
         &'b self,
@@ -100,10 +100,10 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
         let cell_content: iced::Element<message::Message> = match self.1.field {
             ColumnField::SelectButton => iced::widget::button(" ")
-                .on_press(message::Message::SelectSline(row_index))
+                .on_press(message::Message::SelectEvent(row_index))
                 .into(),
             ColumnField::FilterName => {
-                iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_sline(row) {
+                iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_event(row) {
                     Some(filter) => {
                         let stored_name = &filter.name;
                         if stored_name.is_empty() {
@@ -149,7 +149,7 @@ pub fn view<'a>(
             grid_state.header_scrollable_id.clone(),
             grid_state.body_scrollable_id.clone(),
             columns_with_state.as_slice(),
-            &global_state.subtitles.slines,
+            &global_state.subtitles.events,
             // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
             // does not support passing a closure here.
             // TODO: Make a PR to support this?

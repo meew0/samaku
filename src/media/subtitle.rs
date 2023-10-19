@@ -27,9 +27,10 @@ impl OpaqueTrack {
     /// Convert data from our representation into libass'.
     ///
     /// # Panics
-    /// Panics if libass fails to construct a new subtitle track.
+    /// Panics if libass fails to construct a new subtitle track or when there are more events than
+    /// would fit into an `i32`.
     pub fn from_compiled<'a>(
-        events: impl IntoIterator<Item = &'a subtitle::CompiledEvent<'a>>,
+        events: impl IntoIterator<Item = &'a subtitle::Event<'a>>,
         styles: &[subtitle::Style],
         metadata: &subtitle::ScriptInfo,
     ) -> OpaqueTrack {
@@ -40,9 +41,10 @@ impl OpaqueTrack {
         track.set_header(metadata);
 
         assert_eq!(track.events().len(), 0); // No events should exist yet
-        for event in events {
+        for (read_index, event) in events.into_iter().enumerate() {
             track.alloc_event();
-            *track.events_mut().last_mut().unwrap() = ass::event_to_raw(event);
+            *track.events_mut().last_mut().unwrap() =
+                ass::event_to_raw(event, i32::try_from(read_index).unwrap());
         }
 
         track.resize_styles(styles.len());
@@ -57,7 +59,7 @@ impl OpaqueTrack {
     #[must_use]
     pub fn to_sline_track(&self) -> subtitle::SlineTrack {
         subtitle::SlineTrack {
-            slines: self.slines(),
+            events: self.events(),
             styles: self.styles(),
             extradata: subtitle::Extradata::default(),
         }
@@ -78,11 +80,11 @@ impl OpaqueTrack {
         self.internal.styles().len()
     }
 
-    fn slines(&self) -> Vec<subtitle::Sline> {
+    fn events(&self) -> Vec<subtitle::Event<'static>> {
         self.internal
             .events()
             .iter()
-            .map(ass::raw_event_to_sline)
+            .map(ass::event_from_raw)
             .collect::<Vec<_>>()
     }
 
@@ -388,10 +390,10 @@ mod tests {
             (SHADOW_2_COLOUR, SHADOW_2_TRANSPARENCY)
         );
 
-        // Do the whole thing again, going through a round trip of ass -> sline -> ass
+        // Do the whole thing again, going through a round trip of ass -> stored event -> ass
         let sline_track = opaque_track.to_sline_track();
-        assert_eq!(sline_track.slines[0].style_index, default);
-        assert_eq!(sline_track.slines[1].style_index, alternate);
+        assert_eq!(sline_track.events[0].style_index, default);
+        assert_eq!(sline_track.events[1].style_index, alternate);
         assert_eq!(sline_track.styles[default_usize].primary_colour, WHITE);
         assert_eq!(
             sline_track.styles[default_usize].primary_transparency,

@@ -109,26 +109,24 @@ pub fn view<'a>(
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
 ) -> super::View<'a> {
-    let content: iced::Element<message::Message> = match global_state.active_sline_index {
-        Some(active_sline_index) => {
-            // There is an active sline, check whether it has an NDE filter
-            let active_sline = &global_state.subtitles.slines[active_sline_index];
+    let content: iced::Element<message::Message> = match global_state.active_event_index {
+        Some(active_event_index) => {
+            // There is an active event, check whether it has an NDE filter
+            let active_event = &global_state.subtitles.events[active_event_index];
             match &global_state
                 .subtitles
                 .extradata
-                .nde_filter_for_sline(active_sline)
+                .nde_filter_for_event(active_event)
             {
                 Some(nde_filter) => {
                     // Before doing much of anything else, we need to run the NDE filter —
                     // not to get the output events, but for the intermediate state,
                     // which lets us determine what style to draw nodes in, as well as provide
                     // precise information of what types sockets contain
-                    let mut counter = 0;
                     let nde_result_or_error = subtitle::compile::nde(
-                        active_sline,
+                        active_event,
                         &nde_filter.graph,
                         global_state.frame_rate(),
-                        &mut counter,
                     );
 
                     let mut graph_content = vec![];
@@ -406,7 +404,7 @@ fn view_graph<'a>(
         .item_height(iced_aw::menu::ItemHeight::Uniform(32));
 
     let unassign_button = iced::widget::button(iced::widget::text("Unassign"))
-        .on_press(message::Message::UnassignFilterFromActiveSline);
+        .on_press(message::Message::UnassignFilterFromActiveEvent);
 
     let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
         .on_input(message::Message::SetActiveFilterName)
@@ -467,7 +465,7 @@ fn view_non_selected(
         pane_state
             .selected_filter
             .as_ref()
-            .map(|filter_ref| message::Message::AssignFilterToActiveSline(filter_ref.index)),
+            .map(|filter_ref| message::Message::AssignFilterToActiveEvent(filter_ref.index)),
     );
     let create_button = iced::widget::button(iced::widget::text("Create new"))
         .on_press(message::Message::CreateEmptyFilter);

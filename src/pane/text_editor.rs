@@ -10,11 +10,11 @@ pub fn view<'a>(
 ) -> super::View<'a> {
     let content: iced::Element<message::Message> = match global_state
         .subtitles
-        .active_sline(global_state.active_sline_index)
+        .active_event(global_state.active_event_index)
     {
-        Some(active_sline) => iced::widget::responsive(|size| {
-            iced::widget::text_input("Enter subtitle text...", &active_sline.text)
-                .on_input(message::Message::SetActiveSlineText)
+        Some(active_event) => iced::widget::responsive(|size| {
+            iced::widget::text_input("Enter subtitle text...", &active_event.text)
+                .on_input(message::Message::SetActiveEventText)
                 .width(size.width)
                 .line_height(iced::widget::text::LineHeight::Absolute(size.height.into()))
                 .into()

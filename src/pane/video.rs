@@ -65,8 +65,8 @@ pub fn view<'a>(
                     };
                     let elapsed_render = instant3.elapsed();
                     println!(
-                        "Subtitle profiling: compiling {} slines to {} events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
-                        global_state.subtitles.slines.len(), compiled.len(), elapsed_compile, elapsed_copy, elapsed_render
+                        "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
+                        global_state.subtitles.events.len(), compiled.len(), elapsed_compile, elapsed_copy, elapsed_render
                     );
 
                     stack

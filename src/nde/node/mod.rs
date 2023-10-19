@@ -7,10 +7,10 @@ use std::fmt::Debug;
 
 pub use clip::ClipRectangle;
 pub use gradient::Gradient;
+pub use input::InputEvent;
 pub use input::InputFrameRate;
 pub use input::InputPosition;
 pub use input::InputRectangle;
-pub use input::InputSline;
 pub use input::InputTags;
 pub use motion_track::MotionTrack;
 pub use output::Output;
@@ -31,8 +31,8 @@ mod style_basic;
 
 /// Represents a value passed into a socket.
 ///
-/// This struct takes a lifetime argument because it needs to support references to slines, which
-/// are awkward to clone. But slines should not be passed around in the node tree, so only leaf
+/// This struct takes a lifetime argument because it needs to support references to events stored
+/// in the global state. But those should not be passed around in the node tree, so only leaf
 /// nodes should have to deal with these — for the most part, the lifetime should be `'static`
 #[derive(Debug, Clone)]
 pub enum SocketValue<'a> {
@@ -53,10 +53,10 @@ pub enum SocketValue<'a> {
 
     FrameRate(media::FrameRate),
 
-    Sline(&'a subtitle::Sline),
+    SourceEvent(&'a subtitle::Event<'static>),
 
     /// Compiled events that are ready to copy into libass.
-    CompiledEvents(Vec<subtitle::CompiledEvent<'static>>),
+    CompiledEvents(Vec<subtitle::Event<'static>>),
 }
 
 impl<'a> SocketValue<'a> {
@@ -70,7 +70,9 @@ impl<'a> SocketValue<'a> {
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
             SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
-            SocketValue::None | SocketValue::Sline(_) | SocketValue::CompiledEvents(_) => None,
+            SocketValue::None | SocketValue::SourceEvent(_) | SocketValue::CompiledEvents(_) => {
+                None
+            }
         }
     }
 
@@ -172,7 +174,7 @@ impl SocketType {
 
 #[derive(Debug, Clone, Copy)]
 pub enum LeafInputType {
-    Sline,
+    Event,
     FrameRate,
 }
 
