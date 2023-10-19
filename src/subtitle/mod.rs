@@ -227,12 +227,21 @@ impl From<i32> for BorderStyle {
     }
 }
 
+/// Subtitle colour mangling mode. Needed for colour compatibility with certain old scripts
+/// targeting VSFilter etc. For newly created scripts, there is absolutely no reason to use a
+/// value other than [`YCbCrMatrix::None`].
+///
 /// See <https://github.com/libass/libass/blob/5c15c883a4783641f7e71a6a1f440209965eb64f/libass/ass_types.h#L152>
-#[derive(Debug, Clone, Copy)]
+/// for further details.
+#[derive(Debug, Clone, Copy, Default)]
 pub enum YCbCrMatrix {
     Default = 0,
     Unknown,
+
+    /// Specifies unambiguously that no colour mangling should occur.
+    #[default]
     None,
+
     Bt601Tv,
     Bt601Pc,
     Bt709Tv,
