@@ -149,7 +149,7 @@ pub fn view<'a>(
             grid_state.header_scrollable_id.clone(),
             grid_state.body_scrollable_id.clone(),
             columns_with_state.as_slice(),
-            &global_state.subtitles.events,
+            global_state.subtitles.events.as_slice(),
             // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
             // does not support passing a closure here.
             // TODO: Make a PR to support this?

@@ -6,8 +6,8 @@ use crate::nde::tags::{Colour, Transparency};
 use crate::{nde, version};
 
 use super::{
-    Attachment, AttachmentType, Event, EventType, Extradata, ExtradataEntry, ScriptInfo, SideData,
-    SlineTrack, Style, YCbCrMatrix,
+    Attachment, AttachmentType, EventTrack, EventType, Extradata, ExtradataEntry, File, ScriptInfo,
+    Style, YCbCrMatrix,
 };
 
 const NEWLINE: &str = "\n";
@@ -19,27 +19,22 @@ const EVENT_FORMAT: &str =
 ///
 /// # Errors
 /// Errors when the writer cannot be written to, or when there is an unexpected format error.
-pub fn emit<W: Write>(
-    writer: &mut W,
-    script_info: &ScriptInfo,
-    subtitles: &SlineTrack,
-    side_data: &SideData,
-) -> Result<(), Error> {
-    emit_script_info(writer, script_info)?;
-    emit_aegi_metadata(writer, &side_data.aegi_metadata)?;
+pub fn emit<W: Write>(writer: &mut W, subtitles: &File) -> Result<(), Error> {
+    emit_script_info(writer, &subtitles.script_info)?;
+    emit_aegi_metadata(writer, &subtitles.aegi_metadata)?;
     emit_styles(writer, &subtitles.styles)?;
     emit_attachments(
         writer,
         "Graphics",
         "filename",
-        &side_data.attachments,
+        &subtitles.attachments,
         AttachmentType::Graphic,
     )?;
     emit_attachments(
         writer,
         "Fonts",
         "fontname",
-        &side_data.attachments,
+        &subtitles.attachments,
         AttachmentType::Font,
     )?;
     emit_events(writer, &subtitles.events, &subtitles.styles)?;
@@ -221,7 +216,11 @@ fn emit_attachments<W: Write>(
     Ok(())
 }
 
-fn emit_events<W: Write>(writer: &mut W, events: &[Event], styles: &[Style]) -> Result<(), Error> {
+fn emit_events<W: Write>(
+    writer: &mut W,
+    events: &EventTrack,
+    styles: &[Style],
+) -> Result<(), Error> {
     if events.is_empty() {
         return Ok(());
     }

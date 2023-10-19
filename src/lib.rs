@@ -71,16 +71,9 @@ pub struct Samaku {
     /// Metadata of the currently loaded video, if and only if any is loaded.
     pub video_metadata: Option<media::VideoMetadata>,
 
-    /// Currently loaded subtitles, if present.
-    pub subtitles: subtitle::SlineTrack,
-
-    /// Metadata of loaded script, containing information like the playback resolution, the
-    /// YCbCr matrix, etc.
-    pub script_info: subtitle::ScriptInfo,
-
-    /// Additional metadata which is useful less often, like Aegisub-specific metadata or
-    /// .ass file attachments.
-    pub side_data: subtitle::SideData,
+    /// Currently loaded subtitles. Will contain some useful defaults if nothing has been loaded
+    /// yet.
+    pub subtitles: subtitle::File,
 
     /// Index of currently selected event, if one exists.
     pub active_event_index: Option<usize>,
@@ -124,7 +117,7 @@ impl Samaku {
     pub fn update_filter_lists(&mut self) {
         for pane in self.panes.panes.values_mut() {
             if let pane::State::NodeEditor(node_editor_state) = pane {
-                node_editor_state.update_filter_names(&self.subtitles);
+                node_editor_state.update_filter_names(&self.subtitles.extradata);
             }
         }
     }
@@ -179,9 +172,7 @@ impl Application for Samaku {
                 workers: workers::Workers::spawn_all(&shared_state),
                 actual_frame: None,
                 video_metadata: None,
-                subtitles: subtitle::SlineTrack::default(),
-                script_info: subtitle::ScriptInfo::default(),
-                side_data: subtitle::SideData::default(),
+                subtitles: subtitle::File::default(),
                 active_event_index: None,
                 shared: shared_state,
                 view: RefCell::new(ViewState {
@@ -300,9 +291,13 @@ impl Application for Samaku {
                 );
             }
             Self::Message::SubtitleFileReadForImport(content) => {
-                let ass = media::subtitle::OpaqueTrack::parse(&content);
-                self.subtitles = ass.to_sline_track();
-                self.script_info = ass.script_info();
+                let opaque = media::subtitle::OpaqueTrack::parse(&content);
+                self.subtitles = subtitle::File {
+                    events: opaque.to_event_track(),
+                    styles: opaque.styles(),
+                    script_info: opaque.script_info(),
+                    ..Default::default()
+                }
             }
             Self::Message::OpenSubtitleFile => {
                 let future = async {
@@ -310,7 +305,7 @@ impl Application for Samaku {
                         Some(handle) => match smol::fs::File::open(handle.path()).await {
                             Ok(file) => {
                                 let lines = smol::io::BufReader::new(file).lines();
-                                subtitle::AssFile::parse(lines).await.map(Box::new)
+                                subtitle::File::parse(lines).await.map(Box::new)
                             }
                             Err(io_err) => Err(subtitle::parse::Error::IoError(io_err)),
                         },
@@ -329,11 +324,7 @@ impl Application for Samaku {
                 let result = smol::block_on(future);
 
                 match result {
-                    Ok(ass_file) => {
-                        self.script_info = ass_file.script_info;
-                        self.subtitles = ass_file.subtitles;
-                        self.side_data = ass_file.side_data;
-                    }
+                    Ok(ass_file) => self.subtitles = *ass_file,
                     Err(err) => {
                         self.toasts.push(view::toast::Toast {
                             title: "Error while loading subtitle file".to_string(),
@@ -345,13 +336,7 @@ impl Application for Samaku {
             }
             Self::Message::SaveSubtitleFile => {
                 let mut data = String::new();
-                subtitle::emit(
-                    &mut data,
-                    &self.script_info,
-                    &self.subtitles,
-                    &self.side_data,
-                )
-                .unwrap();
+                subtitle::emit(&mut data, &self.subtitles).unwrap();
 
                 let future = async {
                     if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
@@ -412,7 +397,11 @@ impl Application for Samaku {
             }
             Self::Message::SelectEvent(index) => self.active_event_index = Some(index),
             Self::Message::SetActiveEventText(new_text) => {
-                if let Some(event) = self.subtitles.active_event_mut(self.active_event_index) {
+                if let Some(event) = self
+                    .subtitles
+                    .events
+                    .active_event_mut(self.active_event_index)
+                {
                     event.text = Cow::Owned(new_text);
                 }
             }
@@ -442,7 +431,8 @@ impl Application for Samaku {
             Self::Message::SetActiveFilterName(new_name) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_event_index)
+                    .events
+                    .active_nde_filter_mut(self.active_event_index, &mut self.subtitles.extradata)
                 {
                     filter.name = new_name;
                     self.update_filter_lists();
@@ -454,7 +444,8 @@ impl Application for Samaku {
             Self::Message::AddNode(node_constructor) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_event_index)
+                    .events
+                    .active_nde_filter_mut(self.active_event_index, &mut self.subtitles.extradata)
                 {
                     let visual_node = nde::graph::VisualNode {
                         node: node_constructor(),
@@ -466,7 +457,8 @@ impl Application for Samaku {
             Self::Message::MoveNode(node_index, x, y) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_event_index)
+                    .events
+                    .active_nde_filter_mut(self.active_event_index, &mut self.subtitles.extradata)
                 {
                     let node = &mut filter.graph.nodes[node_index];
                     node.position = iced::Point::new(node.position.x + x, node.position.y + y);
@@ -475,7 +467,8 @@ impl Application for Samaku {
             Self::Message::ConnectNodes(link) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_event_index)
+                    .events
+                    .active_nde_filter_mut(self.active_event_index, &mut self.subtitles.extradata)
                 {
                     let (start, end) = link.unwrap_sockets();
                     filter.graph.connect(
@@ -493,7 +486,8 @@ impl Application for Samaku {
             Self::Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
                 if let Some(filter) = self
                     .subtitles
-                    .active_nde_filter_mut(self.active_event_index)
+                    .events
+                    .active_nde_filter_mut(self.active_event_index, &mut self.subtitles.extradata)
                 {
                     let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
                         node_index: endpoint.node_index,
@@ -524,10 +518,10 @@ impl Application for Samaku {
             }
             Self::Message::UpdateReticulePosition(index, position) => {
                 if let Some(reticules) = &mut self.reticules {
-                    if let Some(filter) = self
-                        .subtitles
-                        .active_nde_filter_mut(self.active_event_index)
-                    {
+                    if let Some(filter) = self.subtitles.events.active_nde_filter_mut(
+                        self.active_event_index,
+                        &mut self.subtitles.extradata,
+                    ) {
                         if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index)
                         {
                             node.node.reticule_update(reticules, index, position);
@@ -543,13 +537,15 @@ impl Application for Samaku {
                     // position of the current frame.
                     // The node can't do this itself, because it does not know the number of
                     // the current frame.
-                    self.subtitles.update_node(
+                    self.subtitles.events.update_node(
                         self.active_event_index,
+                        &mut self.subtitles.extradata,
                         node_index,
                         message::Node::MotionTrackUpdate(current_frame, initial_region),
                     );
 
-                    if let Some(event) = self.subtitles.active_event(self.active_event_index) {
+                    if let Some(event) = self.subtitles.events.active_event(self.active_event_index)
+                    {
                         self.workers.emit_track_motion_for_node(
                             node_index,
                             initial_region,
@@ -560,8 +556,12 @@ impl Application for Samaku {
                 }
             }
             Self::Message::Node(node_index, node_message) => {
-                self.subtitles
-                    .update_node(self.active_event_index, node_index, node_message);
+                self.subtitles.events.update_node(
+                    self.active_event_index,
+                    &mut self.subtitles.extradata,
+                    node_index,
+                    node_message,
+                );
             }
         }
 

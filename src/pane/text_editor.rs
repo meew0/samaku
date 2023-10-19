@@ -10,6 +10,7 @@ pub fn view<'a>(
 ) -> super::View<'a> {
     let content: iced::Element<message::Message> = match global_state
         .subtitles
+        .events
         .active_event(global_state.active_event_index)
     {
         Some(active_event) => iced::widget::responsive(|size| {

@@ -57,12 +57,8 @@ impl OpaqueTrack {
     }
 
     #[must_use]
-    pub fn to_sline_track(&self) -> subtitle::SlineTrack {
-        subtitle::SlineTrack {
-            events: self.events(),
-            styles: self.styles(),
-            extradata: subtitle::Extradata::default(),
-        }
+    pub fn to_event_track(&self) -> subtitle::EventTrack {
+        subtitle::EventTrack::from_vec(self.events())
     }
 
     #[must_use]
@@ -88,7 +84,7 @@ impl OpaqueTrack {
             .collect::<Vec<_>>()
     }
 
-    fn styles(&self) -> Vec<subtitle::Style> {
+    pub fn styles(&self) -> Vec<subtitle::Style> {
         self.internal
             .styles()
             .iter()
@@ -391,50 +387,34 @@ mod tests {
         );
 
         // Do the whole thing again, going through a round trip of ass -> stored event -> ass
-        let sline_track = opaque_track.to_sline_track();
-        assert_eq!(sline_track.events[0].style_index, default);
-        assert_eq!(sline_track.events[1].style_index, alternate);
-        assert_eq!(sline_track.styles[default_usize].primary_colour, WHITE);
+        let event_track = opaque_track.to_event_track();
+        let styles = opaque_track.styles();
+        assert_eq!(event_track[0].style_index, default);
+        assert_eq!(event_track[1].style_index, alternate);
+        assert_eq!(styles[default_usize].primary_colour, WHITE);
+        assert_eq!(styles[default_usize].primary_transparency, OPAQUE);
+        assert_eq!(styles[default_usize].border_colour, BLACK);
+        assert_eq!(styles[default_usize].border_transparency, OPAQUE);
+        assert_eq!(styles[default_usize].shadow_colour, BLACK);
+        assert_eq!(styles[default_usize].shadow_transparency, OPAQUE);
+        assert_eq!(styles[alternate_usize].primary_colour, PRIMARY_2_COLOUR);
         assert_eq!(
-            sline_track.styles[default_usize].primary_transparency,
-            OPAQUE
-        );
-        assert_eq!(sline_track.styles[default_usize].border_colour, BLACK);
-        assert_eq!(
-            sline_track.styles[default_usize].border_transparency,
-            OPAQUE
-        );
-        assert_eq!(sline_track.styles[default_usize].shadow_colour, BLACK);
-        assert_eq!(
-            sline_track.styles[default_usize].shadow_transparency,
-            OPAQUE
-        );
-        assert_eq!(
-            sline_track.styles[alternate_usize].primary_colour,
-            PRIMARY_2_COLOUR
-        );
-        assert_eq!(
-            sline_track.styles[alternate_usize].primary_transparency,
+            styles[alternate_usize].primary_transparency,
             PRIMARY_2_TRANSPARENCY
         );
+        assert_eq!(styles[alternate_usize].border_colour, BORDER_2_COLOUR);
         assert_eq!(
-            sline_track.styles[alternate_usize].border_colour,
-            BORDER_2_COLOUR
-        );
-        assert_eq!(
-            sline_track.styles[alternate_usize].border_transparency,
+            styles[alternate_usize].border_transparency,
             BORDER_2_TRANSPARENCY
         );
+        assert_eq!(styles[alternate_usize].shadow_colour, SHADOW_2_COLOUR);
         assert_eq!(
-            sline_track.styles[alternate_usize].shadow_colour,
-            SHADOW_2_COLOUR
-        );
-        assert_eq!(
-            sline_track.styles[alternate_usize].shadow_transparency,
+            styles[alternate_usize].shadow_transparency,
             SHADOW_2_TRANSPARENCY
         );
 
-        let compiled_events = sline_track.compile(24, 1, FRAME_RATE);
+        let compiled_events =
+            event_track.compile(&subtitle::Extradata::default(), 24, 1, FRAME_RATE);
         assert_eq!(compiled_events[0].style_index, default);
         assert_eq!(compiled_events[1].style_index, alternate);
 
@@ -443,8 +423,7 @@ mod tests {
             ..Default::default()
         };
 
-        let opaque2 =
-            OpaqueTrack::from_compiled(&compiled_events, &sline_track.styles, &script_info);
+        let opaque2 = OpaqueTrack::from_compiled(&compiled_events, &styles, &script_info);
         renderer = Renderer::new();
         colours.clear();
         renderer.render_subtitles_with_callback(

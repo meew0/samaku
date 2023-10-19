@@ -348,22 +348,50 @@ impl Default for Style {
     }
 }
 
-/// Ordered collection of [`Event`]s with associated data.
-/// For now, it's just a wrapper around [`Vec`].
-/// Might become more advanced in the future.
+/// Ordered collection of [`Event`]s.
+/// For now, this is just a wrapper around [`Vec`], but in the future it might become more advanced,
+/// using a tree-like structure or some time-indexed data structure.
 #[derive(Default)]
-pub struct SlineTrack {
-    pub events: Vec<Event<'static>>,
-    pub styles: Vec<Style>,
-    pub extradata: Extradata,
+pub struct EventTrack {
+    events: Vec<Event<'static>>,
 }
 
-impl SlineTrack {
-    /// Returns true if and only if there are no events in this track
-    /// (there may still be some styles)
+impl EventTrack {
+    /// Create a new `EventTrack` from the given `Vec` of events, with empty extradata.
+    ///
+    /// # Panics
+    /// Panics if any of the given events refer to any extradata.
+    #[must_use]
+    pub fn from_vec(events: Vec<Event<'static>>) -> Self {
+        for event in &events {
+            assert!(
+                event.extradata_ids.is_empty(),
+                "events given to `from_vec` may not refer to extradata"
+            );
+        }
+
+        Self { events }
+    }
+
+    /// Returns true if and only if there are no events in this track.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+
+    /// Returns the number of events in the track.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[Event<'static>] {
+        self.events.as_slice()
+    }
+
+    pub fn push(&mut self, event: Event<'static>) {
+        self.events.push(event);
     }
 
     #[must_use]
@@ -386,20 +414,25 @@ impl SlineTrack {
     }
 
     #[must_use]
-    pub fn active_nde_filter(&self, active_event_index: Option<usize>) -> Option<&nde::Filter> {
+    pub fn active_nde_filter<'a>(
+        &self,
+        active_event_index: Option<usize>,
+        extradata: &'a Extradata,
+    ) -> Option<&'a nde::Filter> {
         match active_event_index.map(|index| &self.events[index]) {
-            Some(active_event) => self.extradata.nde_filter_for_event(active_event),
+            Some(active_event) => extradata.nde_filter_for_event(active_event),
             None => None,
         }
     }
 
     #[must_use]
-    pub fn active_nde_filter_mut(
-        &mut self,
+    pub fn active_nde_filter_mut<'a>(
+        &self,
         active_event_index: Option<usize>,
-    ) -> Option<&mut nde::Filter> {
+        extradata: &'a mut Extradata,
+    ) -> Option<&'a mut nde::Filter> {
         match active_event_index.map(|index| &self.events[index]) {
-            Some(active_event) => self.extradata.nde_filter_for_event_mut(active_event),
+            Some(active_event) => extradata.nde_filter_for_event_mut(active_event),
             None => None,
         }
     }
@@ -408,10 +441,11 @@ impl SlineTrack {
     pub fn update_node(
         &mut self,
         active_event_index: Option<usize>,
+        extradata: &mut Extradata,
         node_index: usize,
         message: message::Node,
     ) {
-        if let Some(filter) = self.active_nde_filter_mut(active_event_index) {
+        if let Some(filter) = self.active_nde_filter_mut(active_event_index, extradata) {
             if let Some(node) = filter.graph.nodes.get_mut(node_index) {
                 node.node.update(message);
             }
@@ -422,6 +456,7 @@ impl SlineTrack {
     #[must_use]
     pub fn compile<'a>(
         &'a self,
+        extradata: &Extradata,
         _frame_start: i32,
         _frame_count: i32,
         frame_rate: media::FrameRate,
@@ -429,7 +464,7 @@ impl SlineTrack {
         let mut compiled: Vec<Event<'a>> = vec![];
 
         for event in &self.events {
-            match self.extradata.nde_filter_for_event(event) {
+            match extradata.nde_filter_for_event(event) {
                 Some(filter) => match compile::nde(event, &filter.graph, frame_rate) {
                     Ok(mut nde_result) => match &mut nde_result.events {
                         Some(events) => compiled.append(events),
@@ -444,6 +479,30 @@ impl SlineTrack {
         }
 
         compiled
+    }
+}
+
+// For now, just transparently pass along `Vec`'s implementation
+impl<'a> IntoIterator for &'a EventTrack {
+    type Item = &'a Event<'static>;
+    type IntoIter = <&'a Vec<Event<'static>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        <&'a Vec<Event<'static>> as IntoIterator>::into_iter(&self.events)
+    }
+}
+
+impl Index<usize> for EventTrack {
+    type Output = Event<'static>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.events[index]
+    }
+}
+
+impl IndexMut<usize> for EventTrack {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.events[index]
     }
 }
 
@@ -475,13 +534,38 @@ impl Default for ScriptInfo {
     }
 }
 
-pub struct AssFile {
+/// Represents all data that can be contained within an `.ass` file.
+pub struct File {
+    /// Metadata, containing information like the playback resolution, the YCbCr matrix, etc.
     pub script_info: ScriptInfo,
-    pub subtitles: SlineTrack,
-    pub side_data: SideData,
+
+    /// Aegisub-specific metadata, from the “Aegisub Project Garbage” section. Currently this is
+    /// unused, but in the future we might use it for more compatibility with Aegisub, like loading
+    /// (dummy) videos or keeping track of the currently selected event in the same way.
+    pub aegi_metadata: HashMap<String, String>,
+
+    /// Binary files (fonts or graphics) attached to the subtitles. Currently unused within samaku.
+    /// This feature is pretty obscure anyway, we might eventually decide to get rid of these again.
+    pub attachments: Vec<Attachment>,
+
+    /// Other sections that were not recognised by the parser. They are represented here opaquely
+    /// to avoid removing them, in case for example some Aegisub variant decides to introduce a
+    /// new section.
+    pub other_sections: HashMap<String, String>,
+
+    /// Base styles for the events.
+    pub styles: Vec<Style>,
+
+    /// The events, i.e. the individual subtitle lines.
+    pub events: EventTrack,
+
+    /// Additional arbitrary data which may be referred to by events. Importantly for samaku's
+    /// purposes, this includes NDE filters, but there may also be other data such as
+    /// Aegisub-specific properties.
+    pub extradata: Extradata,
 }
 
-impl AssFile {
+impl File {
     /// Parse the given stream of lines into an [`AssFile`].
     ///
     /// # Errors
@@ -492,16 +576,23 @@ impl AssFile {
     /// Panics if there are more styles than would fit into an `i32`.
     pub async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         input: smol::io::Lines<R>,
-    ) -> Result<AssFile, parse::Error> {
+    ) -> Result<File, parse::Error> {
         parse::parse(input).await
     }
 }
 
-#[derive(Default)]
-pub struct SideData {
-    pub aegi_metadata: HashMap<String, String>,
-    pub attachments: Vec<Attachment>,
-    pub other_sections: HashMap<String, String>,
+impl Default for File {
+    fn default() -> Self {
+        Self {
+            script_info: ScriptInfo::default(),
+            aegi_metadata: HashMap::new(),
+            attachments: vec![],
+            other_sections: HashMap::new(),
+            styles: vec![Style::default()],
+            events: EventTrack::default(),
+            extradata: Extradata::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -551,7 +642,7 @@ impl Extradata {
 
     /// Returns the assigned NDE filter for a given event, if one exists.
     #[must_use]
-    pub fn nde_filter_for_event(&self, event: &Event) -> Option<&nde::Filter> {
+    pub fn nde_filter_for_event<'a>(&'a self, event: &Event) -> Option<&'a nde::Filter> {
         for extradata_id in &event.extradata_ids {
             if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
                 return Some(filter);
@@ -566,7 +657,10 @@ impl Extradata {
     /// # Panics
     /// This function should never panic in safe operation.
     #[must_use]
-    pub fn nde_filter_for_event_mut(&mut self, event: &Event) -> Option<&mut nde::Filter> {
+    pub fn nde_filter_for_event_mut<'a>(
+        &'a mut self,
+        event: &Event,
+    ) -> Option<&'a mut nde::Filter> {
         // We have to implement it in this roundabout way because of borrow checker limitations;
         // if we simply return the filter reference in the loop, the borrow checker cannot prove
         // that the mutable reference is unique.
@@ -651,8 +745,8 @@ mod tests {
         let path = test_file("test_files/extra_sections.ass");
         let ass_file = parse::tests::parse_blocking(&path);
 
-        assert_eq!(ass_file.side_data.attachments.len(), 1);
-        let at1 = &ass_file.side_data.attachments[0];
+        assert_eq!(ass_file.attachments.len(), 1);
+        let at1 = &ass_file.attachments[0];
         assert_eq!(at1.attachment_type, AttachmentType::Graphic);
 
         let source_data = std::fs::read(test_file("test_files/4x4.jpg")).unwrap();
@@ -681,52 +775,31 @@ mod tests {
             },
         );
 
-        let ass_file = AssFile {
-            script_info: ScriptInfo::default(),
-            subtitles: SlineTrack {
-                events: vec![],
-                styles: vec![],
-                extradata: Extradata {
-                    entries,
-                    next_id: ExtradataId(2),
-                },
+        let ass_file = File {
+            extradata: Extradata {
+                entries,
+                next_id: ExtradataId(2),
             },
-            side_data: SideData::default(),
+            ..Default::default()
         };
 
         let mut emitted = String::new();
-        emit::emit(
-            &mut emitted,
-            &ass_file.script_info,
-            &ass_file.subtitles,
-            &ass_file.side_data,
-        )
-        .unwrap();
+        emit::emit(&mut emitted, &ass_file).unwrap();
 
         // Make sure the short one was inline-encoded and the long one UU-encoded
         assert!(emitted.contains("short,e#00"));
         assert!(emitted.contains("long,u!"));
 
         let parsed = smol::block_on(async {
-            AssFile::parse(smol::io::BufReader::new(emitted.as_bytes()).lines()).await
+            File::parse(smol::io::BufReader::new(emitted.as_bytes()).lines()).await
         })
         .unwrap();
 
-        assert_eq!(parsed.subtitles.extradata.entries.len(), 2);
-        assert_eq!(parsed.subtitles.extradata.next_id, ExtradataId(2));
+        assert_eq!(parsed.extradata.entries.len(), 2);
+        assert_eq!(parsed.extradata.next_id, ExtradataId(2));
 
-        let e0 = parsed
-            .subtitles
-            .extradata
-            .entries
-            .get(&ExtradataId(0))
-            .unwrap();
-        let e1 = parsed
-            .subtitles
-            .extradata
-            .entries
-            .get(&ExtradataId(1))
-            .unwrap();
+        let e0 = parsed.extradata.entries.get(&ExtradataId(0)).unwrap();
+        let e1 = parsed.extradata.entries.get(&ExtradataId(1)).unwrap();
 
         assert_matches!(e0, ExtradataEntry::Opaque { key: k0, value: v0 });
         assert_matches!(e1, ExtradataEntry::Opaque { key: k1, value: v1 });

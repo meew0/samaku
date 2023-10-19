@@ -12,15 +12,15 @@ use crate::nde::tags::{Alignment, Colour, Transparency};
 use crate::{nde, subtitle};
 
 use super::{
-    Angle, AssFile, Attachment, AttachmentType, BorderStyle, Duration, Event, EventType, Extradata,
-    ExtradataEntry, ExtradataId, FontEncoding, JustifyMode, Margins, Scale, ScriptInfo, SideData,
-    SlineTrack, StartTime, Style, YCbCrMatrix,
+    Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,
+    Extradata, ExtradataEntry, ExtradataId, File, FontEncoding, JustifyMode, Margins, Scale,
+    ScriptInfo, StartTime, Style, YCbCrMatrix,
 };
 
 #[allow(clippy::too_many_lines)]
 pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     mut input: smol::io::Lines<R>,
-) -> Result<AssFile, Error> {
+) -> Result<File, Error> {
     let mut state = ParseState::ScriptInfo;
 
     // Data of opaque/unknown sections
@@ -130,7 +130,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         }
     }
 
-    // Match event style names to styles, and construct sline track
+    // Match event style names to styles, and construct event track
     let mut events: Vec<Event> = vec![];
     for (mut raw_event, style_name) in raw_events_and_style_names {
         if let Some(style_index) = style_lookup.get(&style_name) {
@@ -141,20 +141,14 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         }
     }
 
-    let subtitles = SlineTrack {
-        events,
-        styles,
-        extradata,
-    };
-
-    Ok(AssFile {
+    Ok(File {
         script_info,
-        subtitles,
-        side_data: SideData {
-            aegi_metadata,
-            attachments,
-            other_sections: opaque_sections,
-        },
+        aegi_metadata,
+        attachments,
+        other_sections: opaque_sections,
+        styles,
+        events: EventTrack { events },
+        extradata,
     })
 }
 
@@ -716,7 +710,7 @@ pub mod tests {
     /// # Panics
     /// Panics if any error occurs (IO or parsing)
     #[must_use]
-    pub fn parse_blocking(path: &Path) -> AssFile {
+    pub fn parse_blocking(path: &Path) -> File {
         smol::block_on(async {
             let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
             parse(lines).await
@@ -729,9 +723,9 @@ pub mod tests {
         let path = test_file("test_files/extra_sections.ass");
         let ass_file = parse_blocking(&path);
 
-        assert_eq!(ass_file.subtitles.styles.len(), 1);
+        assert_eq!(ass_file.styles.len(), 1);
         assert_eq!(
-            ass_file.subtitles.styles[0].primary_colour,
+            ass_file.styles[0].primary_colour,
             Colour {
                 red: 255,
                 green: 0,
@@ -740,16 +734,16 @@ pub mod tests {
         );
 
         assert_eq!(ass_file.script_info.playback_resolution.x, 1920);
-        assert_eq!(ass_file.side_data.attachments.len(), 1);
+        assert_eq!(ass_file.attachments.len(), 1);
         assert_matches!(
-            ass_file.side_data.attachments[0].attachment_type,
+            ass_file.attachments[0].attachment_type,
             AttachmentType::Graphic
         );
 
-        let event5 = &ass_file.subtitles.events[5];
+        let event5 = &ass_file.events.events[5];
         assert_eq!(event5.style_index, 0);
         assert_matches!(
-            ass_file.subtitles.extradata.nde_filter_for_event(event5),
+            ass_file.extradata.nde_filter_for_event(event5),
             Some(filter)
         );
         assert_eq!(filter.graph.nodes.len(), 4);

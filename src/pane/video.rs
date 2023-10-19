@@ -29,7 +29,7 @@ pub fn view<'a>(
                     y: video_metadata.height,
                 };
 
-                let stack = if global_state.subtitles.is_empty() {
+                let stack = if global_state.subtitles.events.is_empty() {
                     vec![view::widget::StackedImage {
                         handle: handle.clone(),
                         x: 0,
@@ -37,17 +37,19 @@ pub fn view<'a>(
                     }]
                 } else {
                     let instant = std::time::Instant::now();
-                    let compiled =
-                        global_state
-                            .subtitles
-                            .compile(0, 1_000_000, video_metadata.frame_rate); // TODO give actual frame range values here
+                    let compiled = global_state.subtitles.events.compile(
+                        &global_state.subtitles.extradata,
+                        0,
+                        1_000_000,
+                        video_metadata.frame_rate,
+                    ); // TODO give actual frame range values here
                     let elapsed_compile = instant.elapsed();
 
                     let instant2 = std::time::Instant::now();
                     let ass = media::subtitle::OpaqueTrack::from_compiled(
                         &compiled,
                         &global_state.subtitles.styles,
-                        &global_state.script_info,
+                        &global_state.subtitles.script_info,
                     );
                     let elapsed_copy = instant2.elapsed();
 

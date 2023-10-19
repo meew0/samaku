@@ -17,7 +17,8 @@ pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 1
 #[test]
 fn libass_parse_comparison() {
     let opaque_track = media::subtitle::OpaqueTrack::parse(&ASS_FILE.to_owned());
-    let track = opaque_track.to_sline_track();
+    let track = opaque_track.to_event_track();
+    let styles = opaque_track.styles();
 
     let mut indirect_renderer = media::subtitle::Renderer::new();
     let mut direct_renderer = media::subtitle::Renderer::new();
@@ -25,7 +26,7 @@ fn libass_parse_comparison() {
 
     let mut found_any_difference = false;
 
-    for event in track.events.iter() {
+    for event in &track {
         let direct = subtitle::Event {
             start: event.start,
             duration: event.duration,
@@ -37,14 +38,14 @@ fn libass_parse_comparison() {
         };
         let direct_opaque = media::subtitle::OpaqueTrack::from_compiled(
             std::iter::once(&direct),
-            &track.styles,
+            &styles,
             &opaque_track.script_info(),
         );
 
         let indirect = parse_round_trip(event);
         let indirect_opaque = media::subtitle::OpaqueTrack::from_compiled(
             std::iter::once(&indirect),
-            &track.styles,
+            &styles,
             &opaque_track.script_info(),
         );
 

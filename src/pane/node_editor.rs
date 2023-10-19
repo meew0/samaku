@@ -18,9 +18,9 @@ pub struct State {
 }
 
 impl State {
-    pub fn update_filter_names(&mut self, subtitles: &subtitle::SlineTrack) {
+    pub fn update_filter_names(&mut self, extradata: &subtitle::Extradata) {
         self.filters.clear();
-        for (i, filter) in subtitles.extradata.iter_filters() {
+        for (i, filter) in extradata.iter_filters() {
             self.filters.push(FilterReference {
                 name: filter.name.clone(),
                 index: i,
