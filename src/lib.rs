@@ -135,6 +135,13 @@ impl Samaku {
         }
     }
 
+    /// Create a context for compilation.
+    pub fn compile_context(&self) -> subtitle::compile::Context {
+        subtitle::compile::Context {
+            frame_rate: self.frame_rate(),
+        }
+    }
+
     /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
     /// video is loaded.
     pub fn current_frame(&self) -> Option<model::FrameNumber> {
@@ -338,6 +345,26 @@ impl Application for Samaku {
             Self::Message::SaveSubtitleFile => {
                 let mut data = String::new();
                 subtitle::emit(&mut data, &self.subtitles, None).unwrap();
+
+                let future = async {
+                    if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
+                        smol::fs::write(handle.path(), data).await.unwrap();
+                    }
+                };
+
+                return Command::perform(future, |()| Self::Message::None);
+            }
+            Self::Message::ExportSubtitleFile => {
+                let mut data = String::new();
+                subtitle::emit(&mut data, &self.subtitles, Some(self.compile_context())).unwrap();
+
+                if self.video_metadata.is_none() {
+                    self.toasts.push(view::toast::Toast {
+                        title: "Warning".to_string(),
+                        body: format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(self.frame_rate())),
+                        status: view::toast::Status::Primary,
+                    });
+                }
 
                 let future = async {
                     if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {

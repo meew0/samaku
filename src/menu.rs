@@ -12,6 +12,7 @@ pub fn file<'a>() -> MenuTree<'a, message::Message, iced::Renderer> {
             view::menu::item("Open", message::Message::OpenSubtitleFile),
             view::menu::item("Import", message::Message::ImportSubtitleFile),
             view::menu::item("Save", message::Message::SaveSubtitleFile),
+            view::menu::item("Export", message::Message::ExportSubtitleFile),
         ],
     )
 }

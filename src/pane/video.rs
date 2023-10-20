@@ -37,9 +37,7 @@ pub fn view<'a>(
                     }]
                 } else {
                     let instant = std::time::Instant::now();
-                    let context = subtitle::compile::Context {
-                        frame_rate: video_metadata.frame_rate,
-                    };
+                    let context = global_state.compile_context();
                     let compiled = global_state.subtitles.events.compile(
                         &global_state.subtitles.extradata,
                         &context,

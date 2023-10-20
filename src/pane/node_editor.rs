@@ -123,9 +123,7 @@ pub fn view<'a>(
                     // not to get the output events, but for the intermediate state,
                     // which lets us determine what style to draw nodes in, as well as provide
                     // precise information of what types sockets contain
-                    let context = subtitle::compile::Context {
-                        frame_rate: global_state.frame_rate(),
-                    };
+                    let context = global_state.compile_context();
                     let nde_result_or_error =
                         subtitle::compile::nde(active_event, &nde_filter.graph, &context);
 

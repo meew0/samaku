@@ -52,6 +52,9 @@ pub enum Message {
     /// reproduced intact as extradata
     SaveSubtitleFile,
 
+    /// Export subtitle file — compiling events and removing extraneous metadata
+    ExportSubtitleFile,
+
     /// A video file has been selected and should be loaded.
     VideoFileSelected(std::path::PathBuf),
 
