@@ -61,7 +61,7 @@ pub fn spawn(
                             .supported_output_configs()
                             .expect("Error while querying audio output configurations")
                         {
-                            if audio_properties.channels == supported_config.channels().into()
+                            if audio_properties.channels == u32::from(supported_config.channels())
                                 && audio_properties.sample_rate
                                 >= supported_config.min_sample_rate().0
                                 && audio_properties.sample_rate
