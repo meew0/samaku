@@ -337,7 +337,7 @@ impl Application for Samaku {
             }
             Self::Message::SaveSubtitleFile => {
                 let mut data = String::new();
-                subtitle::emit(&mut data, &self.subtitles).unwrap();
+                subtitle::emit(&mut data, &self.subtitles, None).unwrap();
 
                 let future = async {
                     if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {

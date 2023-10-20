@@ -11,7 +11,7 @@ pub use emit::emit;
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
 };
-use crate::{media, message, nde, style};
+use crate::{message, nde, style};
 
 pub mod compile;
 mod emit;
@@ -366,19 +366,9 @@ pub struct EventTrack {
 }
 
 impl EventTrack {
-    /// Create a new `EventTrack` from the given `Vec` of events, with empty extradata.
-    ///
-    /// # Panics
-    /// Panics if any of the given events refer to any extradata.
+    /// Create a new `EventTrack` from the given `Vec` of events.
     #[must_use]
     pub fn from_vec(events: Vec<Event<'static>>) -> Self {
-        for event in &events {
-            assert!(
-                event.extradata_ids.is_empty(),
-                "events given to `from_vec` may not refer to extradata"
-            );
-        }
-
         Self { events }
     }
 
@@ -466,15 +456,15 @@ impl EventTrack {
     pub fn compile<'a>(
         &'a self,
         extradata: &Extradata,
+        context: &compile::Context,
         _frame_start: i32,
-        _frame_count: i32,
-        frame_rate: media::FrameRate,
+        _frame_count: Option<i32>,
     ) -> Vec<Event<'a>> {
         let mut compiled: Vec<Event<'a>> = vec![];
 
         for event in &self.events {
             match extradata.nde_filter_for_event(event) {
-                Some(filter) => match compile::nde(event, &filter.graph, frame_rate) {
+                Some(filter) => match compile::nde(event, &filter.graph, context) {
                     Ok(mut nde_result) => match &mut nde_result.events {
                         Some(events) => compiled.append(events),
                         None => println!("No output from NDE filter"),
@@ -745,7 +735,7 @@ mod tests {
     use assert_matches2::assert_matches;
     use smol::io::AsyncBufReadExt;
 
-    use crate::test_utils::test_file;
+    use crate::{media, test_utils::test_file};
 
     use super::*;
 
@@ -793,7 +783,7 @@ mod tests {
         };
 
         let mut emitted = String::new();
-        emit::emit(&mut emitted, &ass_file).unwrap();
+        emit::emit(&mut emitted, &ass_file, None).unwrap();
 
         // Make sure the short one was inline-encoded and the long one UU-encoded
         assert!(emitted.contains("short,e#00"));
@@ -829,10 +819,70 @@ mod tests {
         assert!(recipe[0].contains("Olive Oil"));
 
         let mut emitted = String::new();
-        emit::emit(&mut emitted, &ass_file).unwrap();
+        emit::emit(&mut emitted, &ass_file, None).unwrap();
 
         assert!(emitted.contains("[Croutons Recipe]"));
         assert!(emitted.contains("Olive Oil"));
         assert!(emitted.contains("Pepper\nStep"));
+    }
+
+    #[test]
+    fn emit_export() {
+        // Create a File containing a single event that specifies an NDE filter which splits it
+        // frame-by-frame, and ensure that the exported output contains the correct number of
+        // resulting events.
+
+        let mut graph =
+            nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
+
+        // The SplitFrameByFrame node requires a frame rate, so add a respective input node and
+        // connect it
+        graph.nodes.push(nde::graph::VisualNode {
+            node: Box::new(nde::node::InputFrameRate {}),
+            position: iced::Point::new(0.0, 200.0),
+        });
+        graph.connect(
+            nde::graph::NextEndpoint {
+                node_index: 1,
+                socket_index: 1,
+            },
+            nde::graph::PreviousEndpoint {
+                node_index: 3,
+                socket_index: 0,
+            },
+        );
+
+        let filter = nde::Filter {
+            name: "foo".to_string(),
+            graph,
+        };
+
+        let mut extradata = Extradata::new();
+        extradata.push(ExtradataEntry::NdeFilter(filter));
+
+        let event = Event {
+            start: StartTime(0),
+            duration: Duration(999),
+            extradata_ids: vec![ExtradataId(0)],
+            ..Default::default()
+        };
+
+        let ass_file = File {
+            events: EventTrack::from_vec(vec![event]),
+            extradata,
+            ..Default::default()
+        };
+
+        let context = compile::Context {
+            frame_rate: media::FrameRate {
+                numerator: 24,
+                denominator: 1,
+            },
+        };
+        let mut emitted = String::new();
+        emit::emit(&mut emitted, &ass_file, Some(context)).unwrap();
+
+        let parsed = parse::tests::parse_str(&emitted);
+        assert_eq!(parsed.events.len(), 24);
     }
 }

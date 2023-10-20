@@ -37,11 +37,14 @@ pub fn view<'a>(
                     }]
                 } else {
                     let instant = std::time::Instant::now();
+                    let context = subtitle::compile::Context {
+                        frame_rate: video_metadata.frame_rate,
+                    };
                     let compiled = global_state.subtitles.events.compile(
                         &global_state.subtitles.extradata,
+                        &context,
                         0,
-                        1_000_000,
-                        video_metadata.frame_rate,
+                        None,
                     ); // TODO give actual frame range values here
                     let elapsed_compile = instant.elapsed();
 

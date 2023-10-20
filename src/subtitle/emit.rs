@@ -6,7 +6,7 @@ use crate::nde::tags::{Colour, Transparency};
 use crate::{nde, version};
 
 use super::{
-    Attachment, AttachmentType, EventTrack, EventType, Extradata, ExtradataEntry, File, ScriptInfo,
+    Attachment, AttachmentType, Event, EventType, Extradata, ExtradataEntry, File, ScriptInfo,
     Style, YCbCrMatrix,
 };
 
@@ -17,11 +17,24 @@ const EVENT_FORMAT: &str =
 
 /// Write the given ASS file data as an .ass file to the given writer.
 ///
+/// Optionally, a compile context can be specified. If this is done, the file will be written as if
+/// exporting for final distribution: events with NDE filters will be compiled, and samaku- and
+/// Aegisub-specific metadata will be removed. Otherwise, all data will be exported verbatim, such
+/// that it can be loaded again losslessly using [`File::parse`] or in Aegisub.
+///
 /// # Errors
 /// Errors when the writer cannot be written to, or when there is an unexpected format error.
-pub fn emit<W: Write>(writer: &mut W, subtitles: &File) -> Result<(), Error> {
+pub fn emit<W: Write>(
+    writer: &mut W,
+    subtitles: &File,
+    compile_context: Option<super::compile::Context>,
+) -> Result<(), Error> {
     emit_script_info(writer, &subtitles.script_info)?;
-    emit_aegi_metadata(writer, &subtitles.aegi_metadata)?;
+
+    if compile_context.is_none() {
+        emit_aegi_metadata(writer, &subtitles.aegi_metadata)?;
+    }
+
     emit_styles(writer, &subtitles.styles)?;
     emit_attachments(
         writer,
@@ -37,9 +50,19 @@ pub fn emit<W: Write>(writer: &mut W, subtitles: &File) -> Result<(), Error> {
         &subtitles.attachments,
         AttachmentType::Font,
     )?;
-    emit_events(writer, &subtitles.events, &subtitles.styles)?;
-    emit_extradata(writer, &subtitles.extradata)?;
-    emit_other_sections(writer, &subtitles.other_sections)?;
+
+    if let Some(context) = compile_context {
+        // Compile events
+        let compiled = subtitles
+            .events
+            .compile(&subtitles.extradata, &context, 0, None);
+        emit_events(writer, &compiled, &subtitles.styles)?;
+    } else {
+        // Export events verbatim
+        emit_events(writer, &subtitles.events, &subtitles.styles)?;
+        emit_extradata(writer, &subtitles.extradata)?;
+        emit_other_sections(writer, &subtitles.other_sections)?;
+    }
 
     Ok(())
 }
@@ -217,19 +240,23 @@ fn emit_attachments<W: Write>(
     Ok(())
 }
 
-fn emit_events<W: Write>(
+fn emit_events<'a, 'b, W: Write>(
     writer: &mut W,
-    events: &EventTrack,
+    events: impl IntoIterator<Item = &'a Event<'b>>,
     styles: &[Style],
-) -> Result<(), Error> {
-    if events.is_empty() {
-        return Ok(());
-    }
-
-    write!(writer, "[Events]{NEWLINE}")?;
-    write!(writer, "{EVENT_FORMAT}{NEWLINE}")?;
+) -> Result<(), Error>
+where
+    'b: 'a,
+{
+    let mut header_written: bool = false;
 
     for event in events {
+        if !header_written {
+            write!(writer, "[Events]{NEWLINE}")?;
+            write!(writer, "{EVENT_FORMAT}{NEWLINE}")?;
+            header_written = true;
+        }
+
         write!(
             writer,
             "{}: {},",
@@ -273,7 +300,11 @@ fn emit_events<W: Write>(
         write!(writer, "{NEWLINE}")?;
     }
 
-    write!(writer, "{NEWLINE}")
+    if header_written {
+        write!(writer, "{NEWLINE}")
+    } else {
+        Ok(())
+    }
 }
 
 fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(), Error> {

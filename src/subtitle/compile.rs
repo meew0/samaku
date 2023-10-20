@@ -18,6 +18,12 @@ pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
     }
 }
 
+/// Contains all extra data that may be used by NDE filters and must thus be specified
+/// for non-trivial compilations, such as the video frame rate.
+pub struct Context {
+    pub frame_rate: media::FrameRate,
+}
+
 /// Applies the given `filter` to the given `event`, and returns the resulting events plus certain
 /// intermediate values. The `counter` is counted up for every created event and used as its read
 /// index.
@@ -30,7 +36,7 @@ pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
 pub fn nde<'a, 'b>(
     event: &'a super::Event<'static>,
     filter: &'b nde::graph::Graph,
-    frame_rate: media::FrameRate,
+    context: &Context,
 ) -> Result<NdeResult<'a, 'b>, NdeError> {
     let mut intermediates: Vec<NodeState> = vec![NodeState::Inactive; filter.nodes.len()];
     let mut process_queue = match filter.dfs() {
@@ -38,7 +44,7 @@ pub fn nde<'a, 'b>(
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
     };
     let source_event_value = nde::node::SocketValue::SourceEvent(event);
-    let frame_rate_value = nde::node::SocketValue::FrameRate(frame_rate);
+    let frame_rate_value = nde::node::SocketValue::FrameRate(context.frame_rate);
 
     // Go through the process queue and process the individual nodes
     while let Some(node_index) = process_queue.pop_front() {
@@ -142,15 +148,14 @@ mod tests {
             ..Default::default()
         };
 
-        let result = nde(
-            &event,
-            &filter,
-            media::FrameRate {
+        let context = Context {
+            frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
-        )
-        .expect("there should be no error");
+        };
+
+        let result = nde(&event, &filter, &context).expect("there should be no error");
 
         for node_state in &result.intermediates {
             assert_matches!(node_state, NodeState::Active { .. });

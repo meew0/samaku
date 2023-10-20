@@ -710,7 +710,7 @@ pub mod tests {
 
     use super::*;
 
-    /// Parse the given file path to an `AssFile`
+    /// Parse the file at the given path to a `File`
     ///
     /// # Panics
     /// Panics if any error occurs (IO or parsing)
@@ -718,6 +718,19 @@ pub mod tests {
     pub fn parse_blocking(path: &Path) -> File {
         smol::block_on(async {
             let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
+            parse(lines).await
+        })
+        .unwrap()
+    }
+
+    /// Parse the given string to a `File`
+    ///
+    /// # Panics
+    /// Panics if a parse error occurs
+    #[must_use]
+    pub fn parse_str(str: &str) -> File {
+        smol::block_on(async {
+            let lines = smol::io::BufReader::new(str.as_bytes()).lines();
             parse(lines).await
         })
         .unwrap()
