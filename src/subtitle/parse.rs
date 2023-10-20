@@ -25,8 +25,8 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     // Data of opaque/unknown sections
     let mut header = String::new();
-    let mut section = String::new();
-    let mut opaque_sections: HashMap<String, String> = HashMap::new();
+    let mut section = vec![];
+    let mut opaque_sections: HashMap<String, Vec<String>> = HashMap::new();
 
     let mut current_attachment: Option<Attachment> = None;
 
@@ -67,7 +67,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
                 opaque_sections.insert(header, section);
 
                 header = String::new();
-                section = String::new();
+                section = vec![];
             }
 
             if line.eq_ignore_ascii_case("[v4 styles]") {
@@ -96,7 +96,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
         match state {
             ParseState::Unknown => {
-                section.push_str(&line_string);
+                section.push(line_string);
             }
             ParseState::Styles => {
                 if line.starts_with("Style:") {
@@ -128,6 +128,11 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
                     parse_attachment_header(line, "fontname: ", AttachmentType::Font);
             }
         }
+    }
+
+    // Finalise opaque section, if it exists
+    if !header.is_empty() {
+        opaque_sections.insert(header, section);
     }
 
     // Match event style names to styles, and construct event track

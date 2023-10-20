@@ -558,9 +558,9 @@ pub struct File {
     pub attachments: Vec<Attachment>,
 
     /// Other sections that were not recognised by the parser. They are represented here opaquely
-    /// to avoid removing them, in case for example some Aegisub variant decides to introduce a
-    /// new section.
-    pub other_sections: HashMap<String, String>,
+    /// (as `key => [lines]`) to avoid removing them, in case for example some Aegisub variant
+    /// decides to introduce a new section.
+    pub other_sections: HashMap<String, Vec<String>>,
 
     /// Base styles for the events.
     pub styles: Vec<Style>,
@@ -817,5 +817,22 @@ mod tests {
         assert_eq!(v0, SHORT_VALUE);
         assert_eq!(k1, "long");
         assert_eq!(v1, LONG_VALUE);
+    }
+
+    #[test]
+    fn opaque_sections_round_trip() {
+        let path = test_file("test_files/opaque_sections.ass");
+        let ass_file = parse::tests::parse_blocking(&path);
+
+        assert_eq!(ass_file.other_sections.len(), 1);
+        assert_matches!(ass_file.other_sections.get("Croutons Recipe"), Some(recipe));
+        assert!(recipe[0].contains("Olive Oil"));
+
+        let mut emitted = String::new();
+        emit::emit(&mut emitted, &ass_file).unwrap();
+
+        assert!(emitted.contains("[Croutons Recipe]"));
+        assert!(emitted.contains("Olive Oil"));
+        assert!(emitted.contains("Pepper\nStep"));
     }
 }

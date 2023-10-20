@@ -39,6 +39,7 @@ pub fn emit<W: Write>(writer: &mut W, subtitles: &File) -> Result<(), Error> {
     )?;
     emit_events(writer, &subtitles.events, &subtitles.styles)?;
     emit_extradata(writer, &subtitles.extradata)?;
+    emit_other_sections(writer, &subtitles.other_sections)?;
 
     Ok(())
 }
@@ -319,6 +320,21 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
     }
 
     write!(writer, "{NEWLINE}")
+}
+
+fn emit_other_sections<W: Write>(
+    writer: &mut W,
+    other_sections: &HashMap<String, Vec<String>>,
+) -> Result<(), Error> {
+    for (header, lines) in other_sections {
+        write!(writer, "[{header}]{NEWLINE}")?;
+        for line in lines {
+            write!(writer, "{line}{NEWLINE}")?;
+        }
+        write!(writer, "{NEWLINE}")?;
+    }
+
+    Ok(())
 }
 
 /// Try to inline encode some arbitrary binary data. Returns `Some(_)` if both the conversion
