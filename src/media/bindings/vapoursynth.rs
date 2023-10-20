@@ -878,7 +878,8 @@ pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Option<Scr
 
     if let Some(error_code) = script
         .evaluate_buffer(c_string(vs_script_code), c_string("samaku"))
-        .err() {
+        .err()
+    {
         println!("Failed to evaluate buffer: error code {error_code}");
         return None;
     }

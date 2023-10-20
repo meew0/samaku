@@ -86,8 +86,11 @@ impl<'a, V> Tracker<'a, V> {
         };
 
         let patch_response_1 = (self.patch_provider)(self.video, self.last_frame, patch_request);
-        let patch_response_2 =
-            (self.patch_provider)(self.video, self.last_frame + model::FrameDelta(1), patch_request);
+        let patch_response_2 = (self.patch_provider)(
+            self.video,
+            self.last_frame + model::FrameDelta(1),
+            patch_request,
+        );
 
         let image1 = mv::MonochromeImage::new(
             patch_response_1.data.as_slice(),
@@ -147,12 +150,13 @@ pub enum TrackResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::video;
+    use super::*;
 
     #[test]
     fn motion_track() {
-        let video = video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv")).unwrap();
+        let video =
+            video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv")).unwrap();
 
         let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
         let mut tracker = Tracker::new(
