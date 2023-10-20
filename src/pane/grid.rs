@@ -77,6 +77,22 @@ impl Display for ColumnField {
     }
 }
 
+struct Highlighted;
+
+impl iced::widget::container::StyleSheet for Highlighted {
+    type Style = iced::Theme;
+
+    fn appearance(&self, theme: &iced::Theme) -> iced::widget::container::Appearance {
+        let pair = theme.extended_palette().primary.weak;
+
+        iced::widget::container::Appearance {
+            background: Some(pair.color.into()),
+            text_color: pair.text.into(),
+            ..Default::default()
+        }
+    }
+}
+
 impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     for (&'a crate::Samaku, &'a Column)
 {
@@ -120,10 +136,16 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
             ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
             ColumnField::Text => iced::widget::text(row.text.to_string()).into(),
         };
-        iced::widget::container(cell_content)
-            .height(24)
-            .center_y()
-            .into()
+
+        // Highlight the selected event
+        let container = if self.0.active_event_index == Some(row_index) {
+            let style = iced::theme::Container::Custom(Box::new(Highlighted));
+            iced::widget::container(cell_content).style(style)
+        } else {
+            iced::widget::container(cell_content)
+        };
+
+        container.height(24).center_y().into()
     }
 
     fn width(&self) -> f32 {
