@@ -560,12 +560,7 @@ fn menu_item(
     label: &str,
     node_constructor: nde::node::Constructor,
 ) -> iced_aw::menu::MenuTree<message::Message, iced::Renderer> {
-    iced_aw::menu_tree!(view::menu::labeled_button(
-        label,
-        message::Message::AddNode(node_constructor)
-    )
-    .width(iced::Length::Fill)
-    .height(iced::Length::Fill))
+    view::menu::item(label, message::Message::AddNode(node_constructor))
 }
 
 fn sub_menu<'a>(

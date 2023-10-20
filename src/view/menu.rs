@@ -58,6 +58,13 @@ pub fn labeled_button<'a>(
 }
 
 #[must_use]
+pub fn item(label: &str, msg: Message) -> MenuTree<Message, iced::Renderer> {
+    iced_aw::menu_tree!(labeled_button(label, msg)
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill))
+}
+
+#[must_use]
 #[allow(clippy::module_name_repetitions)]
 pub fn sub_menu<'a>(
     label: &str,

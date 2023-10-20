@@ -15,6 +15,7 @@ use smol::io::AsyncBufReadExt;
 
 pub mod keyboard;
 pub mod media;
+pub mod menu;
 pub mod message;
 pub mod model;
 pub mod nde;
@@ -607,6 +608,14 @@ impl Application for Samaku {
             .on_drag(Self::Message::DragPane)
             .on_resize(0, Self::Message::ResizePane);
 
+        // We implement our own non-native menu using iced_aw. The entry definitions are located
+        // in `menu.rs`.
+        // Once iced supports native menus again, we may switch to that.
+        let menu_bar = iced_aw::menu_bar!(menu::file(), menu::media())
+            .spacing(5.0)
+            .item_width(iced_aw::menu::ItemWidth::Uniform(180))
+            .item_height(iced_aw::menu::ItemHeight::Uniform(32));
+
         // The title row — currently only contains the logo and the application name.
         // TODO: add buttons/menus for loading/saving/etc
         let title_row = iced::widget::row![
@@ -615,7 +624,9 @@ impl Application for Samaku {
                 .height(30),
             iced::widget::text("samaku")
                 .size(25)
-                .style(iced::theme::Text::Color(style::SAMAKU_PRIMARY))
+                .style(iced::theme::Text::Color(style::SAMAKU_PRIMARY)),
+            iced::widget::horizontal_space(Length::Fixed(10.0)),
+            menu_bar
         ]
         .spacing(5)
         .align_items(Alignment::Center);
