@@ -97,6 +97,7 @@ pub enum Message {
     SetActiveEventActor(String),
     SetActiveEventEffect(String),
     SetActiveEventStyleIndex(usize),
+    SetActiveEventLayerIndex(i32),
     SetActiveEventType(subtitle::EventType),
     SetActiveEventStartTime(subtitle::StartTime),
     SetActiveEventDuration(subtitle::Duration),

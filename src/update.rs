@@ -303,6 +303,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 event.style_index = new_style_index;
             }
         }
+        Message::SetActiveEventLayerIndex(new_layer_index) => {
+            if let Some(event) = active_event_mut!(global_state) {
+                event.layer_index = new_layer_index;
+            }
+        }
         Message::SetActiveEventType(new_type) => {
             if let Some(event) = active_event_mut!(global_state) {
                 event.event_type = new_type;

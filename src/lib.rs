@@ -160,28 +160,33 @@ impl Application for Samaku {
             playback_position: Arc::new(model::playback::Position::default()),
         };
 
-        (
-            // ...and initial global state
-            Samaku {
-                panes,
-                focus: None,
-                toasts: vec![],
-                workers: workers::Workers::spawn_all(&shared_state),
-                actual_frame: None,
-                video_metadata: None,
-                subtitles: subtitle::File::default(),
-                active_event_index: None,
-                shared: shared_state,
-                view: RefCell::new(ViewState {
-                    subtitle_renderer: media::subtitle::Renderer::new(),
-                }),
-                playing: false,
-                reticules: None,
-            },
-            // Tell iced to load the UI font (Barlow) when loading the application, so it is
-            // immediately available for rendering.
+        // ...and initial global state
+        let global_state = Samaku {
+            panes,
+            focus: None,
+            toasts: vec![],
+            workers: workers::Workers::spawn_all(&shared_state),
+            actual_frame: None,
+            video_metadata: None,
+            subtitles: subtitle::File::default(),
+            active_event_index: None,
+            shared: shared_state,
+            view: RefCell::new(ViewState {
+                subtitle_renderer: media::subtitle::Renderer::new(),
+            }),
+            playing: false,
+            reticules: None,
+        };
+
+        // Tell iced to load the UI font (Barlow), as well as the icon font provided by iced_aw,
+        // when loading the application, so they are immediately available for rendering.
+        let on_load = Command::batch(vec![
             iced::font::load(resources::BARLOW).map(|_| message::Message::None),
-        )
+            iced::font::load(iced_aw::graphics::icons::ICON_FONT_BYTES)
+                .map(|_| message::Message::None),
+        ]);
+
+        (global_state, on_load)
     }
 
     fn title(&self) -> String {

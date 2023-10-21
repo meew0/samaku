@@ -96,18 +96,45 @@ pub fn view<'a>(
             )
             .width(iced::Length::FillPortion(1));
 
+            // Text boxes to enter the actor and the effect
             let actor_text = iced::widget::text_input("Actor", &active_event.actor)
                 .on_input(message::Message::SetActiveEventActor)
                 .width(iced::Length::FillPortion(1));
-
             let effect_text = iced::widget::text_input("Effect", &active_event.effect)
                 .on_input(message::Message::SetActiveEventEffect)
                 .width(iced::Length::FillPortion(1));
 
-            let top_line =
+            let first_line =
                 iced::widget::row![comment_checkbox, style_selector, actor_text, effect_text]
                     .spacing(5.0)
                     .align_items(iced::Alignment::Center);
+
+            // Numeric controls
+            let start_time_control =
+                iced_aw::number_input(active_event.start.0, i64::MAX, |new_start_ms| {
+                    message::Message::SetActiveEventStartTime(subtitle::StartTime(new_start_ms))
+                });
+            let duration_control =
+                iced_aw::number_input(active_event.duration.0, i64::MAX, |new_duration_ms| {
+                    message::Message::SetActiveEventDuration(subtitle::Duration(new_duration_ms))
+                });
+            let layer_control = iced_aw::number_input(
+                active_event.layer_index,
+                i32::MAX,
+                message::Message::SetActiveEventLayerIndex,
+            );
+
+            let second_line = iced::widget::row![
+                "Start time (ms):",
+                start_time_control,
+                "Duration (ms):",
+                duration_control,
+                iced::widget::horizontal_space(iced::Length::Fill),
+                "Layer:",
+                layer_control
+            ]
+            .spacing(5.0)
+            .align_items(iced::Alignment::Center);
 
             let main_text = iced::widget::responsive(|size| {
                 iced::widget::text_input("Enter subtitle text...", &active_event.text)
@@ -117,7 +144,7 @@ pub fn view<'a>(
                     .into()
             });
 
-            iced::widget::column![top_line, main_text]
+            iced::widget::column![first_line, second_line, main_text]
                 .spacing(5.0)
                 .into()
         }
