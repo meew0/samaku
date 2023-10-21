@@ -85,7 +85,8 @@ pub fn view<'a>(
                     } else {
                         message::Message::SetActiveEventType(subtitle::EventType::Dialogue)
                     }
-                });
+                })
+                .spacing(5.0);
 
             // Style selection combo box
             let style_selector = iced::widget::combo_box(
@@ -104,10 +105,15 @@ pub fn view<'a>(
                 .on_input(message::Message::SetActiveEventEffect)
                 .width(iced::Length::FillPortion(1));
 
-            let first_line =
-                iced::widget::row![comment_checkbox, style_selector, actor_text, effect_text]
-                    .spacing(5.0)
-                    .align_items(iced::Alignment::Center);
+            let first_line = iced::widget::row![
+                comment_checkbox,
+                iced::widget::horizontal_space(iced::Length::Fixed(10.0)),
+                style_selector,
+                actor_text,
+                effect_text
+            ]
+            .spacing(5.0)
+            .align_items(iced::Alignment::Center);
 
             // Numeric controls
             let start_time_control =
