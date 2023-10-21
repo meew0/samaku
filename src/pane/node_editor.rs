@@ -680,11 +680,17 @@ pub fn update(
 ) -> iced::Command<message::Message> {
     match pane_message {
         message::Pane::NodeEditorScaleChanged(x, y, scale) => {
-            node_editor_state.matrix = node_editor_state
-                .matrix
-                .translate(-x, -y)
-                .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
-                .translate(x, y);
+            let current_scale = node_editor_state.matrix.get_scale();
+
+            // Limit the scale factor to the range [0.3, 3.0], to avoid problems with zooming in
+            // or out too far.
+            if (current_scale > 0.3 || scale > 0.0) && (current_scale < 3.0 || scale < 0.0) {
+                node_editor_state.matrix = node_editor_state
+                    .matrix
+                    .translate(-x, -y)
+                    .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
+                    .translate(x, y);
+            }
         }
         message::Pane::NodeEditorTranslationChanged(x, y) => {
             node_editor_state.matrix = node_editor_state.matrix.translate(x, y);
