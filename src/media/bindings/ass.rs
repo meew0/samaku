@@ -201,19 +201,19 @@ impl Renderer {
 
     pub fn set_fonts(
         &mut self,
-        default_font: Option<CString>,
-        default_family: &CString,
+        default_font: Option<&str>,
+        default_family: &str,
         default_font_provider: FontProvider,
-        fontconfig_config: Option<CString>,
+        fontconfig_config: Option<&str>,
         update: bool,
     ) {
         unsafe {
             libass::ass_set_fonts(
                 self.renderer,
-                default_font.map_or(std::ptr::null(), |s| s.as_ptr()),
-                default_family.as_ptr(),
+                default_font.map_or(std::ptr::null(), |s| malloc_string(s).cast_const()),
+                malloc_string(default_family).cast_const(),
                 default_font_provider as i32,
-                fontconfig_config.map_or(std::ptr::null(), |s| s.as_ptr()),
+                fontconfig_config.map_or(std::ptr::null(), |s| malloc_string(s).cast_const()),
                 i32::from(update),
             );
         }

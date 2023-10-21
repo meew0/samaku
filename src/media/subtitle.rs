@@ -3,7 +3,7 @@ pub use ass::Image;
 use crate::nde::tags::Colour;
 use crate::{model, subtitle, view};
 
-use super::bindings::{ass, c_string};
+use super::bindings::ass;
 
 /// Set the global libass message callback. The provided closure will be called on every log message
 /// produced by libass.
@@ -179,10 +179,8 @@ impl Default for Renderer {
 
 pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
     renderer.set_fonts(
-        Some(c_string(
-            "/usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf",
-        )),
-        &c_string("Alegreya Sans"),
+        Some("usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf"),
+        "Alegreya Sans",
         ass::FontProvider::Autodetect,
         None,
         false,
