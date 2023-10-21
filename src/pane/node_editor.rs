@@ -428,19 +428,7 @@ fn view_graph<'a>(
     )
     .padding(5.0);
 
-    let separator = iced_aw::quad::Quad {
-        width: iced::Length::Fill,
-        height: iced::Length::Fixed(0.5),
-        color: style::samaku_theme()
-            .extended_palette()
-            .background
-            .weak
-            .color,
-        inner_bounds: iced_aw::quad::InnerBounds::Ratio(1.0, 1.0),
-        ..Default::default()
-    };
-
-    iced::widget::column![graph_container, separator, bottom_bar].into()
+    iced::widget::column![graph_container, view::separator(), bottom_bar].into()
 }
 
 fn view_non_selected(

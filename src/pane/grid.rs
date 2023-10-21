@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{message, subtitle};
+use crate::{message, subtitle, view};
 
 #[derive(Debug, Clone)]
 pub struct State {
@@ -187,9 +187,22 @@ pub fn view<'a>(
         .into()
     });
 
+    let add_button =
+        iced::widget::button(view::icon(iced_aw::Icon::Plus)).on_press(message::Message::AddEvent);
+
+    let top_bar = iced::widget::container(
+        iced::widget::row![add_button]
+            .spacing(5.0)
+            .align_items(iced::Alignment::Center),
+    )
+    .padding(5.0);
+
+    let content: iced::Element<message::Message> =
+        iced::widget::column![top_bar, view::separator(), table].into();
+
     super::View {
         title: iced::widget::text("Subtitle grid").into(),
-        content: iced::widget::container(table)
+        content: iced::widget::container(content)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
             .center_x()
