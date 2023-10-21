@@ -267,10 +267,7 @@ where
         write!(writer, ",")?;
         emit_timecode(writer, event.end().0)?;
         write!(writer, ",")?;
-        emit_aegi_inline_string(
-            writer,
-            &styles[usize::try_from(event.style_index).unwrap()].name,
-        )?;
+        emit_aegi_inline_string(writer, &styles[event.style_index].name)?;
         write!(writer, ",")?;
         emit_aegi_inline_string(writer, &event.actor)?;
         write!(

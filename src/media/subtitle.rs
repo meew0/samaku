@@ -389,8 +389,8 @@ mod tests {
         // Do the whole thing again, going through a round trip of ass -> stored event -> ass
         let event_track = opaque_track.to_event_track();
         let styles = opaque_track.styles();
-        assert_eq!(event_track[0].style_index, default);
-        assert_eq!(event_track[1].style_index, alternate);
+        assert_eq!(event_track[0].style_index, default_usize);
+        assert_eq!(event_track[1].style_index, alternate_usize);
         assert_eq!(styles[default_usize].primary_colour, WHITE);
         assert_eq!(styles[default_usize].primary_transparency, OPAQUE);
         assert_eq!(styles[default_usize].border_colour, BLACK);
@@ -418,8 +418,8 @@ mod tests {
         };
         let compiled_events =
             event_track.compile(&subtitle::Extradata::default(), &context, 24, Some(1));
-        assert_eq!(compiled_events[0].style_index, default);
-        assert_eq!(compiled_events[1].style_index, alternate);
+        assert_eq!(compiled_events[0].style_index, default_usize);
+        assert_eq!(compiled_events[1].style_index, alternate_usize);
 
         let script_info = subtitle::ScriptInfo {
             playback_resolution: FRAME_SIZE,

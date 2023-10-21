@@ -112,16 +112,6 @@ pub struct ViewState {
 
 /// Utility methods for global state
 impl Samaku {
-    /// Notifies all entities (like node editor panes) that keep some internal copy of the
-    /// NDE filter list to update their internal representations
-    pub fn update_filter_lists(&mut self) {
-        for pane in self.panes.panes.values_mut() {
-            if let pane::State::NodeEditor(node_editor_state) = pane {
-                node_editor_state.update_filter_names(&self.subtitles.extradata);
-            }
-        }
-    }
-
     /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
     pub fn frame_rate(&self) -> media::FrameRate {
         if let Some(video_metadata) = self.video_metadata {

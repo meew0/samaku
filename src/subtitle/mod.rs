@@ -11,7 +11,7 @@ pub use emit::emit;
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
 };
-use crate::{message, nde, style};
+use crate::{message, model, nde, style};
 
 pub mod compile;
 mod emit;
@@ -42,7 +42,7 @@ pub struct Event<'a> {
 
     /// The index of the style used for the event. If no style with this index exists, the default
     /// style (index 0) is used instead, which is guaranteed to always exist.
-    pub style_index: i32,
+    pub style_index: usize,
 
     /// If this event is not manually positioned using `\pos` tags, these margins determine its
     /// offset from the frame border.
@@ -72,6 +72,11 @@ impl<'a> Event<'a> {
     #[must_use]
     pub fn end(&self) -> StartTime {
         StartTime(self.start.0 + self.duration.0)
+    }
+
+    #[must_use]
+    pub fn is_comment(&self) -> bool {
+        matches!(self.event_type, EventType::Comment)
     }
 
     /// Unassigns the NDE filter from this event, if one is assigned. Otherwise, nothing will
@@ -552,8 +557,9 @@ pub struct File {
     /// decides to introduce a new section.
     pub other_sections: HashMap<String, Vec<String>>,
 
-    /// Base styles for the events.
-    pub styles: Vec<Style>,
+    /// Base styles for the events. This is wrapped in a `Trace` because if it gets modified,
+    /// certain iced widgets need to be notified about this.
+    pub styles: model::Trace<Vec<Style>>,
 
     /// The events, i.e. the individual subtitle lines.
     pub events: EventTrack,
@@ -587,7 +593,7 @@ impl Default for File {
             aegi_metadata: HashMap::new(),
             attachments: vec![],
             other_sections: HashMap::new(),
-            styles: vec![Style::default()],
+            styles: model::Trace::new(vec![Style::default()]),
             events: EventTrack::default(),
             extradata: Extradata::default(),
         }

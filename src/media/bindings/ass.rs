@@ -228,7 +228,7 @@ pub fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
     subtitle::Event {
         start: subtitle::StartTime(raw_event.Start),
         duration: subtitle::Duration(raw_event.Duration),
-        style_index: raw_event.Style,
+        style_index: raw_event.Style.try_into().unwrap_or_default(),
         layer_index: raw_event.Layer,
         margins: subtitle::Margins {
             left: raw_event.MarginL,
@@ -251,7 +251,7 @@ pub fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
         Duration: event.duration.0,
         ReadOrder: read_order,
         Layer: event.layer_index,
-        Style: event.style_index,
+        Style: event.style_index.try_into().unwrap(),
         Name: malloc_string(event.actor.as_ref()),
         MarginL: event.margins.left,
         MarginR: event.margins.right,

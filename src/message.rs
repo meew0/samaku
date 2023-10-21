@@ -92,8 +92,14 @@ pub enum Message {
     /// Set the given event to be active.
     SelectEvent(usize),
 
-    /// Set the text of the active event.
+    // Set various properties of the active event.
     SetActiveEventText(String),
+    SetActiveEventActor(String),
+    SetActiveEventEffect(String),
+    SetActiveEventStyleIndex(usize),
+    SetActiveEventType(subtitle::EventType),
+    SetActiveEventStartTime(subtitle::StartTime),
+    SetActiveEventDuration(subtitle::Duration),
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,

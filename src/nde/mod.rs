@@ -20,7 +20,7 @@ pub struct Event {
     pub start: subtitle::StartTime,
     pub duration: subtitle::Duration,
     pub layer_index: i32,
-    pub style_index: i32,
+    pub style_index: usize,
     pub margins: subtitle::Margins,
 
     /// Tags applying to the entire line.

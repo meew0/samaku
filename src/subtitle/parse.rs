@@ -9,7 +9,7 @@ use smol::stream::StreamExt;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
-use crate::{nde, subtitle};
+use crate::{model, nde, subtitle};
 
 use super::{
     Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,
@@ -139,7 +139,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     let mut events: Vec<Event> = vec![];
     for (mut raw_event, style_name) in raw_events_and_style_names {
         if let Some(style_index) = style_lookup.get(&style_name) {
-            raw_event.style_index = (*style_index).try_into().unwrap();
+            raw_event.style_index = *style_index;
             events.push(raw_event);
         } else {
             return Err(Error::UnmatchedStyle(style_name));
@@ -151,7 +151,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         aegi_metadata,
         attachments,
         other_sections: opaque_sections,
-        styles,
+        styles: model::Trace::new(styles),
         events: EventTrack { events },
         extradata,
     })
