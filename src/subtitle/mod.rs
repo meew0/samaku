@@ -468,6 +468,13 @@ impl EventTrack {
         let mut compiled: Vec<Event<'a>> = vec![];
 
         for event in &self.events {
+            // Skip comments when compiling events
+            if event.is_comment() {
+                continue;
+            }
+
+            // Run the complex `nde` compilation method if the event has a filter assigned,
+            // and the trivial one otherwise
             match extradata.nde_filter_for_event(event) {
                 Some(filter) => match compile::nde(event, &filter.graph, context) {
                     Ok(mut nde_result) => match &mut nde_result.events {
@@ -890,5 +897,33 @@ mod tests {
 
         let parsed = parse::tests::parse_str(&emitted);
         assert_eq!(parsed.events.len(), 24);
+    }
+
+    #[test]
+    fn compile_comments() {
+        // Test that comments are skipped in compilation
+
+        let events = EventTrack::from_vec(vec![
+            Event {
+                event_type: EventType::Dialogue,
+                duration: Duration(5000),
+                ..Default::default()
+            },
+            Event {
+                event_type: EventType::Comment,
+                duration: Duration(5000),
+                ..Default::default()
+            },
+        ]);
+
+        let context = compile::Context {
+            frame_rate: media::FrameRate {
+                numerator: 24,
+                denominator: 1,
+            },
+        };
+        let compiled = events.compile(&Extradata::default(), &context, 0, None);
+
+        assert_eq!(compiled.len(), 1);
     }
 }
