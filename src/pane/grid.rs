@@ -115,9 +115,16 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         row: &'b Self::Row,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
         let cell_content: iced::Element<message::Message> = match self.1.field {
-            ColumnField::SelectButton => iced::widget::button(" ")
-                .on_press(message::Message::SelectEvent(row_index))
-                .into(),
+            ColumnField::SelectButton => {
+                if self.0.active_event_index == Some(row_index) {
+                    // Don't show a select button for the already selected row
+                    iced::widget::text("").into()
+                } else {
+                    iced::widget::button(view::icon(iced_aw::Icon::CircleFill).size(12.0))
+                        .on_press(message::Message::SelectEvent(row_index))
+                        .into()
+                }
+            }
             ColumnField::FilterName => {
                 iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_event(row) {
                     Some(filter) => {

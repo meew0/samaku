@@ -30,4 +30,6 @@ where
 {
     iced::widget::text(iced_aw::graphics::icons::icon_to_char(icon).to_string())
         .font(iced_aw::graphics::icons::ICON_FONT)
+        .horizontal_alignment(iced::alignment::Horizontal::Center)
+        .width(iced::Length::Fill)
 }
