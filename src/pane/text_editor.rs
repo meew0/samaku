@@ -93,11 +93,21 @@ pub fn view<'a>(
                 "Style",
                 editor_state.selected_style.as_ref(),
                 |style_ref| message::Message::SetActiveEventStyleIndex(style_ref.index),
-            );
+            )
+            .width(iced::Length::FillPortion(1));
 
-            let top_line = iced::widget::row![comment_checkbox, style_selector,]
-                .spacing(5.0)
-                .align_items(iced::Alignment::Center);
+            let actor_text = iced::widget::text_input("Actor", &active_event.actor)
+                .on_input(message::Message::SetActiveEventActor)
+                .width(iced::Length::FillPortion(1));
+
+            let effect_text = iced::widget::text_input("Effect", &active_event.effect)
+                .on_input(message::Message::SetActiveEventEffect)
+                .width(iced::Length::FillPortion(1));
+
+            let top_line =
+                iced::widget::row![comment_checkbox, style_selector, actor_text, effect_text]
+                    .spacing(5.0)
+                    .align_items(iced::Alignment::Center);
 
             let main_text = iced::widget::responsive(|size| {
                 iced::widget::text_input("Enter subtitle text...", &active_event.text)
