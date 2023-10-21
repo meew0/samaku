@@ -1,14 +1,27 @@
 pub use ass::Image;
 
 use crate::nde::tags::Colour;
-use crate::{model, subtitle, view};
+use crate::{model, resources, subtitle, view};
 
 use super::bindings::ass;
+
+/// The global libass instance.
+static LIBRARY: once_cell::sync::Lazy<ass::Library> = once_cell::sync::Lazy::new(library_init);
+
+fn library_init() -> ass::Library {
+    let library = ass::Library::init().expect("ASS library initialisation failed");
+
+    // Load Barlow, our UI font we package anyway, into libass so it can be used as a fallback font
+    // in case no system fonts are available for whatever reason
+    library.add_font("Barlow", resources::BARLOW);
+
+    library
+}
 
 /// Set the global libass message callback. The provided closure will be called on every log message
 /// produced by libass.
 pub fn set_libass_callback<F: FnMut(i32, String) + 'static>(callback: F) {
-    ass::LIBRARY.set_message_callback(callback);
+    LIBRARY.set_message_callback(callback);
 }
 
 /// Set the global libass message callback to one that prints all messages level 5 and below to
@@ -36,7 +49,7 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to parse the data.
     pub fn parse(data: &String) -> OpaqueTrack {
-        let track = ass::LIBRARY.read_memory(data.as_bytes(), None).unwrap();
+        let track = LIBRARY.read_memory(data.as_bytes(), None).unwrap();
         OpaqueTrack { internal: track }
     }
 
@@ -50,9 +63,7 @@ impl OpaqueTrack {
         styles: &[subtitle::Style],
         metadata: &subtitle::ScriptInfo,
     ) -> OpaqueTrack {
-        let mut track = ass::LIBRARY
-            .new_track()
-            .expect("failed to construct new track");
+        let mut track = LIBRARY.new_track().expect("failed to construct new track");
 
         track.set_header(metadata);
 
@@ -120,7 +131,7 @@ impl Renderer {
     /// # Panics
     /// Panics if libass fails to create a new renderer.
     pub fn new() -> Renderer {
-        let mut renderer = ass::LIBRARY.renderer_init().unwrap();
+        let mut renderer = LIBRARY.renderer_init().unwrap();
         renderer_set_fonts_default(&mut renderer);
         Renderer { internal: renderer }
     }
@@ -178,13 +189,7 @@ impl Default for Renderer {
 }
 
 pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
-    renderer.set_fonts(
-        Some("usr/share/fonts/alegreya-sans/AlegreyaSans-Regular.ttf"),
-        "Alegreya Sans",
-        ass::FontProvider::Autodetect,
-        None,
-        false,
-    );
+    renderer.set_fonts(None, "Barlow", ass::FontProvider::Autodetect, None, false);
 }
 
 /// Convert an image from libass' representation into iced's.

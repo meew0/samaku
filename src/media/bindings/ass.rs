@@ -157,6 +157,19 @@ impl Library {
             Some(Track { track })
         }
     }
+
+    pub fn add_font(&self, name: &str, data: &[u8]) {
+        // libass will copy the name and data, so we don't need to malloc-ify it.
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            libass::ass_add_font(
+                self.library,
+                c_name.as_ptr().cast(),
+                data.as_ptr().cast(),
+                data.len().try_into().unwrap(),
+            );
+        }
+    }
 }
 
 impl Drop for Library {
@@ -164,9 +177,6 @@ impl Drop for Library {
         unsafe { libass::ass_library_done(self.library) };
     }
 }
-
-pub static LIBRARY: once_cell::sync::Lazy<Library> =
-    once_cell::sync::Lazy::new(|| Library::init().unwrap());
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
