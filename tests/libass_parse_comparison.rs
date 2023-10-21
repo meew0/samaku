@@ -16,6 +16,8 @@ pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 1
 
 #[test]
 fn libass_parse_comparison() {
+    media::subtitle::set_libass_test_callback();
+
     let opaque_track = media::subtitle::OpaqueTrack::parse(&ASS_FILE.to_owned());
     let track = opaque_track.to_event_track();
     let styles = opaque_track.styles();

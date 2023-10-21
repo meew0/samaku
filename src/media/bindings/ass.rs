@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CStr;
+use std::sync::Mutex;
 
 use libass_sys as libass;
 
@@ -49,9 +50,11 @@ fn malloc_string(source: &str) -> *mut i8 {
     ptr.cast::<i8>()
 }
 
-#[derive(Debug)]
+pub type Callback = Box<dyn FnMut(i32, String)>;
+
 pub struct Library {
     library: *mut libass::ASS_Library,
+    callback: Mutex<Option<Box<Callback>>>,
 }
 
 unsafe impl Send for Library {}
@@ -64,7 +67,60 @@ impl Library {
         if library.is_null() {
             None
         } else {
-            Some(Library { library })
+            Some(Library {
+                library,
+                callback: Mutex::new(None),
+            })
+        }
+    }
+
+    pub fn set_message_callback<F: FnMut(i32, String) + 'static>(&self, callback: F) {
+        // We need the two levels of `Box` because the callback function pointer is a DST, so we
+        // essentially have (thin pointer) -> (wide pointer) -> (DST)
+        let ptr: *mut Callback = Box::into_raw(Box::new(Box::new(callback)));
+
+        unsafe {
+            libass::ass_set_message_cb(self.library, Some(Self::internal_callback), ptr.cast());
+        }
+
+        // At this point, libass should no longer reference the previous callback, so we should be
+        // able to overwrite (and thus drop) the old callback
+        {
+            let box_again = unsafe { Box::from_raw(ptr) };
+            let mut guard = self.callback.lock().unwrap();
+            *guard = Some(box_again);
+        }
+    }
+
+    unsafe extern "C" fn internal_callback(
+        level: i32,
+        format: *const i8,
+        va_list: *mut libass::__va_list_tag,
+        opaque_data: *mut libc::c_void,
+    ) {
+        let callback_ptr: *mut Callback = opaque_data.cast();
+        let callback: &mut dyn FnMut(i32, String) = unsafe { &mut **callback_ptr };
+
+        match vsprintf::vsprintf_raw(format, va_list) {
+            Ok(data) => {
+                match String::from_utf8(data) {
+                    Ok(string) => callback(level, string),
+                    Err(err) => {
+                        callback(
+                            level,
+                            format!("Message received from libass resulted in UTF-8 decoding error: {err}"),
+                        );
+                        println!(
+                            "invalid string bytes received from libass: {:02x?}",
+                            err.as_bytes()
+                        );
+                    }
+                }
+            }
+            Err(err) => callback(
+                level,
+                format!("Error while formatting message received from libass: {err}"),
+            ),
         }
     }
 

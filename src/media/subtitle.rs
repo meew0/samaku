@@ -5,6 +5,22 @@ use crate::{model, subtitle, view};
 
 use super::bindings::{ass, c_string};
 
+/// Set the global libass message callback. The provided closure will be called on every log message
+/// produced by libass.
+pub fn set_libass_callback<F: FnMut(i32, String) + 'static>(callback: F) {
+    ass::LIBRARY.set_message_callback(callback);
+}
+
+/// Set the global libass message callback to one that prints all messages level 5 and below to
+/// stdout, to avoid cluttering the console output in tests.
+pub fn set_libass_test_callback() {
+    set_libass_callback(|level, string| {
+        if level <= 5 {
+            println!("[ass] [level {level}] {string}");
+        }
+    });
+}
+
 pub struct OpaqueTrack {
     internal: ass::Track,
 }
@@ -282,6 +298,8 @@ mod tests {
             blue: 113,
         };
         const SHADOW_2_TRANSPARENCY: Transparency = Transparency(136);
+
+        media::subtitle::set_libass_test_callback();
 
         let opaque_track = OpaqueTrack::parse(&ASS_FILE.to_owned());
 

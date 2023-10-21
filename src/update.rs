@@ -96,7 +96,16 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             global_state.toasts.push(toast);
         }
         Message::CloseToast(index) => {
-            global_state.toasts.remove(index);
+            // Sometimes, when two toasts are closed in very quick succession, we receive two
+            // consecutive `CloseToast` messages with the same ID, making the second one invalid.
+            // I suspect this is due to a race condition somewhere, but for now, try to handle the
+            // situation somewhat gracefully.
+            // TODO: figure out what causes this
+            if index < global_state.toasts.len() {
+                global_state.toasts.remove(index);
+            } else {
+                global_state.toasts.pop();
+            }
         }
         Message::SelectVideoFile => {
             return iced::Command::perform(

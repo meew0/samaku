@@ -30,6 +30,7 @@ ciborium = "0.2.1"
 data-encoding = "2.4.0"
 miniz_oxide = "0.7.1"
 data-encoding-macro = "0.1.13"
+vsprintf = "2.0.0"
 
 [dev-dependencies]
 assert_matches2 = "0.1"

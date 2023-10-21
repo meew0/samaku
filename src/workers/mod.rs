@@ -3,12 +3,14 @@ use std::{cell::RefCell, thread};
 use crate::{media, message, model};
 
 mod cpal_playback;
+mod log_toasts;
 mod video_decoder;
 
 #[derive(Debug, Clone)]
 pub enum Type {
     VideoDecoder,
     CpalPlayback,
+    LogToasts,
 }
 
 pub struct Worker<M> {
@@ -37,6 +39,7 @@ pub struct Workers {
 
     video_decoder: Worker<video_decoder::Message>,
     cpal_playback: Worker<cpal_playback::Message>,
+    _log_toasts: Worker<log_toasts::Message>,
 }
 
 impl Workers {
@@ -48,6 +51,7 @@ impl Workers {
         Self {
             video_decoder: video_decoder::spawn(sender.clone(), shared_state),
             cpal_playback: cpal_playback::spawn(sender.clone(), shared_state),
+            _log_toasts: log_toasts::spawn(sender.clone(), shared_state),
 
             _sender: sender,
             receiver: RefCell::new(Some(receiver)),
