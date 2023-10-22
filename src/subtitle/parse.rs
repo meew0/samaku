@@ -650,7 +650,7 @@ fn next_split_f64(split: &mut std::str::SplitN<char>) -> Result<f64, Error> {
 
 fn next_split_bool(split: &mut std::str::SplitN<char>) -> Result<bool, Error> {
     Ok(next_split_trim::<true>(split)?
-        .parse::<u8>()
+        .parse::<i32>()
         .map_err(Error::ParseIntError)?
         != 0)
 }
