@@ -30,7 +30,7 @@ impl State {
             .iter()
             .enumerate()
             .map(|(index, style)| StyleReference {
-                name: style.name.clone(),
+                name: style.name().to_string(),
                 index,
             })
             .collect();
@@ -39,7 +39,7 @@ impl State {
 
     fn map_selected(styles: &[subtitle::Style], selected: Option<usize>) -> Option<StyleReference> {
         selected.map(|index| StyleReference {
-            name: styles[index].name.clone(),
+            name: styles[index].name().to_string(),
             index,
         })
     }

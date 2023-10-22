@@ -379,7 +379,7 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
 
 pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
     RawStyle {
-        Name: malloc_string(style.name.as_str()),
+        Name: malloc_string(style.name()),
         FontName: malloc_string(style.font_name.as_str()),
         FontSize: style.font_size,
         PrimaryColour: subtitle::pack_colour_and_transparency_rgbt(

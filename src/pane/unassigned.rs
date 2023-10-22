@@ -35,6 +35,12 @@ pub fn view<'a>(self_pane: super::Pane) -> super::View<'a> {
                                 Box::new(super::State::NodeEditor(super::node_editor::State::default()))
                             )
                         ),
+                        iced::widget::button("Style editor").on_press(
+                            message::Message::SetPaneState(
+                                self_pane,
+                                Box::new(super::State::StyleEditor(super::style_editor::State::default()))
+                            )
+                        ),
                     ].spacing(10),
                 ]
                 .spacing(20)

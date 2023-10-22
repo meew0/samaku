@@ -86,6 +86,12 @@ pub enum Message {
     /// Does not cause the playback state itself to change.
     Playing(bool),
 
+    CreateStyle,
+    DeleteStyle(usize),
+
+    // Set various properties of the given style.
+    SetStyleBold(usize, bool),
+
     /// Add an empty event to the end of the track.
     AddEvent,
 
@@ -173,6 +179,9 @@ pub enum Pane {
     NodeEditorTranslationChanged(f32, f32),
     NodeEditorDangling(Option<(iced_node_editor::LogicalEndpoint, iced_node_editor::Link)>),
     NodeEditorFilterSelected(usize, pane::node_editor::FilterReference),
+
+    // Messages for the style editor
+    StyleEditorStyleSelected(usize),
 }
 
 /// Messages dispatched to nodes.

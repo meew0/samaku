@@ -18,10 +18,10 @@ pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
-) -> super::PaneView<'a> {
+) -> super::View<'a> {
     let content = todo!();
 
-    super::PaneView {
+    super::View {
         title: iced::widget::text("Pane title").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
@@ -32,13 +32,14 @@ pub fn view<'a>(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn update(
     grid_state: &mut State,
-    pane_message: message::PaneMessage,
+    pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
     match pane_message {
         _ => (),
     }
 
-    return iced::Command::none();
+    iced::Command::none()
 }

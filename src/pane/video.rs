@@ -49,7 +49,7 @@ pub fn view<'a>(
                     let instant2 = std::time::Instant::now();
                     let ass = media::subtitle::OpaqueTrack::from_compiled(
                         &compiled,
-                        &global_state.subtitles.styles,
+                        global_state.subtitles.styles.as_slice(),
                         &global_state.subtitles.script_info,
                     );
                     let elapsed_copy = instant2.elapsed();

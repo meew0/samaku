@@ -14,7 +14,7 @@ use crate::{model, nde, subtitle};
 use super::{
     Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,
     Extradata, ExtradataEntry, ExtradataId, File, FontEncoding, JustifyMode, Margins, Scale,
-    ScriptInfo, StartTime, Style, YCbCrMatrix,
+    ScriptInfo, StartTime, Style, StyleList, YCbCrMatrix,
 };
 
 #[allow(clippy::too_many_lines)]
@@ -30,7 +30,6 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     let mut current_attachment: Option<Attachment> = None;
 
-    let mut style_lookup: HashMap<String, usize> = HashMap::new();
     let mut styles: Vec<Style> = vec![];
     let mut raw_events_and_style_names: Vec<(Event, String)> = vec![];
     let mut script_info = ScriptInfo::default();
@@ -107,7 +106,6 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
                 if line.starts_with("Style:") {
                     match parse_style_line(line) {
                         Ok(style) => {
-                            style_lookup.insert(style.name.clone(), styles.len());
                             styles.push(style);
                         }
                         Err(parse_error) => {
@@ -151,16 +149,18 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         opaque_sections.insert(header, section);
     }
 
-    // Ensure there is at least one style
-    if styles.is_empty() {
-        styles.push(Style::default());
+    // Create a StyleList from the styles we read. This ensures there will be at least one style,
+    // and no styles will have duplicate names.
+    let (style_list, leftover) = StyleList::from_vec(styles);
+    for style in &leftover {
+        warnings.push(Warning::DuplicateStyle(style.name().to_string()));
     }
 
     // Match event style names to styles, and construct event track
     let mut events: Vec<Event> = vec![];
     for (mut raw_event, style_name) in raw_events_and_style_names {
-        if let Some(style_index) = style_lookup.get(&style_name) {
-            raw_event.style_index = *style_index;
+        if let Some(style_index) = style_list.find_by_name(&style_name) {
+            raw_event.style_index = style_index;
             events.push(raw_event);
         } else {
             warnings.push(Warning::UnmatchedStyle(style_name));
@@ -172,7 +172,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         aegi_metadata,
         attachments,
         other_sections: opaque_sections,
-        styles: model::Trace::new(styles),
+        styles: model::Trace::new(style_list),
         events: EventTrack { events },
         extradata,
     };
@@ -262,6 +262,9 @@ pub enum Warning {
 
     #[error("Unknown style {0} — replacing with default")]
     UnmatchedStyle(String),
+
+    #[error("Skipping duplicate style {0}")]
+    DuplicateStyle(String),
 }
 
 fn parse_style_line(line: &str) -> Result<Style, Error> {
@@ -974,7 +977,7 @@ pub mod tests {
 
     #[test]
     fn warning() {
-        let (file, warnings) = parse_blocking(&test_file("test_files/invalid_number.ass"));
+        let (file, warnings) = parse_blocking(&test_file("test_files/parse_warnings.ass"));
         assert_eq!(warnings.len(), 2);
         assert_matches!(&warnings[0], Warning::StyleOnLine(14, _));
         assert_matches!(&warnings[1], Warning::UnmatchedStyle(_));

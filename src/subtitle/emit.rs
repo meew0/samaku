@@ -35,7 +35,7 @@ pub fn emit<W: Write>(
         emit_aegi_metadata(writer, &subtitles.aegi_metadata)?;
     }
 
-    emit_styles(writer, &subtitles.styles)?;
+    emit_styles(writer, subtitles.styles.as_slice())?;
     emit_attachments(
         writer,
         "Graphics",
@@ -56,10 +56,10 @@ pub fn emit<W: Write>(
         let compiled = subtitles
             .events
             .compile(&subtitles.extradata, &context, 0, None);
-        emit_events(writer, &compiled, &subtitles.styles)?;
+        emit_events(writer, &compiled, subtitles.styles.as_slice())?;
     } else {
         // Export events verbatim
-        emit_events(writer, &subtitles.events, &subtitles.styles)?;
+        emit_events(writer, &subtitles.events, subtitles.styles.as_slice())?;
         emit_extradata(writer, &subtitles.extradata)?;
         emit_other_sections(writer, &subtitles.other_sections)?;
     }

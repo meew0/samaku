@@ -276,6 +276,7 @@ impl FontEncoding {
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Style {
+    /// The style's name. Do not modify this value directly; instead, use `StyleList::rename`!
     pub name: String,
     pub font_name: String,
 
@@ -315,6 +316,14 @@ pub struct Style {
 
     pub blur: f64,
     pub justify: JustifyMode,
+}
+
+impl Style {
+    /// To avoid accidentally mutably referring to the name field, we provide this getter method.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
 }
 
 impl Default for Style {
@@ -359,6 +368,120 @@ impl Default for Style {
             blur: 0.0,
             justify: JustifyMode::Auto,
         }
+    }
+}
+
+/// Collection of styles. Upholds the following guarantees:
+/// - There is always at least one style
+/// - No two styles have the same name
+pub struct StyleList {
+    styles: Vec<Style>,
+    names: HashMap<String, usize>,
+}
+
+impl StyleList {
+    #[must_use]
+    pub fn new() -> Self {
+        let default_style = Style::default();
+        let mut default_names = HashMap::new();
+        default_names.insert(default_style.name.clone(), 0);
+
+        Self {
+            names: default_names,
+            styles: vec![default_style],
+        }
+    }
+
+    /// Creates a new `StyleList` containing the given styles. If there are multiple styles with the
+    /// same name, only the last one will be retained (matching libass' lookup behaviour).
+    /// Returns the created list, together with the styles that were not inserted because they had
+    /// duplicate names.
+    #[must_use]
+    pub fn from_vec(styles: Vec<Style>) -> (Self, Vec<Style>) {
+        let capacity = styles.len();
+
+        if capacity == 0 {
+            // Return a list containing a default style
+            return (Self::new(), vec![]);
+        }
+
+        let mut res = Self {
+            names: HashMap::with_capacity(capacity),
+            styles: Vec::with_capacity(capacity),
+        };
+        let mut leftover: Vec<Style> = vec![];
+
+        for style in styles {
+            if let (_, Some(old_style)) = res.insert(style) {
+                leftover.push(old_style);
+            };
+        }
+
+        (res, leftover)
+    }
+
+    /// Add a new style to the end, if no style with the same name exists already. Otherwise, the
+    /// existing style will be replaced. Returns the index of the inserted style together with the
+    /// style previously located at that position, if present.
+    pub fn insert(&mut self, style: Style) -> (usize, Option<Style>) {
+        if let Some(ref_index) = self.names.get(&style.name) {
+            let index = *ref_index;
+            let old_style = std::mem::replace(&mut self.styles[index], style);
+            return (index, Some(old_style));
+        }
+
+        let new_index = self.styles.len();
+        self.names.insert(style.name.clone(), new_index);
+        self.styles.push(style);
+        (new_index, None)
+    }
+
+    /// Look up a style by name. Returns the index of the style, if one was found.
+    #[must_use]
+    pub fn find_by_name(&self, name: &str) -> Option<usize> {
+        self.names.get(name).copied()
+    }
+
+    /// Change a style's name.
+    ///
+    /// # Panics
+    /// Panics if the current name of the style to be renamed does not match our reference to it,
+    /// because it has been renamed “manually” by setting its `name` field in the meantime.
+    pub fn rename(&mut self, index: usize, new_name: String) {
+        let old_name = std::mem::replace(&mut self.styles[index].name, new_name.clone());
+        assert_eq!(self.names.remove(&old_name), Some(index), "Style index did not match expected value in `rename` — was a style manually renamed by changing its `name` field?");
+        self.names.insert(new_name, index);
+    }
+
+    #[must_use]
+    #[allow(clippy::len_without_is_empty)] // no point in an `is_empty` method since `StyleList` is guaranteed to never be empty
+    pub fn len(&self) -> usize {
+        self.styles.len()
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[Style] {
+        &self.styles
+    }
+}
+
+impl Default for StyleList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Index<usize> for StyleList {
+    type Output = Style;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.styles[index]
+    }
+}
+
+impl IndexMut<usize> for StyleList {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.styles[index]
     }
 }
 
@@ -566,7 +689,7 @@ pub struct File {
 
     /// Base styles for the events. This is wrapped in a `Trace` because if it gets modified,
     /// certain iced widgets need to be notified about this.
-    pub styles: model::Trace<Vec<Style>>,
+    pub styles: model::Trace<StyleList>,
 
     /// The events, i.e. the individual subtitle lines.
     pub events: EventTrack,
@@ -600,7 +723,7 @@ impl Default for File {
             aegi_metadata: HashMap::new(),
             attachments: vec![],
             other_sections: HashMap::new(),
-            styles: model::Trace::new(vec![Style::default()]),
+            styles: model::Trace::new(StyleList::default()),
             events: EventTrack::default(),
             extradata: Extradata::default(),
         }
@@ -751,6 +874,48 @@ mod tests {
     use crate::{media, test_utils::test_file};
 
     use super::*;
+
+    #[test]
+    fn style_list() {
+        let mut style_list = StyleList::new();
+        assert_eq!(style_list.len(), 1);
+
+        let (index, result) = style_list.insert(Style {
+            name: "a".to_string(),
+            bold: true,
+            ..Default::default()
+        });
+        assert_eq!(index, 1);
+        assert_matches!(result, None);
+
+        let (index, result) = style_list.insert(Style {
+            name: "b".to_string(),
+            italic: true,
+            ..Default::default()
+        });
+        assert_eq!(index, 2);
+        assert_matches!(result, None);
+
+        let (index, result) = style_list.insert(Style {
+            name: "a".to_string(),
+            bold: false,
+            ..Default::default()
+        });
+        assert_eq!(index, 1);
+        assert_matches!(result, Some(old_style));
+        assert!(old_style.bold);
+
+        let maybe_index = style_list.find_by_name("b");
+        assert_matches!(maybe_index, Some(b_index));
+        assert!(style_list[b_index].italic);
+
+        style_list.rename(2, "c".to_string());
+        assert_eq!(style_list[2].name(), "c");
+
+        let maybe_index = style_list.find_by_name("c");
+        assert_matches!(maybe_index, Some(c_index));
+        assert!(style_list[c_index].italic);
+    }
 
     #[test]
     fn attachment_decode() {

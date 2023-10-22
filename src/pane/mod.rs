@@ -4,6 +4,7 @@ use crate::message;
 
 pub mod grid;
 pub mod node_editor;
+pub mod style_editor;
 pub mod text_editor;
 pub mod unassigned;
 pub mod video;
@@ -17,6 +18,7 @@ pub enum State {
     Grid(grid::State),
     TextEditor(text_editor::State),
     NodeEditor(node_editor::State),
+    StyleEditor(style_editor::State),
 }
 
 /// Struct containing the elements to be shown in a pane and in its title bar, for use as the return
@@ -37,6 +39,7 @@ pub(crate) fn dispatch_view<'a>(
         State::Grid(local_state) => grid::view(self_pane, global_state, local_state),
         State::TextEditor(local_state) => text_editor::view(self_pane, global_state, local_state),
         State::NodeEditor(local_state) => node_editor::view(self_pane, global_state, local_state),
+        State::StyleEditor(local_state) => style_editor::view(self_pane, global_state, local_state),
     }
 }
 
@@ -50,5 +53,6 @@ pub fn dispatch_update(
         State::Grid(local_state) => grid::update(local_state, pane_message),
         State::TextEditor(local_state) => text_editor::update(local_state, pane_message),
         State::NodeEditor(local_state) => node_editor::update(local_state, pane_message),
+        State::StyleEditor(local_state) => style_editor::update(local_state, pane_message),
     }
 }

@@ -2,6 +2,7 @@
 
 use smol::io::AsyncBufReadExt;
 use std::borrow::Cow;
+use std::fmt::Write;
 
 use crate::message::Message;
 use crate::{media, message, model, nde, pane, subtitle, view};
@@ -149,9 +150,28 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::SubtitleFileReadForImport(content) => {
             let opaque = media::subtitle::OpaqueTrack::parse(&content);
+
+            let (style_list, leftover) = subtitle::StyleList::from_vec(opaque.styles());
+
+            // Show warning toasts for duplicate styles
+            if !leftover.is_empty() {
+                let duplicate_names = leftover
+                    .iter()
+                    .map(subtitle::Style::name)
+                    .collect::<Vec<&str>>()
+                    .join(", ");
+                global_state.toast(view::toast::Toast::new(
+                    view::toast::Status::Primary,
+                    "Duplicate styles".to_string(),
+                    format!(
+                        "Skipped the following duplicate styles when loading: {duplicate_names}"
+                    ),
+                ));
+            }
+
             global_state.subtitles = subtitle::File {
                 events: opaque.to_event_track(),
-                styles: model::Trace::new(opaque.styles()),
+                styles: model::Trace::new(style_list),
                 script_info: opaque.script_info(),
                 ..Default::default()
             }
@@ -272,6 +292,28 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::Playing(playing) => {
             global_state.playing = playing;
+        }
+        Message::CreateStyle => {
+            let mut counter = 1;
+            let mut name = format!("New style {counter}");
+
+            while global_state.subtitles.styles.find_by_name(&name).is_some() {
+                counter += 1;
+                name.truncate("New style ".len());
+                write!(name, "{counter}").unwrap();
+            }
+
+            let new_style = subtitle::Style {
+                name,
+                ..Default::default()
+            };
+            global_state.subtitles.styles.insert(new_style);
+        }
+        Message::DeleteStyle(_index) => {
+            todo!()
+        }
+        Message::SetStyleBold(index, value) => {
+            global_state.subtitles.styles[index].bold = value;
         }
         Message::AddEvent => {
             let new_event = subtitle::Event {
@@ -516,10 +558,12 @@ fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     for pane in global_state.panes.panes.values_mut() {
         if let pane::State::TextEditor(text_editor_state) = pane {
             if copy_styles {
-                text_editor_state.update_styles(&global_state.subtitles.styles);
+                text_editor_state.update_styles(global_state.subtitles.styles.as_slice());
             }
-            text_editor_state
-                .update_selected(&global_state.subtitles.styles, active_event_style_index);
+            text_editor_state.update_selected(
+                global_state.subtitles.styles.as_slice(),
+                active_event_style_index,
+            );
         }
     }
 }
