@@ -20,6 +20,25 @@ pub fn spawn(
             loop {
                 match rx_in.recv() {
                     Ok(message) => {
+                        // Remove uninformative pointer value from the start of some libass
+                        // messages
+                        let message = match message {
+                            self::Message::Libass(level, string) => {
+                                if string.starts_with("[0x") {
+                                    if let Some(pos) = string.find("]: ") {
+                                        self::Message::Libass(
+                                            level,
+                                            string[(pos + 3)..].to_string(),
+                                        )
+                                    } else {
+                                        self::Message::Libass(level, string)
+                                    }
+                                } else {
+                                    self::Message::Libass(level, string)
+                                }
+                            }
+                        };
+
                         // Skip already seen messages, to avoid flooding the screen with messages
                         // that are generated over and over
                         if !seen.contains(&message) {
