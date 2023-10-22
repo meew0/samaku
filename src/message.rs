@@ -153,11 +153,11 @@ impl Message {
 // Utility functions to create toasts
 #[must_use]
 pub fn toast_danger(title: String, body: String) -> Message {
-    Message::Toast(view::toast::Toast {
+    Message::Toast(view::toast::Toast::new(
+        view::toast::Status::Danger,
         title,
         body,
-        status: view::toast::Status::Danger,
-    })
+    ))
 }
 
 /// Messages dispatched to panes.

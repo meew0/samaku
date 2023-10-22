@@ -35,11 +35,11 @@ pub fn spawn(
                                     };
 
                                     if let Some((status, title)) = status_and_title {
-                                        let toast = view::toast::Toast {
+                                        let toast = view::toast::Toast::new(
                                             status,
-                                            title: title.to_string(),
-                                            body: string,
-                                        };
+                                            title.to_string(),
+                                            string,
+                                        );
                                         tx_out
                                             .unbounded_send(message::Message::Toast(toast))
                                             .unwrap();

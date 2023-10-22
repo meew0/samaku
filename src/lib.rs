@@ -143,6 +143,23 @@ impl Samaku {
             }),
         }
     }
+
+    /// Add a toast to be shown. Also prints the message to the command line. If multiple toasts
+    /// with the same content arrive at the same time, they will be grouped together.
+    pub fn toast(&mut self, toast: view::toast::Toast) {
+        println!(
+            "[toast status={:?}] [{}] {}",
+            &toast.status, &toast.title, &toast.body
+        );
+
+        // Try to find an existing toast with the same content. `Toast`'s implementation of
+        // `PartialEq` ignores the count
+        if let Some(existing_toast) = self.toasts.iter_mut().find(|t| **t == toast) {
+            existing_toast.count += 1;
+        } else {
+            self.toasts.push(toast);
+        }
+    }
 }
 
 impl Application for Samaku {

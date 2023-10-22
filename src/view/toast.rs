@@ -65,10 +65,32 @@ impl fmt::Display for Status {
 
 #[derive(Debug, Clone, Default)]
 pub struct Toast {
+    pub count: u32,
     pub title: String,
     pub body: String,
     pub status: Status,
 }
+
+impl Toast {
+    #[must_use]
+    pub fn new(status: Status, title: String, body: String) -> Self {
+        Self {
+            count: 1,
+            title,
+            body,
+            status,
+        }
+    }
+}
+
+impl PartialEq for Toast {
+    fn eq(&self, other: &Self) -> bool {
+        // Ignore count
+        self.title == other.title && self.body == other.body && self.status == other.status
+    }
+}
+
+impl Eq for Toast {}
 
 pub struct Manager<'a, Message> {
     content: Element<'a, Message>,
@@ -92,11 +114,17 @@ where
         elements.push(iced::widget::vertical_space(Length::Fill).into());
 
         for (index, toast) in toasts.iter().enumerate() {
+            let title_text = if toast.count == 1 {
+                iced::widget::text(toast.title.as_str())
+            } else {
+                iced::widget::text(format!("({}x) {}", toast.count, toast.title))
+            };
+
             elements.push(
                 iced::widget::container(iced::widget::column![
                     iced::widget::container(
                         iced::widget::row![
-                            iced::widget::text(toast.title.as_str()),
+                            title_text,
                             iced::widget::horizontal_space(Length::Fill),
                             iced::widget::button("X")
                                 .on_press((on_close)(index))

@@ -93,7 +93,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::Toast(toast) => {
-            global_state.toasts.push(toast);
+            global_state.toast(toast);
         }
         Message::CloseToast(index) => {
             // Sometimes, when two toasts are closed in very quick succession, we receive two
@@ -186,19 +186,19 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     global_state.subtitles = ass_file;
 
                     for warning in &warnings {
-                        global_state.toasts.push(view::toast::Toast {
-                            title: "Warning while loading subtitle file".to_string(),
-                            body: format!("{warning}"),
-                            status: view::toast::Status::Primary,
-                        });
+                        global_state.toast(view::toast::Toast::new(
+                            view::toast::Status::Primary,
+                            "Warning while loading subtitle file".to_string(),
+                            format!("{warning}"),
+                        ));
                     }
                 }
                 Err(err) => {
-                    global_state.toasts.push(view::toast::Toast {
-                        title: "Error while loading subtitle file".to_string(),
-                        body: err.to_string(),
-                        status: view::toast::Status::Danger,
-                    });
+                    global_state.toast(view::toast::Toast::new(
+                        view::toast::Status::Danger,
+                        "Error while loading subtitle file".to_string(),
+                        err.to_string(),
+                    ));
                 }
             }
         }
@@ -224,11 +224,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             .unwrap();
 
             if global_state.video_metadata.is_none() {
-                global_state.toasts.push(view::toast::Toast {
-                    title: "Warning".to_string(),
-                    body: format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(global_state.frame_rate())),
-                    status: view::toast::Status::Primary,
-                });
+                global_state.toast(view::toast::Toast::new(
+                    view::toast::Status::Primary,
+                    "Warning".to_string(),
+                    format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(global_state.frame_rate())),
+                ));
             }
 
             let future = async {
