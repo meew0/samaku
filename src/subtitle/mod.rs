@@ -578,7 +578,7 @@ pub struct File {
 }
 
 impl File {
-    /// Parse the given stream of lines into an [`AssFile`].
+    /// Parse the given stream of lines into an [`AssFile`] with a list of non-fatal parse warnings.
     ///
     /// # Errors
     /// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
@@ -588,7 +588,7 @@ impl File {
     /// Panics if there are more styles than would fit into an `i32`.
     pub async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         input: smol::io::Lines<R>,
-    ) -> Result<File, parse::Error> {
+    ) -> Result<(File, Vec<parse::Warning>), parse::Error> {
         parse::parse(input).await
     }
 }
@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn attachment_decode() {
         let path = test_file("test_files/extra_sections.ass");
-        let ass_file = parse::tests::parse_blocking(&path);
+        let (ass_file, _warnings) = parse::tests::parse_blocking(&path);
 
         assert_eq!(ass_file.attachments.len(), 1);
         let at1 = &ass_file.attachments[0];
@@ -802,7 +802,7 @@ mod tests {
         assert!(emitted.contains("short,e#00"));
         assert!(emitted.contains("long,u!"));
 
-        let parsed = smol::block_on(async {
+        let (parsed, _warnings) = smol::block_on(async {
             File::parse(smol::io::BufReader::new(emitted.as_bytes()).lines()).await
         })
         .unwrap();
@@ -825,7 +825,7 @@ mod tests {
     #[test]
     fn opaque_sections_round_trip() {
         let path = test_file("test_files/opaque_sections.ass");
-        let ass_file = parse::tests::parse_blocking(&path);
+        let (ass_file, _warnings) = parse::tests::parse_blocking(&path);
 
         assert_eq!(ass_file.other_sections.len(), 1);
         assert_matches!(ass_file.other_sections.get("Croutons Recipe"), Some(recipe));
@@ -895,7 +895,7 @@ mod tests {
         let mut emitted = String::new();
         emit::emit(&mut emitted, &ass_file, Some(context)).unwrap();
 
-        let parsed = parse::tests::parse_str(&emitted);
+        let (parsed, _warnings) = parse::tests::parse_str(&emitted);
         assert_eq!(parsed.events.len(), 24);
     }
 

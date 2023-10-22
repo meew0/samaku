@@ -181,7 +181,18 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             let result = smol::block_on(future);
 
             match result {
-                Ok(ass_file) => global_state.subtitles = *ass_file,
+                Ok(file_box) => {
+                    let (ass_file, warnings) = *file_box;
+                    global_state.subtitles = ass_file;
+
+                    for warning in &warnings {
+                        global_state.toasts.push(view::toast::Toast {
+                            title: "Warning while loading subtitle file".to_string(),
+                            body: format!("{warning}"),
+                            status: view::toast::Status::Primary,
+                        });
+                    }
+                }
                 Err(err) => {
                     global_state.toasts.push(view::toast::Toast {
                         title: "Error while loading subtitle file".to_string(),

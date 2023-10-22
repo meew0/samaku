@@ -19,8 +19,8 @@ use super::{
 
 #[allow(clippy::too_many_lines)]
 pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
-    mut input: smol::io::Lines<R>,
-) -> Result<File, Error> {
+    input: smol::io::Lines<R>,
+) -> Result<(File, Vec<Warning>), Error> {
     let mut state = ParseState::ScriptInfo;
 
     // Data of opaque/unknown sections
@@ -38,7 +38,12 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     let mut aegi_metadata = HashMap::new();
     let mut attachments = vec![];
 
-    while let Some(line_result) = input.next().await {
+    let mut warnings: Vec<Warning> = vec![];
+
+    let mut input_enumerate = input.enumerate();
+
+    while let Some((line_index, line_result)) = input_enumerate.next().await {
+        let line_number = line_index + 1;
         let line_string = line_result.map_err(Error::IoError)?;
         let line = line_string.trim();
 
@@ -100,14 +105,25 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
             }
             ParseState::Styles => {
                 if line.starts_with("Style:") {
-                    let style = parse_style_line(line)?;
-                    style_lookup.insert(style.name.clone(), styles.len());
-                    styles.push(style);
+                    match parse_style_line(line) {
+                        Ok(style) => {
+                            style_lookup.insert(style.name.clone(), styles.len());
+                            styles.push(style);
+                        }
+                        Err(parse_error) => {
+                            warnings.push(Warning::StyleOnLine(line_number, parse_error));
+                        }
+                    }
                 }
             }
             ParseState::Events => {
                 if line.starts_with("Dialogue:") || line.starts_with("Comment:") {
-                    raw_events_and_style_names.push(parse_event_line(line)?);
+                    match parse_event_line(line) {
+                        Ok(event) => raw_events_and_style_names.push(event),
+                        Err(parse_error) => {
+                            warnings.push(Warning::EventOnLine(line_number, parse_error));
+                        }
+                    }
                 }
             }
             ParseState::ScriptInfo => {
@@ -135,6 +151,11 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         opaque_sections.insert(header, section);
     }
 
+    // Ensure there is at least one style
+    if styles.is_empty() {
+        styles.push(Style::default());
+    }
+
     // Match event style names to styles, and construct event track
     let mut events: Vec<Event> = vec![];
     for (mut raw_event, style_name) in raw_events_and_style_names {
@@ -142,11 +163,11 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
             raw_event.style_index = *style_index;
             events.push(raw_event);
         } else {
-            return Err(Error::UnmatchedStyle(style_name));
+            warnings.push(Warning::UnmatchedStyle(style_name));
         }
     }
 
-    Ok(File {
+    let file = File {
         script_info,
         aegi_metadata,
         attachments,
@@ -154,7 +175,9 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         styles: model::Trace::new(styles),
         events: EventTrack { events },
         extradata,
-    })
+    };
+
+    Ok((file, warnings))
 }
 
 enum ParseState {
@@ -206,9 +229,6 @@ pub enum Error {
     #[error("Found invalid alignment value in style")]
     InvalidAlignment,
 
-    #[error("Style mentioned in event does not exist: {0}")]
-    UnmatchedStyle(String),
-
     #[error("Invalid NDE filter format identifier: {0:?}")]
     InvalidNdeFilterFormat(Option<u8>),
 
@@ -229,6 +249,19 @@ pub enum Error {
 
     #[error("Invalid extradata ID: {0}")]
     InvalidExtradataId(String),
+}
+
+/// Denotes that something could not be fully parsed, and was thus ignored.
+#[derive(Error, Debug)]
+pub enum Warning {
+    #[error("Could not read style on line {0}: {1}")]
+    StyleOnLine(usize, Error),
+
+    #[error("Could not read event on line {0}: {1}")]
+    EventOnLine(usize, Error),
+
+    #[error("Unknown style {0} — replacing with default")]
+    UnmatchedStyle(String),
 }
 
 fn parse_style_line(line: &str) -> Result<Style, Error> {
@@ -715,7 +748,7 @@ pub mod tests {
     /// # Panics
     /// Panics if any error occurs (IO or parsing)
     #[must_use]
-    pub fn parse_blocking(path: &Path) -> File {
+    pub fn parse_blocking(path: &Path) -> (File, Vec<Warning>) {
         smol::block_on(async {
             let lines = smol::io::BufReader::new(smol::fs::File::open(path).await.unwrap()).lines();
             parse(lines).await
@@ -728,7 +761,7 @@ pub mod tests {
     /// # Panics
     /// Panics if a parse error occurs
     #[must_use]
-    pub fn parse_str(str: &str) -> File {
+    pub fn parse_str(str: &str) -> (File, Vec<Warning>) {
         smol::block_on(async {
             let lines = smol::io::BufReader::new(str.as_bytes()).lines();
             parse(lines).await
@@ -739,7 +772,7 @@ pub mod tests {
     #[test]
     fn sections_file() {
         let path = test_file("test_files/extra_sections.ass");
-        let ass_file = parse_blocking(&path);
+        let ass_file = parse_blocking(&path).0;
 
         assert_eq!(ass_file.styles.len(), 1);
         assert_eq!(
@@ -937,5 +970,15 @@ pub mod tests {
         assert_matches!(parse_extradata_references("{=1=2"), None);
         assert_matches!(parse_extradata_references("{=1a}b"), None);
         assert_matches!(parse_extradata_references("{=1ä}b"), None);
+    }
+
+    #[test]
+    fn warning() {
+        let (file, warnings) = parse_blocking(&test_file("test_files/invalid_number.ass"));
+        assert_eq!(warnings.len(), 2);
+        assert_matches!(&warnings[0], Warning::StyleOnLine(14, _));
+        assert_matches!(&warnings[1], Warning::UnmatchedStyle(_));
+        assert_eq!(file.styles.len(), 1); // There should still be a style...
+        assert_eq!(file.styles[0].name, "Default"); // ...but it should be the default one
     }
 }
