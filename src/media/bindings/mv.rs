@@ -92,7 +92,7 @@ pub struct MonochromeImage<'a> {
 
 impl<'a> MonochromeImage<'a> {
     pub fn new(data: &'a [f32], width: i32, height: i32) -> Self {
-        assert_eq!(data.len(), (width * height).try_into().unwrap());
+        assert_eq!(data.len(), usize::try_from(width * height).unwrap());
         Self {
             data,
             width,
