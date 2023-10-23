@@ -33,8 +33,8 @@ impl button::StyleSheet for ButtonStyle {
     }
 }
 
-pub fn base_button<'a>(
-    content: impl Into<Element<'a, Message, iced::Renderer>>,
+pub fn base_button<'a, E: Into<Element<'a, Message, iced::Renderer>>>(
+    content: E,
     msg: Message,
 ) -> button::Button<'a, Message, iced::Renderer> {
     button(content)

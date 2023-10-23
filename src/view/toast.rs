@@ -52,14 +52,14 @@ impl iced::widget::container::StyleSheet for Status {
 }
 
 impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Status::Primary => "Primary",
             Status::Secondary => "Secondary",
             Status::Success => "Success",
             Status::Danger => "Danger",
         }
-        .fmt(f)
+        .fmt(formatter)
     }
 }
 
@@ -198,7 +198,7 @@ impl<'a, Message> Widget<Message, Renderer> for Manager<'a, Message> {
     }
 
     fn tag(&self) -> widget::tree::Tag {
-        struct Marker(Vec<Instant>);
+        struct Marker;
         widget::tree::Tag::of::<Marker>()
     }
 
@@ -376,7 +376,7 @@ impl<'a, 'b, Message> overlay::Overlay<Message, Renderer> for Overlay<'a, 'b, Me
         &mut self,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<Message>,
+        operation: &mut dyn Operation<Message>,
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.toasts

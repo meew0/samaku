@@ -55,14 +55,14 @@ where
 
     /// Sets the width of the [`ImageStack`] boundaries.
     #[must_use]
-    pub fn width(mut self, width: impl Into<Length>) -> Self {
+    pub fn set_stack_width(mut self, width: impl Into<Length>) -> Self {
         self.width = width.into();
         self
     }
 
     /// Sets the height of the [`ImageStack`] boundaries.
     #[must_use]
-    pub fn height(mut self, height: impl Into<Length>) -> Self {
+    pub fn set_stack_height(mut self, height: impl Into<Length>) -> Self {
         self.height = height.into();
         self
     }
