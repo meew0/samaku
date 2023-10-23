@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{message, subtitle, view};
+use crate::{message, style, subtitle, view};
 
 #[derive(Debug, Clone)]
 pub struct State {
@@ -93,6 +93,19 @@ impl iced::widget::container::StyleSheet for Highlighted {
     }
 }
 
+struct Comment;
+
+impl iced::widget::container::StyleSheet for Comment {
+    type Style = iced::Theme;
+
+    fn appearance(&self, _theme: &iced::Theme) -> iced::widget::container::Appearance {
+        iced::widget::container::Appearance {
+            text_color: style::SAMAKU_TEXT_WEAK.into(),
+            ..Default::default()
+        }
+    }
+}
+
 impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     for (&'a crate::Samaku, &'a Column)
 {
@@ -145,14 +158,17 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         };
 
         // Highlight the selected event
-        let container = if self.0.active_event_index == Some(row_index) {
-            let style = iced::theme::Container::Custom(Box::new(Highlighted));
-            iced::widget::container(cell_content).style(style)
+        let container = iced::widget::container(cell_content);
+
+        let styled_container = if self.0.active_event_index == Some(row_index) {
+            container.style(iced::theme::Container::Custom(Box::new(Highlighted)))
+        } else if row.is_comment() {
+            container.style(iced::theme::Container::Custom(Box::new(Comment)))
         } else {
-            iced::widget::container(cell_content)
+            container
         };
 
-        container.height(24).center_y().into()
+        styled_container.height(24).center_y().into()
     }
 
     fn width(&self) -> f32 {
