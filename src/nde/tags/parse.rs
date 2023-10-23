@@ -1287,7 +1287,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::too_many_lines)]
     fn override_values() {
         use Resettable::*;
 
@@ -1719,7 +1718,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::too_many_lines)]
     fn argument_parse() {
         let twa = TagWithArguments {
             first_part: "",
