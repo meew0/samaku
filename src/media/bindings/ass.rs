@@ -9,7 +9,6 @@ use libass_sys as libass;
 
 use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
-use crate::subtitle::{EventType, FontEncoding, Margins, YCbCrMatrix};
 
 pub type CString = std::ffi::CString;
 
@@ -101,7 +100,8 @@ impl Library {
         let callback_ptr: *mut Callback = opaque_data.cast();
         let callback: &mut dyn FnMut(i32, String) = unsafe { &mut **callback_ptr };
 
-        match vsprintf::vsprintf_raw(format, va_list) {
+        let vsprintf_result = unsafe { vsprintf::vsprintf_raw(format, va_list) };
+        match vsprintf_result {
             Ok(data) => {
                 match String::from_utf8(data) {
                     Ok(string) => callback(level, string),
@@ -308,7 +308,7 @@ pub fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
         ),
         actor: Cow::Owned(string_from_libass(raw_event.Name).unwrap_or_default()),
         effect: Cow::Owned(string_from_libass(raw_event.Effect).unwrap_or_default()),
-        event_type: EventType::Dialogue,
+        event_type: subtitle::EventType::Dialogue,
         extradata_ids: vec![],
     }
 }
@@ -368,12 +368,12 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
         shadow_distance: raw_style.Shadow,
         alignment: Alignment::try_unpack(raw_style.Alignment)
             .expect("received invalid alignment value from libass"),
-        margins: Margins {
+        margins: subtitle::Margins {
             left: raw_style.MarginL,
             right: raw_style.MarginR,
             vertical: raw_style.MarginV,
         },
-        encoding: FontEncoding(raw_style.Encoding),
+        encoding: subtitle::FontEncoding(raw_style.Encoding),
         blur: raw_style.Blur,
         justify: subtitle::JustifyMode::from(raw_style.Justify),
     }
@@ -510,22 +510,22 @@ impl Track {
             scaled_border_and_shadow: unsafe { (*self.track).ScaledBorderAndShadow } != 0,
             kerning: unsafe { (*self.track).Kerning } != 0,
             ycbcr_matrix: match unsafe { (*self.track).YCbCrMatrix } {
-                libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => YCbCrMatrix::Default,
-                libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => YCbCrMatrix::Unknown,
+                libass::ASS_YCbCrMatrix::YCBCR_DEFAULT => subtitle::YCbCrMatrix::Default,
+                libass::ASS_YCbCrMatrix::YCBCR_UNKNOWN => subtitle::YCbCrMatrix::Unknown,
                 // implied by `_` arm
-                // libass::ASS_YCbCrMatrix::YCBCR_NONE => YCbCrMatrix::None,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => YCbCrMatrix::Bt601Tv,
-                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => YCbCrMatrix::Bt601Pc,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => YCbCrMatrix::Bt709Tv,
-                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => YCbCrMatrix::Bt709Pc,
-                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => YCbCrMatrix::Smtpe240MPc,
-                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => YCbCrMatrix::Smtpe240MTv,
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => YCbCrMatrix::FccTv,
-                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => YCbCrMatrix::FccPc,
+                // libass::ASS_YCbCrMatrix::YCBCR_NONE => subtitle::YCbCrMatrix::None,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_TV => subtitle::YCbCrMatrix::Bt601Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT601_PC => subtitle::YCbCrMatrix::Bt601Pc,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_TV => subtitle::YCbCrMatrix::Bt709Tv,
+                libass::ASS_YCbCrMatrix::YCBCR_BT709_PC => subtitle::YCbCrMatrix::Bt709Pc,
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_TV => subtitle::YCbCrMatrix::Smtpe240MPc,
+                libass::ASS_YCbCrMatrix::YCBCR_SMPTE240M_PC => subtitle::YCbCrMatrix::Smtpe240MTv,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_TV => subtitle::YCbCrMatrix::FccTv,
+                libass::ASS_YCbCrMatrix::YCBCR_FCC_PC => subtitle::YCbCrMatrix::FccPc,
 
                 // Honestly, it's debatable if we should even support tracks
                 // that use a matrix other than `NONE`.
-                _ => YCbCrMatrix::None,
+                _ => subtitle::YCbCrMatrix::None,
             },
         }
     }

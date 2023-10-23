@@ -318,7 +318,7 @@ impl Video {
         let instant2 = std::time::Instant::now();
 
         // Assumes all frames are the same size. They should be.
-        for plane in 0u8..3u8 {
+        for plane in 0_u8..3_u8 {
             let stride = vs_frame.get_stride(i32::from(plane));
             let read_ptr = vs_frame.get_read_ptr(i32::from(plane));
 

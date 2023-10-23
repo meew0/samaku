@@ -11,7 +11,7 @@
 #![warn(clippy::cargo_common_metadata)]
 #![warn(clippy::clear_with_drain)]
 #![warn(clippy::clone_on_ref_ptr)]
-#![warn(clippy::cognitive_complexity)]
+#![cfg_attr(not(test), warn(clippy::cognitive_complexity))]
 #![warn(clippy::collection_is_never_read)]
 #![warn(clippy::create_dir)]
 #![warn(clippy::dbg_macro)]
@@ -86,6 +86,22 @@
 #![warn(clippy::useless_let_if_seq)]
 #![warn(clippy::verbose_file_reads)]
 #![warn(clippy::wildcard_dependencies)]
+#![warn(absolute_paths_not_starting_with_crate)]
+#![warn(keyword_idents)]
+#![warn(let_underscore_drop)]
+#![warn(macro_use_extern_crate)]
+#![warn(meta_variable_misuse)]
+#![warn(missing_abi)]
+// #![warn(missing_docs)] // (later)
+// #![warn(must_not_suspend)] // (unstable)
+#![warn(pointer_structural_match)]
+#![warn(unsafe_op_in_unsafe_fn)]
+#![warn(unused_crate_dependencies)]
+#![warn(unused_extern_crates)]
+#![warn(unused_import_braces)]
+#![warn(unused_qualifications)]
+#![warn(unused_tuple_struct_fields)]
+#![cfg_attr(test, allow(clippy::too_many_lines))]
 #![allow(clippy::enum_glob_use)]
 #![allow(clippy::doc_markdown)] // Useful to have in general, but too many false positives — perhaps worth revisiting later?
 

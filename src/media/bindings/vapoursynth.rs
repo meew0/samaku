@@ -41,7 +41,7 @@ fn get_api() -> *const vs::VSAPI {
 
     if ptr.is_null() {
         #[allow(clippy::cast_possible_wrap)] // constant defined by VS, does not matter if it wraps
-        let vs_api_version = vs::VSSCRIPT_API_VERSION as i32;
+        let vs_api_version = vs::VAPOURSYNTH_API_VERSION as i32;
 
         let script_api = get_script_api();
         let new_ptr = unsafe { (*script_api).getVSAPI.unwrap()(vs_api_version).cast_mut() };
@@ -128,7 +128,7 @@ impl Core {
             (*api).addLogHandler.unwrap()(
                 Some(log_handler),
                 Some(log_handler_free),
-                data_ptr.cast::<libc::c_void>(),
+                data_ptr.cast::<c_void>(),
                 self.core,
             )
         };

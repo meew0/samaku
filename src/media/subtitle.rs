@@ -198,7 +198,7 @@ pub fn renderer_set_fonts_default(renderer: &mut ass::Renderer) {
 /// Panics if the libass image has invalid metadata (e.g. negative dimensions).
 #[must_use]
 pub fn ass_image_to_iced(
-    ass_image: &ass::Image,
+    ass_image: &Image,
 ) -> view::widget::StackedImage<iced::widget::image::Handle> {
     let width: usize = ass_image
         .metadata
@@ -262,7 +262,6 @@ mod tests {
 
     /// Test to verify that our handling of events and their styles is lossless.
     #[test]
-    #[allow(clippy::too_many_lines)]
     fn style_colours() {
         const ASS_FILE: &str = include_str!("../../test_files/style_colours.ass");
         const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 108 };
@@ -302,7 +301,7 @@ mod tests {
         };
         const SHADOW_2_TRANSPARENCY: Transparency = Transparency(136);
 
-        media::subtitle::set_libass_test_callback();
+        set_libass_test_callback();
 
         let opaque_track = OpaqueTrack::parse(&ASS_FILE.to_owned());
 
