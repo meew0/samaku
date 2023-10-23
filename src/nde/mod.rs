@@ -187,7 +187,7 @@ mod tests {
 
         let filter = Filter {
             graph,
-            name: "test filter".to_string(),
+            name: "test filter".to_owned(),
         };
 
         let mut data: Vec<u8> = vec![];

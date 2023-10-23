@@ -3,7 +3,7 @@ use crate::nde;
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct ClipRectangle {}
+pub struct ClipRectangle;
 
 #[typetag::serde]
 impl Node for ClipRectangle {

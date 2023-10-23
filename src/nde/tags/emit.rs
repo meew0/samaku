@@ -126,8 +126,7 @@ where
     N: TagName,
     V: Value,
 {
-    if let super::Resettable::Keep = maybe_value {
-    } else {
+    if !matches!(maybe_value, super::Resettable::Keep) {
         sink.write_str("\\")?;
         tag_name.write_name(sink)?;
         if let super::Resettable::Override(value) = maybe_value {

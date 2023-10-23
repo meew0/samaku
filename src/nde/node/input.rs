@@ -3,7 +3,7 @@ use crate::{message, model, nde};
 use super::{Error, LeafInputType, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InputEvent {}
+pub struct InputEvent;
 
 #[typetag::serde]
 impl Node for InputEvent {
@@ -48,7 +48,7 @@ inventory::submit! {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InputFrameRate {}
+pub struct InputFrameRate;
 
 #[typetag::serde]
 impl Node for InputFrameRate {

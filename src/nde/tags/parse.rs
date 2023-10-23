@@ -209,6 +209,7 @@ enum TagBlockParseState {
 }
 
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::cognitive_complexity)]
 fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     if tag.is_empty() {
         return false;
@@ -217,7 +218,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     let paren_pos = tag.find('(');
 
     // Contains the name and potentially the first argument
-    let first_part = &tag[0..paren_pos.unwrap_or(tag.bytes().len())];
+    let first_part = &tag[0..paren_pos.unwrap_or_else(|| tag.bytes().len())];
 
     let mut twa = TagWithArguments {
         first_part,
@@ -287,11 +288,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         local.border = maybe_both_dimensions(twa.float_arg(0));
     } else if twa.tag::<true>("move") {
         if global.position.is_none() && (twa.nargs() == 4 || twa.nargs() == 6) {
-            let timing = if twa.nargs() == 6 {
+            let timing = (twa.nargs() == 6).then(|| {
                 let t1 = twa.int_arg(4).unwrap();
                 let t2 = twa.int_arg(5).unwrap();
 
-                Some(if t1 < t2 {
+                if t1 < t2 {
                     MoveTiming {
                         start_time: Milliseconds(t1),
                         end_time: Milliseconds(t2),
@@ -301,10 +302,8 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                         start_time: Milliseconds(t2),
                         end_time: Milliseconds(t1),
                     }
-                })
-            } else {
-                None
-            };
+                }
+            });
 
             global.position = Some(PositionOrMove::Move(Move {
                 initial_position: Position {
@@ -325,7 +324,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     } else if twa.tag::<false>("frz") || twa.tag::<false>("fr") {
         local.text_rotation.z = resettable(twa.float_arg(0));
     } else if twa.tag::<false>("fn") {
-        local.font_name = resettable(twa.string_arg(0).map(|name| lstrip(name).to_string()));
+        local.font_name = resettable(twa.string_arg(0).map(|name| lstrip(name).to_owned()));
     } else if twa.tag::<false>("alpha") {
         let resettable_transparency = resettable(twa.transparency_arg(0));
         local.primary_transparency = resettable_transparency;
@@ -804,14 +803,10 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn position_args(&self) -> Option<Position> {
-        if self.nargs() == 2 {
-            Some(Position {
-                x: self.float_arg(0).unwrap(),
-                y: self.float_arg(1).unwrap(),
-            })
-        } else {
-            None
-        }
+        (self.nargs() == 2).then(|| Position {
+            x: self.float_arg(0).unwrap(),
+            y: self.float_arg(1).unwrap(),
+        })
     }
 }
 
@@ -838,7 +833,7 @@ fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
         .map(|num| num * sign);
     i64_to_i32_truncate(
         maybe_parsed
-            .unwrap_or(0i64)
+            .unwrap_or(0_i64)
             .clamp(i32::MIN.into(), i32::MAX.into()),
     )
 }
@@ -852,8 +847,8 @@ fn i64_to_i32_truncate(val: i64) -> i32 {
 /// C's `isspace` function. This is required to match libass behaviour in the admittedly extremely
 /// obscure case that someone specifies a numeric literal preceded by a Unicode whitespace.
 fn trim_start_ctype_isspace(str: &str) -> &str {
-    str.trim_start_matches(|c: char| {
-        matches!(c, '\x20' | '\x0c' | '\x0a' | '\x0d' | '\x09' | '\x0b')
+    str.trim_start_matches(|char: char| {
+        matches!(char, '\x20' | '\x0c' | '\x0a' | '\x0d' | '\x09' | '\x0b')
     })
 }
 
@@ -881,7 +876,7 @@ where
         let commands = twa.string_arg(twa.nargs() - 1).unwrap();
         let drawing = Drawing {
             scale,
-            commands: commands.to_string(),
+            commands: commands.to_owned(),
         };
 
         global.vector_clip = Some(vector_clip(drawing));
@@ -1937,12 +1932,12 @@ mod tests {
             Tags(non_empty.clone(), String::new()),
             Drawing(non_empty.clone(), non_empty_drawing.clone()),
             Drawing(non_empty.clone(), empty_drawing.clone()),
-            Drawing(non_empty.clone(), non_empty_drawing.clone()),
+            Drawing(non_empty.clone(), non_empty_drawing),
             Tags(non_empty.clone(), "g".to_owned()),
             ResetToStyle("C".to_owned()),
             Reset,
             Tags(non_empty.clone(), String::new()),
-            Drawing(non_empty.clone(), empty_drawing.clone()),
+            Drawing(non_empty, empty_drawing),
         ];
 
         let simplified = simplify(spans);

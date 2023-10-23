@@ -60,6 +60,7 @@ impl Position {
         let mut lock = self.authoritative_position.lock().unwrap();
         let new_value = lock.saturating_add_signed(delta);
         *lock = new_value;
+        drop(lock);
         self.position.store(new_value, Ordering::Relaxed);
     }
 

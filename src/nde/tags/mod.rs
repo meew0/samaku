@@ -87,22 +87,22 @@ where
 }
 
 pub trait OverrideFrom<T> {
-    fn override_from(&mut self, b: &Self);
-    fn clear_from(&mut self, b: &Self);
+    fn override_from(&mut self, other: &Self);
+    fn clear_from(&mut self, other: &Self);
 }
 
 impl<T> OverrideFrom<T> for Option<T>
 where
     T: Clone,
 {
-    fn override_from(&mut self, b: &Self) {
-        if let Some(b_value) = b {
-            self.replace(b_value.clone());
+    fn override_from(&mut self, other: &Self) {
+        if let Some(other_value) = other {
+            self.replace(other_value.clone());
         }
     }
 
-    fn clear_from(&mut self, b: &Self) {
-        if b.is_some() {
+    fn clear_from(&mut self, other: &Self) {
+        if other.is_some() {
             self.take();
         }
     }
@@ -112,20 +112,20 @@ impl<T> OverrideFrom<T> for Resettable<T>
 where
     T: Clone,
 {
-    fn override_from(&mut self, b: &Self) {
-        match b {
+    fn override_from(&mut self, other: &Self) {
+        match other {
             Self::Keep => {}
             _ => {
-                let _ = std::mem::replace(self, b.clone());
+                drop(std::mem::replace(self, other.clone()));
             }
         }
     }
 
-    fn clear_from(&mut self, b: &Self) {
-        match b {
+    fn clear_from(&mut self, other: &Self) {
+        match other {
             Self::Keep => {}
             _ => {
-                let _ = std::mem::replace(self, Self::Keep);
+                drop(std::mem::replace(self, Self::Keep));
             }
         }
     }
@@ -196,11 +196,12 @@ impl Global {
 }
 
 impl Debug for Global {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if *self == Global::empty() {
-            write!(f, "Global {{ empty }}")
+            write!(formatter, "Global {{ empty }}")
         } else {
-            f.debug_struct("Global")
+            formatter
+                .debug_struct("Global")
                 .field("position", &self.position)
                 .field("rectangle_clip", &self.rectangle_clip)
                 .field("vector_clip", &self.vector_clip)
@@ -215,7 +216,7 @@ impl Debug for Global {
 }
 
 /// Subset of global tags that are animatable.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GlobalAnimatable {
     pub clip: Option<Clip<Rectangle>>,
 }
@@ -546,11 +547,12 @@ impl Local {
 }
 
 impl Debug for Local {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if *self == Local::empty() {
-            write!(f, "Local {{ empty }}")
+            write!(formatter, "Local {{ empty }}")
         } else {
-            f.debug_struct("Local")
+            formatter
+                .debug_struct("Local")
                 .field("italic", &self.italic)
                 .field("font_weight", &self.font_weight)
                 .field("underline", &self.underline)
@@ -1174,7 +1176,7 @@ impl emit::Value for Move {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MoveTiming {
     pub start_time: Milliseconds,
     pub end_time: Milliseconds,
@@ -1316,7 +1318,7 @@ impl lerp::Lerp for FontSize {
             },
             FontSize::Reset(_) => other,
             FontSize::Set(font_size1) => match other {
-                FontSize::Delta(delta) => FontSize::Set(font_size1 + delta.0 * power),
+                FontSize::Delta(delta) => FontSize::Set(delta.0.mul_add(power, font_size1)),
                 FontSize::Reset(delta) => FontSize::Reset(delta),
                 FontSize::Set(font_size2) => FontSize::Set(font_size1.lerp(font_size2, power)),
             },
@@ -1547,7 +1549,7 @@ pub enum KaraokeOnset {
     Absolute(Centiseconds),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KaraokeEffect {
     /// Maps to `\k`.
     FillInstant,
@@ -1645,7 +1647,7 @@ impl emit::Value for ComplexFade {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Clip<T: emit::Value> {
     /// Show only the content **inside** the border. Maps to `\clip`.
     Contained(T),
@@ -1763,7 +1765,7 @@ mod tests {
     fn override_from() {
         use Resettable::*;
 
-        let mut a = Local {
+        let mut initial = Local {
             font_size: FontSize::Set(50.0),
             font_scale: Maybe2D {
                 x: Override(123.0),
@@ -1777,7 +1779,7 @@ mod tests {
             ..Local::default()
         };
 
-        let b = Local {
+        let other = Local {
             drawing_baseline_offset: Some(2.0),
             font_size: FontSize::Set(70.0),
             font_scale: Maybe2D {
@@ -1792,16 +1794,16 @@ mod tests {
             ..Local::default()
         };
 
-        a.override_from(&b, false);
+        initial.override_from(&other, false);
 
-        assert_eq!(a.drawing_baseline_offset, Some(2.0));
-        assert_eq!(a.strike_out, Keep); // untouched
-        assert_eq!(a.font_size, FontSize::Set(70.0));
-        assert_eq!(a.font_scale.x, Override(10.0));
-        assert_eq!(a.font_scale.y, Keep);
-        assert_eq!(a.text_rotation.x, Override(456.0));
-        assert_eq!(a.text_rotation.y, Reset);
-        assert_eq!(a.text_rotation.z, Override(30.0));
+        assert_eq!(initial.drawing_baseline_offset, Some(2.0));
+        assert_eq!(initial.strike_out, Keep); // untouched
+        assert_eq!(initial.font_size, FontSize::Set(70.0));
+        assert_eq!(initial.font_scale.x, Override(10.0));
+        assert_eq!(initial.font_scale.y, Keep);
+        assert_eq!(initial.text_rotation.x, Override(456.0));
+        assert_eq!(initial.text_rotation.y, Reset);
+        assert_eq!(initial.text_rotation.z, Override(30.0));
     }
 
     macro_rules! fsot {
@@ -1849,21 +1851,21 @@ mod tests {
     fn clear_from() {
         use Resettable::*;
 
-        let mut a = Local {
+        let mut initial = Local {
             italic: Override(true),
             underline: Override(false),
             ..Local::default()
         };
 
-        let b = Local {
+        let clear = Local {
             underline: Override(true),
             ..Local::default()
         };
 
-        a.clear_from(&b);
+        initial.clear_from(&clear);
 
-        assert_eq!(a.italic, Override(true));
-        assert_eq!(a.underline, Keep);
+        assert_eq!(initial.italic, Override(true));
+        assert_eq!(initial.underline, Keep);
     }
 
     #[test]
@@ -2028,54 +2030,60 @@ mod tests {
 
     #[test]
     fn karaoke() -> Result<(), std::fmt::Error> {
-        let mut k = Karaoke::default();
-        assert_eq!(k.effect, None);
-        assert_emits!(k, "");
+        let mut karaoke = Karaoke::default();
+        assert_eq!(karaoke.effect, None);
+        assert_emits!(karaoke, "");
 
-        k.add_relative(KaraokeEffect::FillInstant, Centiseconds(10.0));
+        karaoke.add_relative(KaraokeEffect::FillInstant, Centiseconds(10.0));
         assert_eq!(
-            k.effect,
+            karaoke.effect,
             Some((KaraokeEffect::FillInstant, Centiseconds(10.0)))
         );
-        assert_eq!(k.onset, KaraokeOnset::NoDelay);
-        assert_emits!(k, "\\k10");
+        assert_eq!(karaoke.onset, KaraokeOnset::NoDelay);
+        assert_emits!(karaoke, "\\k10");
 
-        k.add_relative(KaraokeEffect::FillSweep, Centiseconds(20.0));
+        karaoke.add_relative(KaraokeEffect::FillSweep, Centiseconds(20.0));
         assert_eq!(
-            k.effect,
+            karaoke.effect,
             Some((KaraokeEffect::FillSweep, Centiseconds(20.0)))
         );
-        assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(10.0)));
-        assert_emits!(k, "\\k10\\kf20");
-
-        k.add_relative(KaraokeEffect::FillSweep, Centiseconds(5.0));
         assert_eq!(
-            k.effect,
+            karaoke.onset,
+            KaraokeOnset::RelativeDelay(Centiseconds(10.0))
+        );
+        assert_emits!(karaoke, "\\k10\\kf20");
+
+        karaoke.add_relative(KaraokeEffect::FillSweep, Centiseconds(5.0));
+        assert_eq!(
+            karaoke.effect,
             Some((KaraokeEffect::FillSweep, Centiseconds(5.0)))
         );
-        assert_eq!(k.onset, KaraokeOnset::RelativeDelay(Centiseconds(30.0)));
-        assert_emits!(k, "\\k30\\kf5");
-
-        k.set_absolute(Centiseconds(50.0));
-        assert_eq!(k.effect, None);
-        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
-        assert_emits!(k, "\\kt50");
-
-        k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(30.0));
         assert_eq!(
-            k.effect,
+            karaoke.onset,
+            KaraokeOnset::RelativeDelay(Centiseconds(30.0))
+        );
+        assert_emits!(karaoke, "\\k30\\kf5");
+
+        karaoke.set_absolute(Centiseconds(50.0));
+        assert_eq!(karaoke.effect, None);
+        assert_eq!(karaoke.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
+        assert_emits!(karaoke, "\\kt50");
+
+        karaoke.add_relative(KaraokeEffect::BorderInstant, Centiseconds(30.0));
+        assert_eq!(
+            karaoke.effect,
             Some((KaraokeEffect::BorderInstant, Centiseconds(30.0)))
         );
-        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
-        assert_emits!(k, "\\kt50\\ko30");
+        assert_eq!(karaoke.onset, KaraokeOnset::Absolute(Centiseconds(50.0)));
+        assert_emits!(karaoke, "\\kt50\\ko30");
 
-        k.add_relative(KaraokeEffect::BorderInstant, Centiseconds(40.0));
+        karaoke.add_relative(KaraokeEffect::BorderInstant, Centiseconds(40.0));
         assert_eq!(
-            k.effect,
+            karaoke.effect,
             Some((KaraokeEffect::BorderInstant, Centiseconds(40.0)))
         );
-        assert_eq!(k.onset, KaraokeOnset::Absolute(Centiseconds(80.0)));
-        assert_emits!(k, "\\kt80\\ko40");
+        assert_eq!(karaoke.onset, KaraokeOnset::Absolute(Centiseconds(80.0)));
+        assert_emits!(karaoke, "\\kt80\\ko40");
 
         Ok(())
     }

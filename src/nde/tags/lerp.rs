@@ -10,7 +10,7 @@ impl Lerp for i32 {
 
     #[allow(clippy::cast_possible_truncation)]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        (f64::from(self) * (1.0 - power) + f64::from(other) * power) as i32
+        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as i32
     }
 
     fn out(self) -> Self::Output {
@@ -24,7 +24,7 @@ impl Lerp for u32 {
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        (f64::from(self) * (1.0 - power) + f64::from(other) * power) as u32
+        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u32
     }
 
     fn out(self) -> Self::Output {
@@ -38,7 +38,7 @@ impl Lerp for u8 {
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        (f64::from(self) * (1.0 - power) + f64::from(other) * power) as u8
+        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u8
     }
 
     fn out(self) -> Self::Output {
@@ -50,7 +50,7 @@ impl Lerp for f64 {
     type Output = f64;
 
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        self * (1.0 - power) + other * power
+        self.mul_add(1.0 - power, other * power)
     }
 
     fn out(self) -> Self::Output {

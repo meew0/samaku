@@ -184,7 +184,7 @@ impl Graph {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DfsResult {
     CycleFound,
     ProcessQueue(VecDeque<usize>),
