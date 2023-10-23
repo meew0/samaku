@@ -2,6 +2,12 @@
 name = "samaku"
 version = "0.1.0"
 edition = "2021"
+description = "Node-based editor for typesetting of ASS subtitles"
+repository = "https://github.com/meew0/samaku"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+keywords = ["ass", "subtitle"]
+categories = ["multimedia"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,7 +16,6 @@ iced = { version = "0.10.0", features = ["lazy", "image", "advanced", "smol", "s
 iced_aw = { version = "0.7.0", features = ["menu", "selection_list", "icons"] }
 iced_table = "0.1"
 iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", branch = "sockets" }
-#iced_node_editor = { path = "../iced-node-editor/iced_node_editor" }
 rustsynth-sys = { version = "0.4.0", features = ["vapoursynth-functions", "vsscript-functions"] }
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }

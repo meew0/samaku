@@ -1,17 +1,15 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
-// #![warn(clippy::allow_attributes)] // (add this and the following once lint_reasons is stable)
-// #![warn(clippy::allow_attributes_without_reason)]
-
-// #![warn(clippy::arithmetic_side_effects)] // (for now, maybe reconsider later)
-// #![warn(clippy::as_conversions)] // (for now, maybe reconsider later)
+// #![warn(clippy::allow_attributes)] // add once lint_reasons is stable
+// #![warn(clippy::allow_attributes_without_reason)] // add once lint_reasons is stable
+// #![warn(clippy::arithmetic_side_effects)] // potentially add in the future
 #![warn(clippy::as_underscore)]
 #![warn(clippy::assertions_on_result_states)]
 #![warn(clippy::branches_sharing_code)]
 #![warn(clippy::cargo_common_metadata)]
 #![warn(clippy::clear_with_drain)]
 #![warn(clippy::clone_on_ref_ptr)]
-#![cfg_attr(not(test), warn(clippy::cognitive_complexity))]
+#![warn(clippy::cognitive_complexity)]
 #![warn(clippy::collection_is_never_read)]
 #![warn(clippy::create_dir)]
 #![warn(clippy::dbg_macro)]
@@ -33,7 +31,7 @@
 #![warn(clippy::get_unwrap)]
 #![warn(clippy::if_then_some_else_none)]
 #![warn(clippy::impl_trait_in_params)]
-// #![warn(clippy::implied_bounds_in_impls)] // (doesn't exist)
+// #![warn(clippy::implied_bounds_in_impls)] // supposed to exist but doesn't
 #![warn(clippy::imprecise_flops)]
 #![warn(clippy::iter_on_empty_collections)]
 #![warn(clippy::iter_on_single_items)]
@@ -44,7 +42,7 @@
 #![warn(clippy::manual_clamp)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::min_ident_chars)]
-// #![warn(clippy::missing_asserts_for_indexing)] // (doesn't exist)
+// #![warn(clippy::missing_asserts_for_indexing)] // supposed to exist but doesn't
 #![warn(clippy::mixed_read_write_in_expression)]
 #![warn(clippy::multiple_inherent_impl)]
 #![warn(clippy::needless_collect)]
@@ -53,7 +51,6 @@
 #![warn(clippy::nonstandard_macro_braces)]
 #![warn(clippy::or_fun_call)]
 #![warn(clippy::path_buf_push_overwrite)]
-// #![warn(clippy::pattern_type_mismatch)] // (for now, maybe reconsider later)
 #![warn(clippy::pub_without_shorthand)]
 #![warn(clippy::rc_buffer)]
 #![warn(clippy::rc_mutex)]
@@ -82,7 +79,7 @@
 #![warn(clippy::unseparated_literal_suffix)]
 #![warn(clippy::unused_peekable)]
 #![warn(clippy::unused_rounding)]
-// #![warn(clippy::unwrap_used)] // (for now, maybe reconsider later)
+// #![warn(clippy::unwrap_used)] // potentially add in the future
 #![warn(clippy::useless_let_if_seq)]
 #![warn(clippy::verbose_file_reads)]
 #![warn(clippy::wildcard_dependencies)]
@@ -92,18 +89,19 @@
 #![warn(macro_use_extern_crate)]
 #![warn(meta_variable_misuse)]
 #![warn(missing_abi)]
-// #![warn(missing_docs)] // (later)
-// #![warn(must_not_suspend)] // (unstable)
+// #![warn(missing_docs)] // potentially add in the future
+// #![warn(must_not_suspend)] // add once stable
 #![warn(pointer_structural_match)]
 #![warn(unsafe_op_in_unsafe_fn)]
-#![warn(unused_crate_dependencies)]
+// #![warn(unused_crate_dependencies)] // false positive for criterion
 #![warn(unused_extern_crates)]
 #![warn(unused_import_braces)]
 #![warn(unused_qualifications)]
 #![warn(unused_tuple_struct_fields)]
-#![cfg_attr(test, allow(clippy::too_many_lines))]
-#![allow(clippy::enum_glob_use)]
-#![allow(clippy::doc_markdown)] // Useful to have in general, but too many false positives — perhaps worth revisiting later?
+#![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
+#![allow(clippy::enum_glob_use)] // too useful to disallow entirely, but should only be done locally
+#![cfg_attr(test, allow(clippy::cognitive_complexity))] // same as above
+#![cfg_attr(test, allow(clippy::too_many_lines))] // it doesn't matter if test functions are complex
 
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
