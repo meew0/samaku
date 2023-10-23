@@ -3,14 +3,22 @@ use iced::{
     widget::pane_grid::Axis,
 };
 
-use crate::message::Message;
 use crate::model;
+use crate::{message::Message, pane};
 
-pub(crate) fn handle_key_press(_modifiers: Modifiers, key_code: KeyCode) -> Option<Message> {
+pub(crate) fn handle_key_press(modifiers: Modifiers, key_code: KeyCode) -> Option<Message> {
     match key_code {
         KeyCode::F2 => Some(Message::SplitPane(Axis::Vertical)),
         KeyCode::F3 => Some(Message::SplitPane(Axis::Horizontal)),
-        KeyCode::F4 => Some(Message::ClosePane),
+        KeyCode::F4 => {
+            if modifiers.shift() {
+                Some(Message::SetFocusedPaneState(Box::new(
+                    pane::State::Unassigned,
+                )))
+            } else {
+                Some(Message::ClosePane)
+            }
+        }
         KeyCode::V => Some(Message::SelectVideoFile),
         KeyCode::B => Some(Message::ImportSubtitleFile),
         KeyCode::N => Some(Message::SelectAudioFile),

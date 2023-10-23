@@ -30,6 +30,9 @@ pub enum Message {
     /// Can be used to change its type or possibly more
     SetPaneState(pane_grid::Pane, Box<pane::State>),
 
+    /// Same as [`SetPaneState`], but sets the focused pane
+    SetFocusedPaneState(Box<pane::State>),
+
     /// Show a toast notification
     Toast(view::toast::Toast),
 

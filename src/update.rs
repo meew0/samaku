@@ -77,10 +77,20 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::SetPaneState(pane, new_state) => {
             if let Some(pane_state) = global_state.panes.get_mut(&pane) {
                 *pane_state = *new_state;
-            }
 
-            update_filter_lists(global_state);
-            update_style_lists(global_state, true);
+                update_filter_lists(global_state);
+                update_style_lists(global_state, true);
+            }
+        }
+        Message::SetFocusedPaneState(new_state) => {
+            if let Some(focused_pane) = global_state.focus {
+                if let Some(focused_pane_state) = global_state.panes.get_mut(&focused_pane) {
+                    *focused_pane_state = *new_state;
+
+                    update_filter_lists(global_state);
+                    update_style_lists(global_state, true);
+                }
+            }
         }
         Message::Pane(pane, pane_message) => {
             if let Some(pane_state) = global_state.panes.get_mut(&pane) {
