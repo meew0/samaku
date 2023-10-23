@@ -153,7 +153,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     // and no styles will have duplicate names.
     let (style_list, leftover) = StyleList::from_vec(styles);
     for style in &leftover {
-        warnings.push(Warning::DuplicateStyle(style.name().to_string()));
+        warnings.push(Warning::DuplicateStyle(style.name().to_owned()));
     }
 
     // Match event style names to styles, and construct event track
@@ -278,8 +278,8 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
 
     let mut split = value.splitn(23, ',');
 
-    let name = next_split_trim::<true>(&mut split)?.to_string();
-    let font_name = next_split_trim::<true>(&mut split)?.to_string();
+    let name = next_split_trim::<true>(&mut split)?.to_owned();
+    let font_name = next_split_trim::<true>(&mut split)?.to_owned();
     let font_size = next_split_f64(&mut split)?;
 
     let (primary_colour, primary_transparency) =
@@ -361,7 +361,7 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
     } else if let Some(fields_str) = line.strip_prefix("Comment: ") {
         (EventType::Comment, fields_str)
     } else {
-        return Err(Error::InvalidEventType(line.to_string()));
+        return Err(Error::InvalidEventType(line.to_owned()));
     };
 
     let mut split = fields_str.splitn(10, ',');
@@ -372,14 +372,14 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
 
     let start = parse_timecode(next_split_trim::<true>(&mut split)?)?;
     let end = parse_timecode(next_split_trim::<true>(&mut split)?)?;
-    let style = next_split_trim::<true>(&mut split)?.to_string();
-    let actor = next_split_trim::<true>(&mut split)?.to_string();
+    let style = next_split_trim::<true>(&mut split)?.to_owned();
+    let actor = next_split_trim::<true>(&mut split)?.to_owned();
 
     let margin_l = next_split_i32(&mut split)?;
     let margin_r = next_split_i32(&mut split)?;
     let margin_v = next_split_i32(&mut split)?;
 
-    let effect = next_split_trim::<true>(&mut split)?.to_string();
+    let effect = next_split_trim::<true>(&mut split)?.to_owned();
 
     // Aegisub only trims the event text at its end. We match that behaviour, because why not.
     let mut text = next_split_trim::<false>(&mut split)?;
@@ -403,7 +403,7 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
             right: margin_r,
             vertical: margin_v,
         },
-        text: Cow::Owned(text.to_string()),
+        text: Cow::Owned(text.to_owned()),
         actor: Cow::Owned(actor),
         effect: Cow::Owned(effect),
         event_type,
@@ -463,7 +463,7 @@ fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<()
     } else {
         script_info
             .extra_info
-            .insert(key.to_string(), value.to_string());
+            .insert(key.to_owned(), value.to_owned());
     }
 
     Ok(())
@@ -471,7 +471,7 @@ fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<()
 
 fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, String>) {
     if let Some((key, value)) = parse_kv_generic(line) {
-        aegi_metadata.insert(key.to_string(), value.to_string());
+        aegi_metadata.insert(key.to_owned(), value.to_owned());
     };
 }
 
@@ -484,7 +484,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
     if let Some(captures) = extradata_regex.captures(line) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id_num) = id_str.parse::<u32>() else {
-            return Err(Error::InvalidExtradataId(id_str.to_string()));
+            return Err(Error::InvalidExtradataId(id_str.to_owned()));
         };
 
         let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
@@ -496,7 +496,7 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
         } else if value_type == "u" {
             super::uu::decode(value_raw).map_err(Error::UuDecodeError)?
         } else {
-            return Err(Error::InvalidExtradataValueType(value_type.to_string()));
+            return Err(Error::InvalidExtradataValueType(value_type.to_owned()));
         };
 
         extradata.next_id = extradata.next_id.max(ExtradataId(id_num + 1));
@@ -538,7 +538,7 @@ fn parse_attachment_header(
 ) -> Option<Attachment> {
     line.strip_prefix(filename_key).map(|filename| Attachment {
         attachment_type,
-        filename: filename.to_string(),
+        filename: filename.to_owned(),
         uu_data: String::new(),
     })
 }
@@ -677,7 +677,7 @@ fn parse_timecode(timecode: &str) -> Result<i64, Error> {
         TIMECODE_REGEX.get_or_init(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
 
     let Some(captures) = timecode_regex.captures(timecode) else {
-        return Err(Error::InvalidTimecode(timecode.to_string()));
+        return Err(Error::InvalidTimecode(timecode.to_owned()));
     };
 
     let hours = captures[1].parse::<i64>().unwrap();
@@ -931,9 +931,9 @@ pub mod tests {
 
     #[test]
     fn aegi_metadata() {
-        let mut a = HashMap::new();
-        parse_aegi_metadata_line("Key: Value", &mut a);
-        assert_matches!(a.get("Key"), Some(value));
+        let mut aegi_metadata = HashMap::new();
+        parse_aegi_metadata_line("Key: Value", &mut aegi_metadata);
+        assert_matches!(aegi_metadata.get("Key"), Some(value));
         assert_eq!(value, "Value");
     }
 
@@ -957,17 +957,17 @@ pub mod tests {
         assert_matches!(parse_extradata_references("{}a"), None);
         assert_matches!(parse_extradata_references("{=}a"), None);
         assert_matches!(parse_extradata_references("{1}a"), None);
-        assert_matches!(parse_extradata_references("{=1}a"), Some((e, after)));
-        assert_eq!(e.as_slice(), &[ExtradataId(1)]);
+        assert_matches!(parse_extradata_references("{=1}a"), Some((refs, after)));
+        assert_eq!(refs.as_slice(), &[ExtradataId(1)]);
         assert_eq!(after, 4);
-        assert_matches!(parse_extradata_references("{=1=2}a"), Some((e, after)));
-        assert_eq!(e.as_slice(), &[ExtradataId(1), ExtradataId(2)]);
+        assert_matches!(parse_extradata_references("{=1=2}a"), Some((refs, after)));
+        assert_eq!(refs.as_slice(), &[ExtradataId(1), ExtradataId(2)]);
         assert_eq!(after, 6);
         assert_matches!(
             parse_extradata_references("{=1234567890}a"),
-            Some((e, after))
+            Some((refs, after))
         );
-        assert_eq!(e.as_slice(), &[ExtradataId(1_234_567_890)]);
+        assert_eq!(refs.as_slice(), &[ExtradataId(1_234_567_890)]);
         assert_eq!(after, 13);
         assert_matches!(parse_extradata_references("{==1}a"), None);
         assert_matches!(parse_extradata_references("{=1=2"), None);

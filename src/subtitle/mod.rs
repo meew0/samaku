@@ -330,8 +330,8 @@ impl Default for Style {
     /// Samaku's default style.
     fn default() -> Self {
         Self {
-            name: "Default".to_string(),
-            font_name: "Arial".to_string(),
+            name: "Default".to_owned(),
+            font_name: "Arial".to_owned(),
             font_size: 120.0,
             primary_colour: Colour::WHITE,
             secondary_colour: Colour {
@@ -881,7 +881,7 @@ mod tests {
         assert_eq!(style_list.len(), 1);
 
         let (index, result) = style_list.insert(Style {
-            name: "a".to_string(),
+            name: "a".to_owned(),
             bold: true,
             ..Default::default()
         });
@@ -889,7 +889,7 @@ mod tests {
         assert_matches!(result, None);
 
         let (index, result) = style_list.insert(Style {
-            name: "b".to_string(),
+            name: "b".to_owned(),
             italic: true,
             ..Default::default()
         });
@@ -897,7 +897,7 @@ mod tests {
         assert_matches!(result, None);
 
         let (index, result) = style_list.insert(Style {
-            name: "a".to_string(),
+            name: "a".to_owned(),
             bold: false,
             ..Default::default()
         });
@@ -909,7 +909,7 @@ mod tests {
         assert_matches!(maybe_index, Some(b_index));
         assert!(style_list[b_index].italic);
 
-        style_list.rename(2, "c".to_string());
+        style_list.rename(2, "c".to_owned());
         assert_eq!(style_list[2].name(), "c");
 
         let maybe_index = style_list.find_by_name("c");
@@ -940,14 +940,14 @@ mod tests {
         entries.insert(
             ExtradataId(0),
             ExtradataEntry::Opaque {
-                key: "short".to_string(),
+                key: "short".to_owned(),
                 value: SHORT_VALUE.to_vec(),
             },
         );
         entries.insert(
             ExtradataId(1),
             ExtradataEntry::Opaque {
-                key: "long".to_string(),
+                key: "long".to_owned(),
                 value: LONG_VALUE.to_vec(),
             },
         );
@@ -961,7 +961,7 @@ mod tests {
         };
 
         let mut emitted = String::new();
-        emit::emit(&mut emitted, &ass_file, None).unwrap();
+        emit(&mut emitted, &ass_file, None).unwrap();
 
         // Make sure the short one was inline-encoded and the long one UU-encoded
         assert!(emitted.contains("short,e#00"));
@@ -975,8 +975,8 @@ mod tests {
         assert_eq!(parsed.extradata.entries.len(), 2);
         assert_eq!(parsed.extradata.next_id, ExtradataId(2));
 
-        let e0 = parsed.extradata.entries.get(&ExtradataId(0)).unwrap();
-        let e1 = parsed.extradata.entries.get(&ExtradataId(1)).unwrap();
+        let e0 = &parsed.extradata.entries[&ExtradataId(0)];
+        let e1 = &parsed.extradata.entries[&ExtradataId(1)];
 
         assert_matches!(e0, ExtradataEntry::Opaque { key: k0, value: v0 });
         assert_matches!(e1, ExtradataEntry::Opaque { key: k1, value: v1 });
@@ -997,7 +997,7 @@ mod tests {
         assert!(recipe[0].contains("Olive Oil"));
 
         let mut emitted = String::new();
-        emit::emit(&mut emitted, &ass_file, None).unwrap();
+        emit(&mut emitted, &ass_file, None).unwrap();
 
         assert!(emitted.contains("[Croutons Recipe]"));
         assert!(emitted.contains("Olive Oil"));
@@ -1031,7 +1031,7 @@ mod tests {
         );
 
         let filter = nde::Filter {
-            name: "foo".to_string(),
+            name: "foo".to_owned(),
             graph,
         };
 
@@ -1058,7 +1058,7 @@ mod tests {
             },
         };
         let mut emitted = String::new();
-        emit::emit(&mut emitted, &ass_file, Some(context)).unwrap();
+        emit(&mut emitted, &ass_file, Some(context)).unwrap();
 
         let (parsed, _warnings) = parse::tests::parse_str(&emitted);
         assert_eq!(parsed.events.len(), 24);

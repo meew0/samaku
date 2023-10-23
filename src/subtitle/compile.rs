@@ -144,7 +144,7 @@ mod tests {
         let event = Event {
             start: StartTime(0),
             duration: Duration(1000),
-            text: Cow::Owned("This text will become italic".to_string()),
+            text: Cow::Owned("This text will become italic".to_owned()),
             ..Default::default()
         };
 
