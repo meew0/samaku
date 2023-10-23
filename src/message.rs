@@ -139,7 +139,7 @@ impl Message {
     /// Returns a function that maps Some(x) to some message, and None to Message::None.
     pub fn map_option<A, F1: FnOnce(A) -> Self>(f1: F1) -> impl FnOnce(Option<A>) -> Self {
         |a_opt| match a_opt {
-            Some(a) => f1(a),
+            Some(val) => f1(val),
             None => Self::None,
         }
     }
@@ -150,8 +150,8 @@ impl Message {
         f_err: F2,
     ) -> impl FnOnce(Result<A, B>) -> Self {
         |result| match result {
-            Ok(a) => f_ok(a),
-            Err(b) => f_err(b),
+            Ok(ok_val) => f_ok(ok_val),
+            Err(err_val) => f_err(err_val),
         }
     }
 }

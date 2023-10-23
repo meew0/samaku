@@ -6,8 +6,8 @@ const CARGO_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct Short;
 
 impl std::fmt::Display for Short {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(CARGO_VERSION)
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(CARGO_VERSION)
     }
 }
 
@@ -15,7 +15,7 @@ impl std::fmt::Display for Short {
 pub struct Long;
 
 impl std::fmt::Display for Long {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", CARGO_VERSION, &GIT_HASH[0..9])
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}-{}", CARGO_VERSION, &GIT_HASH[0..9])
     }
 }

@@ -256,7 +256,11 @@ impl Samaku {
 
         // Try to find an existing toast with the same content. `Toast`'s implementation of
         // `PartialEq` ignores the count
-        if let Some(existing_toast) = self.toasts.iter_mut().find(|t| **t == toast) {
+        if let Some(existing_toast) = self
+            .toasts
+            .iter_mut()
+            .find(|toast_to_check| **toast_to_check == toast)
+        {
             existing_toast.count += 1;
         } else {
             self.toasts.push(toast);
@@ -404,7 +408,7 @@ impl Application for Samaku {
 
         // Handle incoming global events, like key presses
         let events = subscription::events_with(|event, status| {
-            if let event::Status::Captured = status {
+            if status == event::Status::Captured {
                 return None;
             }
 

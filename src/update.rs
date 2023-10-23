@@ -41,6 +41,7 @@ pub fn update(global_state: &mut super::Samaku, message: Message) -> iced::Comma
 
 /// The internal update method, which actually processes the message and updates global state.
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::cognitive_complexity)]
 fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
     #[allow(clippy::match_same_arms)]
     match message {
@@ -134,6 +135,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::AudioFileSelected(path_buf) => {
             let mut audio_lock = global_state.shared.audio.lock().unwrap();
             *audio_lock = Some(media::Audio::load(path_buf));
+            drop(audio_lock);
             global_state.workers.emit_restart_audio();
         }
         Message::ImportSubtitleFile => {
@@ -162,7 +164,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     .join(", ");
                 global_state.toast(view::toast::Toast::new(
                     view::toast::Status::Primary,
-                    "Duplicate styles".to_string(),
+                    "Duplicate styles".to_owned(),
                     format!(
                         "Skipped the following duplicate styles when loading: {duplicate_names}"
                     ),
@@ -208,7 +210,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     for warning in &warnings {
                         global_state.toast(view::toast::Toast::new(
                             view::toast::Status::Primary,
-                            "Warning while loading subtitle file".to_string(),
+                            "Warning while loading subtitle file".to_owned(),
                             format!("{warning}"),
                         ));
                     }
@@ -216,7 +218,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 Err(err) => {
                     global_state.toast(view::toast::Toast::new(
                         view::toast::Status::Danger,
-                        "Error while loading subtitle file".to_string(),
+                        "Error while loading subtitle file".to_owned(),
                         err.to_string(),
                     ));
                 }
@@ -246,7 +248,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             if global_state.video_metadata.is_none() {
                 global_state.toast(view::toast::Toast::new(
                     view::toast::Status::Primary,
-                    "Warning".to_string(),
+                    "Warning".to_owned(),
                     format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(global_state.frame_rate())),
                 ));
             }
@@ -326,7 +328,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     right: 50,
                     vertical: 50,
                 },
-                text: Cow::Owned("Sphinx of black quartz, judge my vow".to_string()),
+                text: Cow::Owned("Sphinx of black quartz, judge my vow".to_owned()),
                 actor: Cow::Owned(String::new()),
                 effect: Cow::Owned(String::new()),
                 event_type: subtitle::EventType::Dialogue,
