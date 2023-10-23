@@ -14,7 +14,7 @@ pub fn view<'a>(self_pane: super::Pane) -> super::View<'a> {
                         iced::widget::button("Video").on_press(
                             message::Message::SetPaneState(
                                 self_pane,
-                                Box::new(super::State::Video(super::video::State::default()))
+                                Box::new(super::State::Video(super::video::State))
                             )
                         ),
                         iced::widget::button("Grid").on_press(

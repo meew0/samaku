@@ -30,7 +30,7 @@ impl State {
             .iter()
             .enumerate()
             .map(|(index, style)| StyleReference {
-                name: style.name().to_string(),
+                name: style.name().to_owned(),
                 index,
             })
             .collect();
@@ -39,7 +39,7 @@ impl State {
 
     fn map_selected(styles: &[subtitle::Style], selected: Option<usize>) -> Option<StyleReference> {
         selected.map(|index| StyleReference {
-            name: styles[index].name().to_string(),
+            name: styles[index].name().to_owned(),
             index,
         })
     }
@@ -61,8 +61,8 @@ struct StyleReference {
 }
 
 impl Display for StyleReference {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.name)
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.name)
     }
 }
 

@@ -17,8 +17,8 @@ static_assertions::assert_eq_size!(StyleWrapper, subtitle::Style);
 static_assertions::assert_eq_align!(StyleWrapper, subtitle::Style);
 
 impl Display for StyleWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.name())
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0.name())
     }
 }
 
@@ -61,14 +61,10 @@ pub fn view<'a>(
     let create_button = iced::widget::button(iced::widget::text("Create new"))
         .on_press(message::Message::CreateStyle);
     let delete_button = iced::widget::button(iced::widget::text("Delete")).on_press_maybe(
-        if pane_state.selected_style_index == 0 {
-            Some(message::Message::DeleteStyle(
-                pane_state.selected_style_index,
-            ))
-        } else {
-            // Do not allow deleting the first style
-            None
-        },
+        // Do not allow deleting the first style
+        (pane_state.selected_style_index == 0).then_some(message::Message::DeleteStyle(
+            pane_state.selected_style_index,
+        )),
     );
 
     let left_column = iced::widget::column![

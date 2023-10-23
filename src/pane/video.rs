@@ -3,7 +3,7 @@ use iced::widget::canvas;
 use crate::{media, message, model, style, subtitle, view};
 
 #[derive(Debug, Clone, Default)]
-pub struct State {}
+pub struct State;
 
 // Elements to display if no video is loaded
 macro_rules! empty {
@@ -189,30 +189,30 @@ impl<'a> canvas::Program<message::Message> for ReticuleProgram<'a> {
 
             match reticule.shape {
                 model::reticule::Shape::Cross => {
-                    let back_x = canvas::Path::new(|p| {
-                        p.move_to(center_point + iced::Vector::new(-reticule.radius, 3.0));
-                        p.line_to(center_point + iced::Vector::new(reticule.radius, -3.0));
-                        p.line_to(center_point + iced::Vector::new(reticule.radius, 3.0));
-                        p.line_to(center_point + iced::Vector::new(-reticule.radius, -3.0));
-                        p.close();
+                    let back_x = canvas::Path::new(|path| {
+                        path.move_to(center_point + iced::Vector::new(-reticule.radius, 3.0));
+                        path.line_to(center_point + iced::Vector::new(reticule.radius, -3.0));
+                        path.line_to(center_point + iced::Vector::new(reticule.radius, 3.0));
+                        path.line_to(center_point + iced::Vector::new(-reticule.radius, -3.0));
+                        path.close();
                     });
 
-                    let back_y = canvas::Path::new(|p| {
-                        p.move_to(center_point + iced::Vector::new(3.0, -reticule.radius));
-                        p.line_to(center_point + iced::Vector::new(-3.0, reticule.radius));
-                        p.line_to(center_point + iced::Vector::new(3.0, reticule.radius));
-                        p.line_to(center_point + iced::Vector::new(-3.0, -reticule.radius));
-                        p.close();
+                    let back_y = canvas::Path::new(|path| {
+                        path.move_to(center_point + iced::Vector::new(3.0, -reticule.radius));
+                        path.line_to(center_point + iced::Vector::new(-3.0, reticule.radius));
+                        path.line_to(center_point + iced::Vector::new(3.0, reticule.radius));
+                        path.line_to(center_point + iced::Vector::new(-3.0, -reticule.radius));
+                        path.close();
                     });
 
                     frame.fill(&back_x, iced::Color::BLACK);
                     frame.fill(&back_y, iced::Color::BLACK);
 
-                    let thin_path = canvas::Path::new(|p| {
-                        p.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
-                        p.line_to(center_point + iced::Vector::new(reticule.radius, 0.0));
-                        p.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
-                        p.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
+                    let thin_path = canvas::Path::new(|path| {
+                        path.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
+                        path.line_to(center_point + iced::Vector::new(reticule.radius, 0.0));
+                        path.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
+                        path.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
                     });
 
                     frame.stroke(
@@ -248,10 +248,10 @@ fn corner(
     x_sign: f32,
     y_sign: f32,
 ) {
-    let path = canvas::Path::new(|p| {
-        p.move_to(center_point + iced::Vector::new(x_sign * radius * 1.5, 0.0));
-        p.line_to(center_point);
-        p.line_to(center_point + iced::Vector::new(0.0, y_sign * radius * 1.5));
+    let path = canvas::Path::new(|path| {
+        path.move_to(center_point + iced::Vector::new(x_sign * radius * 1.5, 0.0));
+        path.line_to(center_point);
+        path.line_to(center_point + iced::Vector::new(0.0, y_sign * radius * 1.5));
     });
 
     frame.stroke(

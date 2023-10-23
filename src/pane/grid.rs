@@ -62,9 +62,9 @@ pub enum ColumnField {
 }
 
 impl Display for ColumnField {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
-            f,
+            formatter,
             "{}",
             match self {
                 ColumnField::SelectButton => "Select",

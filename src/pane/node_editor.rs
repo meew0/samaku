@@ -35,8 +35,8 @@ impl State {
 // `iced_node_editor::Matrix` doesn't implement `Debug`.
 // So we have to do this manually...
 impl Debug for State {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("State { <opaque> }")
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("State { <opaque> }")
     }
 }
 
@@ -60,11 +60,11 @@ pub struct FilterReference {
 }
 
 impl Display for FilterReference {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         if self.name.is_empty() {
-            f.write_str("(unnamed filter)")
+            formatter.write_str("(unnamed filter)")
         } else {
-            f.write_str(self.name.as_str())
+            formatter.write_str(self.name.as_str())
         }
     }
 }
@@ -168,7 +168,7 @@ pub fn view<'a>(
 fn create_nodes(
     graph_content: &mut Vec<iced_node_editor::GraphNodeElement<message::Message, iced::Renderer>>,
     nde_filter: &nde::Filter,
-    nde_result_or_error: &Result<subtitle::compile::NdeResult, subtitle::compile::NdeError>,
+    nde_result_or_error: &Result<NdeResult, NdeError>,
     scale: f32,
 ) {
     // Convert NDE graph nodes into `iced_node_editor` nodes
@@ -370,21 +370,22 @@ fn view_graph<'a>(
     pane_state: &State,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    graph_content: std::vec::Vec<
-        iced_node_editor::GraphNodeElement<'a, message::Message, iced::Renderer>,
-    >,
+    graph_content: Vec<iced_node_editor::GraphNodeElement<'a, message::Message, iced::Renderer>>,
 ) -> iced::Element<'a, message::Message> {
     let graph_container =
         iced_node_editor::graph_container::<message::Message, iced::Renderer>(graph_content)
             .dangling_source(pane_state.dangling_source)
-            .on_translate(move |p| {
+            .on_translate(move |translation| {
                 message::Message::Pane(
                     self_pane,
-                    message::Pane::NodeEditorTranslationChanged(p.0, p.1),
+                    message::Pane::NodeEditorTranslationChanged(translation.0, translation.1),
                 )
             })
-            .on_scale(move |x, y, s| {
-                message::Message::Pane(self_pane, message::Pane::NodeEditorScaleChanged(x, y, s))
+            .on_scale(move |x, y, scale| {
+                message::Message::Pane(
+                    self_pane,
+                    message::Pane::NodeEditorScaleChanged(x, y, scale),
+                )
             })
             .on_connect(message::Message::ConnectNodes)
             .on_disconnect(move |endpoint, new_dangling_end_position| {
@@ -634,7 +635,7 @@ fn collect_internal_recursive(
             Some(MenuShell::Item(_)) => return Err(CollectError::DuplicateItem),
             Some(MenuShell::SubMenu(_)) => return Err(CollectError::ItemOverSubMenu),
             None => {
-                menu.insert(path[0].to_string(), MenuShell::Item(constructor));
+                menu.insert(path[0].to_owned(), MenuShell::Item(constructor));
             }
         }
 
@@ -645,7 +646,7 @@ fn collect_internal_recursive(
             Some(MenuShell::Item(_)) => return Err(CollectError::SubMenuOverItem),
             Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
             None => {
-                menu.insert(path[0].to_string(), MenuShell::SubMenu(BTreeMap::new()));
+                menu.insert(path[0].to_owned(), MenuShell::SubMenu(BTreeMap::new()));
                 match menu.get_mut(path[0]) {
                     Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
                     _ => panic!(),
