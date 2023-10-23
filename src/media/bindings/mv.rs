@@ -63,7 +63,7 @@ pub enum TrackRegionDirection {
 
 impl TrackRegionDirection {
     fn as_libmv(&self) -> libmv::libmv_TrackRegionDirection {
-        match self {
+        match *self {
             TrackRegionDirection::Forward => {
                 libmv::libmv_TrackRegionDirection_LIBMV_TRACK_REGION_FORWARD
             }
@@ -92,7 +92,11 @@ pub struct MonochromeImage<'a> {
 
 impl<'a> MonochromeImage<'a> {
     pub fn new(data: &'a [f32], width: i32, height: i32) -> Self {
-        assert_eq!(data.len(), usize::try_from(width * height).unwrap());
+        let usize_width =
+            usize::try_from(width).expect("MonochromeImage width should not be negative");
+        let usize_height =
+            usize::try_from(height).expect("MonochromeImage height should not be negative");
+        assert_eq!(data.len(), usize_width * usize_height);
         Self {
             data,
             width,

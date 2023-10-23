@@ -87,7 +87,7 @@ impl Library {
         // able to overwrite (and thus drop) the old callback
         {
             let box_again = unsafe { Box::from_raw(ptr) };
-            let mut guard = self.callback.lock().unwrap();
+            let mut guard = self.callback.lock().expect("lock should not be poisoned");
             *guard = Some(box_again);
         }
     }
@@ -146,7 +146,7 @@ impl Library {
         let track = unsafe {
             libass::ass_read_memory(
                 self.library,
-                buf.as_ptr() as *mut i8,
+                buf.as_ptr().cast_mut().cast::<i8>(),
                 buf.len(),
                 codepage.map_or(std::ptr::null_mut::<i8>(), |cp| cp.as_ptr().cast_mut()),
             )
@@ -160,13 +160,13 @@ impl Library {
 
     pub fn add_font(&self, name: &str, data: &[u8]) {
         // libass will copy the name and data, so we don't need to malloc-ify it.
-        let c_name = CString::new(name).unwrap();
+        let c_name = CString::new(name).expect("the font name should not contain null bytes");
         unsafe {
             libass::ass_add_font(
                 self.library,
                 c_name.as_ptr().cast(),
                 data.as_ptr().cast(),
-                data.len().try_into().unwrap(),
+                i32::try_from(data.len()).expect("font data size should fit into an "),
             );
         }
     }
@@ -174,7 +174,9 @@ impl Library {
 
 impl Drop for Library {
     fn drop(&mut self) {
-        unsafe { libass::ass_library_done(self.library) };
+        unsafe {
+            libass::ass_library_done(self.library);
+        }
     }
 }
 
@@ -201,12 +203,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn set_frame_size(&mut self, w: i32, h: i32) {
-        unsafe { libass::ass_set_frame_size(self.renderer, w, h) }
+    pub fn set_frame_size(&mut self, width: i32, height: i32) {
+        unsafe { libass::ass_set_frame_size(self.renderer, width, height) }
     }
 
-    pub fn set_storage_size(&mut self, w: i32, h: i32) {
-        unsafe { libass::ass_set_storage_size(self.renderer, w, h) }
+    pub fn set_storage_size(&mut self, width: i32, height: i32) {
+        unsafe { libass::ass_set_storage_size(self.renderer, width, height) }
     }
 
     pub fn set_fonts(
@@ -220,10 +222,10 @@ impl Renderer {
         unsafe {
             libass::ass_set_fonts(
                 self.renderer,
-                default_font.map_or(std::ptr::null(), |s| malloc_string(s).cast_const()),
+                default_font.map_or(std::ptr::null(), |str| malloc_string(str).cast_const()),
                 malloc_string(default_family).cast_const(),
                 default_font_provider as i32,
-                fontconfig_config.map_or(std::ptr::null(), |s| malloc_string(s).cast_const()),
+                fontconfig_config.map_or(std::ptr::null(), |str| malloc_string(str).cast_const()),
                 i32::from(update),
             );
         }
@@ -317,7 +319,7 @@ pub fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
         Duration: event.duration.0,
         ReadOrder: read_order,
         Layer: event.layer_index,
-        Style: event.style_index.try_into().unwrap(),
+        Style: i32::try_from(event.style_index).expect("event style index should fit into an i32"),
         Name: malloc_string(event.actor.as_ref()),
         MarginL: event.margins.left,
         MarginR: event.margins.right,
@@ -471,7 +473,7 @@ impl Track {
 
     /// Resizes the internal styles array to have `count` entries.
     pub fn resize_styles(&mut self, count: usize) {
-        let i32_count: i32 = count.try_into().unwrap();
+        let i32_count = i32::try_from(count).expect("style count should fit into an i32");
 
         unsafe {
             let num_to_alloc = i32_count - (*self.track).max_styles;
@@ -490,11 +492,11 @@ impl Track {
         let mut extra_info: HashMap<String, String> = HashMap::new();
 
         if let Some(language) = unsafe { string_from_libass((*self.track).Language) } {
-            extra_info.insert("Language".to_string(), language);
+            extra_info.insert("Language".to_owned(), language);
         }
 
         if let Some(title) = unsafe { string_from_libass((*self.track).name) } {
-            extra_info.insert("Title".to_string(), title);
+            extra_info.insert("Title".to_owned(), title);
         }
 
         subtitle::ScriptInfo {
@@ -563,11 +565,13 @@ impl Track {
 
 impl Drop for Track {
     fn drop(&mut self) {
-        unsafe { libass::ass_free_track(self.track) };
+        unsafe {
+            libass::ass_free_track(self.track);
+        }
     }
 }
 
-pub struct ImageType {}
+pub struct ImageType;
 
 pub type ImageInternal = libass::ASS_Image;
 

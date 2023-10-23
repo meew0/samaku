@@ -6,14 +6,14 @@ pub mod mv;
 pub mod vapoursynth;
 
 pub fn c_string<T: Into<Vec<u8>>>(rust_str: T) -> CString {
-    CString::new(rust_str).unwrap()
+    CString::new(rust_str).expect("string passed into c_string should not contain null bytes")
 }
 
-pub fn path_to_cstring<P: AsRef<Path>>(p: P) -> CString {
+pub fn path_to_cstring<P: AsRef<Path>>(path_as_ref: P) -> CString {
     // https://stackoverflow.com/a/59224987
     // Why is this not in the standard library?
 
-    let path = p.as_ref();
+    let path = path_as_ref.as_ref();
     let mut buf = Vec::new();
 
     #[cfg(unix)]
@@ -36,5 +36,5 @@ pub fn path_to_cstring<P: AsRef<Path>>(p: P) -> CString {
         );
     }
 
-    CString::new(buf).unwrap()
+    CString::new(buf).expect("path buffer should not contain null bytes")
 }

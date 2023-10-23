@@ -141,11 +141,11 @@ mod tests {
         assert_eq!(properties.sample_rate, 44100);
         assert_eq!(properties.channels, 2);
 
-        let mut slice = vec![0u8; 256 * properties.bytes_per_sample];
+        let mut slice = vec![0_u8; 256 * properties.bytes_per_sample];
         bas.get_packed_audio(&mut slice, 88200, 128);
         assert_ne!(
             slice,
-            vec![0u8; 256 * properties.bytes_per_sample],
+            vec![0_u8; 256 * properties.bytes_per_sample],
             "there should be some audio data"
         );
     }

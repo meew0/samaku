@@ -23,8 +23,10 @@ fn get_script_api() -> *const vs::VSSCRIPTAPI {
     let ptr = SCRIPTAPI.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        let new_ptr =
-            unsafe { vs::getVSScriptAPI(vs::VSSCRIPT_API_VERSION.try_into().unwrap()).cast_mut() };
+        #[allow(clippy::cast_possible_wrap)] // constant defined by VS, does not matter if it wraps
+        let vs_api_version = vs::VSSCRIPT_API_VERSION as i32;
+
+        let new_ptr = unsafe { vs::getVSScriptAPI(vs_api_version).cast_mut() };
         assert!(!new_ptr.is_null(), "Failed to initialise VSScriptAPI");
 
         SCRIPTAPI.store(new_ptr, Ordering::Relaxed);
@@ -38,11 +40,11 @@ fn get_api() -> *const vs::VSAPI {
     let ptr = API.load(Ordering::Relaxed);
 
     if ptr.is_null() {
+        #[allow(clippy::cast_possible_wrap)] // constant defined by VS, does not matter if it wraps
+        let vs_api_version = vs::VSSCRIPT_API_VERSION as i32;
+
         let script_api = get_script_api();
-        let new_ptr = unsafe {
-            (*script_api).getVSAPI.unwrap()(vs::VAPOURSYNTH_API_VERSION.try_into().unwrap())
-                .cast_mut()
-        };
+        let new_ptr = unsafe { (*script_api).getVSAPI.unwrap()(vs_api_version).cast_mut() };
         assert!(!new_ptr.is_null(), "Failed to initialise VSAPI");
 
         API.store(new_ptr, Ordering::Relaxed);
@@ -56,8 +58,14 @@ pub type LogHandler = dyn Fn(i32, &str);
 
 unsafe extern "C" fn log_handler(msg_type: c_int, msg: *const c_char, user_data: *mut c_void) {
     let log_handler: *mut Box<LogHandler> = user_data.cast::<Box<LogHandler>>();
-    let rust_str: &str = unsafe { CStr::from_ptr(msg).to_str().unwrap() };
-    unsafe { (*log_handler)(msg_type, rust_str) };
+    let rust_str: &str = unsafe {
+        CStr::from_ptr(msg)
+            .to_str()
+            .expect("the log message received from VapourSynth should be valid UTF-8")
+    };
+    unsafe {
+        (*log_handler)(msg_type, rust_str);
+    }
 }
 
 unsafe extern "C" fn log_handler_free(user_data: *mut c_void) {
@@ -132,12 +140,16 @@ impl Core {
     pub fn remove_log_handler(&mut self, handle: LogHandle) {
         self.check_null();
         let api = get_api();
-        unsafe { (*api).removeLogHandler.unwrap()(handle.handle, self.core) };
+        unsafe {
+            (*api).removeLogHandler.unwrap()(handle.handle, self.core);
+        }
     }
 
     pub fn free(&mut self) {
         let api = get_api();
-        unsafe { (*api).freeCore.unwrap()(self.core) };
+        unsafe {
+            (*api).freeCore.unwrap()(self.core);
+        }
         self.core = ptr::null_mut();
     }
 
@@ -160,7 +172,9 @@ impl Script {
 
     pub fn eval_set_working_dir(&mut self, set_cwd: i32) {
         let script_api = get_script_api();
-        unsafe { (*script_api).evalSetWorkingDir.unwrap()(self.script, set_cwd) };
+        unsafe {
+            (*script_api).evalSetWorkingDir.unwrap()(self.script, set_cwd);
+        }
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -240,7 +254,9 @@ unsafe impl Send for Script {}
 impl Drop for Script {
     fn drop(&mut self) {
         let script_api = get_script_api();
-        unsafe { (*script_api).freeScript.unwrap()(self.script) };
+        unsafe {
+            (*script_api).freeScript.unwrap()(self.script);
+        }
     }
 }
 
@@ -439,7 +455,9 @@ impl<'a> AsMut<MutMap<'a>> for OwnedMap<'a> {
 impl Drop for OwnedMap<'_> {
     fn drop(&mut self) {
         let api = get_api();
-        unsafe { (*api).freeMap.unwrap()(self.map.map) };
+        unsafe {
+            (*api).freeMap.unwrap()(self.map.map);
+        }
     }
 }
 
@@ -514,7 +532,9 @@ unsafe impl Send for Node {}
 impl Drop for Node {
     fn drop(&mut self) {
         let api = get_api();
-        unsafe { (*api).freeNode.unwrap()(self.node) };
+        unsafe {
+            (*api).freeNode.unwrap()(self.node);
+        }
     }
 }
 
@@ -704,7 +724,9 @@ impl Frame {
 impl Drop for Frame {
     fn drop(&mut self) {
         let api = get_api();
-        unsafe { (*api).freeFrame.unwrap()(self.frame) };
+        unsafe {
+            (*api).freeFrame.unwrap()(self.frame);
+        }
     }
 }
 
@@ -748,7 +770,7 @@ impl Plugin {
 pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
     let color_family = vi.get_color_family();
     if color_family != vs::VSColorFamily::cfYUV as i32 {
-        return "None".to_string();
+        return "None".to_owned();
     }
 
     let range = props
@@ -759,13 +781,13 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
         .unwrap_or(-1);
 
     if matrix == vs::VSMatrixCoefficients::VSC_MATRIX_RGB as i64 {
-        return "None".to_string();
+        return "None".to_owned();
     }
 
     let mut ret = if range == vs::VSColorRange::VSC_RANGE_FULL as i64 {
-        "PC".to_string()
+        "PC".to_owned()
     } else {
-        "TV".to_string()
+        "TV".to_owned()
     };
 
     if matrix == vs::VSMatrixCoefficients::VSC_MATRIX_BT709 as i64 {
@@ -779,7 +801,7 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
     } else if matrix == vs::VSMatrixCoefficients::VSC_MATRIX_ST240_M as i64 {
         ret.push_str(".240M");
     } else {
-        return "Unknown".to_string();
+        return "Unknown".to_owned();
     }
 
     ret
