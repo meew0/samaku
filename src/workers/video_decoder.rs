@@ -3,7 +3,7 @@ use std::{sync::Arc, thread};
 use crate::{media, message, model};
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum MessageIn {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
     TrackMotionForNode(
@@ -18,13 +18,13 @@ pub enum Message {
 pub fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
-) -> super::Worker<self::Message> {
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
+) -> super::Worker<MessageIn> {
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
 
     let playback_position = Arc::clone(&shared_state.playback_position);
 
     let handle = thread::Builder::new()
-        .name("samaku_video_decoder".to_string())
+        .name("samaku_video_decoder".to_owned())
         .spawn(move || {
             let mut video_opt: Option<media::Video> = None;
             let mut last_frame = model::FrameNumber(-1);
@@ -78,7 +78,7 @@ pub fn spawn(
                 // continue.
                 if let Some(message) = maybe_message {
                     match message {
-                        self::Message::PlaybackStep => {
+                        self::MessageIn::PlaybackStep => {
                             // The frame might have changed. Check whether we have a video
                             // and whether the frame has actually changed, and if it has,
                             // decode the new frame
@@ -99,7 +99,7 @@ pub fn spawn(
                                 }
                             }
                         }
-                        self::Message::LoadVideo(path_buf) => {
+                        self::MessageIn::LoadVideo(path_buf) => {
                             // Load new video
                             match media::Video::load(path_buf) {
                                 Ok(video) => {
@@ -117,7 +117,7 @@ pub fn spawn(
                                     // Display the error to the user as a toast
                                     if tx_out
                                         .unbounded_send(message::toast_danger(
-                                            "Failed to load video".to_string(),
+                                            "Failed to load video".to_owned(),
                                             err.to_string(),
                                         ))
                                         .is_err()
@@ -127,7 +127,7 @@ pub fn spawn(
                                 }
                             }
                         }
-                        self::Message::TrackMotionForNode(
+                        self::MessageIn::TrackMotionForNode(
                             new_node_index,
                             initial_region,
                             start_frame,

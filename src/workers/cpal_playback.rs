@@ -7,7 +7,7 @@ use std::{
 use crate::{media, message, model};
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum MessageIn {
     TryRestart,
     Play,
     Pause,
@@ -16,23 +16,23 @@ pub enum Message {
 pub fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
-) -> super::Worker<self::Message> {
+) -> super::Worker<MessageIn> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
 
     let playing = Arc::new(atomic::AtomicBool::new(false));
     let playback_position = Arc::clone(&shared_state.playback_position);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
-    let handle = thread::Builder::new().name("samaku_cpal_playback".to_string()).spawn(move || {
+    let handle = thread::Builder::new().name("samaku_cpal_playback".to_owned()).spawn(move || {
         use cpal::traits::StreamTrait;
         let mut stream_opt: Option<cpal::Stream> = None;
 
         loop {
             match rx_in.recv() {
                 Ok(message) => match message {
-                    self::Message::TryRestart => {
+                    self::MessageIn::TryRestart => {
                         // This drops the existing stream, which is supposedly guaranteed to
                         // close it (https://github.com/RustAudio/cpal/issues/652)
                         stream_opt = None;
@@ -87,14 +87,14 @@ pub fn spawn(
                             stream_opt = Some(stream);
                         }
                     }
-                    self::Message::Play => {
+                    self::MessageIn::Play => {
                         if let Some(ref stream) = stream_opt {
                             playing.store(true, atomic::Ordering::Relaxed);
                             tx_out.unbounded_send(message::Message::Playing(true)).expect("Failed to send playing message");
                             stream.play().expect("Failed to play audio stream");
                         }
                     }
-                    self::Message::Pause => {
+                    self::MessageIn::Pause => {
                         if let Some(ref stream) = stream_opt {
                             playing.store(false, atomic::Ordering::Relaxed);
                             tx_out.unbounded_send(message::Message::Playing(false)).expect("Failed to send pausing message");
@@ -262,6 +262,8 @@ fn data_callback<T>(
         playback_position
             .position
             .store(*auth_pos, atomic::Ordering::Relaxed);
+
+        drop(auth_pos);
 
         tx_out
             .unbounded_send(message::Message::PlaybackStep)

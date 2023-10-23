@@ -3,38 +3,38 @@ use std::{collections::HashSet, thread};
 use crate::{media, message, view};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Message {
+pub enum MessageIn {
     Libass(i32, String),
 }
 
 pub fn spawn(
     tx_out: super::GlobalSender,
     _shared_state: &crate::SharedState,
-) -> super::Worker<self::Message> {
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<self::Message>();
+) -> super::Worker<MessageIn> {
+    let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
 
     let handle = thread::Builder::new()
-        .name("samaku_log_toasts".to_string())
+        .name("samaku_log_toasts".to_owned())
         .spawn(move || {
-            let mut seen: HashSet<Message> = HashSet::new();
+            let mut seen: HashSet<MessageIn> = HashSet::new();
             loop {
                 match rx_in.recv() {
                     Ok(message) => {
                         // Remove uninformative pointer value from the start of some libass
                         // messages
                         let message = match message {
-                            self::Message::Libass(level, string) => {
+                            self::MessageIn::Libass(level, string) => {
                                 if string.starts_with("[0x") {
                                     if let Some(pos) = string.find("]: ") {
-                                        self::Message::Libass(
+                                        self::MessageIn::Libass(
                                             level,
                                             string[(pos + 3)..].to_string(),
                                         )
                                     } else {
-                                        self::Message::Libass(level, string)
+                                        self::MessageIn::Libass(level, string)
                                     }
                                 } else {
-                                    self::Message::Libass(level, string)
+                                    self::MessageIn::Libass(level, string)
                                 }
                             }
                         };
@@ -44,7 +44,7 @@ pub fn spawn(
                         if !seen.contains(&message) {
                             seen.insert(message.clone());
                             match message {
-                                self::Message::Libass(level, string) => {
+                                self::MessageIn::Libass(level, string) => {
                                     let status_and_title = match level {
                                         0 | 1 => {
                                             Some((view::toast::Status::Danger, "libass error"))
@@ -56,7 +56,7 @@ pub fn spawn(
                                     if let Some((status, title)) = status_and_title {
                                         let toast = view::toast::Toast::new(
                                             status,
-                                            title.to_string(),
+                                            title.to_owned(),
                                             string,
                                         );
                                         tx_out
@@ -76,7 +76,7 @@ pub fn spawn(
     let tx_in2 = tx_in.clone();
     media::subtitle::set_libass_callback(move |level, string| {
         // Ignore errors, since this function should not panic and we can't really do anything else
-        let _ = tx_in2.send(Message::Libass(level, string));
+        drop(tx_in2.send(MessageIn::Libass(level, string)));
     });
 
     super::Worker {

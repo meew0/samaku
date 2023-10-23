@@ -37,9 +37,9 @@ pub struct Workers {
     _sender: GlobalSender,
     pub receiver: RefCell<Option<GlobalReceiver>>,
 
-    video_decoder: Worker<video_decoder::Message>,
-    cpal_playback: Worker<cpal_playback::Message>,
-    _log_toasts: Worker<log_toasts::Message>,
+    video_decoder: Worker<video_decoder::MessageIn>,
+    cpal_playback: Worker<cpal_playback::MessageIn>,
+    _log_toasts: Worker<log_toasts::MessageIn>,
 }
 
 impl Workers {
@@ -59,26 +59,26 @@ impl Workers {
     }
 
     pub fn emit_play(&self) {
-        self.cpal_playback.dispatch(cpal_playback::Message::Play);
+        self.cpal_playback.dispatch(cpal_playback::MessageIn::Play);
     }
 
     pub fn emit_pause(&self) {
-        self.cpal_playback.dispatch(cpal_playback::Message::Pause);
+        self.cpal_playback.dispatch(cpal_playback::MessageIn::Pause);
     }
 
     pub fn emit_playback_step(&self) {
         self.video_decoder
-            .dispatch(video_decoder::Message::PlaybackStep);
+            .dispatch(video_decoder::MessageIn::PlaybackStep);
     }
 
     pub fn emit_load_video(&self, path_buf: std::path::PathBuf) {
         self.video_decoder
-            .dispatch(video_decoder::Message::LoadVideo(path_buf));
+            .dispatch(video_decoder::MessageIn::LoadVideo(path_buf));
     }
 
     pub fn emit_restart_audio(&self) {
         self.cpal_playback
-            .dispatch(cpal_playback::Message::TryRestart);
+            .dispatch(cpal_playback::MessageIn::TryRestart);
     }
 
     pub fn emit_track_motion_for_node(
@@ -89,7 +89,7 @@ impl Workers {
         end_frame: model::FrameNumber,
     ) {
         self.video_decoder
-            .dispatch(video_decoder::Message::TrackMotionForNode(
+            .dispatch(video_decoder::MessageIn::TrackMotionForNode(
                 node_index,
                 initial_region,
                 start_frame,
