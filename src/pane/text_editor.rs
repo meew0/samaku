@@ -71,10 +71,12 @@ pub fn view<'a>(
     global_state: &'a crate::Samaku,
     editor_state: &'a State,
 ) -> super::View<'a> {
+    // TODO: Implement editing of multiple lines at once
+
     let content: iced::Element<message::Message> = match global_state
         .subtitles
         .events
-        .active_event(global_state.active_event_index)
+        .active_event(&global_state.selected_event_indices)
     {
         Some(active_event) => {
             // Checkbox to make the event a comment or not
@@ -154,7 +156,12 @@ pub fn view<'a>(
                 .spacing(5.0)
                 .into()
         }
-        None => iced::widget::text("No subtitle line currently selected.").into(),
+        None => match global_state.selected_event_indices.len() {
+            0 => iced::widget::text("No subtitle line currently selected."),
+            1 => unreachable!(),
+            _ => iced::widget::text("More than one subtitle line currently selected."),
+        }
+        .into(),
     };
 
     super::View {

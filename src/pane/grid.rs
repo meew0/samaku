@@ -127,16 +127,24 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         row_index: usize,
         row: &'b Self::Row,
     ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
+        let selected = self
+            .0
+            .selected_event_indices
+            .contains(&subtitle::EventIndex(row_index));
+
         let cell_content: iced::Element<message::Message> = match self.1.field {
             ColumnField::SelectButton => {
-                if self.0.active_event_index == Some(row_index) {
-                    // Don't show a select button for the already selected row
-                    iced::widget::text("").into()
+                let icon = if selected {
+                    iced_aw::Icon::Dot
                 } else {
-                    iced::widget::button(view::icon(iced_aw::Icon::CircleFill).size(12.0))
-                        .on_press(message::Message::SelectEvent(row_index))
-                        .into()
-                }
+                    iced_aw::Icon::CircleFill
+                };
+
+                iced::widget::button(view::icon(icon).size(12.0))
+                    .on_press(message::Message::ToggleEventSelection(
+                        subtitle::EventIndex(row_index),
+                    ))
+                    .into()
             }
             ColumnField::FilterName => {
                 iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_event(row) {
@@ -160,7 +168,7 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
         // Highlight the selected event
         let container = iced::widget::container(cell_content);
 
-        let styled_container = if self.0.active_event_index == Some(row_index) {
+        let styled_container = if selected {
             container.style(iced::theme::Container::Custom(Box::new(Highlighted)))
         } else if row.is_comment() {
             container.style(iced::theme::Container::Custom(Box::new(Comment)))

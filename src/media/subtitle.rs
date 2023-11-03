@@ -409,8 +409,14 @@ mod tests {
         // Do the whole thing again, going through a round trip of ass -> stored event -> ass
         let event_track = opaque_track.to_event_track();
         let styles = opaque_track.styles();
-        assert_eq!(event_track[0].style_index, default_usize);
-        assert_eq!(event_track[1].style_index, alternate_usize);
+        assert_eq!(
+            event_track[subtitle::EventIndex(0)].style_index,
+            default_usize
+        );
+        assert_eq!(
+            event_track[subtitle::EventIndex(1)].style_index,
+            alternate_usize
+        );
         assert_eq!(styles[default_usize].primary_colour, WHITE);
         assert_eq!(styles[default_usize].primary_transparency, OPAQUE);
         assert_eq!(styles[default_usize].border_colour, BLACK);

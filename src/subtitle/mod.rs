@@ -3,7 +3,7 @@
 //! ones.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 pub use emit::emit;
@@ -485,6 +485,9 @@ impl IndexMut<usize> for StyleList {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EventIndex(pub usize);
+
 /// Ordered collection of [`Event`]s.
 /// For now, this is just a wrapper around [`Vec`], but in the future it might become more advanced,
 /// using a tree-like structure or some time-indexed data structure.
@@ -521,58 +524,57 @@ impl EventTrack {
         self.events.push(event);
     }
 
+    /// If exactly one event is selected, this method returns the index of that element. Otherwise,
+    /// it returns `None`.
+    fn active_event_index(selected_event_indices: &HashSet<EventIndex>) -> Option<EventIndex> {
+        (selected_event_indices.len() == 1).then(|| *selected_event_indices.iter().next().unwrap())
+    }
+
     #[must_use]
-    pub fn active_event(&self, active_event_index: Option<usize>) -> Option<&Event<'static>> {
-        match active_event_index {
-            Some(active_event_index) => Some(&self.events[active_event_index]),
-            None => None,
-        }
+    pub fn active_event(
+        &self,
+        selected_event_indices: &HashSet<EventIndex>,
+    ) -> Option<&Event<'static>> {
+        Self::active_event_index(selected_event_indices).map(|index| &self[index])
     }
 
     #[must_use]
     pub fn active_event_mut(
         &mut self,
-        active_event_index: Option<usize>,
+        selected_event_indices: &HashSet<EventIndex>,
     ) -> Option<&mut Event<'static>> {
-        match active_event_index {
-            Some(active_event_index) => Some(&mut self.events[active_event_index]),
-            None => None,
-        }
+        Self::active_event_index(selected_event_indices).map(|index| &mut self[index])
     }
 
     #[must_use]
     pub fn active_nde_filter<'a>(
         &self,
-        active_event_index: Option<usize>,
+        selected_event_indices: &HashSet<EventIndex>,
         extradata: &'a Extradata,
     ) -> Option<&'a nde::Filter> {
-        match active_event_index.map(|index| &self.events[index]) {
-            Some(active_event) => extradata.nde_filter_for_event(active_event),
-            None => None,
-        }
+        self.active_event(selected_event_indices)
+            .and_then(|event| extradata.nde_filter_for_event(event))
     }
 
     #[must_use]
     pub fn active_nde_filter_mut<'a>(
         &self,
-        active_event_index: Option<usize>,
+        selected_event_indices: &HashSet<EventIndex>,
         extradata: &'a mut Extradata,
     ) -> Option<&'a mut nde::Filter> {
-        match active_event_index.map(|index| &self.events[index]) {
-            Some(active_event) => extradata.nde_filter_for_event_mut(active_event),
-            None => None,
-        }
+        self.active_event(selected_event_indices)
+            .and_then(|event| extradata.nde_filter_for_event_mut(event))
     }
 
     /// Dispatch message to node
     pub fn update_node(
         &mut self,
-        active_event_index: Option<usize>,
+        selected_event_indices: &HashSet<EventIndex>,
         extradata: &mut Extradata,
         node_index: usize,
         message: message::Node,
     ) {
-        if let Some(filter) = self.active_nde_filter_mut(active_event_index, extradata) {
+        if let Some(filter) = self.active_nde_filter_mut(selected_event_indices, extradata) {
             if let Some(node) = filter.graph.nodes.get_mut(node_index) {
                 node.node.update(message);
             }
@@ -626,17 +628,17 @@ impl<'a> IntoIterator for &'a EventTrack {
     }
 }
 
-impl Index<usize> for EventTrack {
+impl Index<EventIndex> for EventTrack {
     type Output = Event<'static>;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.events[index]
+    fn index(&self, index: EventIndex) -> &Self::Output {
+        &self.events[index.0]
     }
 }
 
-impl IndexMut<usize> for EventTrack {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.events[index]
+impl IndexMut<EventIndex> for EventTrack {
+    fn index_mut(&mut self, index: EventIndex) -> &mut Self::Output {
+        &mut self.events[index.0]
     }
 }
 

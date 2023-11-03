@@ -104,54 +104,41 @@ impl iced_node_editor::styles::connection::StyleSheet for ConnectionStyle {
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
 ) -> super::View<'a> {
-    let content: iced::Element<message::Message> = match global_state.active_event_index {
-        Some(active_event_index) => {
-            // There is an active event, check whether it has an NDE filter
-            let active_event = &global_state.subtitles.events[active_event_index];
-            match &global_state
-                .subtitles
-                .extradata
-                .nde_filter_for_event(active_event)
-            {
-                Some(nde_filter) => {
-                    // Before doing much of anything else, we need to run the NDE filter —
-                    // not to get the output events, but for the intermediate state,
-                    // which lets us determine what style to draw nodes in, as well as provide
-                    // precise information of what types sockets contain
-                    let context = global_state.compile_context();
-                    let nde_result_or_error =
-                        subtitle::compile::nde(active_event, &nde_filter.graph, &context);
+    let content: iced::Element<message::Message> = if global_state.selected_event_indices.is_empty()
+    {
+        iced::widget::text("No subtitle currently selected.").into()
+    } else if global_state.selected_event_indices.len() > 1 {
+        // Multiple events selected. We can't meaningfully run the filter on multiple events
+        // at once, even if their filters should match, so display the assignment pane
+        // as a fallback so at least a filter can be assigned to multiple events
+        view_non_selected(self_pane, pane_state, true)
+    } else {
+        // Exactly one event selected
+        let active_event_index = *global_state.selected_event_indices.iter().next().unwrap();
+        let active_event = &global_state.subtitles.events[active_event_index];
 
-                    let mut graph_content = vec![];
-                    let scale = pane_state.matrix.get_scale(); // For correct node grid translation behaviour
-
-                    // Create `node_editor` nodes with sockets for each of the nodes in the filter,
-                    // and append them to the content
-                    create_nodes(&mut graph_content, nde_filter, &nde_result_or_error, scale);
-                    create_connections(&mut graph_content, nde_filter, &nde_result_or_error);
-
-                    // Append the dangling connection, if one exists
-                    if let Some(link) = &pane_state.dangling_connection {
-                        graph_content.push(iced_node_editor::Connection::new(link.clone()).into());
-                    }
-
-                    view_graph(
-                        self_pane,
-                        pane_state,
-                        nde_filter,
-                        &nde_result_or_error,
-                        graph_content,
-                    )
-                }
-                None => view_non_selected(self_pane, pane_state),
-            }
+        // Check whether the event has an NDE filter assigned. If yes, display the node editor
+        // to edit that filter, otherwise, display the assignment pane
+        match &global_state
+            .subtitles
+            .extradata
+            .nde_filter_for_event(active_event)
+        {
+            Some(nde_filter) => view_filter(
+                self_pane,
+                global_state,
+                pane_state,
+                active_event,
+                nde_filter,
+            ),
+            None => view_non_selected(self_pane, pane_state, false),
         }
-        None => iced::widget::text("No subtitle currently selected.").into(),
     };
 
     super::View {
@@ -163,6 +150,42 @@ pub fn view<'a>(
             .center_y()
             .into(),
     }
+}
+
+fn view_filter<'a>(
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    pane_state: &'a State,
+    active_event: &subtitle::Event<'static>,
+    nde_filter: &nde::Filter,
+) -> iced::Element<'a, message::Message> {
+    // Before doing much of anything else, we need to run the NDE filter —
+    // not to get the output events, but for the intermediate state,
+    // which lets us determine what style to draw nodes in, as well as provide
+    // precise information of what types sockets contain
+    let context = global_state.compile_context();
+    let nde_result_or_error = subtitle::compile::nde(active_event, &nde_filter.graph, &context);
+
+    let mut graph_content = vec![];
+    let scale = pane_state.matrix.get_scale(); // For correct node grid translation behaviour
+
+    // Create `node_editor` nodes with sockets for each of the nodes in the filter,
+    // and append them to the content
+    create_nodes(&mut graph_content, nde_filter, &nde_result_or_error, scale);
+    create_connections(&mut graph_content, nde_filter, &nde_result_or_error);
+
+    // Append the dangling connection, if one exists
+    if let Some(link) = &pane_state.dangling_connection {
+        graph_content.push(iced_node_editor::Connection::new(link.clone()).into());
+    }
+
+    view_graph(
+        self_pane,
+        pane_state,
+        nde_filter,
+        &nde_result_or_error,
+        graph_content,
+    )
 }
 
 fn create_nodes(
@@ -403,7 +426,7 @@ fn view_graph<'a>(
         .item_height(iced_aw::menu::ItemHeight::Uniform(32));
 
     let unassign_button = iced::widget::button(iced::widget::text("Unassign"))
-        .on_press(message::Message::UnassignFilterFromActiveEvent);
+        .on_press(message::Message::UnassignFilterFromSelectedEvents);
 
     let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
         .on_input(message::Message::SetActiveFilterName)
@@ -435,6 +458,7 @@ fn view_graph<'a>(
 fn view_non_selected(
     self_pane: super::Pane,
     pane_state: &State,
+    multi_warning: bool,
 ) -> iced::Element<message::Message> {
     let selection_list = iced_aw::selection_list(
         pane_state.filters.as_slice(),
@@ -452,7 +476,7 @@ fn view_non_selected(
         pane_state
             .selected_filter
             .as_ref()
-            .map(|filter_ref| message::Message::AssignFilterToActiveEvent(filter_ref.index)),
+            .map(|filter_ref| message::Message::AssignFilterToSelectedEvents(filter_ref.index)),
     );
     let create_button = iced::widget::button(iced::widget::text("Create new"))
         .on_press(message::Message::CreateEmptyFilter);
@@ -463,10 +487,18 @@ fn view_non_selected(
             .map(|filter_ref| message::Message::DeleteFilter(filter_ref.index)),
     );
 
+    let warning_text = if multi_warning {
+        iced::widget::text("To edit a filter, select only one event that has it assigned.")
+            .style(style::SAMAKU_PRIMARY)
+    } else {
+        iced::widget::text("")
+    };
+
     iced::widget::column![
         iced::widget::text("Filters").size(20),
         selection_list,
-        iced::widget::row![assign_button, create_button, delete_button].spacing(5)
+        iced::widget::row![assign_button, create_button, delete_button].spacing(5),
+        warning_text,
     ]
     .spacing(5)
     .into()

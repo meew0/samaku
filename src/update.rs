@@ -7,12 +7,20 @@ use std::fmt::Write;
 use crate::message::Message;
 use crate::{media, message, model, nde, pane, subtitle, view};
 
+macro_rules! active_event {
+    ($global_state:ident) => {
+        $global_state
+            .subtitles
+            .events
+            .active_event(&$global_state.selected_event_indices)
+    };
+}
 macro_rules! active_event_mut {
     ($global_state:ident) => {
         $global_state
             .subtitles
             .events
-            .active_event_mut($global_state.active_event_index)
+            .active_event_mut(&$global_state.selected_event_indices)
     };
 }
 
@@ -346,7 +354,13 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             };
             global_state.subtitles.events.push(new_event);
         }
-        Message::SelectEvent(index) => global_state.active_event_index = Some(index),
+        Message::ToggleEventSelection(index) => {
+            if global_state.selected_event_indices.contains(&index) {
+                global_state.selected_event_indices.remove(&index);
+            } else {
+                global_state.selected_event_indices.insert(index);
+            }
+        }
         Message::SetActiveEventText(new_text) => {
             if let Some(event) = active_event_mut!(global_state) {
                 event.text = Cow::Owned(new_text);
@@ -394,25 +408,21 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             });
             update_filter_lists(global_state);
         }
-        Message::AssignFilterToActiveEvent(filter_index) => {
-            if let Some(active_event) = global_state
-                .active_event_index
-                .map(|index| &mut global_state.subtitles.events[index])
-            {
-                active_event.assign_nde_filter(filter_index, &global_state.subtitles.extradata);
+        Message::AssignFilterToSelectedEvents(filter_index) => {
+            for selected_event_index in &global_state.selected_event_indices {
+                global_state.subtitles.events[*selected_event_index]
+                    .assign_nde_filter(filter_index, &global_state.subtitles.extradata);
             }
         }
-        Message::UnassignFilterFromActiveEvent => {
-            if let Some(active_event) = global_state
-                .active_event_index
-                .map(|index| &mut global_state.subtitles.events[index])
-            {
-                active_event.unassign_nde_filter(&global_state.subtitles.extradata);
+        Message::UnassignFilterFromSelectedEvents => {
+            for selected_event_index in &global_state.selected_event_indices {
+                global_state.subtitles.events[*selected_event_index]
+                    .unassign_nde_filter(&global_state.subtitles.extradata);
             }
         }
         Message::SetActiveFilterName(new_name) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
                 filter.name = new_name;
@@ -424,7 +434,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::AddNode(node_constructor) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
                 let visual_node = nde::graph::VisualNode {
@@ -436,7 +446,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::MoveNode(node_index, x, y) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
                 let node = &mut filter.graph.nodes[node_index];
@@ -445,7 +455,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::ConnectNodes(link) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
                 let (start, end) = link.unwrap_sockets();
@@ -463,7 +473,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
                 let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
@@ -496,7 +506,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::UpdateReticulePosition(index, position) => {
             if let Some(reticules) = &mut global_state.reticules {
                 if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                    global_state.active_event_index,
+                    &global_state.selected_event_indices,
                     &mut global_state.subtitles.extradata,
                 ) {
                     if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index) {
@@ -514,7 +524,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 // The node can't do this itglobal_state, because it does not know the number of
                 // the current frame.
                 global_state.subtitles.events.update_node(
-                    global_state.active_event_index,
+                    &global_state.selected_event_indices,
                     &mut global_state.subtitles.extradata,
                     node_index,
                     message::Node::MotionTrackUpdate(current_frame, initial_region),
@@ -523,7 +533,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 if let Some(event) = global_state
                     .subtitles
                     .events
-                    .active_event(global_state.active_event_index)
+                    .active_event(&global_state.selected_event_indices)
                 {
                     global_state.workers.emit_track_motion_for_node(
                         node_index,
@@ -536,7 +546,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::Node(node_index, node_message) => {
             global_state.subtitles.events.update_node(
-                global_state.active_event_index,
+                &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
                 node_index,
                 node_message,
@@ -561,11 +571,7 @@ fn update_filter_lists(global_state: &mut super::Samaku) {
 /// styles list to update their internal representations. If `copy_styles` is false, only the
 /// selected style will be updated.
 fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
-    let active_event_style_index = global_state
-        .subtitles
-        .events
-        .active_event(global_state.active_event_index)
-        .map(|event| event.style_index);
+    let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
 
     for pane in global_state.panes.panes.values_mut() {
         if let pane::State::TextEditor(text_editor_state) = pane {

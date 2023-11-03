@@ -104,6 +104,7 @@
 #![cfg_attr(test, allow(clippy::too_many_lines))] // it doesn't matter if test functions are complex
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
@@ -175,8 +176,9 @@ pub struct Samaku {
     /// yet.
     pub subtitles: subtitle::File,
 
-    /// Index of currently selected event, if one exists.
-    pub active_event_index: Option<usize>,
+    /// Indices of currently selected events. May be any length, or empty if no event is currently
+    /// selected.
+    pub selected_event_indices: HashSet<subtitle::EventIndex>,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -290,7 +292,7 @@ impl Application for Samaku {
             actual_frame: None,
             video_metadata: None,
             subtitles: subtitle::File::default(),
-            active_event_index: None,
+            selected_event_indices: HashSet::new(),
             shared: shared_state,
             view: RefCell::new(ViewState {
                 subtitle_renderer: media::subtitle::Renderer::new(),

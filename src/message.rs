@@ -98,8 +98,8 @@ pub enum Message {
     /// Add an empty event to the end of the track.
     AddEvent,
 
-    /// Set the given event to be active.
-    SelectEvent(usize),
+    /// Select the given event if it is not selected, otherwise deselect it.
+    ToggleEventSelection(subtitle::EventIndex),
 
     // Set various properties of the active event.
     SetActiveEventText(String),
@@ -113,8 +113,8 @@ pub enum Message {
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,
-    AssignFilterToActiveEvent(subtitle::ExtradataId),
-    UnassignFilterFromActiveEvent,
+    AssignFilterToSelectedEvents(subtitle::ExtradataId),
+    UnassignFilterFromSelectedEvents,
     SetActiveFilterName(String),
     DeleteFilter(subtitle::ExtradataId), // NYI
 
