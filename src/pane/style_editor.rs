@@ -4,7 +4,7 @@ use crate::{message, subtitle};
 
 #[derive(Debug, Clone, Default)]
 pub struct State {
-    selected_style_index: usize,
+    pub selected_style_index: usize,
 }
 
 /// A custom wrapper around `Style` that implements `Display`, `Eq`, and `Hash`,
@@ -62,7 +62,7 @@ pub fn view<'a>(
         .on_press(message::Message::CreateStyle);
     let delete_button = iced::widget::button(iced::widget::text("Delete")).on_press_maybe(
         // Do not allow deleting the first style
-        (pane_state.selected_style_index == 0).then_some(message::Message::DeleteStyle(
+        (pane_state.selected_style_index != 0).then_some(message::Message::DeleteStyle(
             pane_state.selected_style_index,
         )),
     );

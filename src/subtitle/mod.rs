@@ -436,6 +436,15 @@ impl StyleList {
         (new_index, None)
     }
 
+    /// Remove a style by index. Returns the style that was removed. All styles with index > `index`
+    /// will have their indices shifted down by 1. The caller must take care to
+    /// update references within events, both to assign the default style to events that had the
+    /// removed style assigned and to shift indices in events that have styles with greater indices
+    /// assigned.
+    pub fn remove(&mut self, index: usize) {
+        self.styles.remove(index);
+    }
+
     /// Look up a style by name. Returns the index of the style, if one was found.
     #[must_use]
     pub fn find_by_name(&self, name: &str) -> Option<usize> {

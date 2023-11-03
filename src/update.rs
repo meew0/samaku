@@ -329,8 +329,19 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             };
             global_state.subtitles.styles.insert(new_style);
         }
-        Message::DeleteStyle(_index) => {
-            todo!()
+        Message::DeleteStyle(index) => {
+            global_state.subtitles.styles.remove(index);
+
+            // Update style references in events: assign the default style to all events that had
+            // the removed style assigned, and decrement style indices of applicable events (with
+            // existing style indices > the removed index)
+            for event in &mut global_state.subtitles.events {
+                match event.style_index.cmp(&index) {
+                    std::cmp::Ordering::Less => {}
+                    std::cmp::Ordering::Equal => event.style_index = 0,
+                    std::cmp::Ordering::Greater => event.style_index -= 1,
+                }
+            }
         }
         Message::SetStyleBold(index, value) => {
             global_state.subtitles.styles[index].bold = value;
@@ -582,14 +593,25 @@ fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
 
     for pane in global_state.panes.panes.values_mut() {
-        if let pane::State::TextEditor(text_editor_state) = pane {
-            if copy_styles {
-                text_editor_state.update_styles(global_state.subtitles.styles.as_slice());
+        match pane {
+            pane::State::TextEditor(text_editor_state) => {
+                if copy_styles {
+                    text_editor_state.update_styles(global_state.subtitles.styles.as_slice());
+                }
+                text_editor_state.update_selected(
+                    global_state.subtitles.styles.as_slice(),
+                    active_event_style_index,
+                );
             }
-            text_editor_state.update_selected(
-                global_state.subtitles.styles.as_slice(),
-                active_event_style_index,
-            );
+            pane::State::StyleEditor(style_editor_state) => {
+                // A style might have been deleted, which might cause the style selected in a
+                // style editor pane to no longer exist. In that case, set it to 0 which will
+                // always exist.
+                if style_editor_state.selected_style_index >= global_state.subtitles.styles.len() {
+                    style_editor_state.selected_style_index = 0;
+                }
+            }
+            _ => {}
         }
     }
 }
