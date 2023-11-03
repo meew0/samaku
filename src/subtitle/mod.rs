@@ -628,6 +628,15 @@ impl<'a> IntoIterator for &'a EventTrack {
     }
 }
 
+impl<'a> IntoIterator for &'a mut EventTrack {
+    type Item = &'a mut Event<'static>;
+    type IntoIter = <&'a mut Vec<Event<'static>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        <&'a mut Vec<Event<'static>> as IntoIterator>::into_iter(&mut self.events)
+    }
+}
+
 impl Index<EventIndex> for EventTrack {
     type Output = Event<'static>;
 
@@ -764,6 +773,11 @@ impl Extradata {
     /// Append a new filter. Returns the newly created extradata ID.
     pub fn push_filter(&mut self, filter: nde::Filter) -> ExtradataId {
         self.push(ExtradataEntry::NdeFilter(filter))
+    }
+
+    /// Remove an entry. The caller must take care to remove references to it from events!
+    pub fn remove(&mut self, id: ExtradataId) -> Option<ExtradataEntry> {
+        self.entries.remove(&id)
     }
 
     /// Iterate over all existing NDE filters with their indices.

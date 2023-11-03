@@ -429,8 +429,16 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 update_filter_lists(global_state);
             }
         }
-        Message::DeleteFilter(_filter_index) => {
-            todo!()
+        Message::DeleteFilter(filter_index) => {
+            // Unassign filters from events that might have it assigned
+            for event in &mut global_state.subtitles.events {
+                event.extradata_ids.retain(|id| *id != filter_index);
+            }
+
+            // Remove the filter itself
+            global_state.subtitles.extradata.remove(filter_index);
+
+            update_filter_lists(global_state);
         }
         Message::AddNode(node_constructor) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
