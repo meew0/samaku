@@ -98,6 +98,8 @@ pub enum Message {
     /// Add an empty event to the end of the track.
     AddEvent,
 
+    DeleteSelectedEvents,
+
     /// Select the given event if it is not selected, otherwise deselect it.
     ToggleEventSelection(subtitle::EventIndex),
 

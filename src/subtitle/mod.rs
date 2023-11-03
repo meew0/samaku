@@ -533,6 +533,19 @@ impl EventTrack {
         self.events.push(event);
     }
 
+    /// Remove all events whose indices are contained in the given set. Clears the set afterwards
+    /// (since the indices it references are no longer valid); hence, it requires a mutable
+    /// reference to the set.
+    pub fn remove_from_set(&mut self, set: &mut HashSet<EventIndex>) {
+        let mut index = 0;
+        self.events.retain(|_| {
+            let to_remove = set.contains(&EventIndex(index));
+            index += 1;
+            !to_remove
+        });
+        set.clear();
+    }
+
     /// If exactly one event is selected, this method returns the index of that element. Otherwise,
     /// it returns `None`.
     fn active_event_index(selected_event_indices: &HashSet<EventIndex>) -> Option<EventIndex> {

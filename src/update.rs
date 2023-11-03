@@ -365,6 +365,12 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             };
             global_state.subtitles.events.push(new_event);
         }
+        Message::DeleteSelectedEvents => {
+            global_state
+                .subtitles
+                .events
+                .remove_from_set(&mut global_state.selected_event_indices);
+        }
         Message::ToggleEventSelection(index) => {
             if global_state.selected_event_indices.contains(&index) {
                 global_state.selected_event_indices.remove(&index);

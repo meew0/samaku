@@ -221,8 +221,11 @@ pub fn view<'a>(
     let add_button =
         iced::widget::button(view::icon(iced_aw::Icon::Plus)).on_press(message::Message::AddEvent);
 
+    let delete_button = iced::widget::button(view::icon(iced_aw::Icon::Dash))
+        .on_press(message::Message::DeleteSelectedEvents);
+
     let top_bar = iced::widget::container(
-        iced::widget::row![add_button]
+        iced::widget::row![add_button, delete_button]
             .spacing(5.0)
             .align_items(iced::Alignment::Center),
     )
