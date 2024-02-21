@@ -103,10 +103,10 @@ impl<'a, Message> Manager<'a, Message>
 where
     Message: 'a + Clone,
 {
-    pub fn new(
-        content: impl Into<Element<'a, Message>>,
+    pub fn new<E: Into<Element<'a, Message>>, F: Fn(usize) -> Message + 'a>(
+        content: E,
         toasts: &'a [Toast],
-        on_close: impl Fn(usize) -> Message + 'a,
+        on_close: F,
     ) -> Self {
         let mut elements: Vec<Element<'a, Message>> = vec![];
 

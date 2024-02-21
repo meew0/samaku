@@ -58,8 +58,8 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to construct a new subtitle track or when there are more events than
     /// would fit into an `i32`.
-    pub fn from_compiled<'a>(
-        events: impl IntoIterator<Item = &'a subtitle::Event<'a>>,
+    pub fn from_compiled<'a, E: IntoIterator<Item = &'a subtitle::Event<'a>>>(
+        events: E,
         styles: &[subtitle::Style],
         metadata: &subtitle::ScriptInfo,
     ) -> OpaqueTrack {

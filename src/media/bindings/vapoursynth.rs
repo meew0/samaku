@@ -116,7 +116,7 @@ impl Core {
         self.get_plugin_by_id(CString::new("com.vapoursynth.resize").unwrap())
     }
 
-    pub fn add_log_handler(&mut self, handler: impl Fn(i32, &str) + 'static) -> LogHandle {
+    pub fn add_log_handler<H: Fn(i32, &str) + 'static>(&mut self, handler: H) -> LogHandle {
         self.check_null();
         let api = get_api();
 

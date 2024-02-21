@@ -679,10 +679,10 @@ fn collect_internal_recursive(
             Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
             None => {
                 menu.insert(path[0].to_owned(), MenuShell::SubMenu(BTreeMap::new()));
-                match menu.get_mut(path[0]) {
-                    Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
-                    _ => panic!(),
-                }
+                let Some(MenuShell::SubMenu(sub_menu)) = menu.get_mut(path[0]) else {
+                    panic!();
+                };
+                sub_menu
             }
         };
         collect_internal_recursive(sub_menu, &path[1..], constructor)

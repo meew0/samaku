@@ -641,6 +641,7 @@ impl EventTrack {
 }
 
 // For now, just transparently pass along `Vec`'s implementation
+#[allow(clippy::into_iter_without_iter)]
 impl<'a> IntoIterator for &'a EventTrack {
     type Item = &'a Event<'static>;
     type IntoIter = <&'a Vec<Event<'static>> as IntoIterator>::IntoIter;
@@ -650,6 +651,7 @@ impl<'a> IntoIterator for &'a EventTrack {
     }
 }
 
+#[allow(clippy::into_iter_without_iter)]
 impl<'a> IntoIterator for &'a mut EventTrack {
     type Item = &'a mut Event<'static>;
     type IntoIter = <&'a mut Vec<Event<'static>> as IntoIterator>::IntoIter;
