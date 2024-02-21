@@ -82,8 +82,26 @@ pub fn view<'a>(
     let bold_checkbox = iced::widget::checkbox("Bold", selected_style.bold, move |val| {
         message::Message::SetStyleBold(i, val)
     });
+    let italic_checkbox = iced::widget::checkbox("Italic", selected_style.italic, move |val| {
+        message::Message::SetStyleItalic(i, val)
+    });
+    let underline_checkbox =
+        iced::widget::checkbox("Underline", selected_style.underline, move |val| {
+            message::Message::SetStyleUnderline(i, val)
+        });
+    let strike_out_checkbox =
+        iced::widget::checkbox("Strike out", selected_style.strike_out, move |val| {
+            message::Message::SetStyleStrikeOut(i, val)
+        });
 
-    let right_column = iced::widget::column![bold_checkbox].spacing(5);
+    let flags_row = iced::widget::row![
+        bold_checkbox,
+        italic_checkbox,
+        underline_checkbox,
+        strike_out_checkbox
+    ];
+
+    let right_column = iced::widget::column![flags_row].spacing(5);
 
     let content = iced::widget::row![left_column, right_column];
 

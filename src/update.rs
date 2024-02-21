@@ -346,6 +346,15 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::SetStyleBold(index, value) => {
             global_state.subtitles.styles[index].bold = value;
         }
+        Message::SetStyleItalic(index, value) => {
+            global_state.subtitles.styles[index].italic = value;
+        }
+        Message::SetStyleUnderline(index, value) => {
+            global_state.subtitles.styles[index].underline = value;
+        }
+        Message::SetStyleStrikeOut(index, value) => {
+            global_state.subtitles.styles[index].strike_out = value;
+        }
         Message::AddEvent => {
             let new_event = subtitle::Event {
                 start: subtitle::StartTime(0),

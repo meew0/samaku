@@ -94,6 +94,9 @@ pub enum Message {
 
     // Set various properties of the given style.
     SetStyleBold(usize, bool),
+    SetStyleItalic(usize, bool),
+    SetStyleUnderline(usize, bool),
+    SetStyleStrikeOut(usize, bool),
 
     /// Add an empty event to the end of the track.
     AddEvent,
