@@ -82,8 +82,8 @@ struct Highlighted;
 impl iced::widget::container::StyleSheet for Highlighted {
     type Style = iced::Theme;
 
-    fn appearance(&self, theme: &iced::Theme) -> iced::widget::container::Appearance {
-        let pair = theme.extended_palette().primary.weak;
+    fn appearance(&self, style: &iced::Theme) -> iced::widget::container::Appearance {
+        let pair = style.extended_palette().primary.weak;
 
         iced::widget::container::Appearance {
             background: Some(pair.color.into()),

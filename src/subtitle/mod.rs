@@ -746,7 +746,7 @@ impl File {
     /// Panics if there are more styles than would fit into an `i32`.
     pub async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         input: smol::io::Lines<R>,
-    ) -> Result<(File, Vec<parse::Warning>), parse::Error> {
+    ) -> Result<(File, Vec<parse::Warning>), parse::SubtitleParseError> {
         parse::parse(input).await
     }
 }
@@ -860,18 +860,18 @@ impl Extradata {
 impl Index<ExtradataId> for Extradata {
     type Output = ExtradataEntry;
 
-    fn index(&self, id: ExtradataId) -> &ExtradataEntry {
+    fn index(&self, index: ExtradataId) -> &ExtradataEntry {
         self.entries
-            .get(&id)
-            .unwrap_or_else(|| panic!("Tried to get non-existent extradata entry with {id:?}"))
+            .get(&index)
+            .unwrap_or_else(|| panic!("Tried to get non-existent extradata entry with {index:?}"))
     }
 }
 
 impl IndexMut<ExtradataId> for Extradata {
-    fn index_mut(&mut self, id: ExtradataId) -> &mut ExtradataEntry {
-        self.entries
-            .get_mut(&id)
-            .unwrap_or_else(|| panic!("Tried to get_mut non-existent extradata entry with {id:?}"))
+    fn index_mut(&mut self, index: ExtradataId) -> &mut ExtradataEntry {
+        self.entries.get_mut(&index).unwrap_or_else(|| {
+            panic!("Tried to get_mut non-existent extradata entry with {index:?}")
+        })
     }
 }
 

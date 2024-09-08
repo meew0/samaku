@@ -204,9 +204,9 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                             let lines = smol::io::BufReader::new(file).lines();
                             subtitle::File::parse(lines).await.map(Box::new)
                         }
-                        Err(io_err) => Err(subtitle::parse::Error::IoError(io_err)),
+                        Err(io_err) => Err(subtitle::parse::SubtitleParseError::IoError(io_err)),
                     },
-                    None => Err(subtitle::parse::Error::NoFileSelected),
+                    None => Err(subtitle::parse::SubtitleParseError::NoFileSelected),
                 }
             };
 

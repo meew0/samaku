@@ -33,8 +33,8 @@ impl Status {
 impl iced::widget::container::StyleSheet for Status {
     type Style = Theme;
 
-    fn appearance(&self, theme: &Theme) -> iced::widget::container::Appearance {
-        let palette = theme.extended_palette();
+    fn appearance(&self, style: &Theme) -> iced::widget::container::Appearance {
+        let palette = style.extended_palette();
 
         let pair = match self {
             Status::Primary => palette.primary.weak,

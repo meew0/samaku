@@ -207,7 +207,7 @@ where
 
     fn draw(
         &self,
-        tree: &Tree,
+        state: &Tree,
         renderer: &mut R,
         theme: &R::Theme,
         _style: &renderer::Style,
@@ -219,7 +219,7 @@ where
 
         let bounds = layout.bounds();
 
-        let state = tree.state.downcast_ref::<P::State>();
+        let state = state.state.downcast_ref::<P::State>();
         renderer.with_layer(bounds, |renderer| {
             renderer.with_translation(Vector::new(bounds.x, bounds.y), |renderer| {
                 canvas::Renderer::draw(

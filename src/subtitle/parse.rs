@@ -20,7 +20,7 @@ use super::{
 #[allow(clippy::too_many_lines)]
 pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     input: smol::io::Lines<R>,
-) -> Result<(File, Vec<Warning>), Error> {
+) -> Result<(File, Vec<Warning>), SubtitleParseError> {
     let mut state = ParseState::ScriptInfo;
 
     // Data of opaque/unknown sections
@@ -43,7 +43,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     while let Some((line_index, line_result)) = input_enumerate.next().await {
         let line_number = line_index + 1;
-        let line_string = line_result.map_err(Error::IoError)?;
+        let line_string = line_result.map_err(SubtitleParseError::IoError)?;
         let line = line_string.trim();
 
         if let Some(mut attachment) = current_attachment.take() {
@@ -75,7 +75,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
             }
 
             if line.eq_ignore_ascii_case("[v4 styles]") {
-                return Err(Error::V4StylesFound);
+                return Err(SubtitleParseError::V4StylesFound);
             } else if line.eq_ignore_ascii_case("[v4+ styles]") {
                 state = ParseState::Styles;
             } else if line.eq_ignore_ascii_case("[events]") {
@@ -192,7 +192,7 @@ enum ParseState {
 }
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum SubtitleParseError {
     #[error("No file was selected")]
     NoFileSelected,
 
@@ -255,10 +255,10 @@ pub enum Error {
 #[derive(Error, Debug)]
 pub enum Warning {
     #[error("Could not read style on line {0}: {1}")]
-    StyleOnLine(usize, Error),
+    StyleOnLine(usize, SubtitleParseError),
 
     #[error("Could not read event on line {0}: {1}")]
-    EventOnLine(usize, Error),
+    EventOnLine(usize, SubtitleParseError),
 
     #[error("Unknown style {0} — replacing with default")]
     UnmatchedStyle(String),
@@ -267,13 +267,13 @@ pub enum Warning {
     DuplicateStyle(String),
 }
 
-fn parse_style_line(line: &str) -> Result<Style, Error> {
+fn parse_style_line(line: &str) -> Result<Style, SubtitleParseError> {
     let Some((key, value)) = parse_kv_generic(line) else {
-        return Err(Error::MalformedStyleLine);
+        return Err(SubtitleParseError::MalformedStyleLine);
     };
 
     if key != "Style" {
-        return Err(Error::StyleLineInvalidKey);
+        return Err(SubtitleParseError::StyleLineInvalidKey);
     }
 
     let mut split = value.splitn(23, ',');
@@ -305,8 +305,8 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     let border_style = BorderStyle::from(next_split_i32(&mut split)?);
     let border_width = next_split_f64(&mut split)?.max(0.0);
     let shadow_distance = next_split_f64(&mut split)?.max(0.0);
-    let alignment =
-        Alignment::try_from_an(next_split_i32(&mut split)?).ok_or(Error::InvalidAlignment)?;
+    let alignment = Alignment::try_from_an(next_split_i32(&mut split)?)
+        .ok_or(SubtitleParseError::InvalidAlignment)?;
 
     let margin_l = next_split_i32(&mut split)?;
     let margin_r = next_split_i32(&mut split)?;
@@ -355,13 +355,13 @@ fn parse_style_line(line: &str) -> Result<Style, Error> {
     Ok(style)
 }
 
-fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
+fn parse_event_line(line: &str) -> Result<(Event<'static>, String), SubtitleParseError> {
     let (event_type, fields_str) = if let Some(fields_str) = line.strip_prefix("Dialogue: ") {
         (EventType::Dialogue, fields_str)
     } else if let Some(fields_str) = line.strip_prefix("Comment: ") {
         (EventType::Comment, fields_str)
     } else {
-        return Err(Error::InvalidEventType(line.to_owned()));
+        return Err(SubtitleParseError::InvalidEventType(line.to_owned()));
     };
 
     let mut split = fields_str.splitn(10, ',');
@@ -413,7 +413,10 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), Error> {
     Ok((new_event, style))
 }
 
-fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<(), Error> {
+fn parse_script_info_line(
+    line: &str,
+    script_info: &mut ScriptInfo,
+) -> Result<(), SubtitleParseError> {
     if line.starts_with(';') {
         // Comment
         return Ok(());
@@ -422,7 +425,7 @@ fn parse_script_info_line(line: &str, script_info: &mut ScriptInfo) -> Result<()
     if let Some(value) = line.strip_prefix("ScriptType:") {
         let version_str = value.trim().to_ascii_lowercase();
         if version_str != "v4.00+" {
-            return Err(Error::UnsupportedScriptType);
+            return Err(SubtitleParseError::UnsupportedScriptType);
         }
 
         // Don't read this one as K/V data later on
@@ -477,14 +480,14 @@ fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, Stri
 
 static EXTRADATA_REGEX: OnceCell<Regex> = OnceCell::new();
 
-fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Error> {
+fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), SubtitleParseError> {
     let extradata_regex = EXTRADATA_REGEX
         .get_or_init(|| Regex::new("Data:[[:space:]]*(\\d+),([^,]+),(.)(.*)").unwrap());
 
     if let Some(captures) = extradata_regex.captures(line) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id_num) = id_str.parse::<u32>() else {
-            return Err(Error::InvalidExtradataId(id_str.to_owned()));
+            return Err(SubtitleParseError::InvalidExtradataId(id_str.to_owned()));
         };
 
         let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
@@ -494,9 +497,11 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
         let value = if value_type == "e" {
             aegi_inline_string_decode(value_raw).into_bytes()
         } else if value_type == "u" {
-            super::uu::decode(value_raw).map_err(Error::UuDecodeError)?
+            super::uu::decode(value_raw).map_err(SubtitleParseError::UuDecodeError)?
         } else {
-            return Err(Error::InvalidExtradataValueType(value_type.to_owned()));
+            return Err(SubtitleParseError::InvalidExtradataValueType(
+                value_type.to_owned(),
+            ));
         };
 
         extradata.next_id = extradata.next_id.max(ExtradataId(id_num + 1));
@@ -508,23 +513,27 @@ fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), Err
     Ok(())
 }
 
-fn parse_extradata_entry(key: String, value: Vec<u8>) -> Result<ExtradataEntry, Error> {
+fn parse_extradata_entry(
+    key: String,
+    value: Vec<u8>,
+) -> Result<ExtradataEntry, SubtitleParseError> {
     if key == "_samaku_nde_filter" {
         let first_char = value.first().copied();
         if first_char == Some(b'1') {
             let base64 = &value[1..];
             let decoded = data_encoding::BASE64
                 .decode(base64)
-                .map_err(Error::NdeFilterBase64DecodeError)?;
+                .map_err(SubtitleParseError::NdeFilterBase64DecodeError)?;
             let decompressed =
                 miniz_oxide::inflate::decompress_to_vec_with_limit(decoded.as_slice(), 1_000_000)
-                    .map_err(Error::NdeFilterDecompressError)?;
-            let filter = ciborium::from_reader::<nde::Filter, _>(decompressed.as_slice())
-                .map_err(|de_error| Error::NdeFilterDeserialiseError(format!("{de_error:?}")))?;
+                    .map_err(SubtitleParseError::NdeFilterDecompressError)?;
+            let filter = ciborium::from_reader::<nde::Filter, _>(decompressed.as_slice()).map_err(
+                |de_error| SubtitleParseError::NdeFilterDeserialiseError(format!("{de_error:?}")),
+            )?;
 
             Ok(ExtradataEntry::NdeFilter(filter))
         } else {
-            Err(Error::InvalidNdeFilterFormat(first_char))
+            Err(SubtitleParseError::InvalidNdeFilterFormat(first_char))
         }
     } else {
         Ok(ExtradataEntry::Opaque { key, value })
@@ -628,33 +637,33 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
 
 fn next_split_trim<'a, const TRIM_START: bool>(
     split: &'a mut std::str::SplitN<char>,
-) -> Result<&'a str, Error> {
+) -> Result<&'a str, SubtitleParseError> {
     match split.next() {
         Some(str) => Ok(if TRIM_START {
             str.trim()
         } else {
             str.trim_end()
         }),
-        None => Err(Error::TruncatedLine),
+        None => Err(SubtitleParseError::TruncatedLine),
     }
 }
 
-fn next_split_i32(split: &mut std::str::SplitN<char>) -> Result<i32, Error> {
+fn next_split_i32(split: &mut std::str::SplitN<char>) -> Result<i32, SubtitleParseError> {
     next_split_trim::<true>(split)?
         .parse::<i32>()
-        .map_err(Error::ParseIntError)
+        .map_err(SubtitleParseError::ParseIntError)
 }
 
-fn next_split_f64(split: &mut std::str::SplitN<char>) -> Result<f64, Error> {
+fn next_split_f64(split: &mut std::str::SplitN<char>) -> Result<f64, SubtitleParseError> {
     next_split_trim::<true>(split)?
         .parse::<f64>()
-        .map_err(Error::ParseFloatError)
+        .map_err(SubtitleParseError::ParseFloatError)
 }
 
-fn next_split_bool(split: &mut std::str::SplitN<char>) -> Result<bool, Error> {
+fn next_split_bool(split: &mut std::str::SplitN<char>) -> Result<bool, SubtitleParseError> {
     Ok(next_split_trim::<true>(split)?
         .parse::<i32>()
-        .map_err(Error::ParseIntError)?
+        .map_err(SubtitleParseError::ParseIntError)?
         != 0)
 }
 
@@ -672,12 +681,12 @@ fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
 
 static TIMECODE_REGEX: OnceCell<Regex> = OnceCell::new();
 
-fn parse_timecode(timecode: &str) -> Result<i64, Error> {
+fn parse_timecode(timecode: &str) -> Result<i64, SubtitleParseError> {
     let timecode_regex =
         TIMECODE_REGEX.get_or_init(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
 
     let Some(captures) = timecode_regex.captures(timecode) else {
-        return Err(Error::InvalidTimecode(timecode.to_owned()));
+        return Err(SubtitleParseError::InvalidTimecode(timecode.to_owned()));
     };
 
     let hours = captures[1].parse::<i64>().unwrap();
@@ -690,13 +699,14 @@ fn parse_timecode(timecode: &str) -> Result<i64, Error> {
 
 fn parse_packed_colour_and_transparency(
     packed_colour_hex: &str,
-) -> Result<(Colour, Transparency), Error> {
+) -> Result<(Colour, Transparency), SubtitleParseError> {
     let prefix_stripped = packed_colour_hex
         .strip_prefix("&H")
         .or_else(|| packed_colour_hex.strip_prefix("&h"))
         .unwrap_or(packed_colour_hex);
     let suffix_stripped = prefix_stripped.strip_suffix('&').unwrap_or(prefix_stripped);
-    let number = u32::from_str_radix(suffix_stripped, 16).map_err(Error::ParseIntError)?;
+    let number =
+        u32::from_str_radix(suffix_stripped, 16).map_err(SubtitleParseError::ParseIntError)?;
 
     Ok(subtitle::unpack_colour_and_transparency_tbgr(number))
 }
@@ -814,7 +824,7 @@ pub mod tests {
     }
 
     #[test]
-    fn style() -> Result<(), Error> {
+    fn style() -> Result<(), SubtitleParseError> {
         let style = parse_style_line("Style: Default,Arial,20,&H000000FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1")?;
 
         assert_eq!(style.name, "Default");
@@ -883,7 +893,7 @@ pub mod tests {
     }
 
     #[test]
-    fn event() -> Result<(), Error> {
+    fn event() -> Result<(), SubtitleParseError> {
         let (event, style_name) = parse_event_line(
             r"Dialogue: 0,0:00:05.00,0:00:07.00,Default,,1,2,3,,{=8=10}{\fs100}asdhasjkldhsajk",
         )?;
@@ -907,7 +917,7 @@ pub mod tests {
     }
 
     #[test]
-    fn script_info() -> Result<(), Error> {
+    fn script_info() -> Result<(), SubtitleParseError> {
         let mut info = ScriptInfo::default();
 
         parse_script_info_line("Title: samaku test", &mut info)?;

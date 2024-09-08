@@ -20,7 +20,7 @@ impl Node for ClipRectangle {
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
-        assert!(inputs.len() > 1);
+        assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));
 
