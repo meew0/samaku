@@ -439,6 +439,10 @@ pub struct Track {
 impl Track {
     pub fn events_mut(&mut self) -> &mut [RawEvent] {
         unsafe {
+            if (*self.track).events.is_null() {
+                return &mut [];
+            }
+
             #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts_mut((*self.track).events, (*self.track).n_events as usize)
         }
@@ -446,6 +450,10 @@ impl Track {
 
     pub fn events(&self) -> &[RawEvent] {
         unsafe {
+            if (*self.track).events.is_null() {
+                return &[];
+            }
+
             #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts((*self.track).events, (*self.track).n_events as usize)
         }
@@ -453,6 +461,10 @@ impl Track {
 
     pub fn styles_mut(&mut self) -> &mut [RawStyle] {
         unsafe {
+            if (*self.track).styles.is_null() {
+                return &mut [];
+            }
+
             #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts_mut((*self.track).styles, (*self.track).n_styles as usize)
         }
@@ -460,6 +472,10 @@ impl Track {
 
     pub fn styles(&self) -> &[RawStyle] {
         unsafe {
+            if (*self.track).styles.is_null() {
+                return &[];
+            }
+
             #[allow(clippy::cast_sign_loss)]
             std::slice::from_raw_parts((*self.track).styles, (*self.track).n_styles as usize)
         }

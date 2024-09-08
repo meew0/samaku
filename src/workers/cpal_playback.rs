@@ -32,7 +32,7 @@ pub fn spawn(
         loop {
             match rx_in.recv() {
                 Ok(message) => match message {
-                    self::MessageIn::TryRestart => {
+                    MessageIn::TryRestart => {
                         // This drops the existing stream, which is supposedly guaranteed to
                         // close it (https://github.com/RustAudio/cpal/issues/652)
                         stream_opt = None;
@@ -87,14 +87,14 @@ pub fn spawn(
                             stream_opt = Some(stream);
                         }
                     }
-                    self::MessageIn::Play => {
+                    MessageIn::Play => {
                         if let Some(ref stream) = stream_opt {
                             playing.store(true, atomic::Ordering::Relaxed);
                             tx_out.unbounded_send(message::Message::Playing(true)).expect("Failed to send playing message");
                             stream.play().expect("Failed to play audio stream");
                         }
                     }
-                    self::MessageIn::Pause => {
+                    MessageIn::Pause => {
                         if let Some(ref stream) = stream_opt {
                             playing.store(false, atomic::Ordering::Relaxed);
                             tx_out.unbounded_send(message::Message::Playing(false)).expect("Failed to send pausing message");

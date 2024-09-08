@@ -23,18 +23,15 @@ pub fn spawn(
                         // Remove uninformative pointer value from the start of some libass
                         // messages
                         let message = match message {
-                            self::MessageIn::Libass(level, string) => {
+                            MessageIn::Libass(level, string) => {
                                 if string.starts_with("[0x") {
                                     if let Some(pos) = string.find("]: ") {
-                                        self::MessageIn::Libass(
-                                            level,
-                                            string[(pos + 3)..].to_string(),
-                                        )
+                                        MessageIn::Libass(level, string[(pos + 3)..].to_string())
                                     } else {
-                                        self::MessageIn::Libass(level, string)
+                                        MessageIn::Libass(level, string)
                                     }
                                 } else {
-                                    self::MessageIn::Libass(level, string)
+                                    MessageIn::Libass(level, string)
                                 }
                             }
                         };
@@ -44,7 +41,7 @@ pub fn spawn(
                         if !seen.contains(&message) {
                             seen.insert(message.clone());
                             match message {
-                                self::MessageIn::Libass(level, string) => {
+                                MessageIn::Libass(level, string) => {
                                     let status_and_title = match level {
                                         0 | 1 => {
                                             Some((view::toast::Status::Danger, "libass error"))

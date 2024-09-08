@@ -401,7 +401,7 @@ impl Local {
         if merge {
             self.animations.extend(other.animations.clone());
         } else {
-            self.animations = other.animations.clone();
+            self.animations.clone_from(&other.animations);
         }
     }
 

@@ -847,9 +847,7 @@ impl Extradata {
             }
         }
 
-        let Some(filter_id) = maybe_filter_id else {
-            return None;
-        };
+        let filter_id = maybe_filter_id?;
 
         let ExtradataEntry::NdeFilter(filter) = &mut self[filter_id] else {
             panic!();

@@ -39,7 +39,7 @@ pub fn base_button<'a, E: Into<Element<'a, Message, iced::Renderer>>>(
 ) -> button::Button<'a, Message, iced::Renderer> {
     button(content)
         .padding([4, 8])
-        .style(iced::theme::Button::Custom(Box::new(ButtonStyle {})))
+        .style(theme::Button::Custom(Box::new(ButtonStyle {})))
         .on_press(msg)
 }
 
@@ -60,8 +60,8 @@ pub fn labeled_button<'a>(
 #[must_use]
 pub fn item(label: &str, msg: Message) -> MenuTree<Message, iced::Renderer> {
     iced_aw::menu_tree!(labeled_button(label, msg)
-        .width(iced::Length::Fill)
-        .height(iced::Length::Fill))
+        .width(Length::Fill)
+        .height(Length::Fill))
 }
 
 #[must_use]
@@ -71,7 +71,7 @@ pub fn sub_menu<'a>(
     msg: Message,
     children: Vec<MenuTree<'a, Message, iced::Renderer>>,
 ) -> MenuTree<'a, Message, iced::Renderer> {
-    let handle = iced::widget::svg::Handle::from_memory(resources::CARET_RIGHT_FILL);
+    let handle = svg::Handle::from_memory(resources::CARET_RIGHT_FILL);
     let arrow = svg(handle)
         .width(Length::Shrink)
         .style(theme::Svg::custom_fn(|theme| svg::Appearance {

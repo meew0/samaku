@@ -78,7 +78,7 @@ pub fn spawn(
                 // continue.
                 if let Some(message) = maybe_message {
                     match message {
-                        self::MessageIn::PlaybackStep => {
+                        MessageIn::PlaybackStep => {
                             // The frame might have changed. Check whether we have a video
                             // and whether the frame has actually changed, and if it has,
                             // decode the new frame
@@ -99,7 +99,7 @@ pub fn spawn(
                                 }
                             }
                         }
-                        self::MessageIn::LoadVideo(path_buf) => {
+                        MessageIn::LoadVideo(path_buf) => {
                             // Load new video
                             match media::Video::load(path_buf) {
                                 Ok(video) => {
@@ -127,7 +127,7 @@ pub fn spawn(
                                 }
                             }
                         }
-                        self::MessageIn::TrackMotionForNode(
+                        MessageIn::TrackMotionForNode(
                             new_node_index,
                             initial_region,
                             start_frame,

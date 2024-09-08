@@ -91,13 +91,11 @@
 #![warn(missing_abi)]
 // #![warn(missing_docs)] // potentially add in the future
 // #![warn(must_not_suspend)] // add once stable
-#![warn(pointer_structural_match)]
 #![warn(unsafe_op_in_unsafe_fn)]
 // #![warn(unused_crate_dependencies)] // false positive for criterion
 #![warn(unused_extern_crates)]
 #![warn(unused_import_braces)]
 #![warn(unused_qualifications)]
-#![warn(unused_tuple_struct_fields)]
 #![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
 #![allow(clippy::enum_glob_use)] // too useful to disallow entirely, but should only be done locally
 #![cfg_attr(test, allow(clippy::cognitive_complexity))] // same as above

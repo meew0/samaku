@@ -28,9 +28,8 @@ impl Audio {
     /// `2**63 - 1`.
     pub fn fill_buffer_packed<T>(&mut self, data: &mut [T], start_frame: u64, count_frames: u64) {
         // Transmute buffer
-        let data_u8 = unsafe {
-            slice::from_raw_parts_mut(data.as_mut_ptr().cast::<u8>(), std::mem::size_of_val(data))
-        };
+        let data_u8 =
+            unsafe { slice::from_raw_parts_mut(data.as_mut_ptr().cast::<u8>(), size_of_val(data)) };
 
         self.source.get_packed_audio(
             data_u8,
