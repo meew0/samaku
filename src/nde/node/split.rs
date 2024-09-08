@@ -20,6 +20,8 @@ impl Node for SplitFrameByFrame {
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+        assert!(inputs.len() > 1); // Elide bounds checks
+
         super::retrieve!(inputs[0], SocketValue::IndividualEvent(event));
         super::retrieve!(inputs[1], SocketValue::FrameRate(frame_rate));
 

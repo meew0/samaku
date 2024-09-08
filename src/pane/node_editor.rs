@@ -661,25 +661,30 @@ fn collect_internal_recursive(
 ) -> Result<(), CollectError> {
     assert!(!path.is_empty());
 
+    let first_path_element = path[0];
+
     if path.len() == 1 {
         // Only the last element remains, which must be inserted as an item.
-        match menu.get(path[0]) {
+        match menu.get(first_path_element) {
             Some(MenuShell::Item(_)) => return Err(CollectError::DuplicateItem),
             Some(MenuShell::SubMenu(_)) => return Err(CollectError::ItemOverSubMenu),
             None => {
-                menu.insert(path[0].to_owned(), MenuShell::Item(constructor));
+                menu.insert(first_path_element.to_owned(), MenuShell::Item(constructor));
             }
         }
 
         Ok(())
     } else {
         // Insert the first element as a sub menu.
-        let sub_menu = match menu.get_mut(path[0]) {
+        let sub_menu = match menu.get_mut(first_path_element) {
             Some(MenuShell::Item(_)) => return Err(CollectError::SubMenuOverItem),
             Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
             None => {
-                menu.insert(path[0].to_owned(), MenuShell::SubMenu(BTreeMap::new()));
-                let Some(MenuShell::SubMenu(sub_menu)) = menu.get_mut(path[0]) else {
+                menu.insert(
+                    first_path_element.to_owned(),
+                    MenuShell::SubMenu(BTreeMap::new()),
+                );
+                let Some(MenuShell::SubMenu(sub_menu)) = menu.get_mut(first_path_element) else {
                     panic!();
                 };
                 sub_menu

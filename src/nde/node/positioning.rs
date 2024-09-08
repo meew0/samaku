@@ -20,6 +20,8 @@ impl Node for SetPosition {
     }
 
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+        assert!(inputs.len() > 1); // Elide bounds checks
+
         if let SocketValue::Position(position) = inputs[1] {
             let socket_value = inputs[0].map_events(|event| {
                 let mut new_event = event.clone();

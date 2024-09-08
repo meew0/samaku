@@ -162,6 +162,8 @@ pub struct InputRectangle {
 
 impl InputRectangle {
     fn reticule_update_internal(&self, reticules: &mut [model::reticule::Reticule]) {
+        assert!(reticules.len() > 3); // Elide bounds checks
+
         reticules[0].position = nde::tags::Position {
             x: f64::from(self.value.x1),
             y: f64::from(self.value.y1),

@@ -26,6 +26,8 @@ impl Node for Gradient {
     fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
         const RESOLUTION: i32 = 5;
 
+        assert!(inputs.len() > 2);
+
         super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));
         super::retrieve!(inputs[2], SocketValue::LocalTags(target_tags));
 
