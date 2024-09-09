@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
-
-use once_cell::sync::OnceCell;
+use std::sync::LazyLock;
 
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
 use crate::{message, nde, style, subtitle, view};
@@ -598,11 +597,9 @@ fn sub_menu<'a>(
 }
 
 fn add_menu<'a>() -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
-    let shell_tree = SHELL_TREE.get_or_init(collect_menu);
-
     vec![iced_aw::menu::Item::with_menu(
         iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
-        iced_aw::menu::Menu::new(children_from_shell_tree(shell_tree)),
+        iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE)),
     )]
 }
 
@@ -625,7 +622,7 @@ fn children_from_shell_tree(
 
 type ShellMap = BTreeMap<String, MenuShell>;
 
-static SHELL_TREE: OnceCell<ShellMap> = OnceCell::new();
+static SHELL_TREE: LazyLock<ShellMap> = LazyLock::new(collect_menu);
 
 enum MenuShell {
     Item(nde::node::Constructor),

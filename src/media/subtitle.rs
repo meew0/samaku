@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 pub use ass::Image;
 
 use crate::nde::tags::Colour;
@@ -6,7 +8,7 @@ use crate::{model, resources, subtitle, view};
 use super::bindings::ass;
 
 /// The global libass instance.
-static LIBRARY: once_cell::sync::Lazy<ass::Library> = once_cell::sync::Lazy::new(library_init);
+static LIBRARY: LazyLock<ass::Library> = LazyLock::new(library_init);
 
 fn library_init() -> ass::Library {
     let library = ass::Library::init().expect("ASS library initialisation failed");

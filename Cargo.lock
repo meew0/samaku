@@ -3526,7 +3526,6 @@ dependencies = [
  "libc",
  "libmv-capi-sys",
  "miniz_oxide",
- "once_cell",
  "regex",
  "rfd",
  "rustsynth-sys",

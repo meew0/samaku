@@ -2,8 +2,8 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-use once_cell::sync::OnceCell;
 use regex::Regex;
 use smol::stream::StreamExt;
 use thiserror::Error;
@@ -478,13 +478,11 @@ fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, Stri
     };
 }
 
-static EXTRADATA_REGEX: OnceCell<Regex> = OnceCell::new();
+static EXTRADATA_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("Data:[[:space:]]*(\\d+),([^,]+),(.)(.*)").unwrap());
 
 fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), SubtitleParseError> {
-    let extradata_regex = EXTRADATA_REGEX
-        .get_or_init(|| Regex::new("Data:[[:space:]]*(\\d+),([^,]+),(.)(.*)").unwrap());
-
-    if let Some(captures) = extradata_regex.captures(line) {
+    if let Some(captures) = EXTRADATA_REGEX.captures(line) {
         let id_str = captures.get(1).unwrap().as_str();
         let Ok(id_num) = id_str.parse::<u32>() else {
             return Err(SubtitleParseError::InvalidExtradataId(id_str.to_owned()));
@@ -679,13 +677,11 @@ fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
     Some((key, value))
 }
 
-static TIMECODE_REGEX: OnceCell<Regex> = OnceCell::new();
+static TIMECODE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
 
 fn parse_timecode(timecode: &str) -> Result<i64, SubtitleParseError> {
-    let timecode_regex =
-        TIMECODE_REGEX.get_or_init(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
-
-    let Some(captures) = timecode_regex.captures(timecode) else {
+    let Some(captures) = TIMECODE_REGEX.captures(timecode) else {
         return Err(SubtitleParseError::InvalidTimecode(timecode.to_owned()));
     };
 
