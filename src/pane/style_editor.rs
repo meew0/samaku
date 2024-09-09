@@ -100,7 +100,7 @@ pub fn view<'a>(
     let content = iced::widget::row![left_column, right_column];
 
     super::View {
-        title: iced::widget::text("Pane title").into(),
+        title: iced::widget::text("Style editor").into(),
         content: iced::widget::container(content)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
