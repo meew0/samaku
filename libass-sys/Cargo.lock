@@ -12,14 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bestsource-sys"
-version = "0.1.0"
-dependencies = [
- "bindgen",
- "cc",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -44,15 +36,6 @@ name = "bitflags"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
-
-[[package]]
-name = "cc"
-version = "1.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62ac837cdb5cb22e10a256099b4fc502b1dfe560cb282963a974d7abd80e476"
-dependencies = [
- "shlex",
-]
 
 [[package]]
 name = "cexpr"
@@ -99,6 +82,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
+]
+
+[[package]]
+name = "libass-sys"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
 ]
 
 [[package]]

@@ -5,4 +5,4 @@ edition = "2021"
 links = "ass"
 
 [build-dependencies]
-bindgen = "0.68"
+bindgen = "0.70.1"
