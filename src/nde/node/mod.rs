@@ -197,10 +197,7 @@ pub trait Node: Debug {
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
     #[allow(unused_variables)]
-    fn content<'a>(
-        &self,
-        self_index: usize,
-    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+    fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         iced::widget::text(self.name()).into()
     }
 

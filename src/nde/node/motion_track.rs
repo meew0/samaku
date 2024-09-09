@@ -51,10 +51,7 @@ impl Node for MotionTrack {
         Ok(vec![SocketValue::MultipleEvents(new_events)])
     }
 
-    fn content<'a>(
-        &self,
-        self_index: usize,
-    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+    fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         let set_marker_button = iced::widget::button("Set marker").on_press(
             message::Message::SetReticules(model::reticule::Reticules {
                 list: vec![model::reticule::Reticule {

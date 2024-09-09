@@ -10,26 +10,27 @@ pub fn separator() -> iced_aw::quad::Quad {
     iced_aw::quad::Quad {
         width: iced::Length::Fill,
         height: iced::Length::Fixed(0.5),
-        color: style::samaku_theme()
-            .extended_palette()
-            .background
-            .weak
-            .color,
-        inner_bounds: iced_aw::quad::InnerBounds::Ratio(1.0, 1.0),
+        quad_color: iced::Background::Color(
+            style::samaku_theme()
+                .extended_palette()
+                .background
+                .weak
+                .color,
+        ),
+        inner_bounds: iced_aw::widgets::common::InnerBounds::Ratio(1.0, 1.0),
         ..Default::default()
     }
 }
 
 /// Create a text widget that shows an icon.
 #[must_use]
-pub fn icon<'a, R>(icon: iced_aw::Icon) -> iced::widget::Text<'a, R>
+pub fn icon<'a, Renderer>(icon: iced_aw::Bootstrap) -> iced::widget::Text<'a, iced::Theme, Renderer>
 where
-    R: iced::advanced::text::Renderer,
-    R::Theme: iced::widget::text::StyleSheet,
-    R::Font: From<iced::Font>,
+    Renderer: iced::advanced::text::Renderer,
+    Renderer::Font: From<iced::Font>,
 {
-    iced::widget::text(iced_aw::graphics::icons::icon_to_char(icon).to_string())
-        .font(iced_aw::graphics::icons::ICON_FONT)
+    iced::widget::text(iced_aw::core::icons::bootstrap::icon_to_char(icon).to_string())
+        .font(iced_aw::BOOTSTRAP_FONT)
         .horizontal_alignment(iced::alignment::Horizontal::Center)
         .width(iced::Length::Fill)
 }

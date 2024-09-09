@@ -56,13 +56,16 @@ pub const SAMAKU_DESTRUCTIVE: Color = Color::from_rgb(
 
 #[must_use]
 pub fn samaku_theme() -> Theme {
-    Theme::custom(Palette {
-        background: SAMAKU_BACKGROUND,
-        text: SAMAKU_TEXT,
-        primary: SAMAKU_PRIMARY,
-        danger: SAMAKU_DESTRUCTIVE,
-        success: SAMAKU_SUCCESS,
-    })
+    Theme::custom(
+        "samaku".to_owned(),
+        Palette {
+            background: SAMAKU_BACKGROUND,
+            text: SAMAKU_TEXT,
+            primary: SAMAKU_PRIMARY,
+            danger: SAMAKU_DESTRUCTIVE,
+            success: SAMAKU_SUCCESS,
+        },
+    )
 }
 
 #[must_use]
@@ -72,8 +75,11 @@ pub fn title_bar_active(theme: &Theme) -> container::Appearance {
     container::Appearance {
         text_color: Some(palette.background.weak.text),
         background: Some(palette.background.weak.color.into()),
-        border_width: 1.0,
-        border_color: palette.background.weak.color,
+        border: iced::Border {
+            width: 1.0,
+            color: palette.background.weak.color,
+            radius: [0.0_f32; 4].into(),
+        },
         ..Default::default()
     }
 }
@@ -95,8 +101,11 @@ pub fn pane_active(theme: &Theme) -> container::Appearance {
 
     container::Appearance {
         background: None,
-        border_width: 1.0,
-        border_color: palette.background.weak.color,
+        border: iced::Border {
+            width: 1.0,
+            color: palette.background.weak.color,
+            radius: [0.0_f32; 4].into(),
+        },
         ..Default::default()
     }
 }
@@ -107,8 +116,11 @@ pub fn pane_focused(theme: &Theme) -> container::Appearance {
 
     container::Appearance {
         background: None,
-        border_width: 2.0,
-        border_color: palette.primary.strong.color,
+        border: iced::Border {
+            width: 2.0,
+            color: palette.background.strong.color,
+            radius: [0.0_f32; 4].into(),
+        },
         ..Default::default()
     }
 }

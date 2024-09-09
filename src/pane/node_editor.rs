@@ -189,7 +189,9 @@ fn view_filter<'a>(
 }
 
 fn create_nodes(
-    graph_content: &mut Vec<iced_node_editor::GraphNodeElement<message::Message, iced::Renderer>>,
+    graph_content: &mut Vec<
+        iced_node_editor::GraphNodeElement<message::Message, iced::Theme, iced::Renderer>,
+    >,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
     scale: f32,
@@ -216,7 +218,7 @@ fn create_nodes(
             for socket_type in &*sockets {
                 // Call our own utility function to create the socket
                 if let Some(new_socket) =
-                    make_socket::<message::Message, iced::Renderer>(role, *socket_type)
+                    make_socket::<message::Message, iced::Theme, iced::Renderer>(role, *socket_type)
                 {
                     node_sockets.push(new_socket);
                 }
@@ -353,7 +355,9 @@ fn create_in_sockets<'a>(
 }
 
 fn create_connections(
-    graph_content: &mut Vec<iced_node_editor::GraphNodeElement<message::Message, iced::Renderer>>,
+    graph_content: &mut Vec<
+        iced_node_editor::GraphNodeElement<message::Message, iced::Theme, iced::Renderer>,
+    >,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
@@ -393,37 +397,41 @@ fn view_graph<'a>(
     pane_state: &State,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    graph_content: Vec<iced_node_editor::GraphNodeElement<'a, message::Message, iced::Renderer>>,
+    graph_content: Vec<
+        iced_node_editor::GraphNodeElement<'a, message::Message, iced::Theme, iced::Renderer>,
+    >,
 ) -> iced::Element<'a, message::Message> {
     let graph_container =
-        iced_node_editor::graph_container::<message::Message, iced::Renderer>(graph_content)
-            .dangling_source(pane_state.dangling_source)
-            .on_translate(move |translation| {
-                message::Message::Pane(
-                    self_pane,
-                    message::Pane::NodeEditorTranslationChanged(translation.0, translation.1),
-                )
-            })
-            .on_scale(move |x, y, scale| {
-                message::Message::Pane(
-                    self_pane,
-                    message::Pane::NodeEditorScaleChanged(x, y, scale),
-                )
-            })
-            .on_connect(message::Message::ConnectNodes)
-            .on_disconnect(move |endpoint, new_dangling_end_position| {
-                message::Message::DisconnectNodes(endpoint, new_dangling_end_position, self_pane)
-            })
-            .on_dangling(move |maybe_dangling| {
-                message::Message::Pane(self_pane, message::Pane::NodeEditorDangling(maybe_dangling))
-            })
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .matrix(pane_state.matrix);
+        iced_node_editor::graph_container::<message::Message, iced::Theme, iced::Renderer>(
+            graph_content,
+        )
+        .dangling_source(pane_state.dangling_source)
+        .on_translate(move |translation| {
+            message::Message::Pane(
+                self_pane,
+                message::Pane::NodeEditorTranslationChanged(translation.0, translation.1),
+            )
+        })
+        .on_scale(move |x, y, scale| {
+            message::Message::Pane(
+                self_pane,
+                message::Pane::NodeEditorScaleChanged(x, y, scale),
+            )
+        })
+        .on_connect(message::Message::ConnectNodes)
+        .on_disconnect(move |endpoint, new_dangling_end_position| {
+            message::Message::DisconnectNodes(endpoint, new_dangling_end_position, self_pane)
+        })
+        .on_dangling(move |maybe_dangling| {
+            message::Message::Pane(self_pane, message::Pane::NodeEditorDangling(maybe_dangling))
+        })
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .matrix(pane_state.matrix);
 
-    let menu_bar = iced_aw::menu_bar!(add_menu())
-        .item_width(iced_aw::menu::ItemWidth::Uniform(180))
-        .item_height(iced_aw::menu::ItemHeight::Uniform(32));
+    let menu_bar = iced_aw::menu::MenuBar::new(add_menu())
+        .width(180)
+        .height(32);
 
     let unassign_button = iced::widget::button(iced::widget::text("Unassign"))
         .on_press(message::Message::UnassignFilterFromSelectedEvents);
@@ -444,7 +452,7 @@ fn view_graph<'a>(
             menu_bar,
             unassign_button,
             name_box,
-            iced::widget::horizontal_space(iced::Length::Fill),
+            iced::widget::horizontal_space(),
             error_message
         ]
         .spacing(5.0)
@@ -504,13 +512,13 @@ fn view_non_selected(
     .into()
 }
 
-fn make_socket<'a, Message, Renderer>(
+fn make_socket<'a, Message, Theme, Renderer>(
     role: iced_node_editor::SocketRole,
     socket_type: nde::node::SocketType,
-) -> Option<iced_node_editor::Socket<'a, Message, Renderer>>
+) -> Option<iced_node_editor::Socket<'a, Message, Theme, Renderer>>
 where
     Renderer: iced::advanced::text::Renderer + 'a,
-    <Renderer as iced::advanced::Renderer>::Theme: iced::widget::text::StyleSheet,
+    Theme: iced::widget::text::StyleSheet + 'a,
 {
     const BLOB_RADIUS: f32 = 7.0;
 
@@ -578,29 +586,29 @@ where
 fn menu_item(
     label: &str,
     node_constructor: nde::node::Constructor,
-) -> iced_aw::menu::MenuTree<message::Message, iced::Renderer> {
+) -> iced_aw::menu::Item<message::Message, iced::Theme, iced::Renderer> {
     view::menu::item(label, message::Message::AddNode(node_constructor))
 }
 
 fn sub_menu<'a>(
     label: &str,
-    children: Vec<iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer>>,
-) -> iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer> {
+    children: Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>>,
+) -> iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer> {
     view::menu::sub_menu(label, message::Message::None, children)
 }
 
-fn add_menu<'a>() -> iced_aw::menu::MenuTree<'a, message::Message, iced::Renderer> {
+fn add_menu<'a>() -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     let shell_tree = SHELL_TREE.get_or_init(collect_menu);
 
-    iced_aw::helpers::menu_tree(
+    vec![iced_aw::menu::Item::with_menu(
         iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
-        children_from_shell_tree(shell_tree),
-    )
+        iced_aw::menu::Menu::new(children_from_shell_tree(shell_tree)),
+    )]
 }
 
 fn children_from_shell_tree(
     tree: &ShellMap,
-) -> Vec<iced_aw::menu::MenuTree<message::Message, iced::Renderer>> {
+) -> Vec<iced_aw::menu::Item<message::Message, iced::Theme, iced::Renderer>> {
     let mut children = vec![];
 
     for (name, child) in tree {

@@ -58,7 +58,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             if let Some(pane) = global_state.focus {
                 let result = global_state
                     .panes
-                    .split(axis, &pane, pane::State::Unassigned);
+                    .split(axis, pane, pane::State::Unassigned);
 
                 if let Some((pane, _)) = result {
                     global_state.focus = Some(pane);
@@ -67,8 +67,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::ClosePane => {
             if let Some(pane) = global_state.focus {
-                if global_state.panes.get(&pane).is_some() {
-                    if let Some((_, sibling)) = global_state.panes.close(&pane) {
+                if global_state.panes.get(pane).is_some() {
+                    if let Some((_, sibling)) = global_state.panes.close(pane) {
                         global_state.focus = Some(sibling);
                     }
                 }
@@ -76,14 +76,14 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::FocusPane(pane) => global_state.focus = Some(pane),
         Message::DragPane(iced::widget::pane_grid::DragEvent::Dropped { pane, target }) => {
-            global_state.panes.drop(&pane, target);
+            global_state.panes.drop(pane, target);
         }
         Message::DragPane(_) => {}
         Message::ResizePane(iced::widget::pane_grid::ResizeEvent { split, ratio }) => {
-            global_state.panes.resize(&split, ratio);
+            global_state.panes.resize(split, ratio);
         }
         Message::SetPaneState(pane, new_state) => {
-            if let Some(pane_state) = global_state.panes.get_mut(&pane) {
+            if let Some(pane_state) = global_state.panes.get_mut(pane) {
                 *pane_state = *new_state;
 
                 update_filter_lists(global_state);
@@ -92,7 +92,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::SetFocusedPaneState(new_state) => {
             if let Some(focused_pane) = global_state.focus {
-                if let Some(focused_pane_state) = global_state.panes.get_mut(&focused_pane) {
+                if let Some(focused_pane_state) = global_state.panes.get_mut(focused_pane) {
                     *focused_pane_state = *new_state;
 
                     update_filter_lists(global_state);
@@ -101,13 +101,13 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::Pane(pane, pane_message) => {
-            if let Some(pane_state) = global_state.panes.get_mut(&pane) {
+            if let Some(pane_state) = global_state.panes.get_mut(pane) {
                 return pane::dispatch_update(pane_state, pane_message);
             }
         }
         Message::FocusedPane(pane_message) => {
             if let Some(pane) = global_state.focus {
-                if let Some(pane_state) = global_state.panes.get_mut(&pane) {
+                if let Some(pane_state) = global_state.panes.get_mut(pane) {
                     return pane::dispatch_update(pane_state, pane_message);
                 }
             }
@@ -517,7 +517,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 
                 if let Some(previous) = maybe_previous {
                     if let Some(pane::State::NodeEditor(node_editor_state)) =
-                        global_state.panes.get_mut(&source_pane)
+                        global_state.panes.get_mut(source_pane)
                     {
                         let new_dangling_source = iced_node_editor::LogicalEndpoint {
                             node_index: previous.node_index,

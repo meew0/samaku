@@ -80,8 +80,8 @@ pub fn view<'a>(
     {
         Some(active_event) => {
             // Checkbox to make the event a comment or not
-            let comment_checkbox =
-                iced::widget::checkbox("Comment", active_event.is_comment(), |is_comment| {
+            let comment_checkbox = iced::widget::checkbox("Comment", active_event.is_comment())
+                .on_toggle(|is_comment| {
                     if is_comment {
                         message::Message::SetActiveEventType(subtitle::EventType::Comment)
                     } else {
@@ -109,7 +109,7 @@ pub fn view<'a>(
 
             let first_line = iced::widget::row![
                 comment_checkbox,
-                iced::widget::horizontal_space(iced::Length::Fixed(10.0)),
+                iced::widget::Space::with_width(iced::Length::Fixed(10.0)),
                 style_selector,
                 actor_text,
                 effect_text
@@ -137,7 +137,7 @@ pub fn view<'a>(
                 start_time_control,
                 "Duration (ms):",
                 duration_control,
-                iced::widget::horizontal_space(iced::Length::Fill),
+                iced::widget::horizontal_space(),
                 "Layer:",
                 layer_control
             ]

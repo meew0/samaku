@@ -4,7 +4,6 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use iced::advanced;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
 use iced::advanced::renderer;
@@ -92,26 +91,32 @@ impl PartialEq for Toast {
 
 impl Eq for Toast {}
 
-pub struct Manager<'a, Message> {
-    content: Element<'a, Message>,
-    toasts: Vec<Element<'a, Message>>,
+pub struct Manager<'a, Message, Theme> {
+    content: Element<'a, Message, Theme>,
+    toasts: Vec<Element<'a, Message, Theme>>,
     timeout_secs: u64,
     on_close: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
-impl<'a, Message> Manager<'a, Message>
+impl<'a, Message, Theme> Manager<'a, Message, Theme>
 where
     Message: 'a + Clone,
+    Theme: 'a
+        + iced::widget::container::StyleSheet
+        + iced::widget::text::StyleSheet
+        + iced::widget::button::StyleSheet
+        + iced::widget::rule::StyleSheet,
+    <Theme as iced::widget::container::StyleSheet>::Style: From<iced::theme::Container>,
 {
-    pub fn new<E: Into<Element<'a, Message>>, F: Fn(usize) -> Message + 'a>(
+    pub fn new<E: Into<Element<'a, Message, Theme>>, F: Fn(usize) -> Message + 'a>(
         content: E,
         toasts: &'a [Toast],
         on_close: F,
     ) -> Self {
-        let mut elements: Vec<Element<'a, Message>> = vec![];
+        let mut elements: Vec<Element<'a, Message, Theme>> = vec![];
 
         // In samaku, we want the toasts to appear at the bottom, so add a vertical space.
-        elements.push(iced::widget::vertical_space(Length::Fill).into());
+        elements.push(iced::widget::vertical_space().into());
 
         for (index, toast) in toasts.iter().enumerate() {
             let title_text = if toast.count == 1 {
@@ -125,7 +130,7 @@ where
                     iced::widget::container(
                         iced::widget::row![
                             title_text,
-                            iced::widget::horizontal_space(Length::Fill),
+                            iced::widget::horizontal_space(),
                             iced::widget::button("X")
                                 .on_press((on_close)(index))
                                 .padding(3),
@@ -163,22 +168,25 @@ where
     }
 }
 
-impl<'a, Message> Widget<Message, Renderer> for Manager<'a, Message> {
-    fn width(&self) -> Length {
-        self.content.as_widget().width()
+impl<'a, Message, Theme> Widget<Message, Theme, Renderer> for Manager<'a, Message, Theme> {
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
     }
 
-    fn height(&self) -> Length {
-        self.content.as_widget().height()
-    }
-
-    fn layout(&self, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
-        self.content.as_widget().layout(renderer, limits)
+    fn layout(
+        &self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.content
+            .as_widget()
+            .layout(&mut tree.children[0], renderer, limits)
     }
 
     fn draw(
         &self,
-        state: &Tree,
+        tree: &Tree,
         renderer: &mut Renderer,
         theme: &Theme,
         style: &renderer::Style,
@@ -187,7 +195,7 @@ impl<'a, Message> Widget<Message, Renderer> for Manager<'a, Message> {
         viewport: &Rectangle,
     ) {
         self.content.as_widget().draw(
-            &state.children[0],
+            &tree.children[0],
             renderer,
             theme,
             style,
@@ -296,27 +304,27 @@ impl<'a, Message> Widget<Message, Renderer> for Manager<'a, Message> {
         state: &'b mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-    ) -> Option<overlay::Element<'b, Message, Renderer>> {
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let instants = state.state.downcast_mut::<Vec<Option<Instant>>>();
 
         let (content_state, toasts_state) = state.children.split_at_mut(1);
 
-        let content = self
-            .content
-            .as_widget_mut()
-            .overlay(&mut content_state[0], layout, renderer);
+        let content = self.content.as_widget_mut().overlay(
+            &mut content_state[0],
+            layout,
+            renderer,
+            translation,
+        );
 
         let toasts = (!self.toasts.is_empty()).then(|| {
-            overlay::Element::new(
-                layout.bounds().position(),
-                Box::new(Overlay {
-                    toasts: &mut self.toasts,
-                    state: toasts_state,
-                    instants,
-                    on_close: &self.on_close,
-                    timeout_secs: self.timeout_secs,
-                }),
-            )
+            overlay::Element::new(Box::new(Overlay {
+                toasts: &mut self.toasts,
+                state: toasts_state,
+                instants,
+                on_close: &self.on_close,
+                timeout_secs: self.timeout_secs,
+            }))
         });
         let overlays = content.into_iter().chain(toasts).collect::<Vec<_>>();
 
@@ -324,16 +332,18 @@ impl<'a, Message> Widget<Message, Renderer> for Manager<'a, Message> {
     }
 }
 
-struct Overlay<'a, 'b, Message> {
-    toasts: &'b mut [Element<'a, Message>],
+struct Overlay<'a, 'b, Message, Theme> {
+    toasts: &'b mut [Element<'a, Message, Theme>],
     state: &'b mut [Tree],
     instants: &'b mut [Option<Instant>],
     on_close: &'b dyn Fn(usize) -> Message,
     timeout_secs: u64,
 }
 
-impl<'a, 'b, Message> overlay::Overlay<Message, Renderer> for Overlay<'a, 'b, Message> {
-    fn layout(&self, renderer: &Renderer, bounds: Size, position: Point) -> layout::Node {
+impl<'a, 'b, Message, Theme> overlay::Overlay<Message, Theme, Renderer>
+    for Overlay<'a, 'b, Message, Theme>
+{
+    fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let limits = layout::Limits::new(Size::ZERO, bounds)
             .width(Length::Fill)
             .height(Length::Fill);
@@ -342,18 +352,20 @@ impl<'a, 'b, Message> overlay::Overlay<Message, Renderer> for Overlay<'a, 'b, Me
             layout::flex::Axis::Vertical,
             renderer,
             &limits,
+            Length::Fill,
+            Length::Fill,
             10.into(),
             10.0,
             Alignment::End,
             self.toasts,
+            self.state,
         )
-        .translate(Vector::new(position.x, position.y))
     }
 
     fn draw(
         &self,
         renderer: &mut Renderer,
-        theme: &<Renderer as advanced::Renderer>::Theme,
+        theme: &Theme,
         style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
@@ -400,7 +412,7 @@ impl<'a, 'b, Message> overlay::Overlay<Message, Renderer> for Overlay<'a, 'b, Me
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
     ) -> event::Status {
-        if let Event::Window(window::Event::RedrawRequested(now)) = &event {
+        if let Event::Window(_, window::Event::RedrawRequested(now)) = &event {
             let mut next_redraw: Option<window::RedrawRequest> = None;
 
             self.instants
@@ -494,11 +506,12 @@ impl<'a, 'b, Message> overlay::Overlay<Message, Renderer> for Overlay<'a, 'b, Me
     }
 }
 
-impl<'a, Message> From<Manager<'a, Message>> for Element<'a, Message>
+impl<'a, Message, Theme> From<Manager<'a, Message, Theme>> for Element<'a, Message, Theme>
 where
     Message: 'a,
+    Theme: 'a,
 {
-    fn from(manager: Manager<'a, Message>) -> Self {
+    fn from(manager: Manager<'a, Message, Theme>) -> Self {
         Element::new(manager)
     }
 }

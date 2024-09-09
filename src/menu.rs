@@ -1,29 +1,31 @@
 //! samaku's global menus
 
-use iced_aw::menu::MenuTree;
+use iced_aw::menu::{Item, Menu};
 
 use crate::{message, view};
 
-#[must_use]
-pub fn file<'a>() -> MenuTree<'a, message::Message, iced::Renderer> {
-    iced_aw::helpers::menu_tree(
-        iced::widget::button("File").on_press(message::Message::None),
-        vec![
+pub fn file<'a>() -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
+    Item::with_menu(
+        iced::widget::button("File")
+            .on_press(message::Message::None)
+            .width(iced::Length::Shrink),
+        Menu::new(vec![
             view::menu::item("Open", message::Message::OpenSubtitleFile),
             view::menu::item("Import", message::Message::ImportSubtitleFile),
             view::menu::item("Save", message::Message::SaveSubtitleFile),
             view::menu::item("Export", message::Message::ExportSubtitleFile),
-        ],
+        ]),
     )
 }
 
-#[must_use]
-pub fn media<'a>() -> MenuTree<'a, message::Message, iced::Renderer> {
-    iced_aw::helpers::menu_tree(
-        iced::widget::button("Media").on_press(message::Message::None),
-        vec![
+pub fn media<'a>() -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
+    Item::with_menu(
+        iced::widget::button("Media")
+            .on_press(message::Message::None)
+            .width(iced::Length::Shrink),
+        Menu::new(vec![
             view::menu::item("Load video", message::Message::SelectVideoFile),
             view::menu::item("Load audio", message::Message::SelectAudioFile),
-        ],
+        ]),
     )
 }

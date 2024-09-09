@@ -1,16 +1,20 @@
 use iced::{
-    keyboard::{KeyCode, Modifiers},
+    keyboard::{key::Named, Key, Location, Modifiers},
     widget::pane_grid::Axis,
 };
 
 use crate::model;
 use crate::{message::Message, pane};
 
-pub(crate) fn handle_key_press(modifiers: Modifiers, key_code: KeyCode) -> Option<Message> {
-    match key_code {
-        KeyCode::F2 => Some(Message::SplitPane(Axis::Vertical)),
-        KeyCode::F3 => Some(Message::SplitPane(Axis::Horizontal)),
-        KeyCode::F4 => {
+pub(crate) fn handle_key_press(
+    key: &Key,
+    modifiers: Modifiers,
+    _location: Location,
+) -> Option<Message> {
+    match key.as_ref() {
+        Key::Named(Named::F2) => Some(Message::SplitPane(Axis::Vertical)),
+        Key::Named(Named::F3) => Some(Message::SplitPane(Axis::Horizontal)),
+        Key::Named(Named::F4) => {
             if modifiers.shift() {
                 Some(Message::SetFocusedPaneState(Box::new(
                     pane::State::Unassigned,
@@ -19,17 +23,17 @@ pub(crate) fn handle_key_press(modifiers: Modifiers, key_code: KeyCode) -> Optio
                 Some(Message::ClosePane)
             }
         }
-        KeyCode::V => Some(Message::SelectVideoFile),
-        KeyCode::B => Some(Message::ImportSubtitleFile),
-        KeyCode::N => Some(Message::SelectAudioFile),
-        KeyCode::O => Some(Message::OpenSubtitleFile),
-        KeyCode::S => Some(Message::SaveSubtitleFile),
-        KeyCode::Comma => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(-1))),
-        KeyCode::Period => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(1))),
-        KeyCode::Left => Some(Message::PlaybackAdvanceSeconds(-1.0)),
-        KeyCode::Right => Some(Message::PlaybackAdvanceSeconds(1.0)),
-        KeyCode::Space => Some(Message::TogglePlayback),
-        KeyCode::Plus => Some(Message::AddEvent),
+        Key::Character("v") => Some(Message::SelectVideoFile),
+        Key::Character("b") => Some(Message::ImportSubtitleFile),
+        Key::Character("n") => Some(Message::SelectAudioFile),
+        Key::Character("o") => Some(Message::OpenSubtitleFile),
+        Key::Character("s") => Some(Message::SaveSubtitleFile),
+        Key::Character(",") => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(-1))),
+        Key::Character(".") => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(1))),
+        Key::Named(Named::ArrowLeft) => Some(Message::PlaybackAdvanceSeconds(-1.0)),
+        Key::Named(Named::ArrowRight) => Some(Message::PlaybackAdvanceSeconds(1.0)),
+        Key::Named(Named::Space) => Some(Message::TogglePlayback),
+        Key::Character("+") => Some(Message::AddEvent),
         _ => None,
     }
 }

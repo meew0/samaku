@@ -143,15 +143,18 @@ pub fn run() -> iced::Result {
         id: Some("samaku".to_owned()),
         window: iced::window::Settings::default(),
         flags: (),
+        fonts: vec![
+            resources::BARLOW.into(),
+            iced_aw::BOOTSTRAP_FONT_BYTES.into(),
+        ],
         default_font: iced::Font {
             family: iced::font::Family::Name("Barlow"),
             weight: iced::font::Weight::Normal,
             stretch: iced::font::Stretch::Normal,
-            monospaced: false,
+            style: iced::font::Style::Normal,
         },
-        default_text_size: 16.0,
+        default_text_size: iced::Pixels(16.0),
         antialiasing: false,
-        exit_on_close_request: true,
     })
 }
 
@@ -310,15 +313,7 @@ impl Application for Samaku {
             reticules: None,
         };
 
-        // Tell iced to load the UI font (Barlow), as well as the icon font provided by iced_aw,
-        // when loading the application, so they are immediately available for rendering.
-        let on_load = Command::batch(vec![
-            iced::font::load(resources::BARLOW).map(|_| message::Message::None),
-            iced::font::load(iced_aw::graphics::icons::ICON_FONT_BYTES)
-                .map(|_| message::Message::None),
-        ]);
-
-        (global_state, on_load)
+        (global_state, Command::none())
     }
 
     fn title(&self) -> String {
@@ -376,10 +371,10 @@ impl Application for Samaku {
         // We implement our own non-native menu using iced_aw. The entry definitions are located
         // in `menu.rs`.
         // Once iced supports native menus again, we may switch to that.
-        let menu_bar = iced_aw::menu_bar!(menu::file(), menu::media())
+        let menu_bar = iced_aw::menu::MenuBar::new(vec![menu::file(), menu::media()])
             .spacing(5.0)
-            .item_width(iced_aw::menu::ItemWidth::Uniform(180))
-            .item_height(iced_aw::menu::ItemHeight::Uniform(32));
+            .width(180)
+            .height(32);
 
         // The title row — currently only contains the logo and the application name.
         // TODO: add buttons/menus for loading/saving/etc
@@ -390,7 +385,7 @@ impl Application for Samaku {
             iced::widget::text("samaku")
                 .size(25)
                 .style(iced::theme::Text::Color(style::SAMAKU_PRIMARY)),
-            iced::widget::horizontal_space(Length::Fixed(10.0)),
+            iced::widget::Space::with_width(Length::Fixed(10.0)),
             menu_bar
         ]
         .spacing(5)
@@ -416,7 +411,7 @@ impl Application for Samaku {
         use iced::futures::StreamExt;
 
         // Handle incoming global events, like key presses
-        let events = subscription::events_with(|event, status| {
+        let events = event::listen_with(|event, status| {
             if status == event::Status::Captured {
                 return None;
             }
@@ -424,9 +419,11 @@ impl Application for Samaku {
             // Call the function in the `keyboard` module for every key press.
             match event {
                 Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                    key,
                     modifiers,
-                    key_code,
-                }) => keyboard::handle_key_press(modifiers, key_code),
+                    location,
+                    ..
+                }) => keyboard::handle_key_press(&key, modifiers, location),
                 _ => None,
             }
         });

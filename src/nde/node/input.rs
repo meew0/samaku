@@ -100,10 +100,7 @@ impl Node for InputPosition {
         Ok(vec![SocketValue::Position(self.value)])
     }
 
-    fn content<'a>(
-        &self,
-        self_index: usize,
-    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+    fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
             model::reticule::Reticules {
                 list: vec![model::reticule::Reticule {
@@ -201,10 +198,7 @@ impl Node for InputRectangle {
         Ok(vec![SocketValue::Rectangle(self.value)])
     }
 
-    fn content<'a>(
-        &self,
-        self_index: usize,
-    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+    fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         let mut reticules = vec![
             model::reticule::Reticule {
                 shape: model::reticule::Shape::CornerTopLeft,
@@ -340,10 +334,7 @@ impl Node for InputTags {
         ])
     }
 
-    fn content<'a>(
-        &self,
-        self_index: usize,
-    ) -> iced::Element<'a, message::Message, iced::Renderer> {
+    fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         let input =
             iced::widget::text_input("\\1c&HFF0000&", &self.value).on_input(move |new_text| {
                 message::Message::Node(self_index, message::Node::TextInputChanged(new_text))

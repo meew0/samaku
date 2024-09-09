@@ -21,27 +21,29 @@ pub struct StackedImage<H> {
 /// Displays a stack of images overlaid on top of each other.
 /// The size is defined by the first image in the stack
 #[derive(Debug)]
-pub struct ImageStack<H, M, P, R>
+pub struct ImageStack<Handle, Message, Program, Theme, Renderer>
 where
-    P: canvas::Program<M, R>,
-    R: image::Renderer<Handle = H> + canvas::Renderer,
+    Program: canvas::Program<Message, Theme, Renderer>,
+    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
 {
-    images: Vec<StackedImage<H>>,
+    images: Vec<StackedImage<Handle>>,
     width: Length,
     height: Length,
     content_fit: ContentFit,
-    program: P,
-    _phantom_message: PhantomData<M>,
-    _phantom_renderer: PhantomData<R>,
+    program: Program,
+    _phantom_message: PhantomData<Message>,
+    _phantom_theme: PhantomData<Theme>,
+    _phantom_renderer: PhantomData<Renderer>,
 }
 
-impl<H, M, P, R> ImageStack<H, M, P, R>
+impl<Handle, Message, Program, Theme, Renderer>
+    ImageStack<Handle, Message, Program, Theme, Renderer>
 where
-    P: canvas::Program<M, R>,
-    R: image::Renderer<Handle = H> + canvas::Renderer,
+    Program: canvas::Program<Message, Theme, Renderer>,
+    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
 {
     /// Creates a new [`ImageStack`] with the given path.
-    pub fn new<T: Into<Vec<StackedImage<H>>>>(images: T, program: P) -> Self {
+    pub fn new<T: Into<Vec<StackedImage<Handle>>>>(images: T, program: Program) -> Self {
         ImageStack {
             images: images.into(),
             width: Length::Shrink,
@@ -49,6 +51,7 @@ where
             content_fit: ContentFit::Contain,
             program,
             _phantom_message: PhantomData,
+            _phantom_theme: PhantomData,
             _phantom_renderer: PhantomData,
         }
     }
@@ -80,16 +83,16 @@ where
 }
 
 /// Computes the layout of an [`ImageStack`].
-pub fn layout<R, H>(
-    renderer: &R,
+pub fn layout<Renderer, Handle>(
+    renderer: &Renderer,
     limits: &layout::Limits,
-    images: &[StackedImage<H>],
+    images: &[StackedImage<Handle>],
     width: Length,
     height: Length,
     content_fit: ContentFit,
 ) -> layout::Node
 where
-    R: image::Renderer<Handle = H>,
+    Renderer: image::Renderer<Handle = Handle>,
 {
     // The raw w/h of the first image
     let image_size = {
@@ -100,7 +103,10 @@ where
     };
 
     // The size to be available to the widget prior to `Shrink`ing
-    let raw_size = limits.width(width).height(height).resolve(image_size);
+    let raw_size = limits
+        .width(width)
+        .height(height)
+        .resolve(width, height, image_size);
 
     // The uncropped size of the image when fit to the bounds above
     let full_size = content_fit.fit(image_size, raw_size);
@@ -121,14 +127,14 @@ where
 }
 
 /// Draws an [`ImageStack`]
-pub fn draw<R, H>(
-    renderer: &mut R,
+pub fn draw<Renderer, Handle>(
+    renderer: &mut Renderer,
     layout: Layout<'_>,
-    images: &[StackedImage<H>],
+    images: &[StackedImage<Handle>],
     content_fit: ContentFit,
 ) where
-    R: image::Renderer<Handle = H>,
-    H: Clone + Hash,
+    Renderer: image::Renderer<Handle = Handle>,
+    Handle: Clone + Hash,
 {
     // Find out maximum size (assuming the first image covers the entire area)
     let Size { width, height } = renderer.dimensions(&images[0].handle);
@@ -142,7 +148,7 @@ pub fn draw<R, H>(
     let y_scale = overall_adjusted_fit.height / overall_size.height;
 
     // Preprocess images
-    let to_draw: Vec<(&StackedImage<H>, Rectangle)> = images
+    let to_draw: Vec<(&StackedImage<Handle>, Rectangle)> = images
         .iter()
         .map(|image| {
             let Size { width, height } = renderer.dimensions(&image.handle);
@@ -167,9 +173,9 @@ pub fn draw<R, H>(
             (image, sum_bounds)
         })
         .collect();
-    let render = |renderer: &mut R| {
+    let render = |renderer: &mut Renderer| {
         for (image, bounds) in to_draw {
-            renderer.draw(image.handle.clone(), bounds);
+            renderer.draw(image.handle.clone(), image::FilterMethod::Linear, bounds);
         }
     };
 
@@ -180,21 +186,26 @@ pub fn draw<R, H>(
     }
 }
 
-impl<M, R, H, P> Widget<M, R> for ImageStack<H, M, P, R>
+impl<Message, Renderer, Handle, Program, Theme> Widget<Message, Theme, Renderer>
+    for ImageStack<Handle, Message, Program, Theme, Renderer>
 where
-    R: image::Renderer<Handle = H> + canvas::Renderer,
-    H: Clone + Hash,
-    P: canvas::Program<M, R>,
+    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
+    Handle: Clone + Hash,
+    Program: canvas::Program<Message, Theme, Renderer>,
 {
-    fn width(&self) -> Length {
-        self.width
+    fn size(&self) -> Size<Length> {
+        Size {
+            width: self.width,
+            height: self.height,
+        }
     }
 
-    fn height(&self) -> Length {
-        self.height
-    }
-
-    fn layout(&self, renderer: &R, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &self,
+        _state: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         layout(
             renderer,
             limits,
@@ -207,9 +218,9 @@ where
 
     fn draw(
         &self,
-        state: &Tree,
-        renderer: &mut R,
-        theme: &R::Theme,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
@@ -219,7 +230,7 @@ where
 
         let bounds = layout.bounds();
 
-        let state = state.state.downcast_ref::<P::State>();
+        let state = tree.state.downcast_ref::<Program::State>();
         renderer.with_layer(bounds, |renderer| {
             renderer.with_translation(Vector::new(bounds.x, bounds.y), |renderer| {
                 canvas::Renderer::draw(
@@ -233,11 +244,11 @@ where
 
     fn tag(&self) -> tree::Tag {
         struct Tag<T>(T);
-        tree::Tag::of::<Tag<P::State>>()
+        tree::Tag::of::<Tag<Program::State>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(P::State::default())
+        tree::State::new(Program::State::default())
     }
 
     fn on_event(
@@ -246,9 +257,9 @@ where
         event: Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _renderer: &R,
+        _renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, M>,
+        shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) -> iced::event::Status {
         let bounds = layout.bounds();
@@ -257,11 +268,11 @@ where
             Event::Mouse(mouse_event) => Some(canvas::Event::Mouse(mouse_event)),
             Event::Touch(touch_event) => Some(canvas::Event::Touch(touch_event)),
             Event::Keyboard(keyboard_event) => Some(canvas::Event::Keyboard(keyboard_event)),
-            Event::Window(_) => None,
+            Event::Window(..) => None,
         };
 
         if let Some(canvas_event) = canvas_event {
-            let state = tree.state.downcast_mut::<P::State>();
+            let state = tree.state.downcast_mut::<Program::State>();
 
             let (event_status, message) = self.program.update(state, canvas_event, bounds, cursor);
 
@@ -281,23 +292,28 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
-        _renderer: &R,
+        _renderer: &Renderer,
     ) -> mouse::Interaction {
         let bounds = layout.bounds();
-        let state = tree.state.downcast_ref::<P::State>();
+        let state = tree.state.downcast_ref::<Program::State>();
 
         self.program.mouse_interaction(state, bounds, cursor)
     }
 }
 
-impl<'a, M, R, H, P> From<ImageStack<H, M, P, R>> for Element<'a, M, R>
+impl<'a, Message, Renderer, Handle, Program, Theme>
+    From<ImageStack<Handle, Message, Program, Theme, Renderer>>
+    for Element<'a, Message, Theme, Renderer>
 where
-    R: image::Renderer<Handle = H> + geometry::Renderer + 'a,
-    H: Clone + Hash + 'a,
-    P: canvas::Program<M, R> + 'a,
-    M: 'a,
+    Renderer: image::Renderer<Handle = Handle> + geometry::Renderer + 'a,
+    Handle: Clone + Hash + 'a,
+    Program: canvas::Program<Message, Theme, Renderer> + 'a,
+    Message: 'a,
+    Theme: 'a,
 {
-    fn from(image: ImageStack<H, M, P, R>) -> Element<'a, M, R> {
+    fn from(
+        image: ImageStack<Handle, Message, Program, Theme, Renderer>,
+    ) -> Element<'a, Message, Theme, Renderer> {
         Element::new(image)
     }
 }

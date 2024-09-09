@@ -106,38 +106,34 @@ impl iced::widget::container::StyleSheet for Comment {
     }
 }
 
-impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
-    for (&'a crate::Samaku, &'a Column)
-{
+impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Renderer> for Column {
     type Row = subtitle::Event<'static>;
+    type State = crate::Samaku;
 
-    fn header(
-        &'b self,
-        _col_index: usize,
-    ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
-        iced::widget::container(iced::widget::text(format!("{}", self.1.field)))
+    fn header(&'a self, _col_index: usize) -> iced::Element<'a, message::Message> {
+        iced::widget::container(iced::widget::text(format!("{}", self.field)))
             .height(24)
             .center_y()
             .into()
     }
 
     fn cell(
-        &'b self,
+        &'a self,
         _col_index: usize,
         row_index: usize,
-        row: &'b Self::Row,
-    ) -> iced::advanced::graphics::core::Element<'a, message::Message, iced::Renderer> {
-        let selected = self
-            .0
+        state: &'a Self::State,
+        row: &'a Self::Row,
+    ) -> iced::Element<'a, message::Message> {
+        let selected = state
             .selected_event_indices
             .contains(&subtitle::EventIndex(row_index));
 
-        let cell_content: iced::Element<message::Message> = match self.1.field {
+        let cell_content: iced::Element<message::Message> = match self.field {
             ColumnField::SelectButton => {
                 let icon = if selected {
-                    iced_aw::Icon::Dot
+                    iced_aw::Bootstrap::Dot
                 } else {
-                    iced_aw::Icon::CircleFill
+                    iced_aw::Bootstrap::CircleFill
                 };
 
                 iced::widget::button(view::icon(icon).size(12.0))
@@ -147,7 +143,7 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
                     .into()
             }
             ColumnField::FilterName => {
-                iced::widget::text(match self.0.subtitles.extradata.nde_filter_for_event(row) {
+                iced::widget::text(match state.subtitles.extradata.nde_filter_for_event(row) {
                     Some(filter) => {
                         let stored_name = &filter.name;
                         if stored_name.is_empty() {
@@ -180,11 +176,11 @@ impl<'a, 'b> iced_table::table::Column<'a, 'b, message::Message, iced::Renderer>
     }
 
     fn width(&self) -> f32 {
-        self.1.width
+        self.width
     }
 
     fn resize_offset(&self) -> Option<f32> {
-        self.1.resize_offset
+        self.resize_offset
     }
 }
 
@@ -193,15 +189,12 @@ pub fn view<'a>(
     global_state: &'a crate::Samaku,
     grid_state: &'a State,
 ) -> super::View<'a> {
-    let columns_with_state: Vec<(&'a crate::Samaku, &Column)> = std::iter::repeat(global_state)
-        .zip(&grid_state.columns)
-        .collect();
-
     let table = iced::widget::responsive(move |size| {
         iced_table::table(
             grid_state.header_scrollable_id.clone(),
             grid_state.body_scrollable_id.clone(),
-            columns_with_state.as_slice(),
+            global_state,
+            grid_state.columns.as_slice(),
             global_state.subtitles.events.as_slice(),
             // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
             // does not support passing a closure here.
@@ -218,10 +211,10 @@ pub fn view<'a>(
         .into()
     });
 
-    let add_button =
-        iced::widget::button(view::icon(iced_aw::Icon::Plus)).on_press(message::Message::AddEvent);
+    let add_button = iced::widget::button(view::icon(iced_aw::Bootstrap::Plus))
+        .on_press(message::Message::AddEvent);
 
-    let delete_button = iced::widget::button(view::icon(iced_aw::Icon::Dash))
+    let delete_button = iced::widget::button(view::icon(iced_aw::Bootstrap::Dash))
         .on_press(message::Message::DeleteSelectedEvents);
 
     let top_bar = iced::widget::container(

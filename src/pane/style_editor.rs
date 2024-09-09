@@ -79,20 +79,14 @@ pub fn view<'a>(
     let i = pane_state.selected_style_index;
     let selected_style = &global_state.subtitles.styles[i];
 
-    let bold_checkbox = iced::widget::checkbox("Bold", selected_style.bold, move |val| {
-        message::Message::SetStyleBold(i, val)
-    });
-    let italic_checkbox = iced::widget::checkbox("Italic", selected_style.italic, move |val| {
-        message::Message::SetStyleItalic(i, val)
-    });
-    let underline_checkbox =
-        iced::widget::checkbox("Underline", selected_style.underline, move |val| {
-            message::Message::SetStyleUnderline(i, val)
-        });
-    let strike_out_checkbox =
-        iced::widget::checkbox("Strike out", selected_style.strike_out, move |val| {
-            message::Message::SetStyleStrikeOut(i, val)
-        });
+    let bold_checkbox = iced::widget::checkbox("Bold", selected_style.bold)
+        .on_toggle(move |val| message::Message::SetStyleBold(i, val));
+    let italic_checkbox = iced::widget::checkbox("Italic", selected_style.italic)
+        .on_toggle(move |val| message::Message::SetStyleItalic(i, val));
+    let underline_checkbox = iced::widget::checkbox("Underline", selected_style.underline)
+        .on_toggle(move |val| message::Message::SetStyleUnderline(i, val));
+    let strike_out_checkbox = iced::widget::checkbox("Strike out", selected_style.strike_out)
+        .on_toggle(move |val| message::Message::SetStyleStrikeOut(i, val));
 
     let flags_row = iced::widget::row![
         bold_checkbox,
