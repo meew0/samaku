@@ -23,7 +23,22 @@ mod tests {
         unsafe {
             let path: CString = CString::new(format!("{}", music_path.display())).unwrap();
             let empty: CString = CString::new("").unwrap();
-            let maybe_source = BestAudioSource_new(path.as_ptr(), -1, -1, 0, empty.as_ptr(), 0.0);
+
+            unsafe extern "C" fn progress(_track: i32, _current: i64, _total: i64) -> i32 {
+                1
+            }
+
+            let maybe_source = BestAudioSource_new(
+                path.as_ptr(),
+                -1,
+                -1,
+                0,
+                0,
+                0,
+                empty.as_ptr(),
+                0.0,
+                Some(progress),
+            );
 
             assert_eq!(
                 maybe_source.error, 0,
@@ -42,7 +57,7 @@ mod tests {
             assert_eq!(properties.SampleRate, 44100);
             assert_eq!(properties.Channels, 2);
 
-            let mut slice = vec![0u8; 256 * properties.BytesPerSample as usize];
+            let mut slice = vec![0u8; 256 * properties.AF.BytesPerSample as usize];
             let error = BestAudioSource_GetPackedAudio(source, slice.as_mut_ptr(), 88200, 128);
             assert_eq!(
                 error, 0,
@@ -50,7 +65,7 @@ mod tests {
             );
             assert_ne!(
                 slice,
-                vec![0; 256 * properties.BytesPerSample as usize],
+                vec![0; 256 * properties.AF.BytesPerSample as usize],
                 "there should be some audio data"
             );
 

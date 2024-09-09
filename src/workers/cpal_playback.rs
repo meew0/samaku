@@ -117,10 +117,10 @@ pub fn spawn(
 fn sample_format_for_audio_properties(
     audio_properties: &media::AudioProperties,
 ) -> cpal::SampleFormat {
-    let sample_format_opt: Option<cpal::SampleFormat> = if audio_properties.is_float {
+    let sample_format_opt: Option<cpal::SampleFormat> = if audio_properties.format.float {
         const F32_SIZE: usize = size_of::<f32>();
         const F64_SIZE: usize = size_of::<f64>();
-        match audio_properties.bytes_per_sample {
+        match audio_properties.format.bytes_per_sample {
             F32_SIZE => Some(cpal::SampleFormat::F32),
             F64_SIZE => Some(cpal::SampleFormat::F64),
             _ => None,
@@ -129,7 +129,7 @@ fn sample_format_for_audio_properties(
         const U8_SIZE: usize = size_of::<u8>();
         const I16_SIZE: usize = size_of::<i16>();
         const I32_SIZE: usize = size_of::<i32>();
-        match audio_properties.bytes_per_sample {
+        match audio_properties.format.bytes_per_sample {
             U8_SIZE => Some(cpal::SampleFormat::U8),
             I16_SIZE => Some(cpal::SampleFormat::I16),
             I32_SIZE => Some(cpal::SampleFormat::I32),

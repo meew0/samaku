@@ -6,14 +6,25 @@ use bestsource_sys as bs;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AudioProperties {
-    pub is_float: bool,
-    pub bytes_per_sample: usize,
-    pub bits_per_sample: usize,
+    pub format: AudioFormat,
     pub sample_rate: u32,
     pub channels: u32,
     pub channel_layout: u64,
     pub num_samples: i64,
     pub start_time: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AudioFormat {
+    pub float: bool,
+    pub bits: usize,
+    pub bytes_per_sample: usize,
+}
+
+pub enum CacheMode {
+    Disable = 0,
+    Auto = 1,
+    AlwaysWrite = 2,
 }
 
 pub struct BestAudioSource {
@@ -23,11 +34,14 @@ pub struct BestAudioSource {
 unsafe impl Send for BestAudioSource {}
 
 impl BestAudioSource {
+    #![allow(clippy::too_many_arguments)]
     pub fn new<P1: AsRef<std::path::Path>, P2: AsRef<std::path::Path>>(
         source_file: P1,
         track: i32,
         ajust_delay: i32,
+        variable_format: bool,
         threads: i32,
+        cache_mode: CacheMode,
         cache_path: P2,
         drc_scale: f64,
     ) -> BestAudioSource {
@@ -39,9 +53,12 @@ impl BestAudioSource {
                 source_file_c.as_ptr(),
                 track,
                 ajust_delay,
+                i32::from(variable_format),
                 threads,
+                cache_mode as i32,
                 cache_path_c.as_ptr(),
                 drc_scale,
+                None, // TODO progress
             )
         };
 
@@ -79,14 +96,6 @@ impl BestAudioSource {
         w.value
     }
 
-    // This is not declared as const in the c++ header file,
-    // so I'm defining it as requiring a &mut self...
-    pub fn get_exact_duration(&mut self) -> bool {
-        let w = unsafe { bs::BestAudioSource_GetExactDuration(self.internal) };
-        assert!(w.error <= 0, "error in BestAudioSource::GetExactDuration");
-        w.value != 0
-    }
-
     pub fn get_audio_properties(&self) -> AudioProperties {
         let bas_ap = unsafe { bs::BestAudioSource_GetAudioProperties(self.internal) };
         assert!(
@@ -96,9 +105,11 @@ impl BestAudioSource {
 
         #[allow(clippy::cast_sign_loss)]
         AudioProperties {
-            is_float: bas_ap.IsFloat != 0,
-            bytes_per_sample: bas_ap.BytesPerSample as usize,
-            bits_per_sample: bas_ap.BitsPerSample as usize,
+            format: AudioFormat {
+                float: bas_ap.AF.Float != 0,
+                bits: bas_ap.AF.Bits as usize,
+                bytes_per_sample: bas_ap.AF.BytesPerSample as usize,
+            },
             sample_rate: bas_ap.SampleRate as u32,
             channels: bas_ap.Channels as u32,
             channel_layout: bas_ap.ChannelLayout,
@@ -135,17 +146,26 @@ mod tests {
     fn audio_properties_and_decoding() {
         let music_path = crate::test_utils::test_file("test_files/music.mp3");
 
-        let mut bas = BestAudioSource::new(music_path, -1, -1, 0, std::path::Path::new(""), 0.0);
+        let mut bas = BestAudioSource::new(
+            music_path,
+            -1,
+            -1,
+            false,
+            0,
+            CacheMode::Disable,
+            std::path::Path::new(""),
+            0.0,
+        );
         let properties = bas.get_audio_properties();
 
         assert_eq!(properties.sample_rate, 44100);
         assert_eq!(properties.channels, 2);
 
-        let mut slice = vec![0_u8; 256 * properties.bytes_per_sample];
+        let mut slice = vec![0_u8; 256 * properties.format.bytes_per_sample];
         bas.get_packed_audio(&mut slice, 88200, 128);
         assert_ne!(
             slice,
-            vec![0_u8; 256 * properties.bytes_per_sample],
+            vec![0_u8; 256 * properties.format.bytes_per_sample],
             "there should be some audio data"
         );
     }

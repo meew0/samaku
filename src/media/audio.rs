@@ -11,8 +11,16 @@ pub struct Audio {
 
 impl Audio {
     pub fn load<P: AsRef<std::path::Path>>(filename: P) -> Audio {
-        let source =
-            bestsource::BestAudioSource::new(filename, -1, -1, 0, std::path::Path::new(""), 0.0);
+        let source = bestsource::BestAudioSource::new(
+            filename,
+            -1,
+            -1,
+            false,
+            0,
+            bestsource::CacheMode::Disable,
+            std::path::Path::new(""),
+            0.0,
+        );
         let properties = source.get_audio_properties();
 
         println!("audio properties: {properties:?}");

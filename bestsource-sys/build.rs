@@ -20,21 +20,15 @@ fn main() {
     let bestsourcew_sources = [
         "bestsource/src/audiosource.cpp",
         "bestsource/src/videosource.cpp",
-        "bestsource/src/SrcAttribCache.cpp",
-        "bestsource/src/BSRational.cpp",
-        "bestsource/src/vapoursynth.cpp",
+        "bestsource/src/tracklist.cpp",
+        "bestsource/src/bsshared.cpp",
         "wrapper/wrapper.cpp",
     ];
-
-    // TODO: make this portable
-    let vapoursynth_include_path = env::var("VAPOURSYNTH_INCLUDE_PATH")
-        .unwrap_or_else(|_| "/usr/include/vapoursynth".to_string());
 
     cc::Build::new()
         .cpp(true)
         .include("bestsource/src")
-        .include("libp2p")
-        .include(vapoursynth_include_path)
+        .include("bestsource/libp2p")
         .files(bestsourcew_sources.iter())
         .flag_if_supported("-Wno-sign-compare")
         .flag_if_supported("-Wno-missing-field-initializers")
@@ -46,10 +40,10 @@ fn main() {
     // so it is not strictly necessary to link it here (as we only use BestSource for audio).
     // However, we can use it for our own video decoding purposes
     let libp2p_sources = vec![
-        "libp2p/p2p_api.cpp",
-        "libp2p/v210.cpp",
-        "libp2p/simd/cpuinfo_x86.cpp",
-        "libp2p/simd/p2p_simd.cpp",
+        "bestsource/libp2p/p2p_api.cpp",
+        "bestsource/libp2p/v210.cpp",
+        "bestsource/libp2p/simd/cpuinfo_x86.cpp",
+        "bestsource/libp2p/simd/p2p_simd.cpp",
     ];
 
     libp2p_compiler()
@@ -60,7 +54,7 @@ fn main() {
 
     // TODO: allow manually configuring whether to use SIMD or not
     if cfg!(target_arch = "x86_64") {
-        let libp2p_sse41_source = "libp2p/simd/p2p_sse41.cpp";
+        let libp2p_sse41_source = "bestsource/libp2p/simd/p2p_sse41.cpp";
         libp2p_compiler()
             .flag("-msse4.1")
             .file(libp2p_sse41_source)
@@ -74,15 +68,14 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper/wrapper.h");
 
     // BestSource dependencies
-    println!("cargo:rustc-link-lib=jansson");
     println!("cargo:rustc-link-lib=avcodec");
     println!("cargo:rustc-link-lib=avformat");
     println!("cargo:rustc-link-lib=avutil");
-    println!("cargo:rustc-link-lib=swscale");
+    println!("cargo:rustc-link-lib=xxhash");
 
     let bindings = bindgen::Builder::default()
         .header("wrapper/wrapper.h")
-        .header("libp2p/p2p_api.h")
+        .header("bestsource/libp2p/p2p_api.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");

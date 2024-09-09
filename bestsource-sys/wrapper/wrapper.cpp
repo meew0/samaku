@@ -2,13 +2,14 @@
 #include "../bestsource/src/audiosource.h"
 
 #include <iostream>
+#include <filesystem>
 
-BSW_PointerWithError BestAudioSource_new(const char *SourceFile, int Track, int AjustDelay, int Threads, const char *CachePath, double DrcScale)
+BSW_PointerWithError BestAudioSource_new(const char *SourceFile, int Track, int AjustDelay, int VariableFormat, int Threads, int CacheMode, const char *CachePath, double DrcScale, int (*Progress)(int, int64_t, int64_t))
 {
     BSW_PointerWithError ret;
     try
     {
-        void *ptr = (void *)new BestAudioSource(SourceFile, Track, AjustDelay, Threads, CachePath, nullptr, DrcScale);
+        void *ptr = (void *)new BestAudioSource(std::filesystem::path(SourceFile), Track, AjustDelay, (bool) VariableFormat, Threads, CacheMode, std::filesystem::path(CachePath), nullptr, DrcScale, Progress);
         ret.error = 0;
         ret.value = ptr;
     }
@@ -123,27 +124,6 @@ BSW_DoubleWithError BestAudioSource_GetRelativeStartTime(void *self, int Track)
     return ret;
 }
 
-BSW_IntWithError BestAudioSource_GetExactDuration(void *self)
-{
-    BSW_IntWithError ret;
-    try
-    {
-        BestAudioSource *BAS = (BestAudioSource *)self;
-        ret.error = 0;
-        ret.value = BAS->GetExactDuration();
-    }
-    catch (const std::exception &ex)
-    {
-        std::cerr << "what(): " << ex.what();
-        ret.error = 2;
-    }
-    catch (...)
-    {
-        ret.error = 1;
-    }
-    return ret;
-}
-
 BestAudioSource_AudioProperties BestAudioSource_GetAudioProperties(void *self)
 {
     BestAudioSource_AudioProperties BAS_AP;
@@ -151,11 +131,15 @@ BestAudioSource_AudioProperties BestAudioSource_GetAudioProperties(void *self)
     try
     {
         BestAudioSource *BAS = (BestAudioSource *)self;
-        AudioProperties AP = BAS->GetAudioProperties();
+        BSAudioProperties AP = BAS->GetAudioProperties();
         BAS_AP.error = 0;
-        BAS_AP.IsFloat = AP.IsFloat;
-        BAS_AP.BytesPerSample = AP.BytesPerSample;
-        BAS_AP.BitsPerSample = AP.BitsPerSample;
+
+        BestAudioSource_AudioFormat BAS_AF;
+        BAS_AF.Float = AP.AF.Float;
+        BAS_AF.Bits = AP.AF.Bits;
+        BAS_AF.BytesPerSample = AP.AF.BytesPerSample;
+        BAS_AP.AF = BAS_AF;
+
         BAS_AP.SampleRate = AP.SampleRate;
         BAS_AP.Channels = AP.Channels;
         BAS_AP.ChannelLayout = AP.ChannelLayout;
