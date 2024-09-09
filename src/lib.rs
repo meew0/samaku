@@ -147,16 +147,18 @@ pub fn run() -> iced::Result {
             resources::BARLOW.into(),
             iced_aw::BOOTSTRAP_FONT_BYTES.into(),
         ],
-        default_font: iced::Font {
-            family: iced::font::Family::Name("Barlow"),
-            weight: iced::font::Weight::Normal,
-            stretch: iced::font::Stretch::Normal,
-            style: iced::font::Style::Normal,
-        },
+        default_font: DEFAULT_FONT,
         default_text_size: iced::Pixels(16.0),
         antialiasing: false,
     })
 }
+
+pub const DEFAULT_FONT: iced::Font = iced::Font {
+    family: iced::font::Family::Name("Barlow"),
+    weight: iced::font::Weight::Normal,
+    stretch: iced::font::Stretch::Normal,
+    style: iced::font::Style::Normal,
+};
 
 /// Global application state.
 pub struct Samaku {

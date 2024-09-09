@@ -27,6 +27,7 @@ where
     Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
 {
     images: Vec<StackedImage<Handle>>,
+    image_size_override: Option<Size<u32>>,
     width: Length,
     height: Length,
     content_fit: ContentFit,
@@ -46,6 +47,7 @@ where
     pub fn new<T: Into<Vec<StackedImage<Handle>>>>(images: T, program: Program) -> Self {
         ImageStack {
             images: images.into(),
+            image_size_override: None,
             width: Length::Shrink,
             height: Length::Shrink,
             content_fit: ContentFit::Contain,
@@ -80,6 +82,14 @@ where
             ..self
         }
     }
+
+    /// By default, the image size of the [`ImageStack`] is measured by the first image in the stack. If another size is desired, this
+    /// method can be used to override that measurement.
+    #[must_use]
+    pub fn set_image_size_override(mut self, image_size_override: Size<u32>) -> Self {
+        self.image_size_override = Some(image_size_override);
+        self
+    }
 }
 
 /// Computes the layout of an [`ImageStack`].
@@ -90,13 +100,15 @@ pub fn layout<Renderer, Handle>(
     width: Length,
     height: Length,
     content_fit: ContentFit,
+    image_size_override: Option<Size<u32>>,
 ) -> layout::Node
 where
     Renderer: image::Renderer<Handle = Handle>,
 {
-    // The raw w/h of the first image
+    // The raw w/h of the first image, or the override, if specified
     let image_size = {
-        let Size { width, height } = renderer.dimensions(&images[0].handle);
+        let Size { width, height } =
+            image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
 
         #[allow(clippy::cast_precision_loss)]
         Size::new(width as f32, height as f32)
@@ -132,12 +144,14 @@ pub fn draw<Renderer, Handle>(
     layout: Layout<'_>,
     images: &[StackedImage<Handle>],
     content_fit: ContentFit,
+    image_size_override: Option<Size<u32>>,
 ) where
     Renderer: image::Renderer<Handle = Handle>,
     Handle: Clone + Hash,
 {
     // Find out maximum size (assuming the first image covers the entire area)
-    let Size { width, height } = renderer.dimensions(&images[0].handle);
+    let Size { width, height } =
+        image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
     #[allow(clippy::cast_precision_loss)]
     let overall_size = Size::new(width as f32, height as f32);
 
@@ -213,6 +227,7 @@ where
             self.width,
             self.height,
             self.content_fit,
+            self.image_size_override,
         )
     }
 
@@ -226,7 +241,13 @@ where
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        draw(renderer, layout, &self.images, self.content_fit);
+        draw(
+            renderer,
+            layout,
+            &self.images,
+            self.content_fit,
+            self.image_size_override,
+        );
 
         let bounds = layout.bounds();
 
@@ -315,5 +336,44 @@ where
         image: ImageStack<Handle, Message, Program, Theme, Renderer>,
     ) -> Element<'a, Message, Theme, Renderer> {
         Element::new(image)
+    }
+}
+
+pub struct EmptyProgram;
+
+impl<Message, Theme, Renderer> canvas::Program<Message, Theme, Renderer> for EmptyProgram
+where
+    Renderer: canvas::Renderer,
+{
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        _renderer: &Renderer,
+        _theme: &Theme,
+        _bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<<Renderer as canvas::Renderer>::Geometry> {
+        vec![]
+    }
+
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        _event: canvas::Event,
+        _bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        (canvas::event::Status::Ignored, None)
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &Self::State,
+        _bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        mouse::Interaction::default()
     }
 }

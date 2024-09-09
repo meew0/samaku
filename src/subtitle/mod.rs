@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Debug;
 use std::ops::{Index, IndexMut};
 
 pub use emit::emit;
@@ -500,7 +501,7 @@ pub struct EventIndex(pub usize);
 /// Ordered collection of [`Event`]s.
 /// For now, this is just a wrapper around [`Vec`], but in the future it might become more advanced,
 /// using a tree-like structure or some time-indexed data structure.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct EventTrack {
     events: Vec<Event<'static>>,
 }
@@ -637,6 +638,17 @@ impl EventTrack {
         }
 
         compiled
+    }
+}
+
+impl Debug for EventTrack {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let trail_s = if self.events.len() == 1 { "" } else { "s" };
+        write!(
+            formatter,
+            "EventTrack with {} event{trail_s}",
+            self.events.len()
+        )
     }
 }
 

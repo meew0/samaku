@@ -1,10 +1,25 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 
-use crate::{message, subtitle};
+use crate::{media, message, model, subtitle, view};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct State {
     pub selected_style_index: usize,
+    pub preview_events: subtitle::EventTrack,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            selected_style_index: 0,
+            preview_events: subtitle::EventTrack::from_vec(vec![subtitle::Event {
+                start: subtitle::StartTime(0_i64),
+                duration: subtitle::Duration(1000_i64),
+                text: "Sphinx of black quartz, judge my vow".into(),
+                ..Default::default()
+            }]),
+        }
+    }
 }
 
 /// A custom wrapper around `Style` that implements `Display`, `Eq`, and `Hash`,
@@ -36,6 +51,14 @@ impl std::hash::Hash for StyleWrapper {
     }
 }
 
+// An image containing a single transparent pixel, to be used as a base for the subtitle preview
+static TRANSPARENT_IMAGE: LazyLock<iced::widget::image::Handle> =
+    LazyLock::new(|| iced::widget::image::Handle::from_pixels(1, 1, [0_u8; 4]));
+
+// TODO: make this scale to the actual size of the pane, by using `responsive` or the like
+static PREVIEW_WIDTH: u16 = 500_u16;
+static PREVIEW_HEIGHT: u16 = 100_u16;
+
 pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
@@ -49,12 +72,20 @@ pub fn view<'a>(
     let wrapped_styles: &[StyleWrapper] =
         unsafe { std::slice::from_raw_parts(styles.as_ptr().cast(), styles.len()) };
 
-    let selection_list = iced_aw::selection_list(wrapped_styles, move |selection_index, _| {
-        message::Message::Pane(
-            self_pane,
-            message::Pane::StyleEditorStyleSelected(selection_index),
-        )
-    })
+    let selection_list = iced_aw::widgets::selection_list_with(
+        wrapped_styles,
+        move |selection_index, _| {
+            message::Message::Pane(
+                self_pane,
+                message::Pane::StyleEditorStyleSelected(selection_index),
+            )
+        },
+        14.0,
+        2.0,
+        <iced::Theme as iced_aw::style::selection_list::StyleSheet>::Style::default(),
+        Some(pane_state.selected_style_index),
+        crate::DEFAULT_FONT,
+    )
     .width(iced::Length::Fixed(200.0))
     .height(iced::Length::Fixed(200.0));
 
@@ -97,7 +128,60 @@ pub fn view<'a>(
 
     let right_column = iced::widget::column![flags_row].spacing(5);
 
-    let content = iced::widget::row![left_column, right_column];
+    // Preview starts here
+
+    // We don't need to actually compile the subtitles here, since the `preview_events` will never use any NDE filters. So we can
+    // just pretend they have already been compiled.
+    let ass = media::subtitle::OpaqueTrack::from_compiled(
+        pane_state.preview_events.as_slice(),
+        std::slice::from_ref(selected_style),
+        // Match the script metadata we use globally, except, ignore any extra info (since it never really contains any useful data
+        // anyway, and would be costly to clone) and set the playback resolution to a useful value to maximise visibility.
+        // TODO: make the playback resolution scale configurable
+        &subtitle::ScriptInfo {
+            wrap_style: global_state.subtitles.script_info.wrap_style,
+            scaled_border_and_shadow: global_state.subtitles.script_info.scaled_border_and_shadow,
+            kerning: global_state.subtitles.script_info.kerning,
+            timer: global_state.subtitles.script_info.timer,
+            ycbcr_matrix: global_state.subtitles.script_info.ycbcr_matrix,
+            playback_resolution: subtitle::Resolution {
+                x: i32::from(PREVIEW_WIDTH) * 2,
+                y: i32::from(PREVIEW_HEIGHT) * 2,
+            },
+            extra_info: HashMap::new(),
+        },
+    );
+
+    // Render the preview subtitles
+    let images = {
+        let mut view_state = global_state.view.borrow_mut();
+
+        let frame_size = subtitle::Resolution {
+            x: i32::from(PREVIEW_WIDTH),
+            y: i32::from(PREVIEW_HEIGHT),
+        };
+
+        view_state.subtitle_renderer.render_subtitles_onto_base(
+            &ass,
+            TRANSPARENT_IMAGE.clone(),
+            model::FrameNumber(0_i32),
+            media::FrameRate {
+                numerator: 24,
+                denominator: 1,
+            },
+            frame_size,
+            frame_size,
+        )
+    };
+
+    // Create an `ImageStack` showing the preview subs
+    let image_stack = view::widget::ImageStack::new(images, view::widget::EmptyProgram)
+        .set_image_size_override(iced::Size {
+            width: u32::from(PREVIEW_WIDTH),
+            height: u32::from(PREVIEW_HEIGHT),
+        });
+
+    let content = iced::widget::column![image_stack, iced::widget::row![left_column, right_column]];
 
     super::View {
         title: iced::widget::text("Style editor").into(),
