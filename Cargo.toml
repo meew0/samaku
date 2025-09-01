@@ -31,26 +31,26 @@ rustsynth-sys = { version = "0.4.0", features = [
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
 libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
-rfd = "0.14"
+rfd = "0.15.4"
 smol = "2.0"
-cpal = "0.15"
-libc = "0.2.158"
+cpal = "0.16"
+libc = "0.2.175"
 fast-float = "0.2"
-thiserror = "1.0"
-inventory = "0.3.15"
-regex = "1.10"
-serde = "1.0.210"
-typetag = "0.2.18"
+thiserror = "2.0"
+inventory = "0.3.21"
+regex = "1.11"
+serde = "1.0.219"
+typetag = "0.2.20"
 ciborium = "0.2.2"
-data-encoding = "2.6"
-miniz_oxide = "0.8.0"
-data-encoding-macro = "0.1.15"
+data-encoding = "2.9"
+miniz_oxide = "0.8.9"
+data-encoding-macro = "0.1.18"
 vsprintf = "2.0.0"
 static_assertions = "1.1.0"
 
 [dev-dependencies]
 assert_matches2 = "0.1.2"
-criterion = "0.5.1"
+criterion = "0.7"
 
 [[bench]]
 name = "nde"
