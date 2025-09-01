@@ -3,11 +3,11 @@ use std::{collections::HashSet, thread};
 use crate::{media, message, view};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MessageIn {
+pub(super) enum MessageIn {
     Libass(i32, String),
 }
 
-pub fn spawn(
+pub(super) fn spawn(
     tx_out: super::GlobalSender,
     _shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {

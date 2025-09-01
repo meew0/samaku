@@ -1,5 +1,4 @@
 use std::{
-    mem::size_of,
     sync::{atomic, Arc, Mutex},
     thread,
 };
@@ -7,13 +6,13 @@ use std::{
 use crate::{media, message, model};
 
 #[derive(Debug, Clone)]
-pub enum MessageIn {
+pub(super) enum MessageIn {
     TryRestart,
     Play,
     Pause,
 }
 
-pub fn spawn(
+pub(super) fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {

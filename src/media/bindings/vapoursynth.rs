@@ -54,7 +54,7 @@ fn get_api() -> *const vs::VSAPI {
     }
 }
 
-pub type LogHandler = dyn Fn(i32, &str);
+pub(crate) type LogHandler = dyn Fn(i32, &str);
 
 unsafe extern "C" fn log_handler(msg_type: c_int, msg: *const c_char, user_data: *mut c_void) {
     let log_handler: *mut Box<LogHandler> = user_data.cast::<Box<LogHandler>>();
@@ -74,12 +74,12 @@ unsafe extern "C" fn log_handler_free(user_data: *mut c_void) {
     drop(data);
 }
 
-pub struct Core {
+pub(crate) struct Core {
     core: *mut vs::VSCore,
 }
 
 impl Core {
-    pub fn create_core(flags: i32) -> Option<Core> {
+    pub(crate) fn create_core(flags: i32) -> Option<Core> {
         let api = get_api();
         let core = unsafe { (*api).createCore.unwrap()(flags) };
         if core.is_null() {
@@ -89,7 +89,7 @@ impl Core {
         }
     }
 
-    pub fn create_script(&self) -> Option<Script> {
+    pub(crate) fn create_script(&self) -> Option<Script> {
         self.check_null();
         let script_api = get_script_api();
         let script = unsafe { (*script_api).createScript.unwrap()(self.core) };
@@ -112,11 +112,11 @@ impl Core {
         }
     }
 
-    pub fn get_resize_plugin(&self) -> Option<Plugin> {
+    pub(crate) fn get_resize_plugin(&self) -> Option<Plugin> {
         self.get_plugin_by_id(CString::new("com.vapoursynth.resize").unwrap())
     }
 
-    pub fn add_log_handler<H: Fn(i32, &str) + 'static>(&mut self, handler: H) -> LogHandle {
+    pub(crate) fn add_log_handler<H: Fn(i32, &str) + 'static>(&mut self, handler: H) -> LogHandle {
         self.check_null();
         let api = get_api();
 
@@ -137,7 +137,7 @@ impl Core {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn remove_log_handler(&mut self, handle: LogHandle) {
+    pub(crate) fn remove_log_handler(&mut self, handle: LogHandle) {
         self.check_null();
         let api = get_api();
         unsafe {
@@ -145,7 +145,7 @@ impl Core {
         }
     }
 
-    pub fn free(&mut self) {
+    pub(crate) fn free(&mut self) {
         let api = get_api();
         unsafe {
             (*api).freeCore.unwrap()(self.core);
@@ -158,19 +158,19 @@ impl Core {
     }
 }
 
-pub struct Script {
+pub(crate) struct Script {
     script: *mut vs::VSScript,
 }
 
 impl Script {
-    pub fn get_core(&self) -> Core {
+    pub(crate) fn get_core(&self) -> Core {
         let script_api = get_script_api();
         Core {
             core: unsafe { (*script_api).getCore.unwrap()(self.script) },
         }
     }
 
-    pub fn eval_set_working_dir(&mut self, set_cwd: i32) {
+    pub(crate) fn eval_set_working_dir(&mut self, set_cwd: i32) {
         let script_api = get_script_api();
         unsafe {
             (*script_api).evalSetWorkingDir.unwrap()(self.script, set_cwd);
@@ -178,7 +178,7 @@ impl Script {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn evaluate_file(&mut self, script_filename: CString) -> Result<(), i32> {
+    pub(crate) fn evaluate_file(&mut self, script_filename: CString) -> Result<(), i32> {
         let script_api = get_script_api();
         let ret =
             unsafe { (*script_api).evaluateFile.unwrap()(self.script, script_filename.as_ptr()) };
@@ -191,7 +191,7 @@ impl Script {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn evaluate_buffer(
+    pub(crate) fn evaluate_buffer(
         &mut self,
         buffer: CString,
         script_filename: CString,
@@ -213,7 +213,7 @@ impl Script {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn get_variable(&self, name: CString, dst: &MutMap) {
+    pub(crate) fn get_variable(&self, name: CString, dst: &MutMap) {
         let script_api = get_script_api();
         let ret =
             unsafe { (*script_api).getVariable.unwrap()(self.script, name.as_ptr(), dst.map) };
@@ -221,13 +221,13 @@ impl Script {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn set_variables(&mut self, vars: ConstMap) {
+    pub(crate) fn set_variables(&mut self, vars: ConstMap) {
         let script_api = get_script_api();
         let ret = unsafe { (*script_api).setVariables.unwrap()(self.script, vars.map) };
         vs_assert(ret, "Script variable setting failed");
     }
 
-    pub fn get_output_node(&self, index: i32) -> Option<Node> {
+    pub(crate) fn get_output_node(&self, index: i32) -> Option<Node> {
         let script_api = get_script_api();
         let node = unsafe { (*script_api).getOutputNode.unwrap()(self.script, index) };
         if node.is_null() {
@@ -260,12 +260,12 @@ impl Drop for Script {
     }
 }
 
-pub struct LogHandle {
+pub(crate) struct LogHandle {
     handle: *mut vs::VSLogHandle,
 }
 
 mod private {
-    pub trait MapPtr {}
+    pub(crate) trait MapPtr {}
 }
 
 type MapConstPtr = *const vs::VSMap;
@@ -275,17 +275,17 @@ impl private::MapPtr for MapConstPtr {}
 
 impl private::MapPtr for MapMutPtr {}
 
-pub struct Map<'a, P: private::MapPtr> {
+pub(crate) struct Map<'a, P: private::MapPtr> {
     map: P,
     _a: PhantomData<&'a vs::VSMap>,
 }
 
-pub type ConstMap<'a> = Map<'a, MapConstPtr>;
-pub type MutMap<'a> = Map<'a, MapMutPtr>;
+pub(crate) type ConstMap<'a> = Map<'a, MapConstPtr>;
+pub(crate) type MutMap<'a> = Map<'a, MapMutPtr>;
 
 impl ConstMap<'_> {
     #[allow(clippy::needless_pass_by_value)]
-    pub fn get_int(&self, key: &CStr, index: i32) -> Result<i64, i32> {
+    pub(crate) fn get_int(&self, key: &CStr, index: i32) -> Result<i64, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let res = unsafe { (*api).mapGetInt.unwrap()(self.map, key.as_ptr(), index, &mut err) };
@@ -296,7 +296,7 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn get_node(&self, key: &CStr, index: i32) -> Result<Node, i32> {
+    pub(crate) fn get_node(&self, key: &CStr, index: i32) -> Result<Node, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let node = unsafe { (*api).mapGetNode.unwrap()(self.map, key.as_ptr(), index, &mut err) };
@@ -307,7 +307,7 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn get_int_array(&self, variable: &CStr) -> Result<Vec<i64>, i32> {
+    pub(crate) fn get_int_array(&self, variable: &CStr) -> Result<Vec<i64>, i32> {
         let len = self.num_elements(variable);
         let api = get_api();
         let mut err: i32 = 0;
@@ -322,7 +322,7 @@ impl ConstMap<'_> {
             Ok(vec)
         }
     }
-    pub fn get_data(&self, variable: &CStr, index: i32) -> Result<Vec<u8>, i32> {
+    pub(crate) fn get_data(&self, variable: &CStr, index: i32) -> Result<Vec<u8>, i32> {
         let api = get_api();
         let mut err: i32 = 0;
         let res: *const u8 = unsafe {
@@ -345,7 +345,7 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn get_error(&self) -> Option<String> {
+    pub(crate) fn get_error(&self) -> Option<String> {
         let api = get_api();
         let buf = unsafe { (*api).mapGetError.unwrap()(self.map) };
 
@@ -358,7 +358,7 @@ impl ConstMap<'_> {
         }
     }
 
-    pub fn num_elements(&self, variable: &CStr) -> usize {
+    pub(crate) fn num_elements(&self, variable: &CStr) -> usize {
         let api = get_api();
         unsafe { (*api).mapNumElements.unwrap()(self.map, variable.as_ptr()) }
             .try_into()
@@ -371,7 +371,7 @@ impl ConstMap<'_> {
 }
 
 impl<'a> MutMap<'a> {
-    pub fn set_utf8(&mut self, key: &CStr, value: &CStr) {
+    pub(crate) fn set_utf8(&mut self, key: &CStr, value: &CStr) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetData.unwrap()(
@@ -386,12 +386,12 @@ impl<'a> MutMap<'a> {
         vs_assert(ret, "Map data setting failed");
     }
 
-    pub fn set_path<P: AsRef<Path>>(&mut self, key: &CStr, value: P) {
+    pub(crate) fn set_path<P: AsRef<Path>>(&mut self, key: &CStr, value: P) {
         // TODO: technically, we are reinterpreting arbitrary bytes as UTF-8 here
         self.set_utf8(key, super::path_to_cstring(value).as_c_str());
     }
 
-    pub fn append_int(&mut self, key: &CStr, value: i64) {
+    pub(crate) fn append_int(&mut self, key: &CStr, value: i64) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetInt.unwrap()(
@@ -404,7 +404,7 @@ impl<'a> MutMap<'a> {
         vs_assert(ret, "Map int setting failed");
     }
 
-    pub fn append_node(&mut self, key: &CStr, value: &Node) {
+    pub(crate) fn append_node(&mut self, key: &CStr, value: &Node) {
         let api = get_api();
         let ret = unsafe {
             (*api).mapSetNode.unwrap()(
@@ -417,7 +417,7 @@ impl<'a> MutMap<'a> {
         vs_assert(ret, "Map node setting failed");
     }
 
-    pub fn as_const(&self) -> ConstMap<'a> {
+    pub(crate) fn as_const(&self) -> ConstMap<'a> {
         ConstMap {
             map: self.map,
             _a: PhantomData,
@@ -425,12 +425,12 @@ impl<'a> MutMap<'a> {
     }
 }
 
-pub struct OwnedMap<'a> {
+pub(crate) struct OwnedMap<'a> {
     map: MutMap<'a>,
 }
 
 impl OwnedMap<'_> {
-    pub fn create_map() -> Option<OwnedMap<'static>> {
+    pub(crate) fn create_map() -> Option<OwnedMap<'static>> {
         let api = get_api();
         let map = unsafe { (*api).createMap.unwrap()() };
         if map.is_null() {
@@ -461,7 +461,7 @@ impl Drop for OwnedMap<'_> {
     }
 }
 
-pub struct Node {
+pub(crate) struct Node {
     node: *mut vs::VSNode,
 }
 
@@ -471,15 +471,15 @@ impl Node {
         unsafe { (*api).getNodeType.unwrap()(self.node) }
     }
 
-    pub fn is_video(&self) -> bool {
+    pub(crate) fn is_video(&self) -> bool {
         self.get_node_type() == vs::VSMediaType::mtVideo as i32
     }
 
-    pub fn is_audio(&self) -> bool {
+    pub(crate) fn is_audio(&self) -> bool {
         self.get_node_type() == vs::VSMediaType::mtAudio as i32
     }
 
-    pub fn get_video_info(&self) -> Option<VideoInfo<'_>> {
+    pub(crate) fn get_video_info(&self) -> Option<VideoInfo<'_>> {
         let api = get_api();
         let vi = unsafe { (*api).getVideoInfo.unwrap()(self.node) };
         if vi.is_null() {
@@ -492,7 +492,7 @@ impl Node {
         }
     }
 
-    pub fn get_audio_info(&self) -> Option<AudioInfo<'_>> {
+    pub(crate) fn get_audio_info(&self) -> Option<AudioInfo<'_>> {
         let api = get_api();
         let ai = unsafe { (*api).getAudioInfo.unwrap()(self.node) };
         if ai.is_null() {
@@ -505,7 +505,7 @@ impl Node {
         }
     }
 
-    pub fn get_frame(&self, n: i32) -> Result<Frame, String> {
+    pub(crate) fn get_frame(&self, n: i32) -> Result<Frame, String> {
         let api = get_api();
         let error_len: u16 = 1024;
         let mut error_buf: Box<[u8]> = vec![0; error_len.into()].into_boxed_slice();
@@ -538,13 +538,13 @@ impl Drop for Node {
     }
 }
 
-pub struct VideoInfo<'a> {
+pub(crate) struct VideoInfo<'a> {
     vi: *const vs::VSVideoInfo,
     _a: PhantomData<&'a vs::VSVideoInfo>,
 }
 
 impl VideoInfo<'_> {
-    pub fn is_constant_video_format(&self) -> bool {
+    pub(crate) fn is_constant_video_format(&self) -> bool {
         // The VSHelper functions don't seem to have been included in rustsynth-sys.
         // Fortunately, it's easy enough to implement
         unsafe {
@@ -554,18 +554,18 @@ impl VideoInfo<'_> {
         }
     }
 
-    pub fn is_rgb24(&self) -> bool {
+    pub(crate) fn is_rgb24(&self) -> bool {
         unsafe {
             (*self.vi).format.colorFamily == vs::VSColorFamily::cfRGB as i32
                 && (*self.vi).format.bitsPerSample == 8
         }
     }
 
-    pub fn get_width(&self) -> i32 {
+    pub(crate) fn get_width(&self) -> i32 {
         unsafe { *self.vi }.width
     }
 
-    pub fn get_height(&self) -> i32 {
+    pub(crate) fn get_height(&self) -> i32 {
         unsafe { *self.vi }.height
     }
 
@@ -573,7 +573,7 @@ impl VideoInfo<'_> {
         unsafe { *self.vi }.format.colorFamily
     }
 
-    pub fn get_frame_rate(&self) -> FrameRate {
+    pub(crate) fn get_frame_rate(&self) -> FrameRate {
         FrameRate {
             numerator: unsafe { (*self.vi).fpsNum }
                 .try_into()
@@ -585,31 +585,31 @@ impl VideoInfo<'_> {
     }
 }
 
-pub const AUDIO_FRAME_SAMPLES: u32 = vs::VS_AUDIO_FRAME_SAMPLES;
+pub(crate) const AUDIO_FRAME_SAMPLES: u32 = vs::VS_AUDIO_FRAME_SAMPLES;
 
-pub struct AudioInfo<'a> {
+pub(crate) struct AudioInfo<'a> {
     ai: *const vs::VSAudioInfo,
     _a: PhantomData<&'a vs::VSAudioInfo>,
 }
 
 impl AudioInfo<'_> {
-    pub fn float_samples(&self) -> bool {
+    pub(crate) fn float_samples(&self) -> bool {
         unsafe { (*self.ai).format.sampleType == vs::VSSampleType::stFloat as i32 }
     }
 
-    pub fn get_bytes_per_sample(&self) -> i32 {
+    pub(crate) fn get_bytes_per_sample(&self) -> i32 {
         unsafe { (*self.ai).format.bytesPerSample }
     }
 
-    pub fn get_sample_rate(&self) -> i32 {
+    pub(crate) fn get_sample_rate(&self) -> i32 {
         unsafe { (*self.ai).sampleRate }
     }
 
-    pub fn get_num_channels(&self) -> i32 {
+    pub(crate) fn get_num_channels(&self) -> i32 {
         unsafe { (*self.ai).format.numChannels }
     }
 
-    pub fn get_num_samples(&self) -> i64 {
+    pub(crate) fn get_num_samples(&self) -> i64 {
         unsafe { (*self.ai).numSamples }
     }
 }
@@ -626,7 +626,7 @@ impl FrameRate {
     /// # Panics
     /// Panics if the resulting frame number would not fit into an `i32`.
     #[must_use]
-    pub fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
+    pub(crate) fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
         // since the numerator is guaranteed to be smaller than i64 max
         #[allow(clippy::cast_possible_wrap)]
         let numerator = ass_ms * self.numerator as i64;
@@ -640,7 +640,7 @@ impl FrameRate {
     }
 
     #[must_use]
-    pub fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
+    pub(crate) fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
         #[allow(clippy::cast_possible_wrap)]
         let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
         #[allow(clippy::cast_possible_wrap)]
@@ -649,7 +649,7 @@ impl FrameRate {
     }
 
     #[must_use]
-    pub fn frame_time_ms(&self) -> i64 {
+    pub(crate) fn frame_time_ms(&self) -> i64 {
         self.frame_to_ms(model::FrameNumber(1))
     }
 }
@@ -663,12 +663,12 @@ impl From<FrameRate> for f64 {
     }
 }
 
-pub struct Frame {
+pub(crate) struct Frame {
     frame: *const vs::VSFrame,
 }
 
 impl Frame {
-    pub fn get_properties_ro(&self) -> Option<ConstMap<'_>> {
+    pub(crate) fn get_properties_ro(&self) -> Option<ConstMap<'_>> {
         let api = get_api();
         let map = unsafe { (*api).getFramePropertiesRO.unwrap()(self.frame) };
         if map.is_null() {
@@ -681,7 +681,7 @@ impl Frame {
         }
     }
 
-    pub fn get_video_format(&self) -> Option<VideoFormat<'_>> {
+    pub(crate) fn get_video_format(&self) -> Option<VideoFormat<'_>> {
         let api = get_api();
         let vf = unsafe { (*api).getVideoFrameFormat.unwrap()(self.frame) };
         if vf.is_null() {
@@ -694,24 +694,24 @@ impl Frame {
         }
     }
 
-    pub fn get_width(&self, plane: i32) -> i32 {
+    pub(crate) fn get_width(&self, plane: i32) -> i32 {
         let api = get_api();
         unsafe { (*api).getFrameWidth.unwrap()(self.frame, plane) }
     }
 
-    pub fn get_height(&self, plane: i32) -> i32 {
+    pub(crate) fn get_height(&self, plane: i32) -> i32 {
         let api = get_api();
         unsafe { (*api).getFrameHeight.unwrap()(self.frame, plane) }
     }
 
-    pub fn get_stride(&self, plane: i32) -> usize {
+    pub(crate) fn get_stride(&self, plane: i32) -> usize {
         let api = get_api();
         unsafe { (*api).getStride.unwrap()(self.frame, plane) }
             .try_into()
             .expect("stride should be positive")
     }
 
-    pub fn get_read_ptr(&self, plane: i32) -> &[u8] {
+    pub(crate) fn get_read_ptr(&self, plane: i32) -> &[u8] {
         let api = get_api();
         let ptr: *const u8 = unsafe { (*api).getReadPtr.unwrap()(self.frame, plane) };
         let len: usize = usize::try_from(self.get_height(plane))
@@ -730,13 +730,13 @@ impl Drop for Frame {
     }
 }
 
-pub struct VideoFormat<'a> {
+pub(crate) struct VideoFormat<'a> {
     vf: *const vs::VSVideoFormat,
     _a: PhantomData<&'a vs::VSVideoFormat>,
 }
 
 impl VideoFormat<'_> {
-    pub fn is_rgb24(&self) -> bool {
+    pub(crate) fn is_rgb24(&self) -> bool {
         let deref = unsafe { *self.vf };
         deref.colorFamily == vs::VSColorFamily::cfRGB as i32
             && deref.numPlanes == 3
@@ -745,17 +745,17 @@ impl VideoFormat<'_> {
             && deref.subSamplingH == 0
     }
 
-    pub fn get_num_planes(&self) -> i32 {
+    pub(crate) fn get_num_planes(&self) -> i32 {
         unsafe { (*self.vf).numPlanes }
     }
 }
 
-pub struct Plugin {
+pub(crate) struct Plugin {
     plugin: *mut vs::VSPlugin,
 }
 
 impl Plugin {
-    pub fn invoke(&'_ mut self, name: &CStr, args: ConstMap) -> OwnedMap<'_> {
+    pub(crate) fn invoke(&'_ mut self, name: &CStr, args: ConstMap) -> OwnedMap<'_> {
         let api = get_api();
         let map = unsafe { (*api).invoke.unwrap()(self.plugin, name.as_ptr(), args.into_ptr()) };
         OwnedMap {
@@ -767,7 +767,7 @@ impl Plugin {
     }
 }
 
-pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
+pub(crate) fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
     let color_family = vi.get_color_family();
     if color_family != vs::VSColorFamily::cfYUV as i32 {
         return "None".to_owned();
@@ -807,7 +807,7 @@ pub fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> String {
     ret
 }
 
-pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
+pub(crate) fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
     args.append_int(
         CString::new("format").unwrap().as_c_str(),
         vs::VSPresetFormat::pfRGB24 as i64,
@@ -864,7 +864,7 @@ pub fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
 
 const PRELUDE: &str = include_str!("../default_scripts/prelude.py");
 
-pub fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Option<Script> {
+pub(crate) fn open_script<P: AsRef<Path>>(script_code: &str, filename: P) -> Option<Script> {
     let mut core = Core::create_core(0).unwrap();
     let Some(mut script) = core.create_script() else {
         // This matches how it's done in aegi, where a core is only ever specifically freed

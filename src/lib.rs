@@ -75,7 +75,6 @@
 #![warn(clippy::rc_mutex)]
 #![warn(clippy::readonly_write_lock)]
 #![warn(clippy::redundant_clone)]
-#![warn(clippy::redundant_pub_crate)]
 #![warn(clippy::redundant_test_prefix)]
 #![warn(clippy::redundant_type_annotations)]
 #![warn(clippy::renamed_function_params)]
@@ -115,17 +114,42 @@
 #![warn(clippy::while_float)]
 #![warn(clippy::wildcard_dependencies)]
 #![warn(absolute_paths_not_starting_with_crate)]
+#![warn(ambiguous_negative_literals)]
+#![warn(closure_returning_async_block)]
+#![warn(deref_into_dyn_supertrait)]
+#![warn(explicit_outlives_requirements)]
+// #![warn(fuzzy_provenance_casts)] // add once stable
+#![warn(if_let_rescope)]
+#![warn(impl_trait_overcaptures)]
+#![warn(impl_trait_redundant_captures)]
 #![warn(keyword_idents)]
 #![warn(let_underscore_drop)]
+// #![warn(lossy_provenance_casts)] // add once stable
 #![warn(macro_use_extern_crate)]
 #![warn(meta_variable_misuse)]
 #![warn(missing_abi)]
 // #![warn(missing_docs)] // potentially add in the future
+#![warn(missing_unsafe_on_extern)]
+// #![warn(multiple_supertrait_upcastable)] // add once stable
 // #![warn(must_not_suspend)] // add once stable
+// #![warn(non_exhaustive_omitted_patterns)] // add once stable
+#![warn(redundant_imports)]
+#![warn(redundant_lifetimes)]
+#![warn(single_use_lifetimes)]
+// #![warn(supertrait_item_shadowing_definition)] // add once stable
+// #![warn(supertrait_item_shadowing_usage)] // add once stable
+#![warn(trivial_casts)]
+#![warn(trivial_numeric_casts)]
+#![warn(unit_bindings)]
+// #![warn(unqualified_local_imports)] // add once stable
+#![warn(unreachable_pub)]
+#![warn(unsafe_attr_outside_unsafe)]
 #![warn(unsafe_op_in_unsafe_fn)]
-// #![warn(unused_crate_dependencies)] // false positive for criterion
+#![warn(unused_crate_dependencies)] // false positive for criterion
 #![warn(unused_extern_crates)]
 #![warn(unused_import_braces)]
+#![warn(unused_lifetimes)]
+#![warn(unused_macro_rules)]
 #![warn(unused_qualifications)]
 #![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
 #![allow(clippy::enum_glob_use)] // too useful to disallow entirely, but should only be done locally
@@ -141,6 +165,9 @@ use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{event, executor, subscription, Alignment, Event};
 use iced::{Application, Command, Element, Length, Settings, Subscription};
+
+#[cfg(test)]
+use criterion as _;
 
 pub mod keyboard;
 pub mod media;
@@ -461,7 +488,7 @@ impl Application for Samaku {
         let worker_messages = subscription::unfold(
             std::any::TypeId::of::<workers::Workers>(),
             self.workers.receiver.take(),
-            move |mut receiver| async move {
+            async move |mut receiver| {
                 let message = receiver.as_mut().unwrap().next().await.unwrap();
                 (message, receiver)
             },

@@ -65,7 +65,7 @@ fn maybe_write_block(text: &mut String, tags: &str) {
     }
 }
 
-pub trait TagName {
+pub(super) trait TagName {
     fn write_name<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write;
@@ -77,13 +77,13 @@ pub trait Value {
         W: std::fmt::Write;
 }
 
-pub trait Tag {
+pub(super) trait Tag {
     fn emit_tag<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write;
 }
 
-pub fn tag<W, T>(sink: &mut W, maybe_tag: Option<&T>) -> Result<(), std::fmt::Error>
+pub(super) fn tag<W, T>(sink: &mut W, maybe_tag: Option<&T>) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
     T: Tag,
@@ -96,7 +96,7 @@ where
 }
 
 #[allow(clippy::needless_pass_by_value)]
-pub fn simple_tag<W, N, V>(
+pub(super) fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,
     maybe_value: Option<&V>,
@@ -116,7 +116,7 @@ where
 }
 
 #[allow(clippy::needless_pass_by_value)]
-pub fn simple_tag_resettable<W, N, V>(
+pub(super) fn simple_tag_resettable<W, N, V>(
     sink: &mut W,
     tag_name: N,
     maybe_value: super::Resettable<&V>,
@@ -138,7 +138,7 @@ where
 }
 
 /// Behaves like `simple_tag`, but inserts parentheses around the argument.
-pub fn complex_tag<W, V>(
+pub(super) fn complex_tag<W, V>(
     sink: &mut W,
     tag_name: &str,
     maybe_value: Option<&V>,

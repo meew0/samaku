@@ -1,4 +1,4 @@
-pub trait Lerp<U = Self> {
+pub(super) trait Lerp<U = Self> {
     type Output;
 
     fn lerp(self, other: U, power: f64) -> Self::Output;

@@ -34,7 +34,7 @@ macro_rules! iter_panes {
     };
 }
 
-pub fn update(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
+pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
     // Run the internal update method, which does the actual updating of global state.
     let command = update_internal(global_state, message);
 

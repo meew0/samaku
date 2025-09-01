@@ -10,7 +10,7 @@ use libass_sys as libass;
 use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
 
-pub type CString = std::ffi::CString;
+pub(crate) type CString = std::ffi::CString;
 
 unsafe fn str_from_libass<'a>(ptr: *const i8) -> Option<&'a str> {
     if ptr.is_null() {
@@ -49,9 +49,9 @@ fn malloc_string(source: &str) -> *mut i8 {
     ptr.cast::<i8>()
 }
 
-pub type Callback = Box<dyn FnMut(i32, String)>;
+pub(crate) type Callback = Box<dyn FnMut(i32, String)>;
 
-pub struct Library {
+pub(crate) struct Library {
     library: *mut libass::ASS_Library,
     callback: Mutex<Option<Box<Callback>>>,
 }
@@ -61,7 +61,7 @@ unsafe impl Send for Library {}
 unsafe impl Sync for Library {}
 
 impl Library {
-    pub fn init() -> Option<Library> {
+    pub(crate) fn init() -> Option<Library> {
         let library = unsafe { libass::ass_library_init() };
         if library.is_null() {
             None
@@ -73,7 +73,7 @@ impl Library {
         }
     }
 
-    pub fn set_message_callback<F: FnMut(i32, String) + 'static>(&self, callback: F) {
+    pub(crate) fn set_message_callback<F: FnMut(i32, String) + 'static>(&self, callback: F) {
         // We need the two levels of `Box` because the callback function pointer is a DST, so we
         // essentially have (thin pointer) -> (wide pointer) -> (DST)
         let ptr: *mut Callback = Box::into_raw(Box::new(Box::new(callback)));
@@ -124,7 +124,7 @@ impl Library {
         }
     }
 
-    pub fn renderer_init(&self) -> Option<Renderer> {
+    pub(crate) fn renderer_init(&self) -> Option<Renderer> {
         let renderer = unsafe { libass::ass_renderer_init(self.library) };
         if renderer.is_null() {
             None
@@ -133,7 +133,7 @@ impl Library {
         }
     }
 
-    pub fn new_track(&self) -> Option<Track> {
+    pub(crate) fn new_track(&self) -> Option<Track> {
         let track = unsafe { libass::ass_new_track(self.library) };
         if track.is_null() {
             None
@@ -142,7 +142,7 @@ impl Library {
         }
     }
 
-    pub fn read_memory(&self, buf: &[u8], codepage: Option<CString>) -> Option<Track> {
+    pub(crate) fn read_memory(&self, buf: &[u8], codepage: Option<CString>) -> Option<Track> {
         let track = unsafe {
             libass::ass_read_memory(
                 self.library,
@@ -158,7 +158,7 @@ impl Library {
         }
     }
 
-    pub fn add_font(&self, name: &str, data: &[u8]) {
+    pub(crate) fn add_font(&self, name: &str, data: &[u8]) {
         // libass will copy the name and data, so we don't need to malloc-ify it.
         let c_name = CString::new(name).expect("the font name should not contain null bytes");
         unsafe {
@@ -289,10 +289,10 @@ impl Drop for Renderer {
     }
 }
 
-pub type RawEvent = libass::ASS_Event;
-pub type RawStyle = libass::ASS_Style;
+pub(crate) type RawEvent = libass::ASS_Event;
+pub(crate) type RawStyle = libass::ASS_Style;
 
-pub fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
+pub(crate) fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
     subtitle::Event {
         start: subtitle::StartTime(raw_event.Start),
         duration: subtitle::Duration(raw_event.Duration),
@@ -313,7 +313,7 @@ pub fn event_from_raw(raw_event: &RawEvent) -> subtitle::Event<'static> {
     }
 }
 
-pub fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
+pub(crate) fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
     RawEvent {
         Start: event.start.0,
         Duration: event.duration.0,
@@ -330,7 +330,7 @@ pub fn event_to_raw(event: &subtitle::Event, read_order: i32) -> RawEvent {
     }
 }
 
-pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
+pub(crate) fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
     let (primary_colour, primary_transparency) =
         subtitle::unpack_colour_and_transparency_rgbt(raw_style.PrimaryColour);
     let (secondary_colour, secondary_transparency) =
@@ -379,7 +379,7 @@ pub fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
     }
 }
 
-pub fn style_to_raw(style: &subtitle::Style) -> RawStyle {
+pub(crate) fn style_to_raw(style: &subtitle::Style) -> RawStyle {
     RawStyle {
         Name: malloc_string(style.name()),
         FontName: malloc_string(style.font_name.as_str()),
@@ -587,9 +587,9 @@ impl Drop for Track {
     }
 }
 
-pub struct ImageType;
+pub(crate) struct ImageType;
 
-pub type ImageInternal = libass::ASS_Image;
+pub(crate) type ImageInternal = libass::ASS_Image;
 
 pub struct Image<'a> {
     pub metadata: &'a ImageInternal,

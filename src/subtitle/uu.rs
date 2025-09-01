@@ -7,7 +7,7 @@ const UU: data_encoding::Encoding = new_encoding! {
     padding: None,
 };
 
-pub fn encode(input: &[u8]) -> String {
+pub(super) fn encode(input: &[u8]) -> String {
     // First, pad with zero bytes
     let mut padded: Vec<u8> = vec![];
     padded.extend_from_slice(input);
@@ -27,7 +27,7 @@ pub fn encode(input: &[u8]) -> String {
     result
 }
 
-pub fn decode(input: &str) -> Result<Vec<u8>, data_encoding::DecodeError> {
+pub(super) fn decode(input: &str) -> Result<Vec<u8>, data_encoding::DecodeError> {
     UU.decode(input.as_bytes())
 }
 

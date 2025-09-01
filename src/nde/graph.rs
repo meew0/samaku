@@ -196,7 +196,7 @@ struct CycleDetector {
 }
 
 impl CycleDetector {
-    pub fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self {
             matrix: vec![false; n * n],
             n,
@@ -216,7 +216,7 @@ impl CycleDetector {
         self.matrix[parent + self.n * child]
     }
 
-    pub fn set_parent(&mut self, parent: usize, child: usize) -> CycleFound {
+    pub(crate) fn set_parent(&mut self, parent: usize, child: usize) -> CycleFound {
         if self.is_ancestor(parent, child) {
             return CycleFound(false); // because we would have detected the cycle before
         }
@@ -240,7 +240,7 @@ impl CycleDetector {
 struct CycleFound(bool);
 
 impl CycleFound {
-    pub fn cycle_found(&self) -> bool {
+    pub(crate) fn cycle_found(&self) -> bool {
         self.0
     }
 }

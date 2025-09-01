@@ -918,7 +918,7 @@ fn end_span(
     }
 }
 
-pub fn simplify(s0: Vec<Span>) -> Vec<Span> {
+pub(super) fn simplify(s0: Vec<Span>) -> Vec<Span> {
     use Span::*;
 
     // Remove empty texts and drawings

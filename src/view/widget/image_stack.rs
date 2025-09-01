@@ -93,7 +93,7 @@ where
 }
 
 /// Computes the layout of an [`ImageStack`].
-pub fn layout<Renderer, Handle>(
+pub(super) fn layout<Renderer, Handle>(
     renderer: &Renderer,
     limits: &layout::Limits,
     images: &[StackedImage<Handle>],
@@ -139,7 +139,7 @@ where
 }
 
 /// Draws an [`ImageStack`]
-pub fn draw<Renderer, Handle>(
+pub(super) fn draw<Renderer, Handle>(
     renderer: &mut Renderer,
     layout: Layout<'_>,
     images: &[StackedImage<Handle>],

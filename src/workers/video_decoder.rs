@@ -3,7 +3,7 @@ use std::{sync::Arc, thread};
 use crate::{media, message, model};
 
 #[derive(Debug, Clone)]
-pub enum MessageIn {
+pub(super) enum MessageIn {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
     TrackMotionForNode(
@@ -15,7 +15,7 @@ pub enum MessageIn {
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn spawn(
+pub(super) fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {

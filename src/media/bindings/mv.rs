@@ -5,21 +5,21 @@ use std::ffi::CString;
 use libmv_capi_sys as libmv;
 use libmv_capi_sys::libmv_TrackRegionOptions;
 
-pub fn init_logging(executable_name: &str) {
+pub(crate) fn init_logging(executable_name: &str) {
     let c_string =
         CString::new(executable_name).expect("`executable_name` should not contain 0 bytes");
     unsafe { libmv::libmv_initLogging(c_string.into_raw()) }
 }
 
-pub fn start_debug_logging() {
+pub(crate) fn start_debug_logging() {
     unsafe { libmv::libmv_startDebugLogging() }
 }
 
-pub fn set_logging_verbosity(verbosity: i32) {
+pub(crate) fn set_logging_verbosity(verbosity: i32) {
     unsafe { libmv::libmv_setLoggingVerbosity(verbosity) }
 }
 
-pub struct TrackRegionOptions {
+pub(crate) struct TrackRegionOptions {
     pub direction: TrackRegionDirection,
     pub motion_model: MotionModel,
 
@@ -56,7 +56,7 @@ pub struct TrackRegionOptions {
     pub image1_mask: Option<Vec<f32>>,
 }
 
-pub enum TrackRegionDirection {
+pub(crate) enum TrackRegionDirection {
     Forward,
     Backward,
 }
@@ -84,14 +84,14 @@ pub enum MotionModel {
     Homography = 5,
 }
 
-pub struct MonochromeImage<'a> {
+pub(crate) struct MonochromeImage<'a> {
     data: &'a [f32],
     width: i32,
     height: i32,
 }
 
 impl<'a> MonochromeImage<'a> {
-    pub fn new(data: &'a [f32], width: i32, height: i32) -> Self {
+    pub(crate) fn new(data: &'a [f32], width: i32, height: i32) -> Self {
         let usize_width =
             usize::try_from(width).expect("MonochromeImage width should not be negative");
         let usize_height =
@@ -200,7 +200,7 @@ impl Region {
 /// Tracks the region defined by `region1` on `image1` onto `image2`.
 /// Needs to be seeded with a prediction of where that region could be on `image2`,
 /// this prediction is then refined and the refinement returned, if possible.
-pub fn track_region(
+pub(crate) fn track_region(
     options: &TrackRegionOptions,
     image1: &MonochromeImage,
     image2: &MonochromeImage,
