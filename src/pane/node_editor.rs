@@ -464,9 +464,9 @@ fn view_graph<'a>(
 
 fn view_non_selected(
     self_pane: super::Pane,
-    pane_state: &State,
+    pane_state: &'_ State,
     multi_warning: bool,
-) -> iced::Element<message::Message> {
+) -> iced::Element<'_, message::Message> {
     let selection_list = iced_aw::selection_list(
         pane_state.filters.as_slice(),
         move |selection_index, filter_ref| {
@@ -583,9 +583,9 @@ where
 }
 
 fn menu_item(
-    label: &str,
+    label: &'_ str,
     node_constructor: nde::node::Constructor,
-) -> iced_aw::menu::Item<message::Message, iced::Theme, iced::Renderer> {
+) -> iced_aw::menu::Item<'_, message::Message, iced::Theme, iced::Renderer> {
     view::menu::item(label, message::Message::AddNode(node_constructor))
 }
 
@@ -604,8 +604,8 @@ fn add_menu<'a>() -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, 
 }
 
 fn children_from_shell_tree(
-    tree: &ShellMap,
-) -> Vec<iced_aw::menu::Item<message::Message, iced::Theme, iced::Renderer>> {
+    tree: &'_ ShellMap,
+) -> Vec<iced_aw::menu::Item<'_, message::Message, iced::Theme, iced::Renderer>> {
     let mut children = vec![];
 
     for (name, child) in tree {

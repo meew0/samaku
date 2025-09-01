@@ -19,7 +19,7 @@ impl Node for SplitFrameByFrame {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[0], SocketValue::IndividualEvent(event));

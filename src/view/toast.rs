@@ -168,7 +168,7 @@ where
     }
 }
 
-impl<'a, Message, Theme> Widget<Message, Theme, Renderer> for Manager<'a, Message, Theme> {
+impl<Message, Theme> Widget<Message, Theme, Renderer> for Manager<'_, Message, Theme> {
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
     }
@@ -340,8 +340,8 @@ struct Overlay<'a, 'b, Message, Theme> {
     timeout_secs: u64,
 }
 
-impl<'a, 'b, Message, Theme> overlay::Overlay<Message, Theme, Renderer>
-    for Overlay<'a, 'b, Message, Theme>
+impl<Message, Theme> overlay::Overlay<Message, Theme, Renderer>
+    for Overlay<'_, '_, Message, Theme>
 {
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let limits = layout::Limits::new(Size::ZERO, bounds)

@@ -23,7 +23,7 @@ impl Node for Gradient {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         const RESOLUTION: i32 = 5;
 
         assert!(inputs.len() > 2); // Elide bounds checks

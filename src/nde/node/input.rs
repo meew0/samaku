@@ -19,7 +19,7 @@ impl Node for InputEvent {
         &[SocketType::IndividualEvent]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         let SocketValue::SourceEvent(source_event) = inputs[0] else {
             return Err(Error::MismatchedTypes);
         };
@@ -64,7 +64,7 @@ impl Node for InputFrameRate {
         &[SocketType::FrameRate]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         super::retrieve!(inputs[0], SocketValue::FrameRate(frame_rate));
         Ok(vec![SocketValue::FrameRate(*frame_rate)])
     }
@@ -96,7 +96,7 @@ impl Node for InputPosition {
         &[SocketType::Position]
     }
 
-    fn run(&self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         Ok(vec![SocketValue::Position(self.value)])
     }
 
@@ -194,7 +194,7 @@ impl Node for InputRectangle {
         &[SocketType::Rectangle]
     }
 
-    fn run(&self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         Ok(vec![SocketValue::Rectangle(self.value)])
     }
 
@@ -315,7 +315,7 @@ impl Node for InputTags {
         &[SocketType::LocalTags, SocketType::GlobalTags]
     }
 
-    fn run(&self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         if self.value.contains('{') || self.value.contains('}') {
             return Err(Error::ContainsBrackets);
         }

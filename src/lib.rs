@@ -332,7 +332,7 @@ impl Application for Samaku {
     }
 
     /// Construct the user interface. Called whenever iced needs to rerender the application.
-    fn view(&self) -> Element<Self::Message> {
+    fn view(&'_ self) -> Element<'_, Self::Message> {
         let focus = self.focus;
 
         // The pane grid makes up the main part of the application. All the fundamental

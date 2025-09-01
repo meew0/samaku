@@ -55,7 +55,7 @@ pub fn labeled_button<'a>(
     )
 }
 
-pub fn item(label: &str, msg: Message) -> Item<Message, iced::Theme, iced::Renderer> {
+pub fn item(label: &'_ str, msg: Message) -> Item<'_, Message, iced::Theme, iced::Renderer> {
     Item::new(labeled_button(label, msg).width(Length::Fill))
 }
 

@@ -69,7 +69,7 @@ pub struct Event<'a> {
     pub extradata_ids: Vec<ExtradataId>,
 }
 
-impl<'a> Event<'a> {
+impl Event<'_> {
     #[must_use]
     pub fn end(&self) -> StartTime {
         StartTime(self.start.0 + self.duration.0)
@@ -817,7 +817,7 @@ impl Extradata {
     }
 
     /// Iterate over all existing NDE filters with their indices.
-    pub fn iter_filters(&self) -> IterFilters {
+    pub fn iter_filters(&'_ self) -> IterFilters<'_> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         self.entries
             .iter()

@@ -755,7 +755,7 @@ pub struct Plugin {
 }
 
 impl Plugin {
-    pub fn invoke(&mut self, name: &CStr, args: ConstMap) -> OwnedMap {
+    pub fn invoke(&'_ mut self, name: &CStr, args: ConstMap) -> OwnedMap<'_> {
         let api = get_api();
         let map = unsafe { (*api).invoke.unwrap()(self.plugin, name.as_ptr(), args.into_ptr()) };
         OwnedMap {

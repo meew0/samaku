@@ -27,7 +27,7 @@ impl Node for MotionTrack {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[0], SocketValue::MultipleEvents(events));

@@ -19,7 +19,7 @@ impl Node for SetPosition {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         if let SocketValue::Position(position) = inputs[1] {

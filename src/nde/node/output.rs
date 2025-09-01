@@ -19,7 +19,7 @@ impl Node for Output {
         &[]
     }
 
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
         let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }

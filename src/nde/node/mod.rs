@@ -59,7 +59,7 @@ pub enum SocketValue<'a> {
     CompiledEvents(Vec<subtitle::Event<'static>>),
 }
 
-impl<'a> SocketValue<'a> {
+impl SocketValue<'_> {
     #[must_use]
     pub fn as_type(&self) -> Option<SocketType> {
         match self {
@@ -192,7 +192,7 @@ pub trait Node: Debug {
     /// # Errors
     /// Can return an [`Error`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
-    fn run(&self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue>, Error>;
+    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error>;
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.

@@ -121,7 +121,7 @@ struct ReticuleState {
     drag_offset: iced::Vector,
 }
 
-impl<'a> canvas::Program<message::Message> for ReticuleProgram<'a> {
+impl canvas::Program<message::Message> for ReticuleProgram<'_> {
     type State = ReticuleState;
 
     fn update(
