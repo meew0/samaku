@@ -144,7 +144,7 @@ impl Graph {
     pub fn dfs(&self) -> DfsResult {
         let mut process_queue: VecDeque<usize> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];
-        let mut cycle_detector: CycleDetector = CycleDetector::new(self.nodes.len());
+        let mut cycle_detector = CycleDetector::new(self.nodes.len());
 
         if self
             .dfs_internal(0, &mut process_queue, &mut seen, &mut cycle_detector)

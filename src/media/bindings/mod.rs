@@ -18,7 +18,7 @@ pub fn path_to_cstring<P: AsRef<Path>>(path_as_ref: P) -> CString {
 
     #[cfg(unix)]
     {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt as _;
         buf.extend(path.as_os_str().as_bytes());
     }
 

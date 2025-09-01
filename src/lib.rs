@@ -2,13 +2,17 @@
 #![warn(clippy::style)]
 // #![warn(clippy::allow_attributes)] // add once lint_reasons is stable
 // #![warn(clippy::allow_attributes_without_reason)] // add once lint_reasons is stable
+// #![warn(clippy::arbitrary_source_item_ordering)] // potentially add in the future
 // #![warn(clippy::arithmetic_side_effects)] // potentially add in the future
+#![warn(clippy::as_pointer_underscore)]
 #![warn(clippy::as_underscore)]
 #![warn(clippy::assertions_on_result_states)]
 #![warn(clippy::branches_sharing_code)]
 #![warn(clippy::cargo_common_metadata)]
+#![warn(clippy::cfg_not_test)]
 #![warn(clippy::clear_with_drain)]
 #![warn(clippy::clone_on_ref_ptr)]
+#![warn(clippy::coerce_container_to_any)]
 #![warn(clippy::cognitive_complexity)]
 #![warn(clippy::collection_is_never_read)]
 #![warn(clippy::create_dir)]
@@ -18,6 +22,8 @@
 #![warn(clippy::default_union_representation)]
 #![warn(clippy::deref_by_slicing)]
 #![warn(clippy::derive_partial_eq_without_eq)]
+#![warn(clippy::doc_include_without_cfg)]
+#![warn(clippy::doc_link_code)]
 #![warn(clippy::empty_drop)]
 #![warn(clippy::empty_enum_variants_with_brackets)]
 #![warn(clippy::empty_line_after_doc_comments)]
@@ -32,6 +38,7 @@
 #![warn(clippy::fn_to_numeric_cast_any)]
 #![warn(clippy::format_push_string)]
 #![warn(clippy::get_unwrap)]
+#![warn(clippy::host_endian_bytes)]
 #![warn(clippy::if_then_some_else_none)]
 #![warn(clippy::ignored_unit_patterns)]
 #![warn(clippy::impl_trait_in_params)]
@@ -43,8 +50,10 @@
 #![warn(clippy::iter_with_drain)]
 #![warn(clippy::large_stack_frames)]
 #![warn(clippy::let_underscore_untyped)]
+#![warn(clippy::literal_string_with_formatting_args)]
 #![warn(clippy::lossy_float_literal)]
 #![warn(clippy::manual_clamp)]
+#![warn(clippy::map_with_unused_argument_over_ranges)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::min_ident_chars)]
 #![warn(clippy::missing_asserts_for_indexing)]
@@ -52,26 +61,33 @@
 #![warn(clippy::multiple_inherent_impl)]
 #![warn(clippy::needless_collect)]
 #![warn(clippy::needless_pass_by_ref_mut)]
+#![warn(clippy::needless_raw_strings)]
 #![warn(clippy::negative_feature_names)]
-// #![warn(clippy::non_zero_suggestions)] // add once exists
+#![warn(clippy::non_zero_suggestions)]
 #![warn(clippy::nonstandard_macro_braces)]
 #![warn(clippy::or_fun_call)]
 #![warn(clippy::path_buf_push_overwrite)]
-// #![warn(clippy::pathbuf_init_then_push)] // add once exists
+#![warn(clippy::pathbuf_init_then_push)] // add once exists
+#![warn(clippy::pointer_format)]
+#![warn(clippy::precedence_bits)]
 #![warn(clippy::pub_without_shorthand)]
 #![warn(clippy::rc_buffer)]
 #![warn(clippy::rc_mutex)]
 #![warn(clippy::readonly_write_lock)]
-#![warn(clippy::redundant_pub_crate)]
 #![warn(clippy::redundant_clone)]
+#![warn(clippy::redundant_pub_crate)]
+#![warn(clippy::redundant_test_prefix)]
+#![warn(clippy::redundant_type_annotations)]
 #![warn(clippy::renamed_function_params)]
 #![warn(clippy::rest_pat_in_fully_bound_structs)]
+#![warn(clippy::return_and_then)]
 #![warn(clippy::same_name_method)]
 #![warn(clippy::self_named_module_files)]
 #![warn(clippy::semicolon_inside_block)]
 #![warn(clippy::set_contains_or_insert)]
 #![warn(clippy::significant_drop_in_scrutinee)]
 #![warn(clippy::significant_drop_tightening)]
+#![warn(clippy::single_option_map)]
 #![warn(clippy::str_to_string)]
 #![warn(clippy::string_lit_chars_any)]
 #![warn(clippy::string_to_string)]
@@ -79,16 +95,20 @@
 #![warn(clippy::suspicious_operation_groupings)]
 #![warn(clippy::suspicious_xor_used_as_pow)]
 #![warn(clippy::tests_outside_test_module)]
+#![warn(clippy::too_long_first_doc_paragraph)]
 #![warn(clippy::trait_duplication_in_bounds)]
 #![warn(clippy::trivial_regex)]
 #![warn(clippy::try_err)]
+#![warn(clippy::tuple_array_conversions)]
 #![warn(clippy::type_repetition_in_bounds)]
 #![warn(clippy::uninhabited_references)]
 #![warn(clippy::unnecessary_struct_initialization)]
 #![warn(clippy::unneeded_field_pattern)]
 #![warn(clippy::unseparated_literal_suffix)]
 #![warn(clippy::unused_peekable)]
+#![warn(clippy::unused_result_ok)]
 #![warn(clippy::unused_rounding)]
+#![warn(clippy::unused_trait_names)]
 // #![warn(clippy::unwrap_used)] // potentially add in the future
 #![warn(clippy::useless_let_if_seq)]
 #![warn(clippy::verbose_file_reads)]
@@ -411,7 +431,7 @@ impl Application for Samaku {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        use iced::futures::StreamExt;
+        use iced::futures::StreamExt as _;
 
         // Handle incoming global events, like key presses
         let events = event::listen_with(|event, status| {

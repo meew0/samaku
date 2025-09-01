@@ -17,7 +17,7 @@ pub fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {
-    use cpal::traits::{DeviceTrait, HostTrait};
+    use cpal::traits::{DeviceTrait as _, HostTrait as _};
 
     let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
 
@@ -26,7 +26,7 @@ pub fn spawn(
     let audio_mutex = Arc::clone(&shared_state.audio);
 
     let handle = thread::Builder::new().name("samaku_cpal_playback".to_owned()).spawn(move || {
-        use cpal::traits::StreamTrait;
+        use cpal::traits::StreamTrait as _;
         let mut stream_opt: Option<cpal::Stream> = None;
 
         loop {
@@ -208,7 +208,7 @@ fn build_stream<T>(
 where
     T: cpal::SizedSample + Default,
 {
-    use cpal::traits::DeviceTrait;
+    use cpal::traits::DeviceTrait as _;
 
     device
         .build_output_stream(

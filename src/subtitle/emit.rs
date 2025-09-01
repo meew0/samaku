@@ -248,7 +248,7 @@ fn emit_events<'a, 'b, W: Write>(
 where
     'b: 'a,
 {
-    let mut header_written: bool = false;
+    let mut header_written = false;
 
     for event in events {
         if !header_written {

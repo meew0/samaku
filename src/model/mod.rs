@@ -40,8 +40,10 @@ impl SubAssign<FrameDelta> for FrameNumber {
 }
 
 /// A wrapper around an arbitrary object that tracks whenever that object might have been modified
-/// (by being mutably borrowed). We use this to track changes to global state that needs to be
-/// reflected in the state of specific iced/iced_aw widgets.
+/// (by being mutably borrowed).
+///
+/// We use this to track changes to global state that needs to be reflected in the state of specific
+/// iced/iced_aw widgets.
 pub struct Trace<T> {
     trace: bool,
     inner: T,

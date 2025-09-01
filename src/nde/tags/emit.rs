@@ -5,7 +5,7 @@ use crate::nde::Span;
 #[must_use]
 #[allow(clippy::missing_panics_doc)] // the expectations should never fail
 pub fn emit(global: &super::Global, spans: &[Span]) -> String {
-    use std::fmt::Write;
+    use std::fmt::Write as _;
 
     let mut compiled_text = String::new();
 

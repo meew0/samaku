@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use smol::stream::StreamExt;
+use smol::stream::StreamExt as _;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
@@ -744,7 +744,7 @@ fn aegi_inline_string_decode(input: &str) -> String {
 #[cfg(test)]
 pub mod tests {
     use assert_matches2::assert_matches;
-    use smol::io::AsyncBufReadExt;
+    use smol::io::AsyncBufReadExt as _;
     use std::path::Path;
 
     use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};

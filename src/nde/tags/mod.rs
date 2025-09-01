@@ -8,6 +8,8 @@ mod emit;
 mod lerp;
 mod parse;
 
+/// A resettable subtitle value override.
+///
 /// Like an `Option`, but also represents the possibility that an ASS tag can be specified
 /// in such a way that it is not set to a value defined by the tag, but to a default value.
 /// This default value comes either from the line style or is hardcoded within libass.
@@ -459,7 +461,7 @@ impl Local {
     /// Interpolates properties linearly between `self` and `other`, according to the given `power`
     /// linear interpolation parameter.
     pub fn interpolate(&mut self, other: &Local, power: f64) {
-        use lerp::Lerp;
+        use lerp::Lerp as _;
 
         // Animatable tags
         self.border = self.border.lerp(other.border, power);
@@ -674,7 +676,7 @@ impl<A: Animatable> Animation<A> {
     where
         W: std::fmt::Write,
     {
-        use emit::Value;
+        use emit::Value as _;
 
         sink.write_str("\\t(")?;
         if let Some(interval) = self.interval {
@@ -966,7 +968,9 @@ impl emit::Value for Colour {
     }
 }
 
-/// A transparency value. The least significant 8 bits determine the rendered transparency:
+/// A subtitle transparency value.
+///
+/// The least significant 8 bits determine the rendered transparency:
 /// 0 represents “fully opaque” and 255 represents “fully transparent”. In this way it is exactly
 /// opposite to the usual idea of an alpha channel.
 ///
@@ -1377,6 +1381,7 @@ impl emit::Value for EmitFontSize {
 }
 
 /// Represents the effect and timing of a karaoke syllable.
+///
 /// Note that it is invalid to have a karaoke syllable
 /// with no set effect (`effect: None`), but with
 /// a `KaraokeOnset::RelativeDelay` onset.
@@ -1601,6 +1606,8 @@ impl emit::Value for SimpleFade {
     }
 }
 
+/// A complex linearly interpolated fade.
+///
 /// Before `fade_in_start`, the line will have transparency
 /// `transparency_before`; between `fade_in_end` and `fade_out_start`,
 /// it will have transparency `transparency_main`; and after

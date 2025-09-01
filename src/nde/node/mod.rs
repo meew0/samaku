@@ -232,6 +232,8 @@ pub enum Error {
 
 pub type Constructor = fn() -> Box<dyn Node>;
 
+/// An empty “shell” of a node that can be used to initiate a node later on.
+///
 /// Represents the idea of a node, with any specific type information being erased. We use the
 /// `inventory` crate to collect node shells, to be able to iterate over them in all places where
 /// we need a list of registered nodes (like in the node editor “Add” menu)

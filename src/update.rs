@@ -1,8 +1,8 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
-use smol::io::AsyncBufReadExt;
+use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
-use std::fmt::Write;
+use std::fmt::Write as _;
 
 use crate::message::Message;
 use crate::{media, message, model, nde, pane, subtitle, view};

@@ -1,4 +1,5 @@
 //! Code for showing toasts (dismissable notifications) over the UI.
+//!
 //! Mostly copied from the iced `toast` example: https://github.com/iced-rs/iced/blob/bc9bb28b1ccd1248d63ccdfef2f57d7aa837abbb/examples/toast/src/main.rs
 
 use std::fmt;

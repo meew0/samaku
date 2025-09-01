@@ -776,11 +776,12 @@ impl<'a> TagWithArguments<'a> {
     /// Note that this function returns `Some(false)` for present but
     /// non-numeric arguments! This matches libass behaviour.
     fn bool_arg(&self, index: usize) -> Option<bool> {
-        self.int_arg(index).and_then(|val: i32| match val {
+        let val = self.int_arg(index)?;
+        match val {
             0 => Some(false),
             1 => Some(true),
             _ => None,
-        })
+        }
     }
 
     fn transparency_arg(&self, index: usize) -> Option<Transparency> {

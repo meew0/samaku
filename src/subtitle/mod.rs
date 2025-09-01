@@ -19,6 +19,8 @@ mod emit;
 pub mod parse;
 mod uu;
 
+/// A subtitle event, i.e. an individual “subtitle”.
+///
 /// “Event” is the unambiguous term for a subtitle line, or a typeset sign, or a frame-by-frame
 /// or clipped part of a sign. It is shown from a specific start time on for a specific duration,
 /// contains text and override tags, and certain other metadata.
@@ -183,9 +185,9 @@ pub fn unpack_colour_and_transparency_tbgr(packed: u32) -> (Colour, Transparency
 /// 32-bit integer.
 #[must_use]
 pub fn pack_colour_and_transparency_rgbt(colour: Colour, transparency: Transparency) -> u32 {
-    u32::from(colour.red) << 24
-        | u32::from(colour.green) << 16
-        | u32::from(colour.blue) << 8
+    (u32::from(colour.red) << 24)
+        | (u32::from(colour.green) << 16)
+        | (u32::from(colour.blue) << 8)
         | u32::from(transparency.rendered())
 }
 
@@ -233,7 +235,9 @@ impl From<i32> for BorderStyle {
     }
 }
 
-/// Subtitle colour mangling mode. Needed for colour compatibility with certain old scripts
+/// Subtitle colour mangling mode.
+///
+/// Needed for colour compatibility with certain old scripts
 /// targeting VSFilter etc. For newly created scripts, there is absolutely no reason to use a
 /// value other than [`YCbCrMatrix::None`].
 ///
@@ -258,9 +262,11 @@ pub enum YCbCrMatrix {
     FccPc,
 }
 
-/// libass font encoding parameter (corresponding to “Encoding” in styles). If this is set to a
-/// value other than `1` or `-1`, libass will avoid selecting fonts that lack coverage in the
-/// legacy Windows codepage specified by the value.
+/// libass font encoding parameter (corresponding to “Encoding” in styles).
+///
+/// If this is set to a value other than `1` or `-1`, libass will avoid selecting
+/// fonts that lack coverage in the legacy Windows codepage specified by
+/// the value.
 ///
 /// See the following libass issue for a detailed explanation:
 /// https://github.com/libass/libass/issues/662
@@ -575,8 +581,8 @@ impl EventTrack {
         selected_event_indices: &HashSet<EventIndex>,
         extradata: &'a Extradata,
     ) -> Option<&'a nde::Filter> {
-        self.active_event(selected_event_indices)
-            .and_then(|event| extradata.nde_filter_for_event(event))
+        let event = self.active_event(selected_event_indices)?;
+        extradata.nde_filter_for_event(event)
     }
 
     #[must_use]
@@ -585,8 +591,8 @@ impl EventTrack {
         selected_event_indices: &HashSet<EventIndex>,
         extradata: &'a mut Extradata,
     ) -> Option<&'a mut nde::Filter> {
-        self.active_event(selected_event_indices)
-            .and_then(|event| extradata.nde_filter_for_event_mut(event))
+        let event = self.active_event(selected_event_indices)?;
+        extradata.nde_filter_for_event_mut(event)
     }
 
     /// Dispatch message to node
@@ -919,7 +925,7 @@ pub enum AttachmentType {
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
-    use smol::io::AsyncBufReadExt;
+    use smol::io::AsyncBufReadExt as _;
 
     use crate::{media, test_utils::test_file};
 
