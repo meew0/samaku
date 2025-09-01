@@ -389,11 +389,11 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), SubtitlePars
 
     let mut extradata_ids: Vec<ExtradataId> = vec![];
 
-    if text.starts_with("{=") {
-        if let Some((new_extradata_ids, after)) = parse_extradata_references(text) {
-            extradata_ids = new_extradata_ids;
-            text = &text[after..];
-        }
+    if text.starts_with("{=")
+        && let Some((new_extradata_ids, after)) = parse_extradata_references(text)
+    {
+        extradata_ids = new_extradata_ids;
+        text = &text[after..];
     }
 
     let new_event = Event {
@@ -824,7 +824,9 @@ pub mod tests {
 
     #[test]
     fn style() -> Result<(), SubtitleParseError> {
-        let style = parse_style_line("Style: Default,Arial,20,&H000000FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1")?;
+        let style = parse_style_line(
+            "Style: Default,Arial,20,&H000000FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1",
+        )?;
 
         assert_eq!(style.name, "Default");
         assert_eq!(style.font_name, "Arial");

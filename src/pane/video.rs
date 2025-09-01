@@ -69,7 +69,11 @@ pub fn view<'a>(
                     let elapsed_render = instant3.elapsed();
                     println!(
                         "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
-                        global_state.subtitles.events.len(), compiled.len(), elapsed_compile, elapsed_copy, elapsed_render
+                        global_state.subtitles.events.len(),
+                        compiled.len(),
+                        elapsed_compile,
+                        elapsed_copy,
+                        elapsed_render
                     );
 
                     stack
@@ -130,43 +134,43 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         bounds: iced::Rectangle,
         cursor: iced::mouse::Cursor,
     ) -> (iced::event::Status, Option<message::Message>) {
-        if let Some(position) = cursor.position_in(bounds) {
-            if let canvas::Event::Mouse(mouse_event) = event {
-                match mouse_event {
-                    iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
-                        for (i, reticule) in self.reticules.iter().enumerate().rev() {
-                            let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
-                            if iced_pos.distance(position) < reticule.radius {
-                                state.dragging = Some(i);
-                                state.drag_offset = position - iced_pos;
-                                return (iced::event::Status::Captured, None);
-                            }
-                        }
-                    }
-                    iced::mouse::Event::CursorMoved { .. } => {
-                        if let Some(dragging_reticule_index) = state.dragging {
-                            return (
-                                iced::event::Status::Captured,
-                                Some(message::Message::UpdateReticulePosition(
-                                    dragging_reticule_index,
-                                    model::reticule::Reticule::position_from_iced(
-                                        position,
-                                        state.drag_offset,
-                                        bounds.size(),
-                                        self.storage_size,
-                                    ),
-                                )),
-                            );
-                        }
-                    }
-                    iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
-                        if state.dragging.is_some() {
-                            state.dragging = None;
+        if let Some(position) = cursor.position_in(bounds)
+            && let canvas::Event::Mouse(mouse_event) = event
+        {
+            match mouse_event {
+                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
+                    for (i, reticule) in self.reticules.iter().enumerate().rev() {
+                        let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
+                        if iced_pos.distance(position) < reticule.radius {
+                            state.dragging = Some(i);
+                            state.drag_offset = position - iced_pos;
                             return (iced::event::Status::Captured, None);
                         }
                     }
-                    _ => {}
                 }
+                iced::mouse::Event::CursorMoved { .. } => {
+                    if let Some(dragging_reticule_index) = state.dragging {
+                        return (
+                            iced::event::Status::Captured,
+                            Some(message::Message::UpdateReticulePosition(
+                                dragging_reticule_index,
+                                model::reticule::Reticule::position_from_iced(
+                                    position,
+                                    state.drag_offset,
+                                    bounds.size(),
+                                    self.storage_size,
+                                ),
+                            )),
+                        );
+                    }
+                }
+                iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                    if state.dragging.is_some() {
+                        state.dragging = None;
+                        return (iced::event::Status::Captured, None);
+                    }
+                }
+                _ => {}
             }
         }
 

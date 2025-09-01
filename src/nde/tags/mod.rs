@@ -1497,10 +1497,10 @@ impl Karaoke {
         } else {
             // Only overwrite the effect type, and only if both `self` and `other` have an effect
             // set.
-            if let Some((other_effect, _)) = other.effect {
-                if let Some((self_effect, _)) = &mut self.effect {
-                    *self_effect = other_effect;
-                }
+            if let Some((other_effect, _)) = other.effect
+                && let Some((self_effect, _)) = &mut self.effect
+            {
+                *self_effect = other_effect;
             }
         }
     }

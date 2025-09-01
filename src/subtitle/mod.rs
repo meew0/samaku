@@ -474,7 +474,11 @@ impl StyleList {
     /// because it has been renamed “manually” by setting its `name` field in the meantime.
     pub fn rename(&mut self, index: usize, new_name: String) {
         let old_name = std::mem::replace(&mut self.styles[index].name, new_name.clone());
-        assert_eq!(self.names.remove(&old_name), Some(index), "Style index did not match expected value in `rename` — was a style manually renamed by changing its `name` field?");
+        assert_eq!(
+            self.names.remove(&old_name),
+            Some(index),
+            "Style index did not match expected value in `rename` — was a style manually renamed by changing its `name` field?"
+        );
         self.names.insert(new_name, index);
     }
 
@@ -615,10 +619,10 @@ impl EventTrack {
         node_index: usize,
         message: message::Node,
     ) {
-        if let Some(filter) = self.active_nde_filter_mut(selected_event_indices, extradata) {
-            if let Some(node) = filter.graph.nodes.get_mut(node_index) {
-                node.node.update(message);
-            }
+        if let Some(filter) = self.active_nde_filter_mut(selected_event_indices, extradata)
+            && let Some(node) = filter.graph.nodes.get_mut(node_index)
+        {
+            node.node.update(message);
         }
     }
 

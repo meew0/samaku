@@ -75,12 +75,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::ClosePane => {
-            if let Some(pane) = global_state.focus {
-                if global_state.panes.get(pane).is_some() {
-                    if let Some((_, sibling)) = global_state.panes.close(pane) {
-                        global_state.focus = Some(sibling);
-                    }
-                }
+            if let Some(pane) = global_state.focus
+                && global_state.panes.get(pane).is_some()
+                && let Some((_, sibling)) = global_state.panes.close(pane)
+            {
+                global_state.focus = Some(sibling);
             }
         }
         Message::FocusPane(pane) => global_state.focus = Some(pane),
@@ -100,13 +99,13 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::SetFocusedPaneState(new_state) => {
-            if let Some(focused_pane) = global_state.focus {
-                if let Some(focused_pane_state) = global_state.panes.get_mut(focused_pane) {
-                    *focused_pane_state = *new_state;
+            if let Some(focused_pane) = global_state.focus
+                && let Some(focused_pane_state) = global_state.panes.get_mut(focused_pane)
+            {
+                *focused_pane_state = *new_state;
 
-                    update_filter_lists(global_state);
-                    update_style_lists(global_state, true);
-                }
+                update_filter_lists(global_state);
+                update_style_lists(global_state, true);
             }
         }
         Message::Pane(pane, pane_message) => {
@@ -115,10 +114,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::FocusedPane(pane_message) => {
-            if let Some(pane) = global_state.focus {
-                if let Some(pane_state) = global_state.panes.get_mut(pane) {
-                    return pane::dispatch_update(pane_state, pane_message);
-                }
+            if let Some(pane) = global_state.focus
+                && let Some(pane_state) = global_state.panes.get_mut(pane)
+            {
+                return pane::dispatch_update(pane_state, pane_message);
             }
         }
         Message::Toast(toast) => {
@@ -524,22 +523,21 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     socket_index: endpoint.socket_index,
                 });
 
-                if let Some(previous) = maybe_previous {
-                    if let Some(pane::State::NodeEditor(node_editor_state)) =
+                if let Some(previous) = maybe_previous
+                    && let Some(pane::State::NodeEditor(node_editor_state)) =
                         global_state.panes.get_mut(source_pane)
-                    {
-                        let new_dangling_source = iced_node_editor::LogicalEndpoint {
-                            node_index: previous.node_index,
-                            role: iced_node_editor::SocketRole::Out,
-                            socket_index: previous.socket_index,
-                        };
-                        node_editor_state.dangling_source = Some(new_dangling_source);
-                        node_editor_state.dangling_connection =
-                            Some(iced_node_editor::Link::from_unordered(
-                                iced_node_editor::Endpoint::Socket(new_dangling_source),
-                                iced_node_editor::Endpoint::Absolute(new_dangling_end_position),
-                            ));
-                    }
+                {
+                    let new_dangling_source = iced_node_editor::LogicalEndpoint {
+                        node_index: previous.node_index,
+                        role: iced_node_editor::SocketRole::Out,
+                        socket_index: previous.socket_index,
+                    };
+                    node_editor_state.dangling_source = Some(new_dangling_source);
+                    node_editor_state.dangling_connection =
+                        Some(iced_node_editor::Link::from_unordered(
+                            iced_node_editor::Endpoint::Socket(new_dangling_source),
+                            iced_node_editor::Endpoint::Absolute(new_dangling_end_position),
+                        ));
                 }
             }
         }
@@ -547,15 +545,14 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             global_state.reticules = Some(reticules);
         }
         Message::UpdateReticulePosition(index, position) => {
-            if let Some(reticules) = &mut global_state.reticules {
-                if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
+            if let Some(reticules) = &mut global_state.reticules
+                && let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
                     &global_state.selected_event_indices,
                     &mut global_state.subtitles.extradata,
-                ) {
-                    if let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index) {
-                        node.node.reticule_update(reticules, index, position);
-                    }
-                }
+                )
+                && let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index)
+            {
+                node.node.reticule_update(reticules, index, position);
             }
         }
         Message::TrackMotionForNode(node_index, initial_region) => {

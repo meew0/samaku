@@ -86,7 +86,7 @@ pub fn nde<'a, 'b>(
 
     // Get the “output” of the output node
     match &mut intermediates[0] {
-        NodeState::Active(ref mut output_node_outputs) => {
+        NodeState::Active(output_node_outputs) => {
             let first_output = output_node_outputs.swap_remove(0);
 
             match first_output {
