@@ -67,7 +67,10 @@ impl<'a, V> Tracker<'a, V> {
         self.last_frame
     }
 
-    #[allow(clippy::missing_panics_doc)] // the expectation should always be met
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "the expectation should always be met"
+    )]
     pub fn update(&mut self, motion_model: Model) -> TrackResult {
         if self.last_frame == self.end_frame {
             return TrackResult::Termination;

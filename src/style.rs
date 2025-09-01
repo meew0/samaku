@@ -1,4 +1,7 @@
-#![allow(clippy::cast_precision_loss)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "precision really does not matter in this case"
+)]
 
 use iced::widget::container;
 use iced::{

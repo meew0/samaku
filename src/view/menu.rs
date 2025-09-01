@@ -59,7 +59,10 @@ pub fn item(label: &'_ str, msg: Message) -> Item<'_, Message, iced::Theme, iced
     Item::new(labeled_button(label, msg).width(Length::Fill))
 }
 
-#[allow(clippy::module_name_repetitions)]
+#[expect(
+    clippy::module_name_repetitions,
+    reason = "this is clearly the best name in this case"
+)]
 pub fn sub_menu<'a>(
     label: &str,
     msg: Message,

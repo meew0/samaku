@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "implements more of what libass does for now than is currently used in samaku"
+)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -249,13 +252,15 @@ impl Renderer {
         // so using a callback that just gets a reference to a wrapped image
         // ensures safety compared to passing “ownership” of it.
         while !image.is_null() {
-            let bitmap_size = unsafe { (*image).stride * ((*image).h - 1) + (*image).w };
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "converting falsely signed value from native code"
+            )]
+            let bitmap_size: usize =
+                unsafe { (*image).stride * ((*image).h - 1) + (*image).w } as usize;
             let safe_image = Image {
                 metadata: unsafe { &(*image) },
-                bitmap: unsafe {
-                    #[allow(clippy::cast_sign_loss)]
-                    std::slice::from_raw_parts((*image).bitmap, bitmap_size as usize)
-                },
+                bitmap: unsafe { std::slice::from_raw_parts((*image).bitmap, bitmap_size) },
             };
             callback(&safe_image);
             image = unsafe { (*image).next };
@@ -443,7 +448,10 @@ impl Track {
                 return &mut [];
             }
 
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "converting falsely unsigned value from native code"
+            )]
             std::slice::from_raw_parts_mut((*self.track).events, (*self.track).n_events as usize)
         }
     }
@@ -454,7 +462,10 @@ impl Track {
                 return &[];
             }
 
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "converting falsely unsigned value from native code"
+            )]
             std::slice::from_raw_parts((*self.track).events, (*self.track).n_events as usize)
         }
     }
@@ -465,7 +476,10 @@ impl Track {
                 return &mut [];
             }
 
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "converting falsely unsigned value from native code"
+            )]
             std::slice::from_raw_parts_mut((*self.track).styles, (*self.track).n_styles as usize)
         }
     }
@@ -476,7 +490,10 @@ impl Track {
                 return &[];
             }
 
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "converting falsely unsigned value from native code"
+            )]
             std::slice::from_raw_parts((*self.track).styles, (*self.track).n_styles as usize)
         }
     }

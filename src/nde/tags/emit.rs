@@ -3,7 +3,10 @@ use crate::nde::Span;
 /// Converts the given `spans` together with the given `global` tag overrides into a string of
 /// ASS tag blocks, to be used by e.g. libass.
 #[must_use]
-#[allow(clippy::missing_panics_doc)] // the expectations should never fail
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "the expectations should never fail"
+)]
 pub fn emit(global: &super::Global, spans: &[Span]) -> String {
     use std::fmt::Write as _;
 
@@ -95,7 +98,10 @@ where
     Ok(())
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tag_name will be a reference or an object composed of only references"
+)]
 pub(super) fn simple_tag<W, N, V>(
     sink: &mut W,
     tag_name: N,
@@ -115,7 +121,10 @@ where
     Ok(())
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tag_name will be a reference or an object composed of only references"
+)]
 pub(super) fn simple_tag_resettable<W, N, V>(
     sink: &mut W,
     tag_name: N,

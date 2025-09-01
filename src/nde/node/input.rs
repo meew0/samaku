@@ -249,7 +249,10 @@ impl Node for InputRectangle {
         index: usize,
         new_position: nde::tags::Position,
     ) {
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "extremely large values not expected in UI code"
+        )]
         match index {
             0 => {
                 // top left

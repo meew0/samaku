@@ -37,7 +37,11 @@ impl State {
         iced::widget::combo_box::State::new(style_refs)
     }
 
-    #[allow(clippy::single_option_map)]
+    // TODO maybe newtype `selected`
+    #[expect(
+        clippy::single_option_map,
+        reason = "the purpose of this method is to allow conveniently matching this kind of option"
+    )]
     fn map_selected(styles: &[subtitle::Style], selected: Option<usize>) -> Option<StyleReference> {
         selected.map(|index| StyleReference {
             name: styles[index].name().to_owned(),
@@ -177,7 +181,6 @@ pub fn view<'a>(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn update(
     _editor_state: &mut State,
     _pane_message: message::Pane,

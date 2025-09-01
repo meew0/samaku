@@ -1,7 +1,7 @@
-// `typetag` for (de)serialising trait objects requires that every struct that implements `Node`
-// must have a unique name. So even if it would lead to more concise code, we can't have the
-// individual node structs be named e.g. `clip::Rectangle` and `input::Rectangle`.
-#![allow(clippy::module_name_repetitions)]
+#![allow(
+    clippy::module_name_repetitions,
+    reason = "`typetag` for (de)serialising trait objects requires that every struct that implements `Node` must have a unique name. So even if it would lead to more concise code, we can't have the individual node structs be named e.g. `clip::Rectangle` and `input::Rectangle`."
+)]
 
 use std::fmt::Debug;
 
@@ -179,6 +179,7 @@ pub enum LeafInputType {
 }
 
 #[typetag::serde(tag = "type")]
+#[expect(unused_variables, reason = "trait with default methods")]
 pub trait Node: Debug {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
@@ -196,19 +197,16 @@ pub trait Node: Debug {
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
-    #[allow(unused_variables)]
     fn content<'a>(&self, self_index: usize) -> iced::Element<'a, message::Message> {
         iced::widget::text(self.name()).into()
     }
 
     /// Called when a message for this node is received.
-    #[allow(unused_variables)]
     fn update(&mut self, message: message::Node) {}
 
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.
-    #[allow(unused_variables)]
     fn reticule_update(
         &mut self,
         reticules: &mut model::reticule::Reticules,

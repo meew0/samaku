@@ -17,7 +17,10 @@ use super::{
     ScriptInfo, StartTime, Style, StyleList, YCbCrMatrix,
 };
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "uncoupling the different parts of parsing would make the code unnecessarily complicated"
+)]
 pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     input: smol::io::Lines<R>,
 ) -> Result<(File, Vec<Warning>), SubtitleParseError> {

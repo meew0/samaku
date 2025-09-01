@@ -929,7 +929,10 @@ impl Colour {
     };
 
     fn from_bgr_packed(packed: u32) -> Self {
-        #[allow(clippy::unreadable_literal)]
+        #[expect(
+            clippy::unreadable_literal,
+            reason = "in this case the literals are readable"
+        )]
         Self {
             red: (packed & 0x0000FF) as u8,
             green: ((packed & 0x00FF00) >> 8) as u8,
@@ -986,8 +989,14 @@ impl Transparency {
     /// Returns the lowest 8 bits of the transparency value, corresponding to how it would be shown
     /// on render.
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "desired behavior in this case (matching libass)"
+    )]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "desired behavior in this case (matching libass)"
+    )]
     pub fn rendered(self) -> u8 {
         self.0 as u8
     }
@@ -2028,7 +2037,10 @@ mod tests {
 
     #[test]
     fn colour() {
-        #[allow(clippy::unreadable_literal)]
+        #[expect(
+            clippy::unreadable_literal,
+            reason = "in this case the literal is readable"
+        )]
         let colour = Colour::from_bgr_packed(0xffbb11);
         assert_eq!(colour.red, 0x11);
         assert_eq!(colour.green, 0xbb);

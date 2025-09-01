@@ -1,7 +1,8 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
-// #![warn(clippy::allow_attributes)] // add once lint_reasons is stable
-// #![warn(clippy::allow_attributes_without_reason)] // add once lint_reasons is stable
+#![warn(clippy::allow_attributes)] // add once lint_reasons is stable
+#![warn(clippy::allow_attributes_without_reason)]
+// add once lint_reasons is stable
 // #![warn(clippy::arbitrary_source_item_ordering)] // potentially add in the future
 // #![warn(clippy::arithmetic_side_effects)] // potentially add in the future
 #![warn(clippy::as_pointer_underscore)]
@@ -67,7 +68,7 @@
 #![warn(clippy::nonstandard_macro_braces)]
 #![warn(clippy::or_fun_call)]
 #![warn(clippy::path_buf_push_overwrite)]
-#![warn(clippy::pathbuf_init_then_push)] // add once exists
+#![warn(clippy::pathbuf_init_then_push)]
 #![warn(clippy::pointer_format)]
 #![warn(clippy::precedence_bits)]
 #![warn(clippy::pub_without_shorthand)]
@@ -145,17 +146,38 @@
 #![warn(unreachable_pub)]
 #![warn(unsafe_attr_outside_unsafe)]
 #![warn(unsafe_op_in_unsafe_fn)]
-#![warn(unused_crate_dependencies)] // false positive for criterion
+#![warn(unused_crate_dependencies)]
 #![warn(unused_extern_crates)]
 #![warn(unused_import_braces)]
 #![warn(unused_lifetimes)]
 #![warn(unused_macro_rules)]
 #![warn(unused_qualifications)]
-#![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
-#![allow(clippy::enum_glob_use)] // too useful to disallow entirely, but should only be done locally
-#![allow(clippy::struct_field_names)] // https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359
-#![cfg_attr(test, allow(clippy::cognitive_complexity))] // same as above
-#![cfg_attr(test, allow(clippy::too_many_lines))] // it doesn't matter if test functions are complex
+#![allow(
+    clippy::doc_markdown,
+    reason = "false positives on any kind of camel case-looking words"
+)]
+#![allow(
+    clippy::enum_glob_use,
+    reason = "too useful to disallow entirely, but should only be done locally"
+)]
+#![allow(
+    clippy::struct_field_names,
+    reason = "https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359"
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::cognitive_complexity,
+        reason = "it doesn't really matter if test functions are complex"
+    )
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::too_many_lines,
+        reason = "it doesn't really matter if test functions are complex"
+    )
+)]
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -185,7 +207,10 @@ pub mod view;
 pub mod workers;
 
 /// Effectively samaku's main function. Creates and starts the application.
-#[allow(clippy::missing_errors_doc)]
+#[expect(
+    clippy::missing_errors_doc,
+    reason = "main function doesn't need error documentation"
+)]
 pub fn run() -> iced::Result {
     Samaku::run(Settings {
         id: Some("samaku".to_owned()),

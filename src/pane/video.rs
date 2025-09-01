@@ -102,7 +102,6 @@ pub fn view<'a>(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn update(
     _video_state: &mut State,
     _pane_message: message::Pane,

@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "implements more of what mv does for now than is currently used in samaku"
+)]
 
 use std::ffi::CString;
 

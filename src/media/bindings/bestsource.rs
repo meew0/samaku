@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "implements more of what bestsource does for now than is currently used in samaku"
+)]
 
 use std::ffi::c_void;
 
@@ -34,7 +37,10 @@ pub(crate) struct BestAudioSource {
 unsafe impl Send for BestAudioSource {}
 
 impl BestAudioSource {
-    #![allow(clippy::too_many_arguments)]
+    #![allow(
+        clippy::too_many_arguments,
+        reason = "closely wraps native code with similar amount of arguments"
+    )]
     pub(crate) fn new<P1: AsRef<std::path::Path>, P2: AsRef<std::path::Path>>(
         source_file: P1,
         track: i32,
@@ -103,7 +109,7 @@ impl BestAudioSource {
             "error in BestAudioSource::GetAudioProperties"
         );
 
-        #[allow(clippy::cast_sign_loss)]
+        #[expect(clippy::cast_sign_loss, reason = "converting from native code")]
         AudioProperties {
             format: AudioFormat {
                 float: bas_ap.AF.Float != 0,

@@ -22,7 +22,10 @@ impl Reticule {
     ) -> iced::Point {
         let x: f64 = self.position.x * f64::from(size.width) / f64::from(storage_size.x);
         let y: f64 = self.position.y * f64::from(size.height) / f64::from(storage_size.y);
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "extreme precision not needed in UI-adjacent code"
+        )]
         let point = iced::Point::new(x as f32, y as f32);
         point
     }

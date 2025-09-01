@@ -107,7 +107,6 @@ impl Event {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Span {
     /// Some text tagged with override tags.

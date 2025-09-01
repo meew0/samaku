@@ -110,7 +110,10 @@ where
         let Size { width, height } =
             image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
 
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "precision loss acceptable for rendering"
+        )]
         Size::new(width as f32, height as f32)
     };
 
@@ -152,7 +155,10 @@ pub(super) fn draw<Renderer, Handle>(
     // Find out maximum size (assuming the first image covers the entire area)
     let Size { width, height } =
         image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "precision loss acceptable for rendering"
+    )]
     let overall_size = Size::new(width as f32, height as f32);
 
     let bounds = layout.bounds();
@@ -172,10 +178,16 @@ pub(super) fn draw<Renderer, Handle>(
                 (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
             );
 
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "precision loss acceptable for rendering"
+            )]
             let pos_offset = Vector::new((image.x as f32) * x_scale, (image.y as f32) * y_scale);
 
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "precision loss acceptable for rendering"
+            )]
             let drawing_bounds = Rectangle {
                 width: width as f32 * x_scale,
                 height: height as f32 * y_scale,

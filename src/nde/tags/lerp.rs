@@ -8,7 +8,10 @@ pub(super) trait Lerp<U = Self> {
 impl Lerp for i32 {
     type Output = i32;
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "not avoidable in this case"
+    )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
         f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as i32
     }
@@ -21,8 +24,14 @@ impl Lerp for i32 {
 impl Lerp for u32 {
     type Output = u32;
 
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "sign loss is expected given the starting value is unsigned too"
+    )]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "not avoidable in this case"
+    )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
         f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u32
     }
@@ -35,8 +44,14 @@ impl Lerp for u32 {
 impl Lerp for u8 {
     type Output = u8;
 
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "sign loss is expected given the starting value is unsigned too"
+    )]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "not avoidable in this case"
+    )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
         f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u8
     }

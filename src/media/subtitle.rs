@@ -313,9 +313,9 @@ mod tests {
         let alternate = opaque_track.internal.events()[1].Style;
         println!("{default} {alternate}");
 
-        #[allow(clippy::cast_sign_loss)]
+        #[expect(clippy::cast_sign_loss, reason = "converting value from native code")]
         let default_usize = default as usize;
-        #[allow(clippy::cast_sign_loss)]
+        #[expect(clippy::cast_sign_loss, reason = "converting value from native code")]
         let alternate_usize = alternate as usize;
 
         // Verify that colours are as we expect

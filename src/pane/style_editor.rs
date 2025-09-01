@@ -194,12 +194,18 @@ pub fn view<'a>(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "this method logically consumes the message"
+)]
 pub fn update(
     editor_state: &mut State,
     pane_message: message::Pane,
 ) -> iced::Command<message::Message> {
-    #[allow(clippy::single_match)]
+    #[expect(
+        clippy::single_match,
+        reason = "to allow easily expanding it later to further messages"
+    )]
     match pane_message {
         message::Pane::StyleEditorStyleSelected(style_index) => {
             editor_state.selected_style_index = style_index;

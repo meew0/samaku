@@ -238,7 +238,10 @@ pub fn view<'a>(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "this method logically consumes the message"
+)]
 pub fn update(
     grid_state: &mut State,
     pane_message: message::Pane,

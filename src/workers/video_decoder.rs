@@ -14,7 +14,10 @@ pub(super) enum MessageIn {
     ),
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "uncoupling all this code is kind of difficult and not so high priority"
+)] // TODO uncouple
 pub(super) fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,

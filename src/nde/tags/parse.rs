@@ -208,8 +208,14 @@ enum TagBlockParseState {
     Parenthesis,
 }
 
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::cognitive_complexity)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "refactoring the big if-else block would make it less understandable"
+)]
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "refactoring the big if-else block would make it less understandable"
+)]
 fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     if tag.is_empty() {
         return false;
@@ -467,7 +473,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                 // Although we do match *this* obscure edge case...
                 // “VSFilter compatibility (because we can): parse the
                 // timestamps differently depending on argument count”
-                #[allow(clippy::cast_possible_truncation)]
+                #[expect(clippy::cast_possible_truncation, reason = "matches libass behavior")]
                 (
                     Some(AnimationInterval {
                         start: Milliseconds(twa.float_arg(0).unwrap() as i32),
@@ -789,7 +795,8 @@ impl<'a> TagWithArguments<'a> {
     }
 
     fn colour_arg(&self, index: usize) -> Option<Colour> {
-        #[allow(clippy::cast_sign_loss)] // Yes, libass allows specifying negative colours.
+        // Yes, libass allows specifying negative colours.
+        #[expect(clippy::cast_sign_loss, reason = "matching libass behavior")]
         self.hex_arg(index)
             .map(|val: i32| Colour::from_bgr_packed(val as u32))
     }
@@ -839,7 +846,10 @@ fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
     )
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "truncation is the point of this method"
+)]
 fn i64_to_i32_truncate(val: i64) -> i32 {
     val as i32
 }

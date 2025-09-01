@@ -151,14 +151,17 @@ pub struct Resolution {
 /// is the transparency) 32-bit packed colour into a pair of [`Colour`] and [`Transparency`].
 #[must_use]
 pub fn unpack_colour_and_transparency_rgbt(packed: u32) -> (Colour, Transparency) {
-    #[allow(clippy::unreadable_literal)]
+    #[expect(clippy::unreadable_literal, reason = "readable color literal")]
     let colour = Colour {
         red: ((packed & 0xff000000) >> 24) as u8,
         green: ((packed & 0x00ff0000) >> 16) as u8,
         blue: ((packed & 0x0000ff00) >> 8) as u8,
     };
-    #[allow(clippy::unreadable_literal)]
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::unreadable_literal, reason = "readable color literal")]
+    #[expect(
+        clippy::cast_possible_wrap,
+        reason = "does not wrap since the value is restricted to 8 bits using bitwise operations"
+    )]
     let transparency = Transparency((packed & 0x000000ff) as i32);
 
     (colour, transparency)
@@ -168,14 +171,17 @@ pub fn unpack_colour_and_transparency_rgbt(packed: u32) -> (Colour, Transparency
 /// byte is the red channel) 32-bit packed colour into a pair of [`Colour`] and [`Transparency`].
 #[must_use]
 pub fn unpack_colour_and_transparency_tbgr(packed: u32) -> (Colour, Transparency) {
-    #[allow(clippy::unreadable_literal)]
+    #[expect(clippy::unreadable_literal, reason = "readable color literal")]
     let colour = Colour {
         red: (packed & 0x000000ff) as u8,
         green: ((packed & 0x0000ff00) >> 8) as u8,
         blue: ((packed & 0x00ff0000) >> 16) as u8,
     };
-    #[allow(clippy::unreadable_literal)]
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::unreadable_literal, reason = "readable color literal")]
+    #[expect(
+        clippy::cast_possible_wrap,
+        reason = "does not wrap since the value is restricted to 8 bits using bitwise operations"
+    )]
     let transparency = Transparency(((packed & 0xff000000) >> 24) as i32);
 
     (colour, transparency)
@@ -281,7 +287,10 @@ impl FontEncoding {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "needed to represent libass' styles in this case"
+)]
 pub struct Style {
     /// The style's name. Do not modify this value directly; instead, use `StyleList::rename`!
     pub name: String,
@@ -470,7 +479,10 @@ impl StyleList {
     }
 
     #[must_use]
-    #[allow(clippy::len_without_is_empty)] // no point in an `is_empty` method since `StyleList` is guaranteed to never be empty
+    #[expect(
+        clippy::len_without_is_empty,
+        reason = "no point in an `is_empty` method since `StyleList` is guaranteed to never be empty"
+    )]
     pub fn len(&self) -> usize {
         self.styles.len()
     }
@@ -659,7 +671,10 @@ impl Debug for EventTrack {
 }
 
 // For now, just transparently pass along `Vec`'s implementation
-#[allow(clippy::into_iter_without_iter)]
+#[expect(
+    clippy::into_iter_without_iter,
+    reason = "iter on underlying method not needed at this time"
+)]
 impl<'a> IntoIterator for &'a EventTrack {
     type Item = &'a Event<'static>;
     type IntoIter = <&'a Vec<Event<'static>> as IntoIterator>::IntoIter;
@@ -669,7 +684,10 @@ impl<'a> IntoIterator for &'a EventTrack {
     }
 }
 
-#[allow(clippy::into_iter_without_iter)]
+#[expect(
+    clippy::into_iter_without_iter,
+    reason = "iter on underlying method not needed at this time"
+)]
 impl<'a> IntoIterator for &'a mut EventTrack {
     type Item = &'a mut Event<'static>;
     type IntoIter = <&'a mut Vec<Event<'static>> as IntoIterator>::IntoIter;
@@ -824,7 +842,10 @@ impl Extradata {
 
     /// Iterate over all existing NDE filters with their indices.
     pub fn iter_filters(&'_ self) -> IterFilters<'_> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
+        #[expect(
+            clippy::match_wildcard_for_single_variants,
+            reason = "the wildcard match should cover all other extradata types that may be added in the future as well"
+        )]
         self.entries
             .iter()
             .filter_map(|(index, entry)| match entry {

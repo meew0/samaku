@@ -48,10 +48,19 @@ pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced
 }
 
 /// The internal update method, which actually processes the message and updates global state.
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::cognitive_complexity)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the elm architecture more or less requires a complex global update method"
+)]
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "the elm architecture more or less requires a complex global update method"
+)]
 fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(
+        clippy::match_same_arms,
+        reason = "needed in this case to coherently group messages together"
+    )]
     match message {
         Message::None => {}
         Message::SplitPane(axis) => {

@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use crate::message;
 
 #[must_use]

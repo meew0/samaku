@@ -95,7 +95,10 @@ impl Video {
             return Err(LoadError::FramePropertiesFailed);
         };
 
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "amount of precision loss is acceptable in this case"
+        )]
         let dar = match props.get_int(c_string("_SARNum").as_c_str(), 0) {
             Ok(sar_numerator) => match props.get_int(c_string("_SARDen").as_c_str(), 0) {
                 Ok(sar_denominator) => {
@@ -220,7 +223,10 @@ impl Video {
 
         // Use libp2p, which we are linking to anyway because of BestSource,
         // for high performance (SIMD) packing
-        #[allow(clippy::cast_possible_wrap)] // frame stride is guaranteed to fit into an `isize`
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "frame stride is guaranteed to fit into an `isize`"
+        )]
         let src_stride = [
             vs_frame.get_stride(0) as isize,
             vs_frame.get_stride(1) as isize,
@@ -289,22 +295,40 @@ impl Video {
             .expect("frame height should not be negative");
 
         // Fit request parameters into the frame bounds
-        #[allow(clippy::cast_sign_loss)] // we clamp to >0.0 it will never be negative
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "we clamp to >0.0, so it will never be negative"
+        )]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "we clamp to a value that will definitely fit into a u32"
+        )]
         let (left_within_frame, top_within_frame) = (
             request.left.clamp(0.0, f64::from(frame_width)).floor() as u32,
             request.top.clamp(0.0, f64::from(frame_height)).floor() as u32,
         );
 
-        #[allow(clippy::cast_sign_loss)]
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "we clamp to >0.0, so it will never be negative"
+        )]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "we clamp to a value that will definitely fit into a u32"
+        )]
         let true_width = request
             .width
             .clamp(0.0, f64::from(frame_width - left_within_frame))
             .ceil() as u32;
 
-        #[allow(clippy::cast_sign_loss)]
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "we clamp to >0.0, so it will never be negative"
+        )]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "we clamp to a value that will definitely fit into a u32"
+        )]
         let true_height = request
             .height
             .clamp(0.0, f64::from(frame_height - top_within_frame))

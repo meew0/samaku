@@ -28,7 +28,10 @@ impl Position {
 
     /// Returns the current non-authoritative position as floating-point seconds.
     /// May be imprecise for very large positions or rates.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "acceptable amount of precision loss"
+    )]
     pub fn seconds(&self) -> f64 {
         if self.rate() == 0 {
             return 0.0;
@@ -68,7 +71,10 @@ impl Position {
         if self.rate() == 0 {
             return;
         }
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "very unlikely to occur in practice"
+        )]
         let delta_ticks: i64 = (delta_seconds * f64::from(self.rate())).round() as i64;
         self.add_ticks(delta_ticks);
     }

@@ -128,7 +128,7 @@ fn emit_aegi_metadata<W: Write>(
     write!(writer, "{NEWLINE}")
 }
 
-#[allow(clippy::similar_names)] // For scale_x/y_percent. Apparently it is not possible to allow this for an individual binding
+#[expect(clippy::similar_names, reason = "For scale_x/y_percent")]
 fn emit_styles<W: Write>(writer: &mut W, styles: &[Style]) -> Result<(), Error> {
     // Ensure there is always at least one style to write
     let styles = if styles.is_empty() {

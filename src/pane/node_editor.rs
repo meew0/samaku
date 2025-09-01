@@ -103,7 +103,10 @@ impl iced_node_editor::styles::connection::StyleSheet for ConnectionStyle {
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "this method does not need documentation since it serves to implement a consistent abstraction"
+)]
 pub fn view<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,

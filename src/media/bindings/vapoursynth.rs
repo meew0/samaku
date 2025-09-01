@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "implements more of what VS does for now than is currently used in samaku"
+)]
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::marker::PhantomData;
@@ -23,7 +26,10 @@ fn get_script_api() -> *const vs::VSSCRIPTAPI {
     let ptr = SCRIPTAPI.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        #[allow(clippy::cast_possible_wrap)] // constant defined by VS, does not matter if it wraps
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "constant defined by VS, does not matter if it wraps"
+        )]
         let vs_api_version = vs::VSSCRIPT_API_VERSION as i32;
 
         let new_ptr = unsafe { vs::getVSScriptAPI(vs_api_version).cast_mut() };
@@ -40,7 +46,10 @@ fn get_api() -> *const vs::VSAPI {
     let ptr = API.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        #[allow(clippy::cast_possible_wrap)] // constant defined by VS, does not matter if it wraps
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "constant defined by VS, does not matter if it wraps"
+        )]
         let vs_api_version = vs::VAPOURSYNTH_API_VERSION as i32;
 
         let script_api = get_script_api();
@@ -100,7 +109,10 @@ impl Core {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "argument only contains a pointer"
+    )]
     fn get_plugin_by_id(&self, identifier: CString) -> Option<Plugin> {
         self.check_null();
         let api = get_api();
@@ -136,7 +148,10 @@ impl Core {
         LogHandle { handle: log_handle }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "handle only contains a pointer"
+    )]
     pub(crate) fn remove_log_handler(&mut self, handle: LogHandle) {
         self.check_null();
         let api = get_api();
@@ -177,7 +192,10 @@ impl Script {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "argument only contains a pointer"
+    )]
     pub(crate) fn evaluate_file(&mut self, script_filename: CString) -> Result<(), i32> {
         let script_api = get_script_api();
         let ret =
@@ -190,7 +208,10 @@ impl Script {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "arguments only contain pointers"
+    )]
     pub(crate) fn evaluate_buffer(
         &mut self,
         buffer: CString,
@@ -212,7 +233,10 @@ impl Script {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "argument only contains a pointer"
+    )]
     pub(crate) fn get_variable(&self, name: CString, dst: &MutMap) {
         let script_api = get_script_api();
         let ret =
@@ -220,7 +244,10 @@ impl Script {
         vs_assert(ret, "Script variable retrieval failed");
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "argument only contains a pointer"
+    )]
     pub(crate) fn set_variables(&mut self, vars: ConstMap) {
         let script_api = get_script_api();
         let ret = unsafe { (*script_api).setVariables.unwrap()(self.script, vars.map) };
@@ -284,7 +311,6 @@ pub(crate) type ConstMap<'a> = Map<'a, MapConstPtr>;
 pub(crate) type MutMap<'a> = Map<'a, MapMutPtr>;
 
 impl ConstMap<'_> {
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn get_int(&self, key: &CStr, index: i32) -> Result<i64, i32> {
         let api = get_api();
         let mut err: i32 = 0;
@@ -627,10 +653,15 @@ impl FrameRate {
     /// Panics if the resulting frame number would not fit into an `i32`.
     #[must_use]
     pub(crate) fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
-        // since the numerator is guaranteed to be smaller than i64 max
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "numerator is guaranteed to be smaller than i64 max"
+        )]
         let numerator = ass_ms * self.numerator as i64;
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "denominator is guaranteed to be smaller than i64 max"
+        )]
         let denominator = 1000 * self.denominator as i64;
         model::FrameNumber(
             (numerator / denominator)
@@ -641,9 +672,15 @@ impl FrameRate {
 
     #[must_use]
     pub(crate) fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "denominator is guaranteed to be smaller than i64 max"
+        )]
         let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "numerator is guaranteed to be smaller than i64 max"
+        )]
         let result = inv_numerator / self.numerator as i64;
         result
     }
@@ -657,7 +694,10 @@ impl FrameRate {
 impl From<FrameRate> for f64 {
     /// Convert the frame rate to a floating-point value by dividing the numerator by the
     /// denominator. May lose precision for very large numerators/denominators.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "amount of precision loss is acceptable in this case"
+    )]
     fn from(value: FrameRate) -> Self {
         value.numerator as f64 / value.denominator as f64
     }
