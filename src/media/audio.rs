@@ -15,7 +15,6 @@ impl Audio {
             filename,
             -1,
             -1,
-            false,
             0,
             bestsource::CacheMode::Disable,
             std::path::Path::new(""),
