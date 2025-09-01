@@ -314,7 +314,7 @@ impl ConstMap<'_> {
     pub(crate) fn get_int(&self, key: &CStr, index: i32) -> Result<i64, i32> {
         let api = get_api();
         let mut err: i32 = 0;
-        let res = unsafe { (*api).mapGetInt.unwrap()(self.map, key.as_ptr(), index, &mut err) };
+        let res = unsafe { (*api).mapGetInt.unwrap()(self.map, key.as_ptr(), index, &raw mut err) };
         if err > 0 {
             Err(err)
         } else {
@@ -325,7 +325,8 @@ impl ConstMap<'_> {
     pub(crate) fn get_node(&self, key: &CStr, index: i32) -> Result<Node, i32> {
         let api = get_api();
         let mut err: i32 = 0;
-        let node = unsafe { (*api).mapGetNode.unwrap()(self.map, key.as_ptr(), index, &mut err) };
+        let node =
+            unsafe { (*api).mapGetNode.unwrap()(self.map, key.as_ptr(), index, &raw mut err) };
         if err > 0 {
             Err(err)
         } else {
@@ -338,7 +339,7 @@ impl ConstMap<'_> {
         let api = get_api();
         let mut err: i32 = 0;
         let res: *const i64 =
-            unsafe { (*api).mapGetIntArray.unwrap()(self.map, variable.as_ptr(), &mut err) };
+            unsafe { (*api).mapGetIntArray.unwrap()(self.map, variable.as_ptr(), &raw mut err) };
         if err > 0 {
             Err(err)
         } else {
@@ -352,15 +353,17 @@ impl ConstMap<'_> {
         let api = get_api();
         let mut err: i32 = 0;
         let res: *const u8 = unsafe {
-            (*api).mapGetData.unwrap()(self.map, variable.as_ptr(), index, &mut err).cast::<u8>()
+            (*api).mapGetData.unwrap()(self.map, variable.as_ptr(), index, &raw mut err)
+                .cast::<u8>()
         };
         if err > 0 {
             return Err(err);
         }
-        let len: usize =
-            unsafe { (*api).mapGetDataSize.unwrap()(self.map, variable.as_ptr(), index, &mut err) }
-                .try_into()
-                .expect("map data size should not be negative");
+        let len: usize = unsafe {
+            (*api).mapGetDataSize.unwrap()(self.map, variable.as_ptr(), index, &raw mut err)
+        }
+        .try_into()
+        .expect("map data size should not be negative");
         if err > 0 {
             Err(err)
         } else {

@@ -2,7 +2,7 @@
 name = "samaku"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.89"
 description = "Node-based editor for typesetting of ASS subtitles"
 repository = "https://github.com/meew0/samaku"
 readme = "README.md"

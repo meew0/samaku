@@ -243,7 +243,7 @@ impl Renderer {
     ) -> i32 {
         let mut change = i32::from(detect_change);
         let mut image =
-            unsafe { libass::ass_render_frame(self.renderer, track.track, now, &mut change) };
+            unsafe { libass::ass_render_frame(self.renderer, track.track, now, &raw mut change) };
 
         // Call the callback for each returned image.
         // Rust has no elegant way to express the idea of

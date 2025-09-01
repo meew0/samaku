@@ -256,7 +256,7 @@ impl Video {
 
         unsafe {
             bestsource_sys::p2p_pack_frame(
-                &p2p_params,
+                &raw const p2p_params,
                 u64::from(bestsource_sys::P2P_ALPHA_SET_ONE),
             );
         }
