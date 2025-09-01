@@ -218,7 +218,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
     let paren_pos = tag.find('(');
 
     // Contains the name and potentially the first argument
-    let first_part = &tag[0..paren_pos.unwrap_or_else(|| tag.bytes().len())];
+    let first_part = &tag[0..paren_pos.unwrap_or(tag.len())];
 
     let mut twa = TagWithArguments {
         first_part,
@@ -742,7 +742,7 @@ impl<'a> TagWithArguments<'a> {
         if self.first_part.starts_with(tag_name) {
             self.tag_found = true;
             if !COMPLEX {
-                self.push_argument(&self.first_part[tag_name.bytes().len()..]);
+                self.push_argument(&self.first_part[tag_name.len()..]);
             }
             true
         } else {

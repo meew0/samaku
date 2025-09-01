@@ -475,7 +475,7 @@ fn parse_script_info_line(
 fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, String>) {
     if let Some((key, value)) = parse_kv_generic(line) {
         aegi_metadata.insert(key.to_owned(), value.to_owned());
-    };
+    }
 }
 
 static EXTRADATA_REGEX: LazyLock<Regex> =
@@ -708,7 +708,7 @@ fn parse_packed_colour_and_transparency(
 }
 
 fn aegi_inline_string_decode(input: &str) -> String {
-    let input_byte_size = input.bytes().len();
+    let input_byte_size = input.len();
     let mut output = String::with_capacity(input_byte_size);
     let mut tag = String::with_capacity(3);
 

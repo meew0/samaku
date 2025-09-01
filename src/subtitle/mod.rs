@@ -415,7 +415,7 @@ impl StyleList {
         for style in styles {
             if let (_, Some(old_style)) = res.insert(style) {
                 leftover.push(old_style);
-            };
+            }
         }
 
         (res, leftover)

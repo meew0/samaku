@@ -179,11 +179,11 @@ impl Global {
     where
         W: std::fmt::Write,
     {
-        emit::tag(sink, &self.position)?;
-        emit::tag(sink, &self.rectangle_clip)?;
-        emit::tag(sink, &self.vector_clip)?;
+        emit::tag(sink, self.position.as_ref())?;
+        emit::tag(sink, self.rectangle_clip.as_ref())?;
+        emit::tag(sink, self.vector_clip.as_ref())?;
         emit::complex_tag(sink, "org", self.origin.as_ref())?;
-        emit::tag(sink, &self.fade)?;
+        emit::tag(sink, self.fade.as_ref())?;
         emit::simple_tag_resettable(sink, "q", self.wrap_style.as_ref())?;
         emit::simple_tag_resettable(sink, "an", self.alignment.as_ref())?;
 
@@ -235,7 +235,7 @@ impl emit::Value for GlobalAnimatable {
     where
         W: std::fmt::Write,
     {
-        emit::tag(sink, &self.clip)?;
+        emit::tag(sink, self.clip.as_ref())?;
 
         Ok(())
     }
@@ -972,7 +972,7 @@ impl emit::Value for Colour {
 ///
 /// Note that like in libass, this is internally represented as a 32-bit signed integer and only
 /// truncated on render. This allows complex wrapping animations and the like. If you need the
-/// “rendered” 8-bit value, use the [`rendered`] function.  
+/// “rendered” 8-bit value, use the [`rendered`] function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transparency(pub i32);
 

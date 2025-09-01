@@ -83,7 +83,7 @@ pub trait Tag {
         W: std::fmt::Write;
 }
 
-pub fn tag<W, T>(sink: &mut W, maybe_tag: &Option<T>) -> Result<(), std::fmt::Error>
+pub fn tag<W, T>(sink: &mut W, maybe_tag: Option<&T>) -> Result<(), std::fmt::Error>
 where
     W: std::fmt::Write,
     T: Tag,

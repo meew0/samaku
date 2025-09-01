@@ -109,6 +109,7 @@
 #![warn(unused_qualifications)]
 #![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
 #![allow(clippy::enum_glob_use)] // too useful to disallow entirely, but should only be done locally
+#![allow(clippy::struct_field_names)] // https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359
 #![cfg_attr(test, allow(clippy::cognitive_complexity))] // same as above
 #![cfg_attr(test, allow(clippy::too_many_lines))] // it doesn't matter if test functions are complex
 
