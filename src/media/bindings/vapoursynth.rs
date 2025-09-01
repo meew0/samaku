@@ -3,7 +3,7 @@
     reason = "implements more of what VS does for now than is currently used in samaku"
 )]
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
@@ -26,11 +26,7 @@ fn get_script_api() -> *const vs::VSSCRIPTAPI {
     let ptr = SCRIPTAPI.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "constant defined by VS, does not matter if it wraps"
-        )]
-        let vs_api_version = vs::VSSCRIPT_API_VERSION as i32;
+        let vs_api_version = vs::VSSCRIPT_API_VERSION;
 
         let new_ptr = unsafe { vs::getVSScriptAPI(vs_api_version).cast_mut() };
         assert!(!new_ptr.is_null(), "Failed to initialise VSScriptAPI");
@@ -46,11 +42,7 @@ fn get_api() -> *const vs::VSAPI {
     let ptr = API.load(Ordering::Relaxed);
 
     if ptr.is_null() {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "constant defined by VS, does not matter if it wraps"
-        )]
-        let vs_api_version = vs::VAPOURSYNTH_API_VERSION as i32;
+        let vs_api_version = vs::VAPOURSYNTH_API_VERSION;
 
         let script_api = get_script_api();
         let new_ptr = unsafe { (*script_api).getVSAPI.unwrap()(vs_api_version).cast_mut() };
@@ -315,11 +307,7 @@ impl ConstMap<'_> {
         let api = get_api();
         let mut err: i32 = 0;
         let res = unsafe { (*api).mapGetInt.unwrap()(self.map, key.as_ptr(), index, &raw mut err) };
-        if err > 0 {
-            Err(err)
-        } else {
-            Ok(res)
-        }
+        if err > 0 { Err(err) } else { Ok(res) }
     }
 
     pub(crate) fn get_node(&self, key: &CStr, index: i32) -> Result<Node, i32> {
@@ -327,11 +315,7 @@ impl ConstMap<'_> {
         let mut err: i32 = 0;
         let node =
             unsafe { (*api).mapGetNode.unwrap()(self.map, key.as_ptr(), index, &raw mut err) };
-        if err > 0 {
-            Err(err)
-        } else {
-            Ok(Node { node })
-        }
+        if err > 0 { Err(err) } else { Ok(Node { node }) }
     }
 
     pub(crate) fn get_int_array(&self, variable: &CStr) -> Result<Vec<i64>, i32> {
@@ -853,7 +837,7 @@ pub(crate) fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> Stri
 pub(crate) fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
     args.append_int(
         CString::new("format").unwrap().as_c_str(),
-        vs::VSPresetFormat::pfRGB24 as i64,
+        i64::from(vs::pfRGB24),
     );
 
     if vi.get_color_family() != vs::VSColorFamily::cfGray as i32

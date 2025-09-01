@@ -24,7 +24,7 @@ iced = { version = "0.12.1", features = [
 iced_aw = { version = "0.9.3", features = ["menu", "selection_list", "icons"] }
 iced_table = { git = "https://github.com/meew0/iced_table.git" }
 iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", branch = "sockets-iced-v0.12" }
-rustsynth-sys = { version = "0.4.0", features = [
+rustsynth-sys = { version = "0.5.0", features = [
     "vapoursynth-functions",
     "vsscript-functions",
 ] }
