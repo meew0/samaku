@@ -266,7 +266,7 @@ impl Video {
             "Frame profiling [display]: obtaining frame {n:?} took {elapsed_obtain:.2?}, packing it took {elapsed_copy:.2?}",
         );
 
-        iced::widget::image::Handle::from_pixels(width, height, out)
+        iced::widget::image::Handle::from_rgba(width, height, out)
     }
 
     /// Get a patch (monochrome region) of frame #`n` with the bounds given by the `request`.

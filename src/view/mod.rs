@@ -24,13 +24,15 @@ pub fn separator() -> iced_aw::quad::Quad {
 
 /// Create a text widget that shows an icon.
 #[must_use]
-pub fn icon<'a, Renderer>(icon: iced_aw::Bootstrap) -> iced::widget::Text<'a, iced::Theme, Renderer>
+pub fn icon<'a, Renderer>(
+    icon: iced_fonts::Bootstrap,
+) -> iced::widget::Text<'a, iced::Theme, Renderer>
 where
     Renderer: iced::advanced::text::Renderer,
     Renderer::Font: From<iced::Font>,
 {
-    iced::widget::text(iced_aw::core::icons::bootstrap::icon_to_char(icon).to_string())
-        .font(iced_aw::BOOTSTRAP_FONT)
-        .horizontal_alignment(iced::alignment::Horizontal::Center)
+    iced::widget::text(iced_fonts::bootstrap::icon_to_char(icon).to_string())
+        .font(iced_fonts::BOOTSTRAP_FONT)
+        .align_x(iced::alignment::Horizontal::Center)
         .width(iced::Length::Fill)
 }

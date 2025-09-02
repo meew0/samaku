@@ -1,8 +1,7 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
-#![warn(clippy::allow_attributes)] // add once lint_reasons is stable
+#![warn(clippy::allow_attributes)]
 #![warn(clippy::allow_attributes_without_reason)]
-// add once lint_reasons is stable
 // #![warn(clippy::arbitrary_source_item_ordering)] // potentially add in the future
 // #![warn(clippy::arithmetic_side_effects)] // potentially add in the future
 #![warn(clippy::as_pointer_underscore)]
@@ -185,8 +184,8 @@ use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::{event, executor, subscription, Alignment, Event};
-use iced::{Application, Command, Element, Length, Settings, Subscription};
+use iced::{Alignment, Event, event};
+use iced::{Element, Length, Settings, Subscription};
 
 #[cfg(test)]
 use criterion as _;
@@ -212,18 +211,20 @@ pub mod workers;
     reason = "main function doesn't need error documentation"
 )]
 pub fn run() -> iced::Result {
-    Samaku::run(Settings {
-        id: Some("samaku".to_owned()),
-        window: iced::window::Settings::default(),
-        flags: (),
-        fonts: vec![
-            resources::BARLOW.into(),
-            iced_aw::BOOTSTRAP_FONT_BYTES.into(),
-        ],
-        default_font: DEFAULT_FONT,
-        default_text_size: iced::Pixels(16.0),
-        antialiasing: false,
-    })
+    iced::application(title, update::update, Samaku::view)
+        .subscription(Samaku::subscription)
+        .settings(Settings {
+            id: Some("samaku".to_owned()),
+            fonts: vec![
+                resources::BARLOW.into(),
+                iced_fonts::BOOTSTRAP_FONT_BYTES.into(),
+            ],
+            default_font: DEFAULT_FONT,
+            default_text_size: iced::Pixels(16.0),
+            antialiasing: false,
+        })
+        .theme(theme)
+        .run()
 }
 
 pub const DEFAULT_FONT: iced::Font = iced::Font {
@@ -353,59 +354,9 @@ impl Samaku {
             self.toasts.push(toast);
         }
     }
-}
-
-impl Application for Samaku {
-    type Executor = executor::Default;
-    type Message = message::Message;
-    type Theme = iced::Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (Self, Command<Self::Message>) {
-        let (panes, _) = pane_grid::State::new(pane::State::Unassigned);
-
-        // Initial shared state...
-        let shared_state = SharedState {
-            audio: Arc::new(Mutex::new(None)),
-            playback_position: Arc::new(model::playback::Position::default()),
-        };
-
-        // ...and initial global state
-        let global_state = Samaku {
-            panes,
-            focus: None,
-            toasts: vec![],
-            workers: workers::Workers::spawn_all(&shared_state),
-            actual_frame: None,
-            video_metadata: None,
-            subtitles: subtitle::File::default(),
-            selected_event_indices: HashSet::new(),
-            shared: shared_state,
-            view: RefCell::new(ViewState {
-                subtitle_renderer: media::subtitle::Renderer::new(),
-            }),
-            playing: false,
-            reticules: None,
-        };
-
-        (global_state, Command::none())
-    }
-
-    fn title(&self) -> String {
-        format!("samaku {}", version::Long)
-    }
-
-    /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
-    /// whatever processing is required, and updates the global state based on it. This will cause
-    /// iced to rerender the application afterwards.
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
-        // The update logic is implemented in `update.rs`, to keep this file somewhat clean and to
-        // make it easier to add utility functions to the update logic.
-        update::update(self, message)
-    }
 
     /// Construct the user interface. Called whenever iced needs to rerender the application.
-    fn view(&'_ self) -> Element<'_, Self::Message> {
+    fn view(&'_ self) -> Element<'_, message::Message> {
         let focus = self.focus;
 
         // The pane grid makes up the main part of the application. All the fundamental
@@ -439,9 +390,9 @@ impl Application for Samaku {
             .width(Length::Fill)
             .height(Length::Fill)
             .spacing(5)
-            .on_click(Self::Message::FocusPane)
-            .on_drag(Self::Message::DragPane)
-            .on_resize(0, Self::Message::ResizePane);
+            .on_click(message::Message::FocusPane)
+            .on_drag(message::Message::DragPane)
+            .on_resize(0, message::Message::ResizePane);
 
         // We implement our own non-native menu using iced_aw. The entry definitions are located
         // in `menu.rs`.
@@ -459,14 +410,16 @@ impl Application for Samaku {
                 .height(30),
             iced::widget::text("samaku")
                 .size(25)
-                .style(iced::theme::Text::Color(style::SAMAKU_PRIMARY)),
+                .style(|_theme| iced::widget::text::Style {
+                    color: Some(style::SAMAKU_PRIMARY)
+                }),
             iced::widget::Space::with_width(Length::Fixed(10.0)),
             menu_bar
         ]
         .spacing(5)
-        .align_items(Alignment::Center);
+        .align_y(Alignment::Center);
 
-        let content: Element<Self::Message> =
+        let content: Element<message::Message> =
             container(iced::widget::column![title_row, pane_grid].spacing(10))
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -478,15 +431,11 @@ impl Application for Samaku {
             .into()
     }
 
-    fn theme(&self) -> Self::Theme {
-        style::samaku_theme()
-    }
-
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(&self) -> Subscription<message::Message> {
         use iced::futures::StreamExt as _;
 
         // Handle incoming global events, like key presses
-        let events = event::listen_with(|event, status| {
+        let events = event::listen_with(|event, status, _window_id| {
             if status == event::Status::Captured {
                 return None;
             }
@@ -510,17 +459,57 @@ impl Application for Samaku {
         // times `subscription` is called, the second argument will be `None` and would lead to a
         // panic if it were unwrapped within the closure, but the closure is never called because
         // the initially created subscription is never overwritten.
-        let worker_messages = subscription::unfold(
+        let worker_messages = Subscription::run_with_id(
             std::any::TypeId::of::<workers::Workers>(),
-            self.workers.receiver.take(),
-            async move |mut receiver| {
-                let message = receiver.as_mut().unwrap().next().await.unwrap();
-                (message, receiver)
-            },
+            iced::futures::stream::unfold(
+                self.workers.receiver.take(),
+                async move |mut receiver| {
+                    let message = receiver.as_mut().unwrap().next().await.unwrap();
+                    Some((message, receiver))
+                },
+            ),
         );
 
         Subscription::batch(vec![events, worker_messages])
     }
+}
+
+impl Default for Samaku {
+    fn default() -> Self {
+        let (panes, _) = pane_grid::State::new(pane::State::Unassigned);
+
+        // Initial shared state...
+        let shared_state = SharedState {
+            audio: Arc::new(Mutex::new(None)),
+            playback_position: Arc::new(model::playback::Position::default()),
+        };
+
+        // ...and initial global state
+        Samaku {
+            panes,
+            focus: None,
+            toasts: vec![],
+            workers: workers::Workers::spawn_all(&shared_state),
+            actual_frame: None,
+            video_metadata: None,
+            subtitles: subtitle::File::default(),
+            selected_event_indices: HashSet::new(),
+            shared: shared_state,
+            view: RefCell::new(ViewState {
+                subtitle_renderer: media::subtitle::Renderer::new(),
+            }),
+            playing: false,
+            reticules: None,
+        }
+    }
+}
+
+fn title(_state: &Samaku) -> String {
+    format!("samaku {}", version::Long)
+}
+
+fn theme(_state: &Samaku) -> iced::Theme {
+    style::samaku_theme()
 }
 
 #[cfg(test)]

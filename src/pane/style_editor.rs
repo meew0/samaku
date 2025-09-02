@@ -52,8 +52,9 @@ impl std::hash::Hash for StyleWrapper {
 }
 
 // An image containing a single transparent pixel, to be used as a base for the subtitle preview
+static TRANSPARENT_IMAGE_PIXELS: &[u8] = &[0_u8; 4];
 static TRANSPARENT_IMAGE: LazyLock<iced::widget::image::Handle> =
-    LazyLock::new(|| iced::widget::image::Handle::from_pixels(1, 1, [0_u8; 4]));
+    LazyLock::new(|| iced::widget::image::Handle::from_rgba(1, 1, TRANSPARENT_IMAGE_PIXELS));
 
 // TODO: make this scale to the actual size of the pane, by using `responsive` or the like
 static PREVIEW_WIDTH: u16 = 500_u16;
@@ -82,7 +83,7 @@ pub fn view<'a>(
         },
         14.0,
         2.0,
-        <iced::Theme as iced_aw::style::selection_list::StyleSheet>::Style::default(),
+        iced_aw::style::selection_list::primary,
         Some(pane_state.selected_style_index),
         crate::DEFAULT_FONT,
     )
@@ -186,10 +187,8 @@ pub fn view<'a>(
     super::View {
         title: iced::widget::text("Style editor").into(),
         content: iced::widget::container(content)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into(),
     }
 }
@@ -201,7 +200,7 @@ pub fn view<'a>(
 pub fn update(
     editor_state: &mut State,
     pane_message: message::Pane,
-) -> iced::Command<message::Message> {
+) -> iced::Task<message::Message> {
     #[expect(
         clippy::single_match,
         reason = "to allow easily expanding it later to further messages"
@@ -213,5 +212,5 @@ pub fn update(
         _ => (),
     }
 
-    iced::Command::none()
+    iced::Task::none()
 }

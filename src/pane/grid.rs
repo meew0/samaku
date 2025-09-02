@@ -77,32 +77,20 @@ impl Display for ColumnField {
     }
 }
 
-struct Highlighted;
+fn highlighted_style(theme: &iced::Theme) -> iced::widget::container::Style {
+    let pair = theme.extended_palette().primary.weak;
 
-impl iced::widget::container::StyleSheet for Highlighted {
-    type Style = iced::Theme;
-
-    fn appearance(&self, style: &iced::Theme) -> iced::widget::container::Appearance {
-        let pair = style.extended_palette().primary.weak;
-
-        iced::widget::container::Appearance {
-            background: Some(pair.color.into()),
-            text_color: pair.text.into(),
-            ..Default::default()
-        }
+    iced::widget::container::Style {
+        background: Some(pair.color.into()),
+        text_color: pair.text.into(),
+        ..iced::widget::container::rounded_box(theme)
     }
 }
 
-struct Comment;
-
-impl iced::widget::container::StyleSheet for Comment {
-    type Style = iced::Theme;
-
-    fn appearance(&self, _theme: &iced::Theme) -> iced::widget::container::Appearance {
-        iced::widget::container::Appearance {
-            text_color: style::SAMAKU_TEXT_WEAK.into(),
-            ..Default::default()
-        }
+fn comment_style(theme: &iced::Theme) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        text_color: style::SAMAKU_TEXT_WEAK.into(),
+        ..iced::widget::container::rounded_box(theme)
     }
 }
 
@@ -112,8 +100,7 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
 
     fn header(&'a self, _col_index: usize) -> iced::Element<'a, message::Message> {
         iced::widget::container(iced::widget::text(format!("{}", self.field)))
-            .height(24)
-            .center_y()
+            .center_y(24)
             .into()
     }
 
@@ -131,9 +118,9 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
         let cell_content: iced::Element<message::Message> = match self.field {
             ColumnField::SelectButton => {
                 let icon = if selected {
-                    iced_aw::Bootstrap::Dot
+                    iced_fonts::Bootstrap::Dot
                 } else {
-                    iced_aw::Bootstrap::CircleFill
+                    iced_fonts::Bootstrap::CircleFill
                 };
 
                 iced::widget::button(view::icon(icon).size(12.0))
@@ -165,14 +152,14 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
         let container = iced::widget::container(cell_content);
 
         let styled_container = if selected {
-            container.style(iced::theme::Container::Custom(Box::new(Highlighted)))
+            container.style(highlighted_style)
         } else if row.is_comment() {
-            container.style(iced::theme::Container::Custom(Box::new(Comment)))
+            container.style(comment_style)
         } else {
             container
         };
 
-        styled_container.height(24).center_y().into()
+        styled_container.center_y(24).into()
     }
 
     fn width(&self) -> f32 {
@@ -211,16 +198,16 @@ pub fn view<'a>(
         .into()
     });
 
-    let add_button = iced::widget::button(view::icon(iced_aw::Bootstrap::Plus))
+    let add_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Plus))
         .on_press(message::Message::AddEvent);
 
-    let delete_button = iced::widget::button(view::icon(iced_aw::Bootstrap::Dash))
+    let delete_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Dash))
         .on_press(message::Message::DeleteSelectedEvents);
 
     let top_bar = iced::widget::container(
         iced::widget::row![add_button, delete_button]
             .spacing(5.0)
-            .align_items(iced::Alignment::Center),
+            .align_y(iced::Alignment::Center),
     )
     .padding(5.0);
 
@@ -230,10 +217,8 @@ pub fn view<'a>(
     super::View {
         title: iced::widget::text("Subtitle grid").into(),
         content: iced::widget::container(content)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into(),
     }
 }
@@ -242,10 +227,7 @@ pub fn view<'a>(
     clippy::needless_pass_by_value,
     reason = "this method logically consumes the message"
 )]
-pub fn update(
-    grid_state: &mut State,
-    pane_message: message::Pane,
-) -> iced::Command<message::Message> {
+pub fn update(grid_state: &mut State, pane_message: message::Pane) -> iced::Task<message::Message> {
     match pane_message {
         message::Pane::GridSyncHeader(offset) => {
             return iced::widget::scrollable::scroll_to(
@@ -268,5 +250,5 @@ pub fn update(
         _ => (),
     }
 
-    iced::Command::none()
+    iced::Task::none()
 }

@@ -44,10 +44,8 @@ pub fn view<'a>(self_pane: super::Pane) -> super::View<'a> {
                 ]
                 .spacing(20)
         )
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into(),
     }
 }

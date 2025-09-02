@@ -120,20 +120,20 @@ pub fn view<'a>(
                 effect_text
             ]
             .spacing(5.0)
-            .align_items(iced::Alignment::Center);
+            .align_y(iced::Alignment::Center);
 
             // Numeric controls
             let start_time_control =
-                iced_aw::number_input(active_event.start.0, i64::MAX, |new_start_ms| {
+                iced_aw::number_input(&active_event.start.0, ..i64::MAX, |new_start_ms| {
                     message::Message::SetActiveEventStartTime(subtitle::StartTime(new_start_ms))
                 });
             let duration_control =
-                iced_aw::number_input(active_event.duration.0, i64::MAX, |new_duration_ms| {
+                iced_aw::number_input(&active_event.duration.0, ..i64::MAX, |new_duration_ms| {
                     message::Message::SetActiveEventDuration(subtitle::Duration(new_duration_ms))
                 });
             let layer_control = iced_aw::number_input(
-                active_event.layer_index,
-                i32::MAX,
+                &active_event.layer_index,
+                ..i32::MAX,
                 message::Message::SetActiveEventLayerIndex,
             );
 
@@ -147,7 +147,7 @@ pub fn view<'a>(
                 layer_control
             ]
             .spacing(5.0)
-            .align_items(iced::Alignment::Center);
+            .align_y(iced::Alignment::Center);
 
             let main_text = iced::widget::responsive(|size| {
                 iced::widget::text_input("Enter subtitle text...", &active_event.text)
@@ -172,10 +172,8 @@ pub fn view<'a>(
     super::View {
         title: iced::widget::text("Text editor").into(),
         content: iced::widget::container(content)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .padding(5.0)
             .into(),
     }
@@ -184,6 +182,6 @@ pub fn view<'a>(
 pub fn update(
     _editor_state: &mut State,
     _pane_message: message::Pane,
-) -> iced::Command<message::Message> {
-    iced::Command::none()
+) -> iced::Task<message::Message> {
+    iced::Task::none()
 }

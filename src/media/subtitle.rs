@@ -243,7 +243,7 @@ pub fn ass_image_to_iced(
         }
     }
 
-    let handle = iced::widget::image::Handle::from_pixels(
+    let handle = iced::widget::image::Handle::from_rgba(
         u32::try_from(width).expect("image width should fit into a `u32`"),
         u32::try_from(height).expect("image height should fit into a `u32`"),
         out,

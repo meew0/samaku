@@ -46,9 +46,9 @@ pub(crate) fn dispatch_view<'a>(
 pub fn dispatch_update(
     state: &mut State,
     pane_message: message::Pane,
-) -> iced::Command<message::Message> {
+) -> iced::Task<message::Message> {
     match state {
-        State::Unassigned => iced::Command::none(),
+        State::Unassigned => iced::Task::none(),
         State::Video(local_state) => video::update(local_state, pane_message),
         State::Grid(local_state) => grid::update(local_state, pane_message),
         State::TextEditor(local_state) => text_editor::update(local_state, pane_message),

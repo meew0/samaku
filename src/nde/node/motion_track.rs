@@ -79,7 +79,7 @@ impl Node for MotionTrack {
             track_button,
         ];
 
-        column.align_items(iced::Alignment::Center).into()
+        column.align_x(iced::Alignment::Center).into()
     }
 
     fn update(&mut self, message: message::Node) {

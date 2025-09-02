@@ -98,10 +98,8 @@ pub fn view<'a>(
     super::View {
         title: iced::widget::text("Video").into(),
         content: iced::widget::container(scroll)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into(),
     }
 }
@@ -109,8 +107,8 @@ pub fn view<'a>(
 pub fn update(
     _video_state: &mut State,
     _pane_message: message::Pane,
-) -> iced::Command<message::Message> {
-    iced::Command::none()
+) -> iced::Task<message::Message> {
+    iced::Task::none()
 }
 
 struct ReticuleProgram<'a> {

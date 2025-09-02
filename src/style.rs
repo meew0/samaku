@@ -5,8 +5,8 @@
 
 use iced::widget::container;
 use iced::{
-    theme::{Palette, Theme},
     Color,
+    theme::{Palette, Theme},
 };
 
 // https://coolors.co/0f1a19-f0f7ee-ffb60a-06b153-f5004e
@@ -72,26 +72,26 @@ pub fn samaku_theme() -> Theme {
 }
 
 #[must_use]
-pub fn title_bar_active(theme: &Theme) -> container::Appearance {
+pub fn title_bar_active(theme: &Theme) -> container::Style {
     let palette = theme.extended_palette();
 
-    container::Appearance {
+    container::Style {
         text_color: Some(palette.background.weak.text),
         background: Some(palette.background.weak.color.into()),
         border: iced::Border {
             width: 1.0,
             color: palette.background.weak.color,
-            radius: [0.0_f32; 4].into(),
+            radius: iced::border::radius(0.0),
         },
         ..Default::default()
     }
 }
 
 #[must_use]
-pub fn title_bar_focused(theme: &Theme) -> container::Appearance {
+pub fn title_bar_focused(theme: &Theme) -> container::Style {
     let palette = theme.extended_palette();
 
-    container::Appearance {
+    container::Style {
         text_color: Some(palette.primary.strong.text),
         background: Some(palette.primary.strong.color.into()),
         ..Default::default()
@@ -99,30 +99,30 @@ pub fn title_bar_focused(theme: &Theme) -> container::Appearance {
 }
 
 #[must_use]
-pub fn pane_active(theme: &Theme) -> container::Appearance {
+pub fn pane_active(theme: &Theme) -> container::Style {
     let palette = theme.extended_palette();
 
-    container::Appearance {
+    container::Style {
         background: None,
         border: iced::Border {
             width: 1.0,
             color: palette.background.weak.color,
-            radius: [0.0_f32; 4].into(),
+            radius: iced::border::radius(0.0),
         },
         ..Default::default()
     }
 }
 
 #[must_use]
-pub fn pane_focused(theme: &Theme) -> container::Appearance {
+pub fn pane_focused(theme: &Theme) -> container::Style {
     let palette = theme.extended_palette();
 
-    container::Appearance {
+    container::Style {
         background: None,
         border: iced::Border {
             width: 2.0,
             color: palette.background.strong.color,
-            radius: [0.0_f32; 4].into(),
+            radius: iced::border::radius(0.0),
         },
         ..Default::default()
     }

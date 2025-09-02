@@ -1,12 +1,11 @@
-use std::hash::Hash;
 use std::marker::PhantomData;
 
 use iced::advanced::graphics::geometry;
 use iced::advanced::layout;
 use iced::advanced::mouse;
 use iced::advanced::renderer;
-use iced::advanced::widget::{tree, Tree};
-use iced::advanced::{image, Clipboard, Shell};
+use iced::advanced::widget::{Tree, tree};
+use iced::advanced::{Clipboard, Shell, image};
 use iced::advanced::{Layout, Widget};
 use iced::widget::canvas;
 use iced::{ContentFit, Element, Event, Length, Rectangle, Size, Vector};
@@ -24,7 +23,7 @@ pub struct StackedImage<H> {
 pub struct ImageStack<Handle, Message, Program, Theme, Renderer>
 where
     Program: canvas::Program<Message, Theme, Renderer>,
-    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
+    Renderer: image::Renderer<Handle = Handle> + geometry::Renderer,
 {
     images: Vec<StackedImage<Handle>>,
     image_size_override: Option<Size<u32>>,
@@ -41,7 +40,7 @@ impl<Handle, Message, Program, Theme, Renderer>
     ImageStack<Handle, Message, Program, Theme, Renderer>
 where
     Program: canvas::Program<Message, Theme, Renderer>,
-    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
+    Renderer: image::Renderer<Handle = Handle> + geometry::Renderer,
 {
     /// Creates a new [`ImageStack`] with the given path.
     pub fn new<T: Into<Vec<StackedImage<Handle>>>>(images: T, program: Program) -> Self {
@@ -108,7 +107,7 @@ where
     // The raw w/h of the first image, or the override, if specified
     let image_size = {
         let Size { width, height } =
-            image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
+            image_size_override.unwrap_or_else(|| renderer.measure_image(&images[0].handle));
 
         #[expect(
             clippy::cast_precision_loss,
@@ -150,11 +149,11 @@ pub(super) fn draw<Renderer, Handle>(
     image_size_override: Option<Size<u32>>,
 ) where
     Renderer: image::Renderer<Handle = Handle>,
-    Handle: Clone + Hash,
+    Handle: Clone,
 {
     // Find out maximum size (assuming the first image covers the entire area)
     let Size { width, height } =
-        image_size_override.unwrap_or_else(|| renderer.dimensions(&images[0].handle));
+        image_size_override.unwrap_or_else(|| renderer.measure_image(&images[0].handle));
     #[expect(
         clippy::cast_precision_loss,
         reason = "precision loss acceptable for rendering"
@@ -171,7 +170,7 @@ pub(super) fn draw<Renderer, Handle>(
     let to_draw: Vec<(&StackedImage<Handle>, Rectangle)> = images
         .iter()
         .map(|image| {
-            let Size { width, height } = renderer.dimensions(&image.handle);
+            let Size { width, height } = renderer.measure_image(&image.handle);
 
             let center_offset = Vector::new(
                 (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
@@ -201,7 +200,14 @@ pub(super) fn draw<Renderer, Handle>(
         .collect();
     let render = |renderer: &mut Renderer| {
         for (image, bounds) in to_draw {
-            renderer.draw(image.handle.clone(), image::FilterMethod::Linear, bounds);
+            let image = image::Image {
+                handle: image.handle.clone(),
+                filter_method: image::FilterMethod::Linear,
+                rotation: iced::Radians(0.0),
+                opacity: 0.0,
+                snap: false,
+            };
+            renderer.draw_image(image, bounds);
         }
     };
 
@@ -215,8 +221,8 @@ pub(super) fn draw<Renderer, Handle>(
 impl<Message, Renderer, Handle, Program, Theme> Widget<Message, Theme, Renderer>
     for ImageStack<Handle, Message, Program, Theme, Renderer>
 where
-    Renderer: image::Renderer<Handle = Handle> + canvas::Renderer,
-    Handle: Clone + Hash,
+    Renderer: image::Renderer<Handle = Handle> + geometry::Renderer,
+    Handle: Clone,
     Program: canvas::Program<Message, Theme, Renderer>,
 {
     fn size(&self) -> Size<Length> {
@@ -266,11 +272,12 @@ where
         let state = tree.state.downcast_ref::<Program::State>();
         renderer.with_layer(bounds, |renderer| {
             renderer.with_translation(Vector::new(bounds.x, bounds.y), |renderer| {
-                canvas::Renderer::draw(
-                    renderer,
+                let draw_result =
                     self.program
-                        .draw(state, renderer, theme, layout.bounds(), cursor),
-                );
+                        .draw(state, renderer, theme, layout.bounds(), cursor);
+                for geometry in draw_result {
+                    renderer.draw_geometry(geometry);
+                }
             });
         });
     }
@@ -339,7 +346,7 @@ impl<'a, Message, Renderer, Handle, Program, Theme>
     for Element<'a, Message, Theme, Renderer>
 where
     Renderer: image::Renderer<Handle = Handle> + geometry::Renderer + 'a,
-    Handle: Clone + Hash + 'a,
+    Handle: Clone + 'a,
     Program: canvas::Program<Message, Theme, Renderer> + 'a,
     Message: 'a,
     Theme: 'a,
@@ -355,7 +362,7 @@ pub struct EmptyProgram;
 
 impl<Message, Theme, Renderer> canvas::Program<Message, Theme, Renderer> for EmptyProgram
 where
-    Renderer: canvas::Renderer,
+    Renderer: geometry::Renderer,
 {
     type State = ();
 
@@ -366,7 +373,7 @@ where
         _theme: &Theme,
         _bounds: Rectangle,
         _cursor: mouse::Cursor,
-    ) -> Vec<<Renderer as canvas::Renderer>::Geometry> {
+    ) -> Vec<<Renderer as geometry::Renderer>::Geometry> {
         vec![]
     }
 

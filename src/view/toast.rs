@@ -30,20 +30,18 @@ impl Status {
     pub const ALL: &'static [Self] = &[Self::Primary, Self::Secondary, Self::Success, Self::Danger];
 }
 
-impl iced::widget::container::StyleSheet for Status {
-    type Style = Theme;
+fn make_style(status: Status) -> impl Fn(&Theme) -> iced::widget::container::Style {
+    move |theme| {
+        let palette = theme.extended_palette();
 
-    fn appearance(&self, style: &Theme) -> iced::widget::container::Appearance {
-        let palette = style.extended_palette();
-
-        let pair = match self {
+        let pair = match status {
             Status::Primary => palette.primary.weak,
             Status::Secondary => palette.secondary.weak,
             Status::Success => palette.success.weak,
             Status::Danger => palette.danger.weak,
         };
 
-        iced::widget::container::Appearance {
+        iced::widget::container::Style {
             background: Some(pair.color.into()),
             text_color: pair.text.into(),
             ..Default::default()
@@ -92,22 +90,16 @@ impl PartialEq for Toast {
 
 impl Eq for Toast {}
 
-pub struct Manager<'a, Message, Theme> {
-    content: Element<'a, Message, Theme>,
-    toasts: Vec<Element<'a, Message, Theme>>,
+pub struct Manager<'a, Message> {
+    content: Element<'a, Message>,
+    toasts: Vec<Element<'a, Message>>,
     timeout_secs: u64,
     on_close: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
-impl<'a, Message, Theme> Manager<'a, Message, Theme>
+impl<'a, Message> Manager<'a, Message>
 where
     Message: 'a + Clone,
-    Theme: 'a
-        + iced::widget::container::StyleSheet
-        + iced::widget::text::StyleSheet
-        + iced::widget::button::StyleSheet
-        + iced::widget::rule::StyleSheet,
-    <Theme as iced::widget::container::StyleSheet>::Style: From<iced::theme::Container>,
 {
     pub fn new<E: Into<Element<'a, Message, Theme>>, F: Fn(usize) -> Message + 'a>(
         content: E,
@@ -136,16 +128,16 @@ where
                                 .on_press((on_close)(index))
                                 .padding(3),
                         ]
-                        .align_items(Alignment::Center)
+                        .align_y(Alignment::Center)
                     )
                     .width(Length::Fill)
                     .padding(5)
-                    .style(iced::theme::Container::Custom(Box::new(toast.status))),
+                    .style(make_style(toast.status)),
                     iced::widget::horizontal_rule(1),
                     iced::widget::container(iced::widget::text(toast.body.as_str()))
                         .width(Length::Fill)
                         .padding(5)
-                        .style(iced::theme::Container::Box),
+                        .style(iced::widget::container::rounded_box),
                 ])
                 .max_width(200)
                 .into(),
@@ -169,7 +161,7 @@ where
     }
 }
 
-impl<Message, Theme> Widget<Message, Theme, Renderer> for Manager<'_, Message, Theme> {
+impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
     }
@@ -251,7 +243,7 @@ impl<Message, Theme> Widget<Message, Theme, Renderer> for Manager<'_, Message, T
         state: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation,
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.content
@@ -333,17 +325,15 @@ impl<Message, Theme> Widget<Message, Theme, Renderer> for Manager<'_, Message, T
     }
 }
 
-struct Overlay<'a, 'b, Message, Theme> {
-    toasts: &'b mut [Element<'a, Message, Theme>],
+struct Overlay<'a, 'b, Message> {
+    toasts: &'b mut [Element<'a, Message>],
     state: &'b mut [Tree],
     instants: &'b mut [Option<Instant>],
     on_close: &'b dyn Fn(usize) -> Message,
     timeout_secs: u64,
 }
 
-impl<Message, Theme> overlay::Overlay<Message, Theme, Renderer>
-    for Overlay<'_, '_, Message, Theme>
-{
+impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Message> {
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let limits = layout::Limits::new(Size::ZERO, bounds)
             .width(Length::Fill)
@@ -385,12 +375,7 @@ impl<Message, Theme> overlay::Overlay<Message, Theme, Renderer>
         }
     }
 
-    fn operate(
-        &mut self,
-        layout: Layout<'_>,
-        renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
-    ) {
+    fn operate(&mut self, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.toasts
                 .iter()
@@ -413,7 +398,7 @@ impl<Message, Theme> overlay::Overlay<Message, Theme, Renderer>
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
     ) -> event::Status {
-        if let Event::Window(_, window::Event::RedrawRequested(now)) = &event {
+        if let Event::Window(window::Event::RedrawRequested(now)) = &event {
             let mut next_redraw: Option<window::RedrawRequest> = None;
 
             self.instants
@@ -507,12 +492,11 @@ impl<Message, Theme> overlay::Overlay<Message, Theme, Renderer>
     }
 }
 
-impl<'a, Message, Theme> From<Manager<'a, Message, Theme>> for Element<'a, Message, Theme>
+impl<'a, Message> From<Manager<'a, Message>> for Element<'a, Message>
 where
     Message: 'a,
-    Theme: 'a,
 {
-    fn from(manager: Manager<'a, Message, Theme>) -> Self {
+    fn from(manager: Manager<'a, Message>) -> Self {
         Element::new(manager)
     }
 }

@@ -118,7 +118,7 @@ impl Node for InputPosition {
             button
         ];
 
-        column.align_items(iced::Alignment::Center).into()
+        column.align_x(iced::Alignment::Center).into()
     }
 
     fn reticule_update(
@@ -240,7 +240,7 @@ impl Node for InputRectangle {
             button
         ];
 
-        column.align_items(iced::Alignment::Center).into()
+        column.align_x(iced::Alignment::Center).into()
     }
 
     fn reticule_update(
@@ -345,7 +345,7 @@ impl Node for InputTags {
 
         let column = iced::widget::column![iced::widget::text(self.name()), input];
 
-        column.align_items(iced::Alignment::Center).into()
+        column.align_x(iced::Alignment::Center).into()
     }
 
     fn update(&mut self, message: message::Node) {

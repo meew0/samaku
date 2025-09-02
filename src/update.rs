@@ -34,9 +34,12 @@ macro_rules! iter_panes {
     };
 }
 
-pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
+/// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
+/// whatever processing is required, and updates the global state based on it. This will cause
+/// iced to rerender the application afterwards.
+pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
     // Run the internal update method, which does the actual updating of global state.
-    let command = update_internal(global_state, message);
+    let task = update_internal(global_state, message);
 
     // Check whether certain properties have been modified. If they have, we need to notify
     // our panes about this, since some of them contain copies of the data in an iced-specific
@@ -44,7 +47,7 @@ pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced
     let styles_modified = global_state.subtitles.styles.check();
     update_style_lists(global_state, styles_modified);
 
-    command
+    task
 }
 
 /// The internal update method, which actually processes the message and updates global state.
@@ -56,7 +59,7 @@ pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced
     clippy::cognitive_complexity,
     reason = "the elm architecture more or less requires a complex global update method"
 )]
-fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::Command<Message> {
+fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
     #[expect(
         clippy::match_same_arms,
         reason = "needed in this case to coherently group messages together"
@@ -136,7 +139,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::SelectVideoFile => {
-            return iced::Command::perform(
+            return iced::Task::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
                 Message::map_option(|handle: rfd::FileHandle| {
                     Message::VideoFileSelected(handle.path().to_path_buf())
@@ -151,7 +154,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             global_state.workers.emit_playback_step();
         }
         Message::SelectAudioFile => {
-            return iced::Command::perform(
+            return iced::Task::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
                 Message::map_option(|handle: rfd::FileHandle| {
                     Message::AudioFileSelected(handle.path().to_path_buf())
@@ -171,7 +174,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     None => None,
                 }
             };
-            return iced::Command::perform(
+            return iced::Task::perform(
                 future,
                 Message::map_option(Message::SubtitleFileReadForImport),
             );
@@ -260,7 +263,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 }
             };
 
-            return iced::Command::perform(future, |()| Message::None);
+            return iced::Task::perform(future, |()| Message::None);
         }
         Message::ExportSubtitleFile => {
             let mut data = String::new();
@@ -285,7 +288,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 }
             };
 
-            return iced::Command::perform(future, |()| Message::None);
+            return iced::Task::perform(future, |()| Message::None);
         }
         Message::VideoFrameAvailable(new_frame, handle) => {
             global_state.actual_frame = Some((new_frame, handle));
@@ -594,7 +597,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
     }
 
-    iced::Command::none()
+    iced::Task::none()
 }
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the

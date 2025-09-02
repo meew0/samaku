@@ -146,10 +146,8 @@ pub fn view<'a>(
     super::View {
         title: iced::widget::text("Node editor").into(),
         content: iced::widget::container(content)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into(),
     }
 }
@@ -447,7 +445,9 @@ fn view_graph<'a>(
         Ok(_) => "",
         Err(NdeError::CycleInGraph) => "Cycle detected!",
     })
-    .style(style::SAMAKU_DESTRUCTIVE);
+    .style(|_theme| iced::widget::text::Style {
+        color: Some(style::SAMAKU_DESTRUCTIVE),
+    });
 
     let bottom_bar = iced::widget::container(
         iced::widget::row![
@@ -458,7 +458,7 @@ fn view_graph<'a>(
             error_message
         ]
         .spacing(5.0)
-        .align_items(iced::Alignment::Center),
+        .align_y(iced::Alignment::Center),
     )
     .padding(5.0);
 
@@ -498,8 +498,11 @@ fn view_non_selected(
     );
 
     let warning_text = if multi_warning {
-        iced::widget::text("To edit a filter, select only one event that has it assigned.")
-            .style(style::SAMAKU_PRIMARY)
+        iced::widget::text("To edit a filter, select only one event that has it assigned.").style(
+            |_theme| iced::widget::text::Style {
+                color: Some(style::SAMAKU_PRIMARY),
+            },
+        )
     } else {
         iced::widget::text("")
     };
@@ -520,7 +523,7 @@ fn make_socket<'a, Message, Theme, Renderer>(
 ) -> Option<iced_node_editor::Socket<'a, Message, Theme, Renderer>>
 where
     Renderer: iced::advanced::text::Renderer + 'a,
-    Theme: iced::widget::text::StyleSheet + 'a,
+    Theme: iced::widget::text::Catalog + 'a,
 {
     const BLOB_RADIUS: f32 = 7.0;
 
@@ -593,7 +596,7 @@ fn menu_item(
 }
 
 fn sub_menu<'a>(
-    label: &str,
+    label: &'a str,
     children: Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>>,
 ) -> iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer> {
     view::menu::sub_menu(label, message::Message::None, children)
@@ -711,7 +714,7 @@ enum CollectError {
 pub fn update(
     node_editor_state: &mut State,
     pane_message: message::Pane,
-) -> iced::Command<message::Message> {
+) -> iced::Task<message::Message> {
     match pane_message {
         message::Pane::NodeEditorScaleChanged(x, y, scale) => {
             let current_scale = node_editor_state.matrix.get_scale();
@@ -744,5 +747,5 @@ pub fn update(
         _ => (),
     }
 
-    iced::Command::none()
+    iced::Task::none()
 }
