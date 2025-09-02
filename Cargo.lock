@@ -1496,10 +1496,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "fast-float"
-version = "0.2.0"
+name = "fast-float2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95765f67b4b18863968b4a1bd5bb576f732b29a4a28c7cd84c09fa3e2875f33c"
+checksum = "f8eb564c5c7423d25c886fb561d1e4ee69f72354d16918afa32c08811f6b6a55"
 
 [[package]]
 name = "fast-srgb8"
@@ -4078,7 +4078,7 @@ dependencies = [
  "criterion",
  "data-encoding",
  "data-encoding-macro",
- "fast-float",
+ "fast-float2",
  "iced",
  "iced_aw",
  "iced_fonts 0.2.1",

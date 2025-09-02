@@ -759,7 +759,9 @@ impl<'a> TagWithArguments<'a> {
     fn float_arg(&self, index: usize) -> Option<f64> {
         self.arguments.get(index).map(|arg_str| {
             assert!(!arg_str.is_empty());
-            fast_float::parse_partial::<f64, _>(trim_start_ctype_isspace(arg_str))
+            // We need fast_float2 here rather than Rust's standard library because of `parse_partial`,
+            // which more closely matches libass' behavior
+            fast_float2::parse_partial::<f64, _>(trim_start_ctype_isspace(arg_str))
                 .ok()
                 .map_or(0.0, |(value, _digits)| value)
         })
@@ -1196,7 +1198,10 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\xbord\\ybord\\xshad\\yshad\\fax\\fay\\iclip\\blur\\fscx\\fscy\\fsp\\fs\\frx\\fry\\frz\\fn\\an\\pos\\fade\\org\\t\\1c\\2c\\3c\\4c\\1a\\2a\\3a\\4a\\be\\b\\i\\kt\\s\\u\\pbo\\p\\q\\fe", &mut global);
+        let block = parse_tag_block(
+            "\\xbord\\ybord\\xshad\\yshad\\fax\\fay\\iclip\\blur\\fscx\\fscy\\fsp\\fs\\frx\\fry\\frz\\fn\\an\\pos\\fade\\org\\t\\1c\\2c\\3c\\4c\\1a\\2a\\3a\\4a\\be\\b\\i\\kt\\s\\u\\pbo\\p\\q\\fe",
+            &mut global,
+        );
 
         assert_matches!(block.new_local.border.x, Reset);
         assert_matches!(block.new_local.border.y, Reset);
@@ -1302,7 +1307,10 @@ mod tests {
         use Resettable::*;
 
         let mut global = Global::empty();
-        let block = parse_tag_block("\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1", &mut global);
+        let block = parse_tag_block(
+            "\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1",
+            &mut global,
+        );
 
         assert_eq!(block.new_local.border.x, Override(1.0));
         assert_eq!(block.new_local.border.y, Override(2.0));
