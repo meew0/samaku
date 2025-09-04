@@ -183,14 +183,11 @@ pub fn view<'a>(
             global_state,
             grid_state.columns.as_slice(),
             global_state.subtitles.events.as_slice(),
-            // We have to use `FocusedPane` here (and in `on_column_resize`) because `iced_table`
-            // does not support passing a closure here.
-            // TODO: Make a PR to support this?
-            |offset| message::Message::FocusedPane(message::Pane::GridSyncHeader(offset)),
+            move |offset| message::Message::Pane(self_pane, message::Pane::GridSyncHeader(offset)),
         )
         .on_column_resize(
-            |index, offset| {
-                message::Message::FocusedPane(message::Pane::GridColumnResizing(index, offset))
+            move |index, offset| {
+                message::Message::Pane(self_pane, message::Pane::GridColumnResizing(index, offset))
             },
             message::Message::Pane(self_pane, message::Pane::GridColumnResized),
         )
