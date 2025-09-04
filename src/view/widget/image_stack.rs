@@ -204,7 +204,7 @@ pub(super) fn draw<Renderer, Handle>(
                 handle: image.handle.clone(),
                 filter_method: image::FilterMethod::Linear,
                 rotation: iced::Radians(0.0),
-                opacity: 0.0,
+                opacity: 1.0,
                 snap: false,
             };
             renderer.draw_image(image, bounds);
