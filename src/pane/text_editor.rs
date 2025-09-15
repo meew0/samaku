@@ -176,10 +176,6 @@ impl super::LocalState for State {
         }
     }
 
-    fn update(&mut self, _pane_message: message::Pane) -> iced::Task<message::Message> {
-        iced::Task::none()
-    }
-
     fn update_style_lists(
         &mut self,
         styles: &[subtitle::Style],
