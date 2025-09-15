@@ -26,12 +26,11 @@ pub enum Message {
     DragPane(pane_grid::DragEvent),
     ResizePane(pane_grid::ResizeEvent),
 
-    /// Set the given pane to contain the given state.
-    /// Can be used to change its type or possibly more
-    SetPaneState(pane_grid::Pane, Box<pane::State>),
+    /// Set the type of the given pane based on the given pane constructor.
+    SetPaneType(pane_grid::Pane, pane::Constructor),
 
-    /// Same as [`SetPaneState`], but sets the focused pane
-    SetFocusedPaneState(Box<pane::State>),
+    /// Same as [`SetPaneType`], but sets the focused pane
+    SetFocusedPaneType(pane::Constructor),
 
     /// Show a toast notification
     Toast(view::toast::Toast),

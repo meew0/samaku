@@ -370,7 +370,7 @@ impl Samaku {
 
                 // Construct the user interface within the pane itself, based on whatever the pane
                 // struct wants to do.
-                let pane_view = pane::dispatch_view(pane, self, pane_state);
+                let pane_view = pane_state.local.view(pane, self);
                 let title_bar =
                     pane_grid::TitleBar::new(pane_view.title)
                         .padding(5)
@@ -476,7 +476,7 @@ impl Samaku {
 
 impl Default for Samaku {
     fn default() -> Self {
-        let (panes, _) = pane_grid::State::new(pane::State::Unassigned);
+        let (panes, _) = pane_grid::State::new(pane::State::unassigned());
 
         // Initial shared state...
         let shared_state = SharedState {

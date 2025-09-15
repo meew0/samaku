@@ -1,5 +1,5 @@
 use iced::{
-    keyboard::{key::Named, Key, Location, Modifiers},
+    keyboard::{Key, Location, Modifiers, key::Named},
     widget::pane_grid::Axis,
 };
 
@@ -16,9 +16,9 @@ pub(crate) fn handle_key_press(
         Key::Named(Named::F3) => Some(Message::SplitPane(Axis::Horizontal)),
         Key::Named(Named::F4) => {
             if modifiers.shift() {
-                Some(Message::SetFocusedPaneState(Box::new(
-                    pane::State::Unassigned,
-                )))
+                Some(Message::SetFocusedPaneType(|| {
+                    Box::new(pane::unassigned::State {})
+                }))
             } else {
                 Some(Message::ClosePane)
             }

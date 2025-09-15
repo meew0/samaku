@@ -16,8 +16,90 @@ pub struct State {
     pub dangling_connection: Option<iced_node_editor::Link>,
 }
 
-impl State {
-    pub fn update_filter_names(&mut self, extradata: &subtitle::Extradata) {
+impl super::LocalState for State {
+    fn view<'a>(
+        &'a self,
+        self_pane: super::Pane,
+        global_state: &'a crate::Samaku,
+    ) -> super::View<'a> {
+        let content: iced::Element<message::Message> =
+            if global_state.selected_event_indices.is_empty() {
+                iced::widget::text("No subtitle currently selected.").into()
+            } else if global_state.selected_event_indices.len() > 1 {
+                // Multiple events selected. We can't meaningfully run the filter on multiple events
+                // at once, even if their filters should match, so display the assignment pane
+                // as a fallback so at least a filter can be assigned to multiple events
+                view_non_selected(self_pane, self, true)
+            } else {
+                // Exactly one event selected
+                let active_event_index =
+                    *global_state.selected_event_indices.iter().next().unwrap();
+                let active_event = &global_state.subtitles.events[active_event_index];
+
+                // Check whether the event has an NDE filter assigned. If yes, display the node editor
+                // to edit that filter, otherwise, display the assignment pane
+                match &global_state
+                    .subtitles
+                    .extradata
+                    .nde_filter_for_event(active_event)
+                {
+                    Some(nde_filter) => {
+                        view_filter(self_pane, global_state, self, active_event, nde_filter)
+                    }
+                    None => view_non_selected(self_pane, self, false),
+                }
+            };
+
+        super::View {
+            title: iced::widget::text("Node editor").into(),
+            content: iced::widget::container(content)
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill)
+                .into(),
+        }
+    }
+
+    fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
+        match pane_message {
+            message::Pane::NodeEditorScaleChanged(x, y, scale) => {
+                let current_scale = self.matrix.get_scale();
+
+                // Limit the scale factor to the range [0.3, 3.0], to avoid problems with zooming in
+                // or out too far.
+                if (current_scale > 0.3 || scale > 0.0) && (current_scale < 3.0 || scale < 0.0) {
+                    self.matrix = self
+                        .matrix
+                        .translate(-x, -y)
+                        .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
+                        .translate(x, y);
+                }
+            }
+            message::Pane::NodeEditorTranslationChanged(x, y) => {
+                self.matrix = self.matrix.translate(x, y);
+            }
+            message::Pane::NodeEditorDangling(Some((source, link))) => {
+                self.dangling_source = Some(source);
+                self.dangling_connection = Some(link);
+            }
+            message::Pane::NodeEditorDangling(None) => {
+                self.dangling_source = None;
+                self.dangling_connection = None;
+            }
+            message::Pane::NodeEditorFilterSelected(selection_index, filter_ref) => {
+                self.selection_index = Some(selection_index);
+                self.selected_filter = Some(filter_ref);
+            }
+            _ => (),
+        }
+
+        iced::Task::none()
+    }
+
+    fn visit(&mut self, visitor: &dyn super::Visitor) {
+        visitor.visit_node_editor(self);
+    }
+
+    fn update_filter_names(&mut self, extradata: &subtitle::Extradata) {
         self.filters.clear();
         for (i, filter) in extradata.iter_filters() {
             self.filters.push(FilterReference {
@@ -29,6 +111,13 @@ impl State {
         self.selection_index = None;
         self.selected_filter = None;
     }
+}
+
+inventory::submit! {
+    super::Shell::new(
+        "Node editor",
+        || Box::new(State::default())
+    )
 }
 
 // `iced_node_editor::Matrix` doesn't implement `Debug`.
@@ -100,55 +189,6 @@ impl iced_node_editor::styles::connection::StyleSheet for ConnectionStyle {
         iced_node_editor::styles::connection::Appearance {
             color: Some(self.colour),
         }
-    }
-}
-
-#[expect(
-    clippy::missing_panics_doc,
-    reason = "this method does not need documentation since it serves to implement a consistent abstraction"
-)]
-pub fn view<'a>(
-    self_pane: super::Pane,
-    global_state: &'a crate::Samaku,
-    pane_state: &'a State,
-) -> super::View<'a> {
-    let content: iced::Element<message::Message> = if global_state.selected_event_indices.is_empty()
-    {
-        iced::widget::text("No subtitle currently selected.").into()
-    } else if global_state.selected_event_indices.len() > 1 {
-        // Multiple events selected. We can't meaningfully run the filter on multiple events
-        // at once, even if their filters should match, so display the assignment pane
-        // as a fallback so at least a filter can be assigned to multiple events
-        view_non_selected(self_pane, pane_state, true)
-    } else {
-        // Exactly one event selected
-        let active_event_index = *global_state.selected_event_indices.iter().next().unwrap();
-        let active_event = &global_state.subtitles.events[active_event_index];
-
-        // Check whether the event has an NDE filter assigned. If yes, display the node editor
-        // to edit that filter, otherwise, display the assignment pane
-        match &global_state
-            .subtitles
-            .extradata
-            .nde_filter_for_event(active_event)
-        {
-            Some(nde_filter) => view_filter(
-                self_pane,
-                global_state,
-                pane_state,
-                active_event,
-                nde_filter,
-            ),
-            None => view_non_selected(self_pane, pane_state, false),
-        }
-    };
-
-    super::View {
-        title: iced::widget::text("Node editor").into(),
-        content: iced::widget::container(content)
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill)
-            .into(),
     }
 }
 
@@ -711,43 +751,4 @@ enum CollectError {
     DuplicateItem,
     ItemOverSubMenu,
     SubMenuOverItem,
-}
-
-pub fn update(
-    node_editor_state: &mut State,
-    pane_message: message::Pane,
-) -> iced::Task<message::Message> {
-    match pane_message {
-        message::Pane::NodeEditorScaleChanged(x, y, scale) => {
-            let current_scale = node_editor_state.matrix.get_scale();
-
-            // Limit the scale factor to the range [0.3, 3.0], to avoid problems with zooming in
-            // or out too far.
-            if (current_scale > 0.3 || scale > 0.0) && (current_scale < 3.0 || scale < 0.0) {
-                node_editor_state.matrix = node_editor_state
-                    .matrix
-                    .translate(-x, -y)
-                    .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
-                    .translate(x, y);
-            }
-        }
-        message::Pane::NodeEditorTranslationChanged(x, y) => {
-            node_editor_state.matrix = node_editor_state.matrix.translate(x, y);
-        }
-        message::Pane::NodeEditorDangling(Some((source, link))) => {
-            node_editor_state.dangling_source = Some(source);
-            node_editor_state.dangling_connection = Some(link);
-        }
-        message::Pane::NodeEditorDangling(None) => {
-            node_editor_state.dangling_source = None;
-            node_editor_state.dangling_connection = None;
-        }
-        message::Pane::NodeEditorFilterSelected(selection_index, filter_ref) => {
-            node_editor_state.selection_index = Some(selection_index);
-            node_editor_state.selected_filter = Some(filter_ref);
-        }
-        _ => (),
-    }
-
-    iced::Task::none()
 }

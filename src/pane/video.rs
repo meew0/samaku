@@ -14,101 +14,103 @@ macro_rules! empty {
     };
 }
 
-pub fn view<'a>(
-    _self_pane: super::Pane,
-    global_state: &'a crate::Samaku,
-    _video_state: &'a State,
-) -> super::View<'a> {
-    let scroll = match &global_state.actual_frame {
-        None => empty!(),
-        Some((num_frame, handle)) => match &global_state.video_metadata {
+impl super::LocalState for State {
+    fn view<'a>(
+        &'a self,
+        _self_pane: super::Pane,
+        global_state: &'a crate::Samaku,
+    ) -> super::View<'a> {
+        let scroll = match &global_state.actual_frame {
             None => empty!(),
-            Some(video_metadata) => {
-                let storage_size = subtitle::Resolution {
-                    x: video_metadata.width,
-                    y: video_metadata.height,
-                };
-
-                let stack = if global_state.subtitles.events.is_empty() {
-                    vec![view::widget::StackedImage {
-                        handle: handle.clone(),
-                        x: 0,
-                        y: 0,
-                    }]
-                } else {
-                    let instant = std::time::Instant::now();
-                    let context = global_state.compile_context();
-                    let compiled = global_state.subtitles.events.compile(
-                        &global_state.subtitles.extradata,
-                        &context,
-                        0,
-                        None,
-                    ); // TODO give actual frame range values here
-                    let elapsed_compile = instant.elapsed();
-
-                    let instant2 = std::time::Instant::now();
-                    let ass = media::subtitle::OpaqueTrack::from_compiled(
-                        &compiled,
-                        global_state.subtitles.styles.as_slice(),
-                        &global_state.subtitles.script_info,
-                    );
-                    let elapsed_copy = instant2.elapsed();
-
-                    let instant3 = std::time::Instant::now();
-                    let stack = {
-                        let mut view_state = global_state.view.borrow_mut();
-                        view_state.subtitle_renderer.render_subtitles_onto_base(
-                            &ass,
-                            handle.clone(),
-                            *num_frame,
-                            video_metadata.frame_rate,
-                            storage_size, // TODO use the actual frame size here (maybe with responsive?)
-                            storage_size,
-                        )
+            Some((num_frame, handle)) => match &global_state.video_metadata {
+                None => empty!(),
+                Some(video_metadata) => {
+                    let storage_size = subtitle::Resolution {
+                        x: video_metadata.width,
+                        y: video_metadata.height,
                     };
-                    let elapsed_render = instant3.elapsed();
-                    println!(
-                        "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
-                        global_state.subtitles.events.len(),
-                        compiled.len(),
-                        elapsed_compile,
-                        elapsed_copy,
-                        elapsed_render
-                    );
 
-                    stack
-                };
-
-                let reticules: &[model::reticule::Reticule] =
-                    if let Some(reticules) = &global_state.reticules {
-                        reticules.list.as_slice()
+                    let stack = if global_state.subtitles.events.is_empty() {
+                        vec![view::widget::StackedImage {
+                            handle: handle.clone(),
+                            x: 0,
+                            y: 0,
+                        }]
                     } else {
-                        &[]
+                        let instant = std::time::Instant::now();
+                        let context = global_state.compile_context();
+                        let compiled = global_state.subtitles.events.compile(
+                            &global_state.subtitles.extradata,
+                            &context,
+                            0,
+                            None,
+                        ); // TODO give actual frame range values here
+                        let elapsed_compile = instant.elapsed();
+
+                        let instant2 = std::time::Instant::now();
+                        let ass = media::subtitle::OpaqueTrack::from_compiled(
+                            &compiled,
+                            global_state.subtitles.styles.as_slice(),
+                            &global_state.subtitles.script_info,
+                        );
+                        let elapsed_copy = instant2.elapsed();
+
+                        let instant3 = std::time::Instant::now();
+                        let stack = {
+                            let mut view_state = global_state.view.borrow_mut();
+                            view_state.subtitle_renderer.render_subtitles_onto_base(
+                                &ass,
+                                handle.clone(),
+                                *num_frame,
+                                video_metadata.frame_rate,
+                                storage_size, // TODO use the actual frame size here (maybe with responsive?)
+                                storage_size,
+                            )
+                        };
+                        let elapsed_render = instant3.elapsed();
+                        println!(
+                            "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
+                            global_state.subtitles.events.len(),
+                            compiled.len(),
+                            elapsed_compile,
+                            elapsed_copy,
+                            elapsed_render
+                        );
+
+                        stack
                     };
 
-                let program = ReticuleProgram {
-                    reticules,
-                    storage_size,
-                };
-                iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
-            }
-        },
-    };
+                    let reticules: &[model::reticule::Reticule] =
+                        if let Some(reticules) = &global_state.reticules {
+                            reticules.list.as_slice()
+                        } else {
+                            &[]
+                        };
 
-    super::View {
-        title: iced::widget::text("Video").into(),
-        content: iced::widget::container(scroll)
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill)
-            .into(),
+                    let program = ReticuleProgram {
+                        reticules,
+                        storage_size,
+                    };
+                    iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
+                }
+            },
+        };
+
+        super::View {
+            title: iced::widget::text("Video").into(),
+            content: iced::widget::container(scroll)
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill)
+                .into(),
+        }
     }
 }
 
-pub fn update(
-    _video_state: &mut State,
-    _pane_message: message::Pane,
-) -> iced::Task<message::Message> {
-    iced::Task::none()
+inventory::submit! {
+    super::Shell::new(
+        "Video",
+        || Box::new(State)
+    )
 }
 
 struct ReticuleProgram<'a> {

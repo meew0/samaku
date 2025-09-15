@@ -9,6 +9,95 @@ pub struct State {
     columns: Vec<Column>,
 }
 
+impl super::LocalState for State {
+    fn view<'a>(
+        &'a self,
+        self_pane: super::Pane,
+        global_state: &'a crate::Samaku,
+    ) -> super::View<'a> {
+        let table = iced::widget::responsive(move |size| {
+            iced_table::table(
+                self.header_scrollable_id.clone(),
+                self.body_scrollable_id.clone(),
+                global_state,
+                self.columns.as_slice(),
+                global_state.subtitles.events.as_slice(),
+                move |offset| {
+                    message::Message::Pane(self_pane, message::Pane::GridSyncHeader(offset))
+                },
+            )
+            .on_column_resize(
+                move |index, offset| {
+                    message::Message::Pane(
+                        self_pane,
+                        message::Pane::GridColumnResizing(index, offset),
+                    )
+                },
+                message::Message::Pane(self_pane, message::Pane::GridColumnResized),
+            )
+            .min_width(size.width)
+            .into()
+        });
+
+        let add_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Plus))
+            .on_press(message::Message::AddEvent);
+
+        let delete_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Dash))
+            .on_press(message::Message::DeleteSelectedEvents);
+
+        let top_bar = iced::widget::container(
+            iced::widget::row![add_button, delete_button]
+                .spacing(5.0)
+                .align_y(iced::Alignment::Center),
+        )
+        .padding(5.0);
+
+        let content: iced::Element<message::Message> =
+            iced::widget::column![top_bar, view::separator(), table].into();
+
+        super::View {
+            title: iced::widget::text("Subtitle grid").into(),
+            content: iced::widget::container(content)
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill)
+                .into(),
+        }
+    }
+
+    fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
+        match pane_message {
+            message::Pane::GridSyncHeader(offset) => {
+                return iced::widget::scrollable::scroll_to(
+                    self.header_scrollable_id.clone(),
+                    offset,
+                );
+            }
+            message::Pane::GridColumnResizing(index, offset) => {
+                if let Some(column) = self.columns.get_mut(index) {
+                    column.resize_offset = Some(offset);
+                }
+            }
+            message::Pane::GridColumnResized => {
+                self.columns.iter_mut().for_each(|column| {
+                    if let Some(offset) = column.resize_offset.take() {
+                        column.width += offset;
+                    }
+                });
+            }
+            _ => (),
+        }
+
+        iced::Task::none()
+    }
+}
+
+inventory::submit! {
+    super::Shell::new(
+        "Subtitle grid",
+        || Box::new(State::default())
+    )
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {
@@ -169,83 +258,4 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
     fn resize_offset(&self) -> Option<f32> {
         self.resize_offset
     }
-}
-
-pub fn view<'a>(
-    self_pane: super::Pane,
-    global_state: &'a crate::Samaku,
-    grid_state: &'a State,
-) -> super::View<'a> {
-    let table = iced::widget::responsive(move |size| {
-        iced_table::table(
-            grid_state.header_scrollable_id.clone(),
-            grid_state.body_scrollable_id.clone(),
-            global_state,
-            grid_state.columns.as_slice(),
-            global_state.subtitles.events.as_slice(),
-            move |offset| message::Message::Pane(self_pane, message::Pane::GridSyncHeader(offset)),
-        )
-        .on_column_resize(
-            move |index, offset| {
-                message::Message::Pane(self_pane, message::Pane::GridColumnResizing(index, offset))
-            },
-            message::Message::Pane(self_pane, message::Pane::GridColumnResized),
-        )
-        .min_width(size.width)
-        .into()
-    });
-
-    let add_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Plus))
-        .on_press(message::Message::AddEvent);
-
-    let delete_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Dash))
-        .on_press(message::Message::DeleteSelectedEvents);
-
-    let top_bar = iced::widget::container(
-        iced::widget::row![add_button, delete_button]
-            .spacing(5.0)
-            .align_y(iced::Alignment::Center),
-    )
-    .padding(5.0);
-
-    let content: iced::Element<message::Message> =
-        iced::widget::column![top_bar, view::separator(), table].into();
-
-    super::View {
-        title: iced::widget::text("Subtitle grid").into(),
-        content: iced::widget::container(content)
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill)
-            .into(),
-    }
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "this method logically consumes the message"
-)]
-pub fn update(grid_state: &mut State, pane_message: message::Pane) -> iced::Task<message::Message> {
-    match pane_message {
-        message::Pane::GridSyncHeader(offset) => {
-            return iced::widget::scrollable::scroll_to(
-                grid_state.header_scrollable_id.clone(),
-                offset,
-            );
-        }
-        message::Pane::GridColumnResizing(index, offset) => {
-            if let Some(column) = grid_state.columns.get_mut(index) {
-                column.resize_offset = Some(offset);
-            }
-        }
-        message::Pane::GridColumnResized => {
-            grid_state.columns.iter_mut().for_each(|column| {
-                if let Some(offset) = column.resize_offset.take() {
-                    column.width += offset;
-                }
-            });
-        }
-        _ => (),
-    }
-
-    iced::Task::none()
 }

@@ -11,48 +11,75 @@ pub mod video;
 
 /// The state information contained by a pane: what type of pane it is, as well as any
 /// extra data that is specific to the pane itself, like the state of control elements.
-#[derive(Debug, Clone)]
-pub enum State {
-    Unassigned,
-    Video(video::State),
-    Grid(grid::State),
-    TextEditor(text_editor::State),
-    NodeEditor(node_editor::State),
-    StyleEditor(style_editor::State),
+pub struct State {
+    pub local: Box<dyn LocalState>,
 }
+
+impl State {
+    #[must_use]
+    pub fn new(local: Box<dyn LocalState>) -> Self {
+        Self { local }
+    }
+
+    #[must_use]
+    pub fn unassigned() -> Self {
+        Self::new(Box::new(unassigned::State {}))
+    }
+}
+
+pub trait LocalState {
+    fn view<'a>(&'a self, self_pane: Pane, global_state: &'a crate::Samaku) -> View<'a>;
+
+    fn update(&mut self, _pane_message: message::Pane) -> iced::Task<message::Message> {
+        iced::Task::none()
+    }
+
+    fn visit(&mut self, _visitor: &dyn Visitor) {}
+
+    fn update_filter_names(&mut self, _extradata: &crate::subtitle::Extradata) {}
+    fn update_style_lists(
+        &mut self,
+        _styles: &[crate::subtitle::Style],
+        _copy_styles: bool,
+        _active_event_style_index: Option<usize>,
+    ) {
+    }
+}
+
+/// Visitor pattern implementation for local state types that potentially need custom pane-specific global update behavior
+///
+/// For instance, the node editor pane needs to be accessible for the global update method because certain messages
+/// require the global update method to change some details about the pane state. For this purpose, a type implementing
+/// this trait can be passed to the `LocalState::visit` method, which will result in the `visit_node_editor` method
+/// being called only for node editor panes.
+pub trait Visitor {
+    fn visit_node_editor(&self, _node_editor_state: &mut node_editor::State) {}
+}
+
+pub type Constructor = fn() -> Box<dyn LocalState>;
+
+/// An empty “shell” of a node that can be used to create a pane later on.
+///
+/// Represents the idea of a pane, with any specific type information being erased. We use the
+/// `inventory` crate to collect pane shells, to be able to iterate over them in all places where
+/// we need a list of registered panes (like on the unassigned pane)
+#[derive(Debug, Clone)]
+pub struct Shell {
+    pub name: &'static str,
+    pub constructor: Constructor,
+}
+
+impl Shell {
+    pub const fn new(name: &'static str, constructor: Constructor) -> Self {
+        Self { name, constructor }
+    }
+}
+
+inventory::collect!(Shell);
 
 /// Struct containing the elements to be shown in a pane and in its title bar, for use as the return
 /// type of each pane's `view` function.
 pub struct View<'a> {
     pub title: iced::Element<'a, message::Message>,
     pub content: iced::Element<'a, message::Message>,
-}
-
-pub(crate) fn dispatch_view<'a>(
-    self_pane: Pane,
-    global_state: &'a crate::Samaku,
-    state: &'a State,
-) -> View<'a> {
-    match state {
-        State::Unassigned => unassigned::view(self_pane),
-        State::Video(local_state) => video::view(self_pane, global_state, local_state),
-        State::Grid(local_state) => grid::view(self_pane, global_state, local_state),
-        State::TextEditor(local_state) => text_editor::view(self_pane, global_state, local_state),
-        State::NodeEditor(local_state) => node_editor::view(self_pane, global_state, local_state),
-        State::StyleEditor(local_state) => style_editor::view(self_pane, global_state, local_state),
-    }
-}
-
-pub fn dispatch_update(
-    state: &mut State,
-    pane_message: message::Pane,
-) -> iced::Task<message::Message> {
-    match state {
-        State::Unassigned => iced::Task::none(),
-        State::Video(local_state) => video::update(local_state, pane_message),
-        State::Grid(local_state) => grid::update(local_state, pane_message),
-        State::TextEditor(local_state) => text_editor::update(local_state, pane_message),
-        State::NodeEditor(local_state) => node_editor::update(local_state, pane_message),
-        State::StyleEditor(local_state) => style_editor::update(local_state, pane_message),
-    }
 }

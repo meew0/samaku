@@ -24,16 +24,6 @@ macro_rules! active_event_mut {
     };
 }
 
-macro_rules! iter_panes {
-    ($global_state:expr, $p:pat, $b:expr) => {
-        for pane in $global_state.panes.panes.values_mut() {
-            if let $p = pane {
-                $b;
-            }
-        }
-    };
-}
-
 /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
 /// whatever processing is required, and updates the global state based on it. This will cause
 /// iced to rerender the application afterwards.
@@ -70,7 +60,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             if let Some(pane) = global_state.focus {
                 let result = global_state
                     .panes
-                    .split(axis, pane, pane::State::Unassigned);
+                    .split(axis, pane, pane::State::unassigned());
 
                 if let Some((pane, _)) = result {
                     global_state.focus = Some(pane);
@@ -93,19 +83,19 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::ResizePane(iced::widget::pane_grid::ResizeEvent { split, ratio }) => {
             global_state.panes.resize(split, ratio);
         }
-        Message::SetPaneState(pane, new_state) => {
+        Message::SetPaneType(pane, constructor) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
-                *pane_state = *new_state;
+                *pane_state = pane::State::new(constructor());
 
                 update_filter_lists(global_state);
                 update_style_lists(global_state, true);
             }
         }
-        Message::SetFocusedPaneState(new_state) => {
+        Message::SetFocusedPaneType(constructor) => {
             if let Some(focused_pane) = global_state.focus
                 && let Some(focused_pane_state) = global_state.panes.get_mut(focused_pane)
             {
-                *focused_pane_state = *new_state;
+                *focused_pane_state = pane::State::new(constructor());
 
                 update_filter_lists(global_state);
                 update_style_lists(global_state, true);
@@ -113,14 +103,14 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::Pane(pane, pane_message) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
-                return pane::dispatch_update(pane_state, pane_message);
+                return pane_state.local.update(pane_message);
             }
         }
         Message::FocusedPane(pane_message) => {
             if let Some(pane) = global_state.focus
                 && let Some(pane_state) = global_state.panes.get_mut(pane)
             {
-                return pane::dispatch_update(pane_state, pane_message);
+                return pane_state.local.update(pane_message);
             }
         }
         Message::Toast(toast) => {
@@ -519,20 +509,38 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 });
 
                 if let Some(previous) = maybe_previous
-                    && let Some(pane::State::NodeEditor(node_editor_state)) =
-                        global_state.panes.get_mut(source_pane)
+                    && let Some(pane_state) = global_state.panes.get_mut(source_pane)
                 {
-                    let new_dangling_source = iced_node_editor::LogicalEndpoint {
-                        node_index: previous.node_index,
-                        role: iced_node_editor::SocketRole::Out,
-                        socket_index: previous.socket_index,
+                    struct Visitor {
+                        previous: nde::graph::PreviousEndpoint,
+                        new_dangling_end_position: iced::Point,
+                    }
+                    impl pane::Visitor for Visitor {
+                        fn visit_node_editor(
+                            &self,
+                            node_editor_state: &mut pane::node_editor::State,
+                        ) {
+                            let new_dangling_source = iced_node_editor::LogicalEndpoint {
+                                node_index: self.previous.node_index,
+                                role: iced_node_editor::SocketRole::Out,
+                                socket_index: self.previous.socket_index,
+                            };
+                            node_editor_state.dangling_source = Some(new_dangling_source);
+                            node_editor_state.dangling_connection =
+                                Some(iced_node_editor::Link::from_unordered(
+                                    iced_node_editor::Endpoint::Socket(new_dangling_source),
+                                    iced_node_editor::Endpoint::Absolute(
+                                        self.new_dangling_end_position,
+                                    ),
+                                ));
+                        }
+                    }
+
+                    let visitor = Visitor {
+                        previous,
+                        new_dangling_end_position,
                     };
-                    node_editor_state.dangling_source = Some(new_dangling_source);
-                    node_editor_state.dangling_connection =
-                        Some(iced_node_editor::Link::from_unordered(
-                            iced_node_editor::Endpoint::Socket(new_dangling_source),
-                            iced_node_editor::Endpoint::Absolute(new_dangling_end_position),
-                        ));
+                    pane_state.local.visit(&visitor);
                 }
             }
         }
@@ -595,11 +603,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
 /// NDE filter list to update their internal representations
 fn update_filter_lists(global_state: &mut super::Samaku) {
-    iter_panes!(
-        global_state,
-        pane::State::NodeEditor(node_editor_state),
-        node_editor_state.update_filter_names(&global_state.subtitles.extradata)
-    );
+    for pane in global_state.panes.panes.values_mut() {
+        pane.local
+            .update_filter_names(&global_state.subtitles.extradata);
+    }
 }
 
 /// Notifies all entities (like text editor panes) that keep some internal copy of the
@@ -609,25 +616,10 @@ fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
 
     for pane in global_state.panes.panes.values_mut() {
-        match pane {
-            pane::State::TextEditor(text_editor_state) => {
-                if copy_styles {
-                    text_editor_state.update_styles(global_state.subtitles.styles.as_slice());
-                }
-                text_editor_state.update_selected(
-                    global_state.subtitles.styles.as_slice(),
-                    active_event_style_index,
-                );
-            }
-            pane::State::StyleEditor(style_editor_state) => {
-                // A style might have been deleted, which might cause the style selected in a
-                // style editor pane to no longer exist. In that case, set it to 0 which will
-                // always exist.
-                if style_editor_state.selected_style_index >= global_state.subtitles.styles.len() {
-                    style_editor_state.selected_style_index = 0;
-                }
-            }
-            _ => {}
-        }
+        pane.local.update_style_lists(
+            global_state.subtitles.styles.as_slice(),
+            copy_styles,
+            active_event_style_index,
+        );
     }
 }
