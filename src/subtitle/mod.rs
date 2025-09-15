@@ -105,7 +105,18 @@ pub enum EventType {
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StartTime(pub i64);
 
 impl Add<Duration> for StartTime {
@@ -113,6 +124,14 @@ impl Add<Duration> for StartTime {
 
     fn add(self, rhs: Duration) -> Self::Output {
         StartTime(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Duration> for StartTime {
+    type Output = StartTime;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        StartTime(self.0 - rhs.0)
     }
 }
 
