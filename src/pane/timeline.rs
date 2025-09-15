@@ -188,7 +188,6 @@ impl canvas::Program<message::Message> for CanvasData {
                             mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
                         };
 
-                        dbg!(y);
                         let modifier_factor = 1.2_f32.powf(y);
                         let new_zoom_factor =
                             (self.position.zoom_factor * modifier_factor).clamp(0.001, 1.0);
@@ -196,8 +195,14 @@ impl canvas::Program<message::Message> for CanvasData {
 
                         if let Some(position) = cursor.position_in(bounds) {
                             let ms_from_center = self.position.ms_from_center(position, bounds);
-                            #[expect(clippy::cast_possible_truncation, reason = "allowed within the precision limits of the timeline")]
-                            #[expect(clippy::cast_precision_loss, reason = "allowed within the precision limits of the timeline")]
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                reason = "allowed within the precision limits of the timeline"
+                            )]
+                            #[expect(
+                                clippy::cast_precision_loss,
+                                reason = "allowed within the precision limits of the timeline"
+                            )]
                             let zoomed = subtitle::Duration(
                                 (ms_from_center.0 as f32 * modifier_factor) as i64,
                             );
@@ -226,11 +231,11 @@ impl canvas::Program<message::Message> for CanvasData {
 
     fn draw(
         &self,
-        state: &Self::State,
+        _state: &Self::State,
         renderer: &Renderer,
-        theme: &Theme,
+        _theme: &Theme,
         bounds: iced::Rectangle,
-        cursor: mouse::Cursor,
+        _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry<Renderer>> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
 
@@ -327,7 +332,7 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
 }
 
 fn top_bar<'a>(
-    pane_state: &'a State,
+    _pane_state: &'a State,
     global_state: &'a crate::Samaku,
 ) -> iced::Element<'a, message::Message> {
     let play_button = iced::widget::button("Play").on_press(message::Message::TogglePlayback);
