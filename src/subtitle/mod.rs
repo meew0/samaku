@@ -5,7 +5,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
-use std::ops::{Index, IndexMut};
+use std::ops::{Add, Index, IndexMut, Sub};
 
 pub use emit::emit;
 
@@ -105,11 +105,27 @@ pub enum EventType {
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StartTime(pub i64);
 
+impl Add<Duration> for StartTime {
+    type Output = StartTime;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        StartTime(self.0 + rhs.0)
+    }
+}
+
+impl Sub<StartTime> for StartTime {
+    type Output = Duration;
+
+    fn sub(self, rhs: StartTime) -> Self::Output {
+        Duration(self.0 - rhs.0)
+    }
+}
+
 /// The duration for which an element is shown, in milliseconds.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Duration(pub i64);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
