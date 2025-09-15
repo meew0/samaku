@@ -298,12 +298,6 @@ fn draw_background(
 }
 
 fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
-    let stroke = canvas::Stroke {
-        style: canvas::stroke::Style::Solid(style::SAMAKU_TEXT),
-        width: 1.0,
-        ..Default::default()
-    };
-
     // Find first full second to the left of the right bound.
     let half_frame_ms_f32 = frame.width() * 1000.0 / (2.0 * position.zoom_factor);
     #[expect(
@@ -319,13 +313,9 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         let tick_x = position
             .time_delta(tick_ms)
             .mul_add(position.zoom_factor, frame.width() / 2.0);
-        frame.stroke(
-            &canvas::Path::line(
-                iced::Point::new(tick_x, 0.0),
-                iced::Point::new(tick_x, frame.height()),
-            ),
-            stroke,
-        );
+        
+        frame.fill_rectangle(
+            iced::Point::new(tick_x, 0.0), iced::Size::new(1.0, frame.height()), style::SAMAKU_TEXT);
 
         tick_ms = tick_ms - subtitle::Duration(1000);
     }
