@@ -2,12 +2,14 @@ use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 
 use crate::{media, message, model, subtitle, view};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
     pub selected_style_index: usize,
+    #[serde(skip, default = "default_preview_events")]
     pub preview_events: subtitle::EventTrack,
 }
 
+#[typetag::serde(name = "style_editor")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,
@@ -182,16 +184,20 @@ inventory::submit! {
     )
 }
 
+fn default_preview_events() -> subtitle::EventTrack {
+    subtitle::EventTrack::from_vec(vec![subtitle::Event {
+        start: subtitle::StartTime(0_i64),
+        duration: subtitle::Duration(1000_i64),
+        text: "Sphinx of black quartz, judge my vow".into(),
+        ..Default::default()
+    }])
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {
             selected_style_index: 0,
-            preview_events: subtitle::EventTrack::from_vec(vec![subtitle::Event {
-                start: subtitle::StartTime(0_i64),
-                duration: subtitle::Duration(1000_i64),
-                text: "Sphinx of black quartz, judge my vow".into(),
-                ..Default::default()
-            }]),
+            preview_events: default_preview_events(),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{Error, Write};
 
 use crate::nde::tags::{Colour, Transparency};
-use crate::{nde, version};
+use crate::{config, project, version};
 
 use super::{
     Attachment, AttachmentType, Event, EventType, Extradata, ExtradataEntry, File, ScriptInfo,
@@ -316,14 +316,15 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
 
         match entry {
             ExtradataEntry::NdeFilter(filter) => {
-                let serialised = match serialise_nde_filter(filter) {
-                    Ok(serialised) => serialised,
-                    Err(err) => {
-                        println!("Error in NDE filter serialisation: {err}");
-                        println!("NDE filter in question: {filter:?}");
-                        return Err(Error);
-                    }
-                };
+                let serialised =
+                    match project::serialize_czb(filter, config::NDE_FILTER_COMPRESSION_LEVEL) {
+                        Ok(serialised) => serialised,
+                        Err(err) => {
+                            println!("Error in NDE filter serialisation: {err}");
+                            println!("NDE filter in question: {filter:?}");
+                            return Err(Error);
+                        }
+                    };
 
                 write!(writer, "_samaku_nde_filter,e1{serialised}")?;
             }
@@ -382,17 +383,6 @@ fn try_inline_encode(data: &[u8]) -> Option<String> {
     None
 }
 
-const COMPRESSION_LEVEL: u8 = 6;
-
-fn serialise_nde_filter(filter: &nde::Filter) -> Result<String, String> {
-    let mut data: Vec<u8> = vec![];
-    ciborium::into_writer(&filter, &mut data).map_err(|err| err.to_string())?;
-
-    Ok(data_encoding::BASE64.encode(
-        miniz_oxide::deflate::compress_to_vec(data.as_slice(), COMPRESSION_LEVEL).as_slice(),
-    ))
-}
-
 fn emit_kvs<W: Write>(writer: &mut W, kvs: &HashMap<String, String>) -> Result<(), Error> {
     for (key, value) in kvs {
         write!(writer, "{key}: {value}{NEWLINE}")?;
@@ -443,20 +433,12 @@ fn emit_aegi_inline_string<W: Write>(writer: &mut W, str: &str) -> Result<(), Er
 }
 
 fn yes_or_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
+    if value { "yes" } else { "no" }
 }
 
 // Why do ass files use -1 for true???
 fn negative_bool(value: bool) -> &'static str {
-    if value {
-        "-1"
-    } else {
-        "0"
-    }
+    if value { "-1" } else { "0" }
 }
 
 fn ycbcr_matrix_name(matrix: YCbCrMatrix) -> &'static str {

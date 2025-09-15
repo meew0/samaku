@@ -2,9 +2,11 @@ use std::fmt::Display;
 
 use crate::{message, subtitle};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
+    #[serde(skip)]
     styles: iced::widget::combo_box::State<StyleReference>,
+    #[serde(skip)]
     selected_style: Option<StyleReference>,
 }
 
@@ -59,6 +61,7 @@ impl Default for State {
     }
 }
 
+#[typetag::serde(name = "text_editor")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,

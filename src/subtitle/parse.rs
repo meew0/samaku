@@ -9,7 +9,7 @@ use smol::stream::StreamExt as _;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
-use crate::{model, nde, subtitle};
+use crate::{model, project, subtitle};
 
 use super::{
     Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,
@@ -235,14 +235,8 @@ pub enum SubtitleParseError {
     #[error("Invalid NDE filter format identifier: {0:?}")]
     InvalidNdeFilterFormat(Option<u8>),
 
-    #[error("Failed to decode base64 data for NDE filter: {0}")]
-    NdeFilterBase64DecodeError(data_encoding::DecodeError),
-
-    #[error("Failed to decompress NDE filter: {0}")]
-    NdeFilterDecompressError(miniz_oxide::inflate::DecompressError),
-
-    #[error("Failed to deserialise NDE filter: {0}")]
-    NdeFilterDeserialiseError(String),
+    #[error("Failed to deserialize NDE filter: {0:?}")]
+    NdeFilterDeserializeError(project::DeserializeError),
 
     #[error("Failed to decode UU-encoded extradata")]
     UuDecodeError(data_encoding::DecodeError),
@@ -521,17 +515,8 @@ fn parse_extradata_entry(
     if key == "_samaku_nde_filter" {
         let first_char = value.first().copied();
         if first_char == Some(b'1') {
-            let base64 = &value[1..];
-            let decoded = data_encoding::BASE64
-                .decode(base64)
-                .map_err(SubtitleParseError::NdeFilterBase64DecodeError)?;
-            let decompressed =
-                miniz_oxide::inflate::decompress_to_vec_with_limit(decoded.as_slice(), 1_000_000)
-                    .map_err(SubtitleParseError::NdeFilterDecompressError)?;
-            let filter = ciborium::from_reader::<nde::Filter, _>(decompressed.as_slice()).map_err(
-                |de_error| SubtitleParseError::NdeFilterDeserialiseError(format!("{de_error:?}")),
-            )?;
-
+            let filter = project::deserialize_czb(&value[1..])
+                .map_err(SubtitleParseError::NdeFilterDeserializeError)?;
             Ok(ExtradataEntry::NdeFilter(filter))
         } else {
             Err(SubtitleParseError::InvalidNdeFilterFormat(first_char))

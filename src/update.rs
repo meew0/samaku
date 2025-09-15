@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 
 use crate::message::Message;
-use crate::{media, message, model, nde, pane, subtitle, view};
+use crate::{config, media, message, model, nde, pane, project, subtitle, view};
 
 macro_rules! active_event {
     ($global_state:ident) => {
@@ -217,6 +217,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             });
         }
         Message::SubtitleFileReadForOpen(file_box) => {
+            // Load ASS subtitles themselves
             let (ass_file, warnings) = *(file_box.0);
             global_state.subtitles = ass_file;
 
@@ -227,6 +228,29 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     format!("{warning}"),
                 ));
             }
+
+            // Load additional project data private to Samaku
+            if let Some(czb) = global_state
+                .subtitles
+                .script_info
+                .extra_info
+                .get(project::METADATA_KEY)
+            {
+                match project::deserialize_czb::<project::Project>(czb.as_bytes()) {
+                    Ok(project) => {
+                        project.update_global(global_state);
+                    }
+                    Err(err) => {
+                        global_state.toast(view::toast::Toast::new(
+                            view::toast::Status::Primary,
+                            "Error while reading project metadata".to_owned(),
+                            format!("{err:?}"),
+                        ));
+                    }
+                }
+            } else {
+                println!("No project metadata found in opened subtitle file");
+            }
         }
         Message::SubtitleParseError(err) => {
             global_state.toast(view::toast::Toast::new(
@@ -236,16 +260,34 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             ));
         }
         Message::SaveSubtitleFile => {
-            let mut data = String::new();
-            subtitle::emit(&mut data, &global_state.subtitles, None).unwrap();
+            let project = project::Project::compile_from(global_state);
+            match project::serialize_czb(&project, config::PROJECT_COMPRESSION_LEVEL) {
+                Ok(czb) => {
+                    global_state
+                        .subtitles
+                        .script_info
+                        .extra_info
+                        .insert(project::METADATA_KEY.to_owned(), czb);
 
-            let future = async {
-                if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
-                    smol::fs::write(handle.path(), data).await.unwrap();
+                    let mut data = String::new();
+                    subtitle::emit(&mut data, &global_state.subtitles, None).unwrap();
+
+                    let future = async {
+                        if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
+                            smol::fs::write(handle.path(), data).await.unwrap();
+                        }
+                    };
+
+                    return iced::Task::perform(future, |()| Message::None);
                 }
-            };
-
-            return iced::Task::perform(future, |()| Message::None);
+                Err(err) => {
+                    global_state.toast(view::toast::Toast::new(
+                        view::toast::Status::Danger,
+                        "Error while writing project data".to_owned(),
+                        err,
+                    ));
+                }
+            }
         }
         Message::ExportSubtitleFile => {
             let mut data = String::new();

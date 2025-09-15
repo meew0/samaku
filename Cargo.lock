@@ -2156,7 +2156,7 @@ dependencies = [
 [[package]]
 name = "iced_node_editor"
 version = "0.1.0"
-source = "git+https://github.com/freegamerskids/iced-node-editor.git?rev=96ad5d91e48886ffe783a3fbfa1dcc5cd957bb28#96ad5d91e48886ffe783a3fbfa1dcc5cd957bb28"
+source = "git+https://github.com/meew0/iced-node-editor.git?rev=3ab7671ed8155d34afc5a5485a66b7a7cd9d05f5#3ab7671ed8155d34afc5a5485a66b7a7cd9d05f5"
 dependencies = [
  "iced",
  "palette",

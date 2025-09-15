@@ -1,7 +1,9 @@
 use crate::message;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct State;
 
+#[typetag::serde(name = "unassigned")]
 impl super::LocalState for State {
     fn view(&self, self_pane: super::Pane, _global_state: &crate::Samaku) -> super::View<'_> {
         // Collect registered panes across the entire codebase

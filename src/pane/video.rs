@@ -2,7 +2,7 @@ use iced::widget::canvas;
 
 use crate::{media, message, model, style, subtitle, view};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct State;
 
 // Elements to display if no video is loaded
@@ -14,6 +14,7 @@ macro_rules! empty {
     };
 }
 
+#[typetag::serde(name = "video")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,

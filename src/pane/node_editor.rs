@@ -6,16 +6,20 @@ use std::sync::LazyLock;
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
 use crate::{message, nde, style, subtitle, view};
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
+    #[serde(with = "MatrixDef")]
     matrix: iced_node_editor::Matrix,
     filters: Vec<FilterReference>,
     selection_index: Option<usize>,
     selected_filter: Option<FilterReference>,
+    #[serde(skip)]
     pub dangling_source: Option<iced_node_editor::LogicalEndpoint>,
+    #[serde(skip)]
     pub dangling_connection: Option<iced_node_editor::Link>,
 }
 
+#[typetag::serde(name = "node_editor")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,
@@ -113,6 +117,22 @@ impl super::LocalState for State {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(remote = "iced_node_editor::Matrix")]
+struct MatrixDef {
+    a11: f32,
+    a12: f32,
+    a13: f32,
+
+    a21: f32,
+    a22: f32,
+    a23: f32,
+
+    a31: f32,
+    a32: f32,
+    a33: f32,
+}
+
 inventory::submit! {
     super::Shell::new(
         "Node editor",
@@ -141,7 +161,7 @@ impl Default for State {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FilterReference {
     pub name: String,
     pub index: subtitle::ExtradataId,

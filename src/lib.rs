@@ -190,6 +190,7 @@ use iced::{Element, Length, Settings, Subscription};
 #[cfg(test)]
 use criterion as _;
 
+pub mod config;
 pub mod keyboard;
 pub mod media;
 pub mod menu;
@@ -197,6 +198,7 @@ pub mod message;
 pub mod model;
 pub mod nde;
 pub mod pane;
+pub mod project;
 pub mod resources;
 pub mod style;
 pub mod subtitle;

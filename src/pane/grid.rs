@@ -2,13 +2,16 @@ use std::fmt::{Display, Formatter};
 
 use crate::{message, style, subtitle, view};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
+    #[serde(skip, default = "unique_scrollable_id")]
     header_scrollable_id: iced::widget::scrollable::Id,
+    #[serde(skip, default = "unique_scrollable_id")]
     body_scrollable_id: iced::widget::scrollable::Id,
     columns: Vec<Column>,
 }
 
+#[typetag::serde(name = "grid")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,
@@ -98,11 +101,15 @@ inventory::submit! {
     )
 }
 
+fn unique_scrollable_id() -> iced::widget::scrollable::Id {
+    iced::widget::scrollable::Id::unique()
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {
-            header_scrollable_id: iced::widget::scrollable::Id::unique(),
-            body_scrollable_id: iced::widget::scrollable::Id::unique(),
+            header_scrollable_id: unique_scrollable_id(),
+            body_scrollable_id: unique_scrollable_id(),
             columns: vec![
                 Column {
                     field: ColumnField::SelectButton,
@@ -134,14 +141,14 @@ impl Default for State {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Column {
     field: ColumnField,
     width: f32,
     resize_offset: Option<f32>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub enum ColumnField {
     SelectButton,
     FilterName,
