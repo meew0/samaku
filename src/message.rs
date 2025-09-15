@@ -198,6 +198,9 @@ pub enum Pane {
 
     // Messages for the style editor
     StyleEditorStyleSelected(usize),
+
+    // Messages for the timeline
+    TimelineDragged(subtitle::StartTime),
 }
 
 /// Messages dispatched to nodes.
