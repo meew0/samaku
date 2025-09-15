@@ -2,7 +2,7 @@ use crate::media::FrameRate;
 use crate::{message, style, subtitle, view};
 use iced::widget::canvas;
 use iced::widget::canvas::event;
-use iced::{mouse, Renderer, Theme};
+use iced::{mouse, touch, Renderer, Theme};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct State {
@@ -101,16 +101,75 @@ struct CanvasData {
     frame_rate: Option<FrameRate>,
 }
 
+#[derive(Default)]
+struct CanvasState {
+    dragging: bool,
+    moved: bool,
+}
+
 impl canvas::Program<message::Message> for CanvasData {
-    type State = ();
+    type State = CanvasState;
 
     fn update(
         &self,
-        _state: &mut Self::State,
-        _event: canvas::Event,
-        _bounds: iced::Rectangle,
-        _cursor: mouse::Cursor,
+        state: &mut Self::State,
+        event: canvas::Event,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
     ) -> (iced::event::Status, Option<message::Message>) {
+        match event {
+            canvas::Event::Mouse(mouse_event) => {
+                match mouse_event {
+                    mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                        state.dragging = true;
+                        state.moved = false;
+                    }
+                    mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                        state.dragging = false;
+                        if !state.moved
+                            && let Some(position) = cursor.position_in(bounds)
+                        {
+                            let x_from_center = position.x - bounds.width / 2.0;
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                reason = "allowed within the precision limits of the timeline"
+                            )]
+                            let ms_from_center = subtitle::Duration(
+                                (x_from_center / self.position.zoom_factor) as i64,
+                            );
+                            let new_time = self.position.center + ms_from_center;
+                            return (
+                                event::Status::Captured,
+                                Some(message::Message::PlaybackSetPosition(new_time)),
+                            );
+                        }
+                    }
+                    mouse::Event::CursorLeft => {
+                        state.dragging = false;
+                    }
+                    mouse::Event::CursorMoved { .. } => {
+                        state.moved = true;
+                    }
+
+                    _ => {}
+                }
+
+                return (event::Status::Captured, None);
+            }
+            canvas::Event::Touch(touch_event) => {
+                // TODO
+                match touch_event {
+                    touch::Event::FingerPressed { .. } => {}
+                    touch::Event::FingerMoved { .. } => {}
+                    touch::Event::FingerLifted { .. } => {}
+                    touch::Event::FingerLost { .. } => {}
+                }
+
+                return (event::Status::Captured, None);
+            }
+            canvas::Event::Keyboard(_) => {}
+        }
+
         (event::Status::Ignored, None)
     }
 

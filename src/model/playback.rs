@@ -3,17 +3,21 @@ use std::sync::{
     Mutex,
 };
 
-use crate::{media, model};
+use crate::{media, model, subtitle};
 
+/// Atomically interior-mutable playback position.
+///
+/// Represents the playback position in a thread-safe way while also allowing interior mutability with only an immutable reference.
+/// The position is represented as a number of ticks with a variable base rate (specified as the `rate` field).
 pub struct Position {
-    // Position in terms of `rate`. Always guaranteed to be correct,
-    // but requires a lock on the mutex to access.
+    /// Position in terms of `rate`. Always guaranteed to be correct,
+    /// but requires a lock on the mutex to access.
     pub authoritative_position: Mutex<u64>,
 
-    // Last known position in terns of `rate`.
+    /// Last known position in terns of `rate`.
     pub position: AtomicU64,
 
-    // How many `n`'s per second there are.
+    /// How many `n`'s per second there are.
     pub rate: AtomicU32,
 }
 
@@ -81,6 +85,34 @@ impl Position {
 
     pub fn add_frames(&self, delta_frames: model::FrameDelta, frame_rate: media::FrameRate) {
         self.add_seconds(f64::from(delta_frames.0) / f64::from(frame_rate));
+    }
+
+    /// Sets the playback position to the given value in ticks.
+    ///
+    /// # Panics
+    /// Panics if the authoritative position lock is poisoned.
+    pub fn set_ticks(&self, new_value: u64) {
+        let mut lock = self.authoritative_position.lock().unwrap();
+        *lock = new_value;
+        drop(lock);
+        self.position.store(new_value, Ordering::Relaxed);
+    }
+
+    /// Sets the playback position to the given event start time.
+    ///
+    /// # Panics
+    /// Panics if the authoritative position lock is poisoned, or on overflow.
+    pub fn set_to_event(&self, new_value: subtitle::StartTime) {
+        if self.rate() == 0 {
+            return;
+        }
+
+        let ticks: i64 = new_value
+            .0
+            .checked_mul(i64::from(self.rate()))
+            .expect("ticks overflow")
+            / 1000;
+        self.set_ticks(ticks.try_into().unwrap_or(0));
     }
 }
 

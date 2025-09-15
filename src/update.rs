@@ -336,6 +336,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 .add_seconds(delta_seconds);
             global_state.workers.emit_playback_step();
         }
+        Message::PlaybackSetPosition(position) => {
+            global_state.shared.playback_position.set_to_event(position);
+            global_state.workers.emit_playback_step();
+        }
         Message::TogglePlayback => {
             // Notify workers to play or pause. The respective playback controller will assume
             // responsibility of updating us.

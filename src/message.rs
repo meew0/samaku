@@ -90,6 +90,7 @@ pub enum Message {
     // Change the playback state in the given way.
     PlaybackAdvanceFrames(model::FrameDelta),
     PlaybackAdvanceSeconds(f64),
+    PlaybackSetPosition(subtitle::StartTime),
     TogglePlayback,
 
     /// Update the global representation of the playback state; emitted by the playback worker.
