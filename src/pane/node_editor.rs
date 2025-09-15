@@ -605,7 +605,8 @@ fn sub_menu<'a>(
 fn add_menu<'a>() -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     vec![iced_aw::menu::Item::with_menu(
         iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
-        iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE)),
+        iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE))
+            .width(iced::Length::Fixed(150.0)),
     )]
 }
 
@@ -630,6 +631,7 @@ type ShellMap = BTreeMap<String, MenuShell>;
 
 static SHELL_TREE: LazyLock<ShellMap> = LazyLock::new(collect_menu);
 
+#[derive(Debug)]
 enum MenuShell {
     Item(nde::node::Constructor),
     SubMenu(ShellMap),

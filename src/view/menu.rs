@@ -80,15 +80,13 @@ pub fn sub_menu<'a>(
             row![
                 text(label)
                     .width(Length::Fill)
-                    .height(Length::Fill)
                     .align_y(alignment::Vertical::Center),
                 arrow
             ]
             .align_y(iced::Alignment::Center),
             msg,
         )
-        .width(Length::Fill)
-        .height(Length::Fill),
+        .width(Length::Fill),
         Menu::new(children),
     )
 }
