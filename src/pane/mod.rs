@@ -6,6 +6,7 @@ pub mod grid;
 pub mod node_editor;
 pub mod style_editor;
 pub mod text_editor;
+pub mod timeline;
 pub mod unassigned;
 pub mod video;
 

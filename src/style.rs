@@ -5,8 +5,8 @@
 
 use iced::widget::container;
 use iced::{
-    Color,
     theme::{Palette, Theme},
+    Color,
 };
 
 // https://coolors.co/0f1a19-f0f7ee-ffb60a-06b153-f5004e
@@ -15,6 +15,12 @@ pub const SAMAKU_BACKGROUND: Color = Color::from_rgb(
     0x0f as f32 / 255.0,
     0x1a as f32 / 255.0,
     0x19 as f32 / 255.0,
+);
+
+pub const SAMAKU_BACKGROUND_WEAK: Color = Color::from_rgb(
+    0x23 as f32 / 255.0,
+    0x2f as f32 / 255.0,
+    0x2e as f32 / 255.0,
 );
 
 pub const SAMAKU_TEXT: Color = Color::from_rgb(
