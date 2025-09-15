@@ -180,7 +180,7 @@ pub enum LeafInputType {
 
 #[typetag::serde(tag = "type")]
 #[expect(unused_variables, reason = "trait with default methods")]
-pub trait Node: Debug {
+pub trait Node: Debug + Send {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
     fn predicted_outputs(&self) -> &[SocketType];

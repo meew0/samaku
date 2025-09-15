@@ -390,6 +390,7 @@ impl Default for Style {
 /// Collection of styles. Upholds the following guarantees:
 /// - There is always at least one style
 /// - No two styles have the same name
+#[derive(Debug)]
 pub struct StyleList {
     styles: Vec<Style>,
     names: HashMap<String, usize>,
@@ -715,6 +716,7 @@ impl IndexMut<EventIndex> for EventTrack {
     }
 }
 
+#[derive(Debug)]
 pub struct ScriptInfo {
     pub wrap_style: WrapStyle,
     pub scaled_border_and_shadow: bool,
@@ -744,6 +746,7 @@ impl Default for ScriptInfo {
 }
 
 /// Represents all data that can be contained within an `.ass` file.
+#[derive(Debug)]
 pub struct File {
     /// Metadata, containing information like the playback resolution, the YCbCr matrix, etc.
     pub script_info: ScriptInfo,

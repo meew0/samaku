@@ -221,37 +221,29 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 }
             };
 
-            // The reason we need to block here, instead of asynchronously executing the future,
-            // is that otherwise we would have to pass the resulting `AssFile` via a `Message`.
-            // This requires it to be cloneable, because messages need to be cloneable in the
-            // general case (for example when retained within widgets, like buttons), even
-            // though it would not actually need to be cloned in this specific case. It is
-            // possible to make `AssFile`s cloneable using type-erased cloning of trait objects,
-            // and in fact we likely want to do this someday to implement duplication of NDE
-            // filters, but I think `AssFile`s should not actually be cloneable entirely.
-            let result = smol::block_on(future);
+            return iced::Task::perform(future, |result| match result {
+                Ok(file_box) => Message::SubtitleFileReadForOpen(model::NeverClone(file_box)),
+                Err(err) => Message::SubtitleParseError(model::NeverClone(err)),
+            });
+        }
+        Message::SubtitleFileReadForOpen(file_box) => {
+            let (ass_file, warnings) = *(file_box.0);
+            global_state.subtitles = ass_file;
 
-            match result {
-                Ok(file_box) => {
-                    let (ass_file, warnings) = *file_box;
-                    global_state.subtitles = ass_file;
-
-                    for warning in &warnings {
-                        global_state.toast(view::toast::Toast::new(
-                            view::toast::Status::Primary,
-                            "Warning while loading subtitle file".to_owned(),
-                            format!("{warning}"),
-                        ));
-                    }
-                }
-                Err(err) => {
-                    global_state.toast(view::toast::Toast::new(
-                        view::toast::Status::Danger,
-                        "Error while loading subtitle file".to_owned(),
-                        err.to_string(),
-                    ));
-                }
+            for warning in &warnings {
+                global_state.toast(view::toast::Toast::new(
+                    view::toast::Status::Primary,
+                    "Warning while loading subtitle file".to_owned(),
+                    format!("{warning}"),
+                ));
             }
+        }
+        Message::SubtitleParseError(err) => {
+            global_state.toast(view::toast::Toast::new(
+                view::toast::Status::Danger,
+                "Error while loading subtitle file".to_owned(),
+                err.to_string(),
+            ));
         }
         Message::SaveSubtitleFile => {
             let mut data = String::new();

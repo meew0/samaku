@@ -74,6 +74,14 @@ pub enum Message {
     /// A subtitle file has been selected and read, and its contents are now available.
     SubtitleFileReadForImport(String),
 
+    /// A subtitle file has been selected, read, and parsed into an `AssFile`.
+    /// This message uses `NeverClone`, so it should never be cloned.
+    SubtitleFileReadForOpen(
+        model::NeverClone<Box<(subtitle::File, Vec<subtitle::parse::Warning>)>>,
+    ),
+
+    SubtitleParseError(model::NeverClone<subtitle::parse::SubtitleParseError>),
+
     /// The playback position has changed, so there might now be a new frame to decode.
     ///
     /// This message is necessary because we represent the playback state using interior mutability
