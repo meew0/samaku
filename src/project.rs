@@ -4,7 +4,9 @@
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
 )]
 
-use crate::pane;
+use crate::{pane, subtitle};
+use std::borrow::Cow;
+use std::collections::HashSet;
 
 use iced::widget::pane_grid;
 use thiserror::Error;
@@ -59,6 +61,7 @@ pub const METADATA_KEY: &str = "Samaku Project Metadata";
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Project<'a> {
     pane_layout: PaneLayout<'a>,
+    selected_event_indices: Cow<'a, HashSet<subtitle::EventIndex>>,
 }
 
 impl<'a> Project<'a> {
@@ -66,12 +69,19 @@ impl<'a> Project<'a> {
         let pane_layout =
             PaneLayout::from_pane_grid(&global_state.panes, global_state.panes.layout());
 
-        Self { pane_layout }
+        Self {
+            pane_layout,
+            selected_event_indices: Cow::Borrowed(&global_state.selected_event_indices),
+        }
     }
 
     pub fn update_global(self, global_state: &mut crate::Samaku) {
-        let Self { pane_layout } = self;
+        let Self {
+            pane_layout,
+            selected_event_indices,
+        } = self;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
+        global_state.selected_event_indices = selected_event_indices.into_owned();
     }
 }
 
