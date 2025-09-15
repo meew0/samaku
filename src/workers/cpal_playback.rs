@@ -1,5 +1,5 @@
 use std::{
-    sync::{atomic, Arc, Mutex},
+    sync::{Arc, Mutex, atomic},
     thread,
 };
 

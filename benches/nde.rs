@@ -1,6 +1,6 @@
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn parse_benchmark(c: &mut Criterion) {
     const NO_TAGS: &str = "Sphinx of black quartz, judge my vow.";

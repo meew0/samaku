@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicU32, AtomicU64, Ordering},
     Mutex,
+    atomic::{AtomicU32, AtomicU64, Ordering},
 };
 
 use crate::{media, model, subtitle};

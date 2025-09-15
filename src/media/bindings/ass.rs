@@ -105,21 +105,21 @@ impl Library {
 
         let vsprintf_result = unsafe { vsprintf::vsprintf_raw(format, va_list) };
         match vsprintf_result {
-            Ok(data) => {
-                match String::from_utf8(data) {
-                    Ok(string) => callback(level, string),
-                    Err(err) => {
-                        callback(
-                            level,
-                            format!("Message received from libass resulted in UTF-8 decoding error: {err}"),
-                        );
-                        println!(
-                            "invalid string bytes received from libass: {:02x?}",
-                            err.as_bytes()
-                        );
-                    }
+            Ok(data) => match String::from_utf8(data) {
+                Ok(string) => callback(level, string),
+                Err(err) => {
+                    callback(
+                        level,
+                        format!(
+                            "Message received from libass resulted in UTF-8 decoding error: {err}"
+                        ),
+                    );
+                    println!(
+                        "invalid string bytes received from libass: {:02x?}",
+                        err.as_bytes()
+                    );
                 }
-            }
+            },
             Err(err) => callback(
                 level,
                 format!("Error while formatting message received from libass: {err}"),
@@ -588,11 +588,7 @@ impl Track {
         let err_val =
             unsafe { libass::ass_track_set_feature(self.track, feature as u32, i32::from(enable)) };
 
-        if err_val < 0 {
-            Err(())
-        } else {
-            Ok(())
-        }
+        if err_val < 0 { Err(()) } else { Ok(()) }
     }
 }
 

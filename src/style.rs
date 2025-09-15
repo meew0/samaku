@@ -5,8 +5,8 @@
 
 use iced::widget::container;
 use iced::{
-    theme::{Palette, Theme},
     Color,
+    theme::{Palette, Theme},
 };
 
 // https://coolors.co/0f1a19-f0f7ee-ffb60a-06b153-f5004e

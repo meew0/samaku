@@ -2,7 +2,7 @@ use crate::media::FrameRate;
 use crate::{message, style, subtitle, view};
 use iced::widget::canvas;
 use iced::widget::canvas::event;
-use iced::{mouse, Renderer, Theme};
+use iced::{Renderer, Theme, mouse};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct State {
