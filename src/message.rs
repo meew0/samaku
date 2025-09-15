@@ -201,6 +201,7 @@ pub enum Pane {
 
     // Messages for the timeline
     TimelineDragged(subtitle::StartTime),
+    TimelineZoomed(subtitle::StartTime, f32),
 }
 
 /// Messages dispatched to nodes.

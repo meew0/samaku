@@ -47,6 +47,10 @@ impl super::LocalState for State {
             message::Pane::TimelineDragged(new_time) => {
                 self.position.center = new_time;
             }
+            message::Pane::TimelineZoomed(new_center, new_zoom_factor) => {
+                self.position.center = new_center;
+                self.position.zoom_factor = new_zoom_factor;
+            }
             _ => {}
         }
 
@@ -92,6 +96,15 @@ impl Position {
                 .mul_add(self.zoom_factor, bounds.x + bounds.width / 2.0),
             y: bounds.height.mul_add(y_factor, bounds.y),
         }
+    }
+
+    fn ms_from_center(&self, position: iced::Point, bounds: iced::Rectangle) -> subtitle::Duration {
+        let x_from_center = position.x - bounds.width / 2.0;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "allowed within the precision limits of the timeline"
+        )]
+        subtitle::Duration((x_from_center / self.zoom_factor) as i64)
     }
 }
 
@@ -140,15 +153,8 @@ impl canvas::Program<message::Message> for CanvasData {
                         if !state.moved
                             && let Some(position) = cursor.position_in(bounds)
                         {
-                            let x_from_center = position.x - bounds.width / 2.0;
-                            #[expect(
-                                clippy::cast_possible_truncation,
-                                reason = "allowed within the precision limits of the timeline"
-                            )]
-                            let ms_from_center = subtitle::Duration(
-                                (x_from_center / self.position.zoom_factor) as i64,
-                            );
-                            let new_time = self.position.center + ms_from_center;
+                            let new_time = self.position.center
+                                + self.position.ms_from_center(position, bounds);
                             return (
                                 event::Status::Captured,
                                 Some(message::Message::PlaybackSetPosition(new_time)),
@@ -175,6 +181,36 @@ impl canvas::Program<message::Message> for CanvasData {
                                 )),
                             );
                         }
+                    }
+                    mouse::Event::WheelScrolled { delta } => {
+                        let y = match delta {
+                            mouse::ScrollDelta::Lines { y, .. } => y,
+                            mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
+                        };
+
+                        dbg!(y);
+                        let modifier_factor = 1.2_f32.powf(y);
+                        let new_zoom_factor =
+                            (self.position.zoom_factor * modifier_factor).clamp(0.001, 1.0);
+                        let mut new_center = self.position.center;
+
+                        if let Some(position) = cursor.position_in(bounds) {
+                            let ms_from_center = self.position.ms_from_center(position, bounds);
+                            #[expect(clippy::cast_possible_truncation, reason = "allowed within the precision limits of the timeline")]
+                            #[expect(clippy::cast_precision_loss, reason = "allowed within the precision limits of the timeline")]
+                            let zoomed = subtitle::Duration(
+                                (ms_from_center.0 as f32 * modifier_factor) as i64,
+                            );
+                            new_center = new_center - ms_from_center + zoomed;
+                        }
+
+                        return (
+                            event::Status::Captured,
+                            Some(message::Message::Pane(
+                                self.pane,
+                                message::Pane::TimelineZoomed(new_center, new_zoom_factor),
+                            )),
+                        );
                     }
 
                     _ => {}
