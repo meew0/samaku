@@ -242,6 +242,10 @@ impl canvas::Program<message::Message> for CanvasData {
         draw_background(bounds, &mut frame, self.position);
         draw_seconds_ticks(&mut frame, self.position);
 
+        if let Some(_frame_rate) = self.frame_rate {
+            // TODO
+        }
+
         vec![frame.into_geometry()]
     }
 
@@ -313,9 +317,12 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         let tick_x = position
             .time_delta(tick_ms)
             .mul_add(position.zoom_factor, frame.width() / 2.0);
-        
+
         frame.fill_rectangle(
-            iced::Point::new(tick_x, 0.0), iced::Size::new(1.0, frame.height()), style::SAMAKU_TEXT);
+            iced::Point::new(tick_x, 0.0),
+            iced::Size::new(1.0, frame.height()),
+            style::SAMAKU_TEXT,
+        );
 
         tick_ms = tick_ms - subtitle::Duration(1000);
     }
