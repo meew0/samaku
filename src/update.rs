@@ -473,6 +473,12 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 event.event_type = new_type;
             }
         }
+        Message::SetEventStartTimeAndDuration(event_index, start, duration) => {
+            if let Some(event) = global_state.subtitles.events.get_mut(event_index) {
+                event.start = start;
+                event.duration = duration;
+            }
+        }
         Message::TextEditorActionPerformed(pane, action) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
                 // Create a visitor that will perform the given action on the text editor pane, if the given pane is a text editor pane

@@ -24,6 +24,17 @@ impl super::LocalState for State {
                 .video_metadata
                 .map(|video_metadata| video_metadata.frame_rate),
             playback_position: global_state.shared.playback_position.subtitle_time(),
+            events: global_state
+                .subtitles
+                .events
+                .iter_range(self.position.left, self.position.right)
+                .map(|(index, event)| EventReference {
+                    index,
+                    start: event.start,
+                    duration: event.duration,
+                    selected: global_state.selected_event_indices.contains(&index),
+                })
+                .collect(),
         };
 
         let canvas = canvas(canvas_data)
@@ -128,6 +139,21 @@ struct CanvasData {
     position: Position,
     frame_rate: Option<FrameRate>,
     playback_position: subtitle::StartTime,
+    events: Vec<EventReference>,
+}
+
+#[derive(Clone)]
+struct EventReference {
+    index: subtitle::EventIndex,
+    start: subtitle::StartTime,
+    duration: subtitle::Duration,
+    selected: bool,
+}
+
+impl EventReference {
+    fn overlaps(&self, other: &EventReference) -> bool {
+        self.start < (other.start + other.duration) && other.start < (self.start + self.duration)
+    }
 }
 
 #[derive(Default)]
@@ -144,11 +170,13 @@ enum DragMode {
     None,
     Pan(Position),
     Cursor,
+    Event(EventDragAction, EventReference),
 }
 
 #[derive(Default)]
 struct ViewState {
     cursor_x: Option<f32>,
+    subtitle_areas: Vec<(iced::Rectangle, EventDragAction, EventReference)>,
 }
 
 impl ViewState {
@@ -161,6 +189,25 @@ impl ViewState {
 
         false
     }
+
+    fn subtitle_to_grab(
+        &self,
+        mouse_position: iced::Point,
+    ) -> Option<(EventDragAction, EventReference)> {
+        for (bounds, drag_action, event_reference) in &self.subtitle_areas {
+            if bounds.contains(mouse_position) {
+                return Some((*drag_action, event_reference.clone()));
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EventDragAction {
+    Left,
+    Center,
+    Right,
 }
 
 impl canvas::Program<message::Message> for CanvasData {
@@ -179,12 +226,15 @@ impl canvas::Program<message::Message> for CanvasData {
                     mouse::Event::ButtonPressed(mouse::Button::Left) => {
                         state.drag_start = cursor.position_in(bounds);
                         if let Some(mouse_position) = state.drag_start {
-                            state.drag_mode =
-                                if state.view_state.borrow().can_grab_cursor(mouse_position) {
-                                    DragMode::Cursor
-                                } else {
-                                    DragMode::Pan(self.position)
-                                };
+                            state.drag_mode = if let Some((drag_action, event_reference)) =
+                                state.view_state.borrow().subtitle_to_grab(mouse_position)
+                            {
+                                DragMode::Event(drag_action, event_reference)
+                            } else if state.view_state.borrow().can_grab_cursor(mouse_position) {
+                                DragMode::Cursor
+                            } else {
+                                DragMode::Pan(self.position)
+                            };
                         }
                         state.moved = false;
                     }
@@ -193,51 +243,32 @@ impl canvas::Program<message::Message> for CanvasData {
                         if !state.moved
                             && let Some(mouse_position) = cursor.position_in(bounds)
                         {
-                            let new_time = self.position.left
-                                + self.position.ms_from_left(mouse_position, bounds.width);
-                            return (
-                                event::Status::Captured,
-                                Some(message::Message::PlaybackSetPosition(new_time)),
-                            );
+                            return match state.drag_mode {
+                                DragMode::None | DragMode::Pan(_) | DragMode::Cursor => {
+                                    let new_time = self.position.left
+                                        + self.position.ms_from_left(mouse_position, bounds.width);
+                                    (
+                                        event::Status::Captured,
+                                        Some(message::Message::PlaybackSetPosition(new_time)),
+                                    )
+                                }
+                                DragMode::Event(_, ref event_reference) => (
+                                    event::Status::Captured,
+                                    Some(message::Message::ToggleEventSelection(
+                                        event_reference.index,
+                                    )),
+                                ),
+                            };
                         }
                     }
                     mouse::Event::CursorMoved { .. } => {
                         if let Some(mouse_position) = cursor.position_in(bounds) {
                             state.moved = true;
-                            if let Some(drag_start) = state.drag_start {
-                                let x_from_start = drag_start.x - mouse_position.x;
-                                let pixel_per_ms = self.position.pixel_per_ms(bounds.width);
-                                #[expect(
-                                    clippy::cast_possible_truncation,
-                                    reason = "allowed within the precision limits of the timeline"
-                                )]
-                                let ms_dragged =
-                                    subtitle::Duration((x_from_start / pixel_per_ms) as i64);
-
-                                match state.drag_mode {
-                                    DragMode::Pan(start_position) => {
-                                        return (
-                                            event::Status::Captured,
-                                            Some(message::Message::Pane(
-                                                self.pane,
-                                                message::Pane::TimelineDragged(
-                                                    start_position.offset(ms_dragged),
-                                                ),
-                                            )),
-                                        );
-                                    }
-                                    DragMode::Cursor => {
-                                        let new_time = self.position.left
-                                            + self
-                                                .position
-                                                .ms_from_left(mouse_position, bounds.width);
-                                        return (
-                                            event::Status::Captured,
-                                            Some(message::Message::PlaybackSetPosition(new_time)),
-                                        );
-                                    }
-                                    DragMode::None => {}
-                                }
+                            if let Some(drag_start) = state.drag_start
+                                && let Some(value) =
+                                    self.handle_drag(state, bounds, mouse_position, drag_start)
+                            {
+                                return value;
                             }
                         }
                     }
@@ -288,6 +319,13 @@ impl canvas::Program<message::Message> for CanvasData {
             state.view_state.borrow_mut().cursor_x = None;
         }
 
+        draw_subtitle_stack(
+            &mut frame,
+            self.position,
+            &self.events,
+            &mut state.view_state.borrow_mut(),
+        );
+
         vec![frame.into_geometry()]
     }
 
@@ -302,7 +340,16 @@ impl canvas::Program<message::Message> for CanvasData {
         }
 
         if let Some(mouse_position) = cursor.position_in(bounds) {
-            return if state.view_state.borrow().can_grab_cursor(mouse_position) {
+            return if let Some((drag_action, _)) =
+                state.view_state.borrow().subtitle_to_grab(mouse_position)
+            {
+                match drag_action {
+                    EventDragAction::Left | EventDragAction::Right => {
+                        mouse::Interaction::ResizingHorizontally
+                    }
+                    EventDragAction::Center => mouse::Interaction::Pointer,
+                }
+            } else if state.view_state.borrow().can_grab_cursor(mouse_position) {
                 mouse::Interaction::ResizingHorizontally
             } else {
                 mouse::Interaction::Grab
@@ -369,6 +416,88 @@ impl CanvasData {
         }
 
         (event::Status::Captured, None)
+    }
+
+    fn handle_drag(
+        &self,
+        state: &CanvasState,
+        bounds: iced::Rectangle,
+        mouse_position: iced::Point,
+        drag_start: iced::Point,
+    ) -> Option<(event::Status, Option<message::Message>)> {
+        const MIN_DURATION: i64 = 10;
+
+        let x_from_start = drag_start.x - mouse_position.x;
+        let pixel_per_ms = self.position.pixel_per_ms(bounds.width);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "allowed within the precision limits of the timeline"
+        )]
+        let ms_dragged = subtitle::Duration((x_from_start / pixel_per_ms) as i64);
+
+        match state.drag_mode {
+            DragMode::Pan(start_position) => {
+                return Some((
+                    event::Status::Captured,
+                    Some(message::Message::Pane(
+                        self.pane,
+                        message::Pane::TimelineDragged(start_position.offset(ms_dragged)),
+                    )),
+                ));
+            }
+            DragMode::Cursor => {
+                let new_time =
+                    self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
+                return Some((
+                    event::Status::Captured,
+                    Some(message::Message::PlaybackSetPosition(new_time)),
+                ));
+            }
+            DragMode::Event(drag_action, ref event_reference) => {
+                let new_time =
+                    self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
+
+                return Some((
+                    event::Status::Captured,
+                    Some(match drag_action {
+                        EventDragAction::Left => {
+                            let new_duration = subtitle::Duration(
+                                (event_reference.duration.0 - (new_time - event_reference.start).0)
+                                    .max(MIN_DURATION),
+                            );
+                            message::Message::SetEventStartTimeAndDuration(
+                                event_reference.index,
+                                event_reference.start + event_reference.duration - new_duration,
+                                new_duration,
+                            )
+                        }
+                        EventDragAction::Center => {
+                            let drag_start_time = self.position.left
+                                + self.position.ms_from_left(drag_start, bounds.width);
+                            let offset = new_time - drag_start_time;
+                            message::Message::SetEventStartTimeAndDuration(
+                                event_reference.index,
+                                event_reference.start + offset,
+                                event_reference.duration,
+                            )
+                        }
+                        EventDragAction::Right => message::Message::SetEventStartTimeAndDuration(
+                            event_reference.index,
+                            event_reference.start,
+                            subtitle::Duration(
+                                (event_reference.duration.0
+                                    - ((event_reference.start + event_reference.duration)
+                                        - new_time)
+                                        .0)
+                                    .max(10),
+                            ),
+                        ),
+                    }),
+                ));
+            }
+            DragMode::None => {}
+        }
+        None
     }
 }
 
@@ -543,6 +672,162 @@ fn draw_equilateral_triangle(
     });
 
     frame.fill(&tri, fill);
+}
+
+const LAYER_HEIGHT: f32 = 24.0;
+const SUBTITLE_FULL_HEIGHT: f32 = 18.0;
+const SUBTITLE_CENTER_HEIGHT: f32 = 12.0;
+const HALF_SQRT_3: f32 = 0.866_025_4;
+const TAN_15_DEG: f32 = 0.267_949_2;
+
+fn draw_subtitle_stack(
+    frame: &mut canvas::Frame<Renderer>,
+    position: Position,
+    events: &[EventReference],
+    view_state: &mut ViewState,
+) {
+    view_state.subtitle_areas.clear();
+
+    #[expect(clippy::cast_sign_loss, reason = "clamped to zero")]
+    #[expect(clippy::cast_possible_truncation, reason = "rounded")]
+    let num_layers = (frame.height() / LAYER_HEIGHT - 1.0).floor().max(0.0) as usize;
+
+    let mut layers: Vec<Vec<&EventReference>> = Vec::with_capacity(num_layers);
+    layers.push(vec![]);
+
+    'outer: for event in events {
+        let mut layer_index = 0;
+        let mut layer = &mut layers[layer_index];
+
+        while layer.iter().any(|other_event| other_event.overlaps(event)) {
+            layer_index += 1;
+            if layer_index >= num_layers {
+                // Skip drawing this subtitle if we don't have a layer available
+                continue 'outer;
+            }
+            if layer_index >= layers.len() {
+                layers.push(vec![]);
+            }
+            layer = &mut layers[layer_index];
+        }
+
+        layer.push(event);
+        draw_one_subtitle(frame, position, event, view_state, layer_index);
+    }
+}
+
+fn draw_one_subtitle(
+    frame: &mut canvas::Frame<Renderer>,
+    position: Position,
+    event: &EventReference,
+    view_state: &mut ViewState,
+    layer_index: usize,
+) {
+    let pixel_per_ms = position.pixel_per_ms(frame.width());
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "acceptable for timeline precision"
+    )]
+    let true_width = event.duration.0 as f32 * pixel_per_ms;
+    let left_x = position.time_delta(event.start) * pixel_per_ms;
+    let pt_x = (SUBTITLE_FULL_HEIGHT - SUBTITLE_CENTER_HEIGHT) / (2.0 * TAN_15_DEG);
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "acceptable for timeline precision"
+    )]
+    let layer_start_y = (layer_index + 1) as f32 * LAYER_HEIGHT;
+    let base_point = iced::Point::new(
+        left_x,
+        layer_start_y + (LAYER_HEIGHT - SUBTITLE_FULL_HEIGHT) / 2.0,
+    );
+
+    let path = if true_width > 2.0 * pt_x {
+        // If we have enough space, draw a full “dumbbell” with a connecting rectangle in the middle
+        let pt_y = (SUBTITLE_FULL_HEIGHT - SUBTITLE_CENTER_HEIGHT) / 2.0;
+
+        let triangle_width = SUBTITLE_FULL_HEIGHT * HALF_SQRT_3;
+        let triangle_size = iced::Size::new(triangle_width, SUBTITLE_FULL_HEIGHT);
+        view_state.subtitle_areas.push((
+            iced::Rectangle::new(base_point, triangle_size),
+            EventDragAction::Left,
+            event.clone(),
+        ));
+        view_state.subtitle_areas.push((
+            iced::Rectangle::new(
+                base_point + iced::Vector::new(triangle_width, 0.0),
+                iced::Size::new(
+                    2.0_f32.mul_add(-triangle_width, true_width),
+                    SUBTITLE_FULL_HEIGHT,
+                ),
+            ),
+            EventDragAction::Center,
+            event.clone(),
+        ));
+        view_state.subtitle_areas.push((
+            iced::Rectangle::new(
+                base_point + iced::Vector::new(true_width - triangle_width, 0.0),
+                triangle_size,
+            ),
+            EventDragAction::Right,
+            event.clone(),
+        ));
+
+        canvas::Path::new(|builder| {
+            builder.move_to(base_point);
+            builder.line_to(base_point + iced::Vector::new(pt_x, pt_y));
+            builder.line_to(base_point + iced::Vector::new(true_width - pt_x, pt_y));
+            builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
+            builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
+            builder.line_to(
+                base_point + iced::Vector::new(true_width - pt_x, SUBTITLE_FULL_HEIGHT - pt_y),
+            );
+            builder.line_to(base_point + iced::Vector::new(pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
+            builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
+            builder.close();
+        })
+    } else {
+        // If there's not enough space, draw a “squeezed dumbbell”, like a spindle
+        let pt_x = true_width / 2.0;
+        let pt_y = pt_x * TAN_15_DEG;
+
+        let triangle_size = iced::Size::new(pt_x, SUBTITLE_FULL_HEIGHT);
+        view_state.subtitle_areas.push((
+            iced::Rectangle::new(base_point, triangle_size),
+            EventDragAction::Left,
+            event.clone(),
+        ));
+        view_state.subtitle_areas.push((
+            iced::Rectangle::new(base_point + iced::Vector::new(pt_x, 0.0), triangle_size),
+            EventDragAction::Right,
+            event.clone(),
+        ));
+
+        canvas::Path::new(|builder| {
+            builder.move_to(base_point);
+            builder.line_to(base_point + iced::Vector::new(pt_x, pt_y));
+            builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
+            builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
+            builder.line_to(base_point + iced::Vector::new(pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
+            builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
+            builder.close();
+        })
+    };
+
+    frame.fill(&path, style::SAMAKU_BACKGROUND_WEAK);
+
+    let stroke_style = if event.selected {
+        style::SAMAKU_PRIMARY
+    } else {
+        style::SAMAKU_TEXT_WEAK
+    };
+    frame.stroke(
+        &path,
+        canvas::Stroke {
+            style: canvas::Style::Solid(stroke_style),
+            width: 1.0,
+            ..Default::default()
+        },
+    );
 }
 
 fn top_bar<'a>(

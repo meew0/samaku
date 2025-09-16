@@ -124,6 +124,13 @@ pub enum Message {
     SetActiveEventStartTime(subtitle::StartTime),
     SetActiveEventDuration(subtitle::Duration),
 
+    // Set various properties of a specific event.
+    SetEventStartTimeAndDuration(
+        subtitle::EventIndex,
+        subtitle::StartTime,
+        subtitle::Duration,
+    ),
+
     // Action performed in a subtitle text editor
     // (needs to be handled both globally and locally)
     TextEditorActionPerformed(pane_grid::Pane, iced::widget::text_editor::Action),

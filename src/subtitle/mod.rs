@@ -638,6 +638,11 @@ impl EventTrack {
     }
 
     #[must_use]
+    pub fn get_mut(&mut self, index: EventIndex) -> Option<&mut Event<'static>> {
+        self.events.get_mut(index.0)
+    }
+
+    #[must_use]
     pub fn as_slice(&self) -> &[Event<'static>] {
         self.events.as_slice()
     }
@@ -714,6 +719,20 @@ impl EventTrack {
         {
             node.node.update(message);
         }
+    }
+
+    /// Iterate over the events in the given range.
+    pub fn iter_range(
+        &'_ self,
+        start: StartTime,
+        end: StartTime,
+    ) -> impl Iterator<Item = (EventIndex, &Event<'_>)> {
+        // TODO: make this more efficient using an interval tree or the like
+        self.events
+            .iter()
+            .enumerate()
+            .filter(move |(_, event)| (event.start + event.duration) >= start && event.start < end)
+            .map(|(index, event)| (EventIndex(index), event))
     }
 
     /// Compile subtitles in the given frame range to ASS.

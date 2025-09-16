@@ -213,7 +213,10 @@ fn active_second_line<'a>(
     .into()
 }
 
-fn active_main_text(state: &'_ State, self_pane: super::Pane) -> iced::Element<message::Message> {
+fn active_main_text(
+    state: &'_ State,
+    self_pane: super::Pane,
+) -> iced::Element<'_, message::Message> {
     text_editor(&state.content)
         .placeholder("Enter subtitle text...")
         .height(iced::Length::Fill)
