@@ -187,9 +187,6 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{Alignment, Event, event};
 use iced::{Element, Length, Settings, Subscription};
 
-#[cfg(test)]
-use criterion as _;
-
 pub mod config;
 pub mod keyboard;
 pub mod media;
@@ -405,7 +402,6 @@ impl Samaku {
             .height(32);
 
         // The title row — currently only contains the logo and the application name.
-        // TODO: add buttons/menus for loading/saving/etc
         let title_row = iced::widget::row![
             iced::widget::svg(iced::widget::svg::Handle::from_memory(resources::LOGO))
                 .width(30)
