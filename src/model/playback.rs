@@ -45,13 +45,16 @@ impl Position {
     }
 
     /// Returns the current non-authoritative position as milliseconds for subtitle purposes.
+    ///
+    /// # Panics
+    /// Panics on overflow
     pub fn subtitle_time(&self) -> subtitle::StartTime {
         subtitle::StartTime(
             self.position()
                 .checked_mul(1000)
-                .and_then(|e| <u64 as TryInto<i64>>::try_into(e).ok())
+                .and_then(|result| <u64 as TryInto<i64>>::try_into(result).ok())
                 .expect("playback position overflow")
-                / self.rate() as i64,
+                / i64::from(self.rate()),
         )
     }
 

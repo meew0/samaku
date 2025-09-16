@@ -403,6 +403,10 @@ fn emit_colour_and_transparency_to_packed<W: Write>(
     )
 }
 
+/// Writes the given time point to the writer in standard ASS format (centisecond accuracy).
+///
+/// # Errors
+/// Errors on I/O failure
 pub fn emit_timecode<W: Write>(writer: &mut W, time: super::StartTime) -> Result<(), Error> {
     let pos = time.0.max(0); // avoid negative numbers
 

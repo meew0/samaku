@@ -4,6 +4,10 @@ use std::fmt::Write;
 use std::fs::File;
 use thiserror::Error;
 
+/// Reads the first subtitle track from the given Matroska file into a string parseable e.g. by libass.
+///
+/// # Errors
+/// Errors in a variety of situations, see `LoadError` variants for details
 pub fn read(file: &File) -> Result<String, LoadError> {
     let mut matroska_file = MatroskaFile::open(file).map_err(LoadError::DemuxErrorLoad)?;
     let track = matroska_file

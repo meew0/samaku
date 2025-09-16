@@ -366,6 +366,16 @@ where
 {
     type State = ();
 
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        _event: canvas::Event,
+        _bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        (canvas::event::Status::Ignored, None)
+    }
+
     fn draw(
         &self,
         _state: &Self::State,
@@ -375,16 +385,6 @@ where
         _cursor: mouse::Cursor,
     ) -> Vec<<Renderer as geometry::Renderer>::Geometry> {
         vec![]
-    }
-
-    fn update(
-        &self,
-        _state: &mut Self::State,
-        _event: canvas::Event,
-        _bounds: Rectangle,
-        _cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
-        (canvas::event::Status::Ignored, None)
     }
 
     fn mouse_interaction(

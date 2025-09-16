@@ -283,12 +283,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     let mut data = String::new();
                     subtitle::emit(&mut data, &global_state.subtitles, None).unwrap();
 
-                    let future = async {
-                        if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
-                            smol::fs::write(handle.path(), data).await.unwrap();
-                        }
-                    };
-
+                    let future = select_file_and_save(data);
                     return iced::Task::perform(future, |()| Message::None);
                 }
                 Err(err) => {
@@ -317,12 +312,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 ));
             }
 
-            let future = async {
-                if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
-                    smol::fs::write(handle.path(), data).await.unwrap();
-                }
-            };
-
+            let future = select_file_and_save(data);
             return iced::Task::perform(future, |()| Message::None);
         }
         Message::VideoFrameAvailable(new_frame, handle) => {
@@ -678,5 +668,11 @@ fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
             copy_styles,
             active_event_style_index,
         );
+    }
+}
+
+async fn select_file_and_save(data: String) -> () {
+    if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
+        smol::fs::write(handle.path(), data).await.unwrap();
     }
 }

@@ -125,7 +125,7 @@ where
                             title_text,
                             iced::widget::horizontal_space(),
                             iced::widget::button("X")
-                                .on_press((on_close)(index))
+                                .on_press(on_close(index))
                                 .padding(3),
                         ]
                         .align_y(Alignment::Center)
