@@ -1,5 +1,5 @@
 use crate::media::FrameRate;
-use crate::{message, style, subtitle, view};
+use crate::{message, model, style, subtitle, view};
 use iced::widget::canvas;
 use iced::widget::canvas::event;
 use iced::{Renderer, Theme, mouse};
@@ -228,11 +228,13 @@ impl canvas::Program<message::Message> for CanvasData {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
 
         draw_background(bounds, &mut frame, self.position);
-        draw_seconds_ticks(&mut frame, self.position);
 
-        if let Some(_frame_rate) = self.frame_rate {
-            // TODO
+        if let Some(frame_rate) = self.frame_rate
+            && self.position.pixel_per_ms(bounds.width) > 0.4
+        {
+            draw_frame_ticks(&mut frame, self.position, frame_rate);
         }
+        draw_seconds_ticks(&mut frame, self.position);
 
         vec![frame.into_geometry()]
     }
@@ -353,13 +355,13 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         clippy::cast_possible_truncation,
         reason = "truncation desired in this case"
     )]
-    let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64);
+    let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64).max(500);
 
     // Find first full second to the left of the right bound.
     let mut tick_ms = subtitle::StartTime(position.right.0 - (position.right.0.rem_euclid(step)));
 
     while tick_ms >= subtitle::StartTime(0) && tick_ms >= position.left {
-        let tick_x = position.time_delta(tick_ms) * position.pixel_per_ms(frame.width());
+        let tick_x = position.time_delta(tick_ms) * pixel_per_ms;
 
         frame.fill_rectangle(
             iced::Point::new(tick_x, 20.0),
@@ -378,6 +380,39 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         });
 
         tick_ms = tick_ms - subtitle::Duration(step);
+    }
+}
+
+fn draw_frame_ticks(
+    frame: &mut canvas::Frame<Renderer>,
+    position: Position,
+    frame_rate: FrameRate,
+) {
+    let pixel_per_ms = position.pixel_per_ms(frame.width());
+    let first_frame = model::FrameNumber(frame_rate.ms_to_frame(position.left.0).0.max(0));
+
+    for (frame_number, time_ms) in frame_rate.iter_from(first_frame) {
+        if time_ms > position.right.0 {
+            break;
+        }
+
+        let tick_x = position.time_delta(subtitle::StartTime(time_ms)) * pixel_per_ms;
+
+        frame.fill_rectangle(
+            iced::Point::new(tick_x, 30.0),
+            iced::Size::new(1.0, frame.height()),
+            style::SAMAKU_TEXT_WEAK,
+        );
+
+        frame.fill_text(canvas::Text {
+            content: format!("{}", frame_number.0),
+            position: iced::Point::new(tick_x, 17.0),
+            color: style::SAMAKU_TEXT_WEAK,
+            font: crate::DEFAULT_FONT,
+            size: iced::Pixels(9.0),
+            horizontal_alignment: iced::alignment::Horizontal::Center,
+            ..Default::default()
+        });
     }
 }
 

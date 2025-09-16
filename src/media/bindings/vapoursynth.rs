@@ -676,6 +676,16 @@ impl FrameRate {
     pub(crate) fn frame_time_ms(&self) -> i64 {
         self.frame_to_ms(model::FrameNumber(1))
     }
+
+    pub(crate) fn iter_from(
+        &self,
+        frame: model::FrameNumber,
+    ) -> impl Iterator<Item = (model::FrameNumber, i64)> {
+        FrameIterator {
+            frame_rate: self,
+            current: frame,
+        }
+    }
 }
 
 impl From<FrameRate> for f64 {
@@ -687,6 +697,20 @@ impl From<FrameRate> for f64 {
     )]
     fn from(value: FrameRate) -> Self {
         value.numerator as f64 / value.denominator as f64
+    }
+}
+
+struct FrameIterator<'a> {
+    frame_rate: &'a FrameRate,
+    current: model::FrameNumber,
+}
+
+impl Iterator for FrameIterator<'_> {
+    type Item = (model::FrameNumber, i64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current += model::FrameDelta(1);
+        Some((self.current, self.frame_rate.frame_to_ms(self.current)))
     }
 }
 
