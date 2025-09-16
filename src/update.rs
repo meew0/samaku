@@ -2,6 +2,7 @@
 
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fmt::Write as _;
 
 use crate::message::Message;
@@ -160,7 +161,17 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::ImportSubtitleFile => {
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {
-                    Some(handle) => Some(smol::fs::read_to_string(handle.path()).await.unwrap()),
+                    Some(handle) => match handle.path().extension().and_then(OsStr::to_str) {
+                        Some("mkv" | "mka" | "mks") => {
+                            // TODO better error handling
+                            // TODO make this async
+                            Some(
+                                media::matroska::read(&std::fs::File::open(handle.path()).unwrap())
+                                    .unwrap(),
+                            )
+                        }
+                        _ => Some(smol::fs::read_to_string(handle.path()).await.unwrap()),
+                    },
                     None => None,
                 }
             };

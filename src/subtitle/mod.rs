@@ -8,6 +8,7 @@ use std::fmt::Debug;
 use std::ops::{Add, Index, IndexMut, Sub};
 
 pub use emit::emit;
+pub use emit::emit_timecode;
 
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,

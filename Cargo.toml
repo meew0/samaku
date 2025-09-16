@@ -32,6 +32,7 @@ rustsynth-sys = { version = "0.5.0", features = [
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
 libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
+matroska-demuxer = "0.7"
 rfd = "0.15.4"
 smol = "2.0"
 cpal = "0.16"

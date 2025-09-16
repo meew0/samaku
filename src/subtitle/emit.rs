@@ -263,9 +263,9 @@ where
             event_type_name(event.event_type),
             event.layer_index,
         )?;
-        emit_timecode(writer, event.start.0)?;
+        emit_timecode(writer, event.start)?;
         write!(writer, ",")?;
-        emit_timecode(writer, event.end().0)?;
+        emit_timecode(writer, event.end())?;
         write!(writer, ",")?;
         emit_aegi_inline_string(writer, &styles[event.style_index].name)?;
         write!(writer, ",")?;
@@ -403,8 +403,8 @@ fn emit_colour_and_transparency_to_packed<W: Write>(
     )
 }
 
-fn emit_timecode<W: Write>(writer: &mut W, time: i64) -> Result<(), Error> {
-    let pos = time.max(0); // avoid negative numbers
+pub fn emit_timecode<W: Write>(writer: &mut W, time: super::StartTime) -> Result<(), Error> {
+    let pos = time.0.max(0); // avoid negative numbers
 
     let hours = pos / 3_600_000;
     let minutes = (pos % 3_600_000) / 60_000;
