@@ -14,6 +14,7 @@ pub struct Position {
     /// but requires a lock on the mutex to access.
     pub authoritative_position: Mutex<u64>,
 
+    // TODO fix potential race condition here from position and rate being observed independently
     /// Last known position in terns of `rate`.
     pub position: AtomicU64,
 
@@ -41,6 +42,17 @@ impl Position {
             return 0.0;
         }
         self.position() as f64 / f64::from(self.rate())
+    }
+
+    /// Returns the current non-authoritative position as milliseconds for subtitle purposes.
+    pub fn subtitle_time(&self) -> subtitle::StartTime {
+        subtitle::StartTime(
+            self.position()
+                .checked_mul(1000)
+                .and_then(|e| <u64 as TryInto<i64>>::try_into(e).ok())
+                .expect("playback position overflow")
+                / self.rate() as i64,
+        )
     }
 
     /// Converts the playback position into a frame number (rounding down) using the given frame

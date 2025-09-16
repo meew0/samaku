@@ -3,6 +3,7 @@ use crate::{message, model, style, subtitle, view};
 use iced::widget::canvas;
 use iced::widget::canvas::event;
 use iced::{Renderer, Theme, mouse};
+use std::cell::RefCell;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct State {
@@ -22,6 +23,7 @@ impl super::LocalState for State {
             frame_rate: global_state
                 .video_metadata
                 .map(|video_metadata| video_metadata.frame_rate),
+            playback_position: global_state.shared.playback_position.subtitle_time(),
         };
 
         let canvas = canvas(canvas_data)
@@ -125,6 +127,7 @@ struct CanvasData {
     pane: super::Pane,
     position: Position,
     frame_rate: Option<FrameRate>,
+    playback_position: subtitle::StartTime,
 }
 
 #[derive(Default)]
@@ -132,6 +135,7 @@ struct CanvasState {
     drag_start: Option<iced::Point>,
     drag_mode: DragMode,
     moved: bool,
+    view_state: RefCell<ViewState>,
 }
 
 #[derive(Default)]
@@ -139,6 +143,12 @@ enum DragMode {
     #[default]
     None,
     Pan(Position),
+    Cursor,
+}
+
+#[derive(Default)]
+struct ViewState {
+    cursor_x: Option<f32>,
 }
 
 impl canvas::Program<message::Message> for CanvasData {
@@ -156,16 +166,24 @@ impl canvas::Program<message::Message> for CanvasData {
                 match mouse_event {
                     mouse::Event::ButtonPressed(mouse::Button::Left) => {
                         state.drag_start = cursor.position_in(bounds);
-                        state.drag_mode = DragMode::Pan(self.position);
+                        if let Some(mouse_position) = state.drag_start
+                            && let Some(cursor_x) = state.view_state.borrow().cursor_x
+                        {
+                            state.drag_mode = if (mouse_position.x - cursor_x).abs() < 4.0 {
+                                DragMode::Cursor
+                            } else {
+                                DragMode::Pan(self.position)
+                            };
+                        }
                         state.moved = false;
                     }
                     mouse::Event::ButtonReleased(mouse::Button::Left) => {
                         state.drag_start = None;
                         if !state.moved
-                            && let Some(position) = cursor.position_in(bounds)
+                            && let Some(mouse_position) = cursor.position_in(bounds)
                         {
                             let new_time = self.position.left
-                                + self.position.ms_from_left(position, bounds.width);
+                                + self.position.ms_from_left(mouse_position, bounds.width);
                             return (
                                 event::Status::Captured,
                                 Some(message::Message::PlaybackSetPosition(new_time)),
@@ -198,6 +216,14 @@ impl canvas::Program<message::Message> for CanvasData {
                                         )),
                                     );
                                 }
+                                DragMode::Cursor => {
+                                    let new_time = self.position.left
+                                        + self.position.ms_from_left(mouse_position, bounds.width);
+                                    return (
+                                        event::Status::Captured,
+                                        Some(message::Message::PlaybackSetPosition(new_time)),
+                                    );
+                                }
                                 DragMode::None => {}
                             }
                         }
@@ -219,7 +245,7 @@ impl canvas::Program<message::Message> for CanvasData {
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: iced::Rectangle,
@@ -235,6 +261,17 @@ impl canvas::Program<message::Message> for CanvasData {
             draw_frame_ticks(&mut frame, self.position, frame_rate);
         }
         draw_seconds_ticks(&mut frame, self.position);
+
+        if self.frame_rate.is_some() {
+            draw_cursor(
+                &mut frame,
+                self.position,
+                self.playback_position,
+                &mut state.view_state.borrow_mut(),
+            );
+        } else {
+            state.view_state.borrow_mut().cursor_x = None;
+        }
 
         vec![frame.into_geometry()]
     }
@@ -414,6 +451,71 @@ fn draw_frame_ticks(
             ..Default::default()
         });
     }
+}
+
+fn draw_cursor(
+    frame: &mut canvas::Frame<Renderer>,
+    position: Position,
+    playback_position: subtitle::StartTime,
+    view_state: &mut ViewState,
+) {
+    let cursor_x = position.time_delta(playback_position) * position.pixel_per_ms(frame.width());
+    view_state.cursor_x = Some(cursor_x);
+    frame.fill_rectangle(
+        iced::Point::new(cursor_x - 1.0, 0.0),
+        iced::Size::new(2.0, frame.height()),
+        style::SAMAKU_PRIMARY,
+    );
+    draw_equilateral_triangle(
+        frame,
+        iced::Point::new(cursor_x, 0.0),
+        iced::Point::new(cursor_x, 10.0),
+        style::SAMAKU_PRIMARY,
+    );
+}
+
+fn draw_equilateral_triangle(
+    frame: &mut canvas::Frame<Renderer>,
+    base_center: iced::Point,
+    apex: iced::Point,
+    fill: impl Into<canvas::Fill>,
+) {
+    // Vector from apex to base center (the altitude)
+    let vx = base_center.x - apex.x;
+    let vy = base_center.y - apex.y;
+    let height = vx.hypot(vy);
+
+    // Degenerate case: nothing to draw
+    if height <= f32::EPSILON {
+        return;
+    }
+
+    // Half of the base length: h / √3
+    let half_base = height / 3.0_f32.sqrt();
+
+    // Unit vector perpendicular to the altitude
+    let ux = -vy / height;
+    let uy = vx / height;
+
+    // Base vertices on either side of the base center
+    let b1 = iced::Point::new(
+        ux.mul_add(half_base, base_center.x),
+        uy.mul_add(half_base, base_center.y),
+    );
+    let b2 = iced::Point::new(
+        ux.mul_add(-half_base, base_center.x),
+        uy.mul_add(-half_base, base_center.y),
+    );
+
+    // Build a closed triangle path: apex -> b1 -> b2
+    let tri = canvas::Path::new(|builder| {
+        builder.move_to(apex);
+        builder.line_to(b1);
+        builder.line_to(b2);
+        builder.close();
+    });
+
+    frame.fill(&tri, fill);
 }
 
 fn top_bar<'a>(
