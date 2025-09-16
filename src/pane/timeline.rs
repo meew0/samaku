@@ -353,7 +353,7 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         clippy::cast_possible_truncation,
         reason = "truncation desired in this case"
     )]
-    let step = (1000.0 * 2_f32.powi(-4 - pixel_per_ms.log2().round() as i32)) as i64;
+    let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64);
 
     // Find first full second to the left of the right bound.
     let mut tick_ms = subtitle::StartTime(position.right.0 - (position.right.0.rem_euclid(step)));
@@ -362,10 +362,20 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
         let tick_x = position.time_delta(tick_ms) * position.pixel_per_ms(frame.width());
 
         frame.fill_rectangle(
-            iced::Point::new(tick_x, 0.0),
+            iced::Point::new(tick_x, 20.0),
             iced::Size::new(1.0, frame.height()),
             style::SAMAKU_TEXT,
         );
+
+        frame.fill_text(canvas::Text {
+            content: tick_ms.format_short(),
+            position: iced::Point::new(tick_x, 2.0),
+            color: style::SAMAKU_TEXT,
+            font: crate::DEFAULT_FONT,
+            size: iced::Pixels(14.0),
+            horizontal_alignment: iced::alignment::Horizontal::Center,
+            ..Default::default()
+        });
 
         tick_ms = tick_ms - subtitle::Duration(step);
     }

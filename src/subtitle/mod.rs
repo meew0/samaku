@@ -119,6 +119,59 @@ pub enum EventType {
 )]
 pub struct StartTime(pub i64);
 
+impl StartTime {
+    /// Fixed-width: `hh:mm:ss.mmm`
+    #[must_use]
+    pub fn format_long(&self) -> String {
+        let (sign, hours, minutes, seconds, millis) = self.split(false);
+        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
+    }
+
+    /// Compact: `h[:mm]:ss[.m..]` — trims leading hour when 0 and
+    /// trims trailing zeros from fractional seconds.
+    #[must_use]
+    pub fn format_short(&self) -> String {
+        let (sign, hours, minutes, seconds, millis) = self.split(false);
+
+        let mut result = if hours > 0 {
+            format!("{sign}{hours}:{minutes:02}:{seconds:02}")
+        } else {
+            format!("{sign}{minutes}:{seconds:02}")
+        };
+
+        if millis > 0 {
+            // fractional seconds with trimmed trailing zeros
+            let mut frac = format!("{millis:03}");
+            while frac.ends_with('0') {
+                frac.pop();
+            }
+            result.push('.');
+            result.push_str(&frac);
+        }
+
+        result
+    }
+
+    fn split(self, minus: bool) -> (&'static str, u64, u32, u32, u32) {
+        if self.0 < 0 {
+            return Self(-self.0).split(true);
+        }
+
+        #[expect(clippy::cast_sign_loss, reason = "clamped to 0")]
+        let ms_total = self.0 as u128;
+
+        #[expect(clippy::cast_possible_truncation, reason = "divided first")]
+        let hours = (ms_total / 3_600_000) as u64;
+        let minutes = ((ms_total / 60_000) % 60) as u32;
+        let seconds = ((ms_total / 1_000) % 60) as u32;
+        let millis = (ms_total % 1_000) as u32;
+
+        let sign = if minus { "-" } else { "" };
+
+        (sign, hours, minutes, seconds, millis)
+    }
+}
+
 impl Add<Duration> for StartTime {
     type Output = StartTime;
 
@@ -1005,6 +1058,36 @@ mod tests {
     use crate::{media, test_utils::test_file};
 
     use super::*;
+
+    #[test]
+    fn format_times() {
+        assert_eq!(StartTime(0).format_short(), "0:00");
+        assert_eq!(StartTime(0).format_long(), "00:00:00.000");
+
+        assert_eq!(StartTime(1000).format_short(), "0:01");
+        assert_eq!(StartTime(1000).format_long(), "00:00:01.000");
+
+        assert_eq!(StartTime(1500).format_short(), "0:01.5");
+        assert_eq!(StartTime(1500).format_long(), "00:00:01.500");
+
+        assert_eq!(StartTime(1501).format_short(), "0:01.501");
+        assert_eq!(StartTime(1501).format_long(), "00:00:01.501");
+
+        assert_eq!(StartTime(601_500).format_short(), "10:01.5");
+        assert_eq!(StartTime(601_500).format_long(), "00:10:01.500");
+
+        assert_eq!(StartTime(3_601_500).format_short(), "1:00:01.5");
+        assert_eq!(StartTime(3_601_500).format_long(), "01:00:01.500");
+
+        assert_eq!(StartTime(36_001_500).format_short(), "10:00:01.5");
+        assert_eq!(StartTime(36_001_500).format_long(), "10:00:01.500");
+
+        assert_eq!(StartTime(360_001_500).format_short(), "100:00:01.5");
+        assert_eq!(StartTime(360_001_500).format_long(), "100:00:01.500");
+
+        assert_eq!(StartTime(-1500).format_short(), "-0:01.5");
+        assert_eq!(StartTime(-1500).format_long(), "-00:00:01.500");
+    }
 
     #[test]
     fn style_list() {
