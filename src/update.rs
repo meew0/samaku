@@ -432,6 +432,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
             notify_selected_events(global_state);
         }
+        Message::SelectOnlyEvent(index) => {
+            global_state.selected_event_indices.clear();
+            global_state.selected_event_indices.insert(index);
+            notify_selected_events(global_state);
+        }
         Message::SetActiveEventText(new_text) => {
             if let Some(event) = active_event_mut!(global_state) {
                 event.text = Cow::Owned(new_text);

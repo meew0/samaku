@@ -113,6 +113,7 @@ pub enum Message {
 
     /// Select the given event if it is not selected, otherwise deselect it.
     ToggleEventSelection(subtitle::EventIndex),
+    SelectOnlyEvent(subtitle::EventIndex),
 
     // Set various properties of the active event.
     SetActiveEventText(String),

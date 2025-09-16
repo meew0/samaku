@@ -1,8 +1,9 @@
 use crate::media::FrameRate;
 use crate::{message, model, style, subtitle, view};
+use iced::keyboard::Modifiers;
 use iced::widget::canvas;
 use iced::widget::canvas::event;
-use iced::{Renderer, Theme, mouse};
+use iced::{Renderer, Theme, keyboard, mouse};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -162,6 +163,7 @@ struct CanvasState {
     drag_mode: DragMode,
     moved: bool,
     view_state: RefCell<ViewState>,
+    control_held: bool,
 }
 
 #[derive(Default)]
@@ -254,9 +256,13 @@ impl canvas::Program<message::Message> for CanvasData {
                                 }
                                 DragMode::Event(_, ref event_reference) => (
                                     event::Status::Captured,
-                                    Some(message::Message::ToggleEventSelection(
-                                        event_reference.index,
-                                    )),
+                                    Some(if state.control_held {
+                                        message::Message::ToggleEventSelection(
+                                            event_reference.index,
+                                        )
+                                    } else {
+                                        message::Message::SelectOnlyEvent(event_reference.index)
+                                    }),
                                 ),
                             };
                         }
@@ -283,7 +289,13 @@ impl canvas::Program<message::Message> for CanvasData {
 
                 return (event::Status::Captured, None);
             }
-            canvas::Event::Touch(_) | canvas::Event::Keyboard(_) => {}
+            canvas::Event::Touch(_) => {}
+            canvas::Event::Keyboard(keyboard_event) => match keyboard_event {
+                keyboard::Event::ModifiersChanged(modifiers) => {
+                    state.control_held = modifiers.contains(Modifiers::CTRL);
+                }
+                _ => {}
+            },
         }
 
         (event::Status::Ignored, None)
