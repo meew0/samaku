@@ -151,6 +151,18 @@ struct ViewState {
     cursor_x: Option<f32>,
 }
 
+impl ViewState {
+    fn can_grab_cursor(&self, mouse_position: iced::Point) -> bool {
+        if let Some(cursor_x) = self.cursor_x
+            && (mouse_position.x - cursor_x).abs() < 6.0
+        {
+            return true;
+        }
+
+        false
+    }
+}
+
 impl canvas::Program<message::Message> for CanvasData {
     type State = CanvasState;
 
@@ -166,14 +178,13 @@ impl canvas::Program<message::Message> for CanvasData {
                 match mouse_event {
                     mouse::Event::ButtonPressed(mouse::Button::Left) => {
                         state.drag_start = cursor.position_in(bounds);
-                        if let Some(mouse_position) = state.drag_start
-                            && let Some(cursor_x) = state.view_state.borrow().cursor_x
-                        {
-                            state.drag_mode = if (mouse_position.x - cursor_x).abs() < 4.0 {
-                                DragMode::Cursor
-                            } else {
-                                DragMode::Pan(self.position)
-                            };
+                        if let Some(mouse_position) = state.drag_start {
+                            state.drag_mode =
+                                if state.view_state.borrow().can_grab_cursor(mouse_position) {
+                                    DragMode::Cursor
+                                } else {
+                                    DragMode::Pan(self.position)
+                                };
                         }
                         state.moved = false;
                     }
@@ -190,46 +201,50 @@ impl canvas::Program<message::Message> for CanvasData {
                             );
                         }
                     }
-                    mouse::Event::CursorMoved {
-                        position: mouse_position,
-                    } => {
-                        state.moved = true;
-                        if let Some(drag_start) = state.drag_start {
-                            let x_from_start = drag_start.x - mouse_position.x;
-                            let pixel_per_ms = self.position.pixel_per_ms(bounds.width);
-                            #[expect(
-                                clippy::cast_possible_truncation,
-                                reason = "allowed within the precision limits of the timeline"
-                            )]
-                            let ms_dragged =
-                                subtitle::Duration((x_from_start / pixel_per_ms) as i64);
+                    mouse::Event::CursorMoved { .. } => {
+                        if let Some(mouse_position) = cursor.position_in(bounds) {
+                            state.moved = true;
+                            if let Some(drag_start) = state.drag_start {
+                                let x_from_start = drag_start.x - mouse_position.x;
+                                let pixel_per_ms = self.position.pixel_per_ms(bounds.width);
+                                #[expect(
+                                    clippy::cast_possible_truncation,
+                                    reason = "allowed within the precision limits of the timeline"
+                                )]
+                                let ms_dragged =
+                                    subtitle::Duration((x_from_start / pixel_per_ms) as i64);
 
-                            match state.drag_mode {
-                                DragMode::Pan(start_position) => {
-                                    return (
-                                        event::Status::Captured,
-                                        Some(message::Message::Pane(
-                                            self.pane,
-                                            message::Pane::TimelineDragged(
-                                                start_position.offset(ms_dragged),
-                                            ),
-                                        )),
-                                    );
+                                match state.drag_mode {
+                                    DragMode::Pan(start_position) => {
+                                        return (
+                                            event::Status::Captured,
+                                            Some(message::Message::Pane(
+                                                self.pane,
+                                                message::Pane::TimelineDragged(
+                                                    start_position.offset(ms_dragged),
+                                                ),
+                                            )),
+                                        );
+                                    }
+                                    DragMode::Cursor => {
+                                        let new_time = self.position.left
+                                            + self
+                                                .position
+                                                .ms_from_left(mouse_position, bounds.width);
+                                        return (
+                                            event::Status::Captured,
+                                            Some(message::Message::PlaybackSetPosition(new_time)),
+                                        );
+                                    }
+                                    DragMode::None => {}
                                 }
-                                DragMode::Cursor => {
-                                    let new_time = self.position.left
-                                        + self.position.ms_from_left(mouse_position, bounds.width);
-                                    return (
-                                        event::Status::Captured,
-                                        Some(message::Message::PlaybackSetPosition(new_time)),
-                                    );
-                                }
-                                DragMode::None => {}
                             }
                         }
                     }
                     mouse::Event::WheelScrolled { delta } => {
-                        return self.calculate_zoom(bounds, cursor, delta);
+                        if cursor.position_in(bounds).is_some() {
+                            return self.calculate_zoom(bounds, cursor, delta);
+                        }
                     }
 
                     _ => {}
@@ -278,11 +293,23 @@ impl canvas::Program<message::Message> for CanvasData {
 
     fn mouse_interaction(
         &self,
-        _state: &Self::State,
-        _bounds: iced::Rectangle,
-        _cursor: mouse::Cursor,
+        state: &Self::State,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        iced::advanced::mouse::Interaction::default()
+        if state.drag_start.is_some() {
+            return mouse::Interaction::Grabbing;
+        }
+
+        if let Some(mouse_position) = cursor.position_in(bounds) {
+            return if state.view_state.borrow().can_grab_cursor(mouse_position) {
+                mouse::Interaction::ResizingHorizontally
+            } else {
+                mouse::Interaction::Grab
+            };
+        }
+
+        mouse::Interaction::default()
     }
 }
 
