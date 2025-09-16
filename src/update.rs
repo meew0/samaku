@@ -6,6 +6,7 @@ use std::ffi::OsStr;
 use std::fmt::Write as _;
 
 use crate::message::Message;
+use crate::pane::text_editor::State;
 use crate::{config, media, message, model, nde, pane, project, subtitle, view};
 
 macro_rules! active_event {
@@ -36,7 +37,7 @@ pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced
     // our panes about this, since some of them contain copies of the data in an iced-specific
     // format, which needs to be kept in sync.
     let styles_modified = global_state.subtitles.styles.check();
-    update_style_lists(global_state, styles_modified);
+    notify_style_lists(global_state, styles_modified);
 
     task
 }
@@ -88,8 +89,9 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
                 *pane_state = pane::State::new(constructor());
 
-                update_filter_lists(global_state);
-                update_style_lists(global_state, true);
+                notify_selected_events(global_state);
+                notify_filter_lists(global_state);
+                notify_style_lists(global_state, true);
             }
         }
         Message::SetFocusedPaneType(constructor) => {
@@ -98,8 +100,9 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             {
                 *focused_pane_state = pane::State::new(constructor());
 
-                update_filter_lists(global_state);
-                update_style_lists(global_state, true);
+                notify_selected_events(global_state);
+                notify_filter_lists(global_state);
+                notify_style_lists(global_state, true);
             }
         }
         Message::Pane(pane, pane_message) => {
@@ -419,6 +422,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 .subtitles
                 .events
                 .remove_from_set(&mut global_state.selected_event_indices);
+            global_state.selected_event_indices.clear();
         }
         Message::ToggleEventSelection(index) => {
             if global_state.selected_event_indices.contains(&index) {
@@ -426,10 +430,12 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             } else {
                 global_state.selected_event_indices.insert(index);
             }
+            notify_selected_events(global_state);
         }
         Message::SetActiveEventText(new_text) => {
             if let Some(event) = active_event_mut!(global_state) {
                 event.text = Cow::Owned(new_text);
+                notify_active_event_text(&mut global_state.panes, event, None);
             }
         }
         Message::SetActiveEventActor(new_actor) => {
@@ -467,12 +473,49 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 event.event_type = new_type;
             }
         }
+        Message::TextEditorActionPerformed(pane, action) => {
+            if let Some(pane_state) = global_state.panes.get_mut(pane) {
+                // Create a visitor that will perform the given action on the text editor pane, if the given pane is a text editor pane
+                struct Visitor {
+                    action: Option<iced::widget::text_editor::Action>,
+                    new_text: Option<String>,
+                }
+
+                impl pane::Visitor for Visitor {
+                    fn visit_text_editor(&mut self, text_editor_state: &mut State) {
+                        let is_edit = self.action.as_ref().unwrap().is_edit();
+
+                        text_editor_state.perform(self.action.take().unwrap());
+
+                        if is_edit {
+                            self.new_text = Some(text_editor_state.text());
+                        }
+                    }
+                }
+
+                let mut visitor = Visitor {
+                    action: Some(action),
+                    new_text: None,
+                };
+
+                pane_state.local.visit(&mut visitor);
+
+                // Check if the text has changed, and if it has, update the active event
+                if let Some(new_text) = visitor.new_text
+                    && let Some(event) = active_event_mut!(global_state)
+                {
+                    event.text = Cow::Owned(new_text);
+                    // Notify all other text editors except for the one we just performed the action on
+                    notify_active_event_text(&mut global_state.panes, event, Some(pane));
+                }
+            }
+        }
         Message::CreateEmptyFilter => {
             global_state.subtitles.extradata.push_filter(nde::Filter {
                 name: String::new(),
                 graph: nde::graph::Graph::identity(),
             });
-            update_filter_lists(global_state);
+            notify_filter_lists(global_state);
         }
         Message::AssignFilterToSelectedEvents(filter_index) => {
             for selected_event_index in &global_state.selected_event_indices {
@@ -492,7 +535,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 &mut global_state.subtitles.extradata,
             ) {
                 filter.name = new_name;
-                update_filter_lists(global_state);
+                notify_filter_lists(global_state);
             }
         }
         Message::DeleteFilter(filter_index) => {
@@ -504,7 +547,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             // Remove the filter itself
             global_state.subtitles.extradata.remove(filter_index);
 
-            update_filter_lists(global_state);
+            notify_filter_lists(global_state);
         }
         Message::AddNode(node_constructor) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
@@ -564,7 +607,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     }
                     impl pane::Visitor for Visitor {
                         fn visit_node_editor(
-                            &self,
+                            &mut self,
                             node_editor_state: &mut pane::node_editor::State,
                         ) {
                             let new_dangling_source = iced_node_editor::LogicalEndpoint {
@@ -583,11 +626,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                         }
                     }
 
-                    let visitor = Visitor {
+                    let mut visitor = Visitor {
                         previous,
                         new_dangling_end_position,
                     };
-                    pane_state.local.visit(&visitor);
+                    pane_state.local.visit(&mut visitor);
                 }
             }
         }
@@ -649,7 +692,30 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
 /// NDE filter list to update their internal representations
-fn update_filter_lists(global_state: &mut super::Samaku) {
+fn notify_selected_events(global_state: &mut super::Samaku) {
+    if let Some(active_event) = active_event!(global_state) {
+        notify_active_event_text(&mut global_state.panes, active_event, None);
+    }
+}
+
+fn notify_active_event_text(
+    panes: &mut iced::widget::pane_grid::State<pane::State>,
+    active_event: &subtitle::Event,
+    except_pane: Option<iced::widget::pane_grid::Pane>,
+) {
+    for (pane, pane_state) in &mut panes.panes {
+        if let Some(except_pane) = except_pane
+            && *pane == except_pane
+        {
+            continue;
+        }
+        pane_state.local.update_active_event_text(active_event);
+    }
+}
+
+/// Notifies all entities (like node editor panes) that keep some internal copy of the
+/// NDE filter list to update their internal representations
+fn notify_filter_lists(global_state: &mut super::Samaku) {
     for pane in global_state.panes.panes.values_mut() {
         pane.local
             .update_filter_names(&global_state.subtitles.extradata);
@@ -659,7 +725,7 @@ fn update_filter_lists(global_state: &mut super::Samaku) {
 /// Notifies all entities (like text editor panes) that keep some internal copy of the
 /// styles list to update their internal representations. If `copy_styles` is false, only the
 /// selected style will be updated.
-fn update_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
+fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
 
     for pane in global_state.panes.panes.values_mut() {

@@ -5,7 +5,7 @@
 
 pub use iced::widget::pane_grid::Pane;
 
-use crate::message;
+use crate::{message, subtitle};
 
 pub mod grid;
 pub mod node_editor;
@@ -42,12 +42,13 @@ pub trait LocalState {
         iced::Task::none()
     }
 
-    fn visit(&mut self, _visitor: &dyn Visitor) {}
+    fn visit(&mut self, _visitor: &mut dyn Visitor) {}
 
-    fn update_filter_names(&mut self, _extradata: &crate::subtitle::Extradata) {}
+    fn update_active_event_text(&mut self, _active_event: &subtitle::Event) {}
+    fn update_filter_names(&mut self, _extradata: &subtitle::Extradata) {}
     fn update_style_lists(
         &mut self,
-        _styles: &[crate::subtitle::Style],
+        _styles: &[subtitle::Style],
         _copy_styles: bool,
         _active_event_style_index: Option<usize>,
     ) {
@@ -61,7 +62,8 @@ pub trait LocalState {
 /// this trait can be passed to the `LocalState::visit` method, which will result in the `visit_node_editor` method
 /// being called only for node editor panes.
 pub trait Visitor {
-    fn visit_node_editor(&self, _node_editor_state: &mut node_editor::State) {}
+    fn visit_node_editor(&mut self, _node_editor_state: &mut node_editor::State) {}
+    fn visit_text_editor(&mut self, _text_editor_state: &mut text_editor::State) {}
 }
 
 pub type Constructor = fn() -> Box<dyn LocalState>;

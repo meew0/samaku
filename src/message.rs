@@ -124,6 +124,10 @@ pub enum Message {
     SetActiveEventStartTime(subtitle::StartTime),
     SetActiveEventDuration(subtitle::Duration),
 
+    // Action performed in a subtitle text editor
+    // (needs to be handled both globally and locally)
+    TextEditorActionPerformed(pane_grid::Pane, iced::widget::text_editor::Action),
+
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,
     AssignFilterToSelectedEvents(subtitle::ExtradataId),

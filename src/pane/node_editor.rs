@@ -99,7 +99,7 @@ impl super::LocalState for State {
         iced::Task::none()
     }
 
-    fn visit(&mut self, visitor: &dyn super::Visitor) {
+    fn visit(&mut self, visitor: &mut dyn super::Visitor) {
         visitor.visit_node_editor(self);
     }
 
