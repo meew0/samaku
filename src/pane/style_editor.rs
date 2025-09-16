@@ -148,10 +148,6 @@ impl super::LocalState for State {
     }
 
     fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
-        #[expect(
-            clippy::single_match,
-            reason = "to allow easily expanding it later to further messages"
-        )]
         match pane_message {
             message::Pane::StyleEditorStyleSelected(style_index) => {
                 self.selected_style_index = style_index;

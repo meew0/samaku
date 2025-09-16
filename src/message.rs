@@ -200,8 +200,7 @@ pub enum Pane {
     StyleEditorStyleSelected(usize),
 
     // Messages for the timeline
-    TimelineDragged(subtitle::StartTime),
-    TimelineZoomed(subtitle::StartTime, f32),
+    TimelineDragged(pane::timeline::Position),
 }
 
 /// Messages dispatched to nodes.

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::single_match,
+    reason = "to allow matching single messages in update methods, such that they can be expanded to more messages later on"
+)]
+
 pub use iced::widget::pane_grid::Pane;
 
 use crate::message;

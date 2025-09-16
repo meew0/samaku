@@ -44,12 +44,8 @@ impl super::LocalState for State {
 
     fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
         match pane_message {
-            message::Pane::TimelineDragged(new_time) => {
-                self.position.center = new_time;
-            }
-            message::Pane::TimelineZoomed(new_center, new_zoom_factor) => {
-                self.position.center = new_center;
-                self.position.zoom_factor = new_zoom_factor;
+            message::Pane::TimelineDragged(new_position) => {
+                self.position = new_position;
             }
             _ => {}
         }
@@ -66,53 +62,61 @@ inventory::submit! {
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
-struct Position {
-    center: subtitle::StartTime,
-
-    /// How many pixels one millisecond should represent
-    zoom_factor: f32,
+pub struct Position {
+    pub left: subtitle::StartTime,
+    pub right: subtitle::StartTime,
 }
 
 impl Position {
     fn time_delta(&self, time: subtitle::StartTime) -> f32 {
         #[expect(
             clippy::cast_precision_loss,
-            reason = "precision loss acceptable here since for very large values, the points will be very far outside the drawn area"
+            reason = "precision loss acceptable within the precision limits of the timeline"
         )]
-        let time_delta = (time - self.center).0 as f32;
+        let time_delta = (time - self.left).0 as f32;
 
         time_delta
     }
 
-    fn time_to_point(
-        &self,
-        time: subtitle::StartTime,
-        bounds: iced::Rectangle,
-        y_factor: f32,
-    ) -> iced::Point {
-        iced::Point {
-            x: self
-                .time_delta(time)
-                .mul_add(self.zoom_factor, bounds.x + bounds.width / 2.0),
-            y: bounds.height.mul_add(y_factor, bounds.y),
-        }
+    fn pixel_per_ms(&self, pixel_width: f32) -> f32 {
+        let timeline_width = self.right - self.left;
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "precision loss acceptable within the precision limits of the timeline"
+        )]
+        let result = pixel_width / timeline_width.0 as f32;
+        result
     }
 
-    fn ms_from_center(&self, position: iced::Point, bounds: iced::Rectangle) -> subtitle::Duration {
-        let x_from_center = position.x - bounds.width / 2.0;
+    fn ms_from_left(&self, position: iced::Point, pixel_width: f32) -> subtitle::Duration {
+        let x_factor = position.x / pixel_width;
+        let timeline_width = self.right - self.left;
         #[expect(
             clippy::cast_possible_truncation,
             reason = "allowed within the precision limits of the timeline"
         )]
-        subtitle::Duration((x_from_center / self.zoom_factor) as i64)
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "precision loss acceptable within the precision limits of the timeline"
+        )]
+        let result = subtitle::Duration(((timeline_width.0 as f32) * x_factor) as i64);
+        result
+    }
+
+    #[must_use]
+    pub fn offset(&self, delta: subtitle::Duration) -> Self {
+        Self {
+            left: self.left + delta,
+            right: self.right + delta,
+        }
     }
 }
 
 impl Default for Position {
     fn default() -> Self {
         Self {
-            center: subtitle::StartTime(0_i64),
-            zoom_factor: 0.04,
+            left: subtitle::StartTime(-10000),
+            right: subtitle::StartTime(10000),
         }
     }
 }
@@ -126,8 +130,15 @@ struct CanvasData {
 #[derive(Default)]
 struct CanvasState {
     drag_start: Option<iced::Point>,
-    drag_start_center: subtitle::StartTime,
+    drag_mode: DragMode,
     moved: bool,
+}
+
+#[derive(Default)]
+enum DragMode {
+    #[default]
+    None,
+    Pan(Position),
 }
 
 impl canvas::Program<message::Message> for CanvasData {
@@ -145,7 +156,7 @@ impl canvas::Program<message::Message> for CanvasData {
                 match mouse_event {
                     mouse::Event::ButtonPressed(mouse::Button::Left) => {
                         state.drag_start = cursor.position_in(bounds);
-                        state.drag_start_center = self.position.center;
+                        state.drag_mode = DragMode::Pan(self.position);
                         state.moved = false;
                     }
                     mouse::Event::ButtonReleased(mouse::Button::Left) => {
@@ -153,69 +164,46 @@ impl canvas::Program<message::Message> for CanvasData {
                         if !state.moved
                             && let Some(position) = cursor.position_in(bounds)
                         {
-                            let new_time = self.position.center
-                                + self.position.ms_from_center(position, bounds);
+                            let new_time = self.position.left
+                                + self.position.ms_from_left(position, bounds.width);
                             return (
                                 event::Status::Captured,
                                 Some(message::Message::PlaybackSetPosition(new_time)),
                             );
                         }
                     }
-                    mouse::Event::CursorMoved { position } => {
+                    mouse::Event::CursorMoved {
+                        position: mouse_position,
+                    } => {
                         state.moved = true;
                         if let Some(drag_start) = state.drag_start {
-                            let x_from_start = position.x - drag_start.x;
+                            let x_from_start = drag_start.x - mouse_position.x;
+                            let pixel_per_ms = self.position.pixel_per_ms(bounds.width);
                             #[expect(
                                 clippy::cast_possible_truncation,
                                 reason = "allowed within the precision limits of the timeline"
                             )]
-                            let ms_from_start = subtitle::Duration(
-                                (x_from_start / self.position.zoom_factor) as i64,
-                            );
-                            let new_time = state.drag_start_center - ms_from_start;
-                            return (
-                                event::Status::Captured,
-                                Some(message::Message::Pane(
-                                    self.pane,
-                                    message::Pane::TimelineDragged(new_time),
-                                )),
-                            );
+                            let ms_dragged =
+                                subtitle::Duration((x_from_start / pixel_per_ms) as i64);
+
+                            match state.drag_mode {
+                                DragMode::Pan(start_position) => {
+                                    return (
+                                        event::Status::Captured,
+                                        Some(message::Message::Pane(
+                                            self.pane,
+                                            message::Pane::TimelineDragged(
+                                                start_position.offset(ms_dragged),
+                                            ),
+                                        )),
+                                    );
+                                }
+                                DragMode::None => {}
+                            }
                         }
                     }
                     mouse::Event::WheelScrolled { delta } => {
-                        let y = match delta {
-                            mouse::ScrollDelta::Lines { y, .. } => y,
-                            mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
-                        };
-
-                        let modifier_factor = 1.2_f32.powf(y);
-                        let new_zoom_factor =
-                            (self.position.zoom_factor * modifier_factor).clamp(0.001, 1.0);
-                        let mut new_center = self.position.center;
-
-                        if let Some(position) = cursor.position_in(bounds) {
-                            let ms_from_center = self.position.ms_from_center(position, bounds);
-                            #[expect(
-                                clippy::cast_possible_truncation,
-                                reason = "allowed within the precision limits of the timeline"
-                            )]
-                            #[expect(
-                                clippy::cast_precision_loss,
-                                reason = "allowed within the precision limits of the timeline"
-                            )]
-                            let zoomed = subtitle::Duration(
-                                (ms_from_center.0 as f32 * modifier_factor) as i64,
-                            );
-                            new_center = new_center - ms_from_center + zoomed;
-                        }
-
-                        return (
-                            event::Status::Captured,
-                            Some(message::Message::Pane(
-                                self.pane,
-                                message::Pane::TimelineZoomed(new_center, new_zoom_factor),
-                            )),
-                        );
+                        return self.calculate_zoom(bounds, cursor, delta);
                     }
 
                     _ => {}
@@ -259,26 +247,84 @@ impl canvas::Program<message::Message> for CanvasData {
     }
 }
 
+impl CanvasData {
+    fn calculate_zoom(
+        &self,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
+        delta: mouse::ScrollDelta,
+    ) -> (iced::event::Status, Option<message::Message>) {
+        let y = match delta {
+            mouse::ScrollDelta::Lines { y, .. } => y,
+            mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
+        };
+
+        let modifier_factor = 1.2_f32.powf(y);
+        let offset_factor = modifier_factor - 1.0;
+
+        let x_factor = if let Some(mouse_position) = cursor.position_in(bounds) {
+            mouse_position.x / bounds.width
+        } else {
+            0.5
+        };
+
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "precision loss acceptable within the precision limits of the timeline"
+        )]
+        let timeline_width_f = (self.position.right - self.position.left).0 as f32;
+
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "acceptable within the precision limits of the timeline"
+        )]
+        let new_left = self.position.left
+            + subtitle::Duration((timeline_width_f * x_factor * offset_factor) as i64);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "acceptable within the precision limits of the timeline"
+        )]
+        let new_right = self.position.right
+            - subtitle::Duration((timeline_width_f * (1.0 - x_factor) * offset_factor) as i64);
+        let new_position = Position {
+            left: new_left,
+            right: new_right,
+        };
+
+        let new_pixel_per_ms = new_position.pixel_per_ms(bounds.width);
+        if new_pixel_per_ms < 1.0 && new_pixel_per_ms > 0.001 {
+            return (
+                event::Status::Captured,
+                Some(message::Message::Pane(
+                    self.pane,
+                    message::Pane::TimelineDragged(new_position),
+                )),
+            );
+        }
+
+        (event::Status::Captured, None)
+    }
+}
+
 fn draw_background(
     bounds: iced::Rectangle,
     frame: &mut canvas::Frame<Renderer>,
     position: Position,
 ) {
-    let zero_point = position.time_to_point(subtitle::StartTime(0), bounds, 0.0);
-
-    if zero_point.x < bounds.x {
+    let zero = subtitle::StartTime(0);
+    if zero < position.left {
         // Entire timeline is in the positive region
         frame.fill_rectangle(
             iced::Point::ORIGIN,
             frame.size(),
             style::SAMAKU_BACKGROUND_WEAK,
         );
-    } else if zero_point.x > bounds.x + bounds.width {
+    } else if zero > position.right {
         // Entire timeline is in the negative region
         frame.fill_rectangle(iced::Point::ORIGIN, frame.size(), style::SAMAKU_BACKGROUND);
     } else {
         // Part of the timeline is in the positive region: draw the part to the left of it darker than the part right of it
-        let midpoint_x = zero_point.x - bounds.x;
+        let midpoint_x = position.time_delta(zero) * position.pixel_per_ms(bounds.width);
         frame.fill_rectangle(
             iced::Point::ORIGIN,
             iced::Size {
@@ -303,20 +349,10 @@ fn draw_background(
 
 fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
     // Find first full second to the left of the right bound.
-    let half_frame_ms_f32 = frame.width() * 1000.0 / (2.0 * position.zoom_factor);
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "truncating the sub-millisecond part is fine since the timeline cannot be more accurate than 1 ms"
-    )]
-    let half_frame_ms = subtitle::Duration(half_frame_ms_f32 as i64);
-    let left_edge_ms = position.center - half_frame_ms;
-    let right_edge_ms = position.center + half_frame_ms;
-    let mut tick_ms = subtitle::StartTime(right_edge_ms.0 - (right_edge_ms.0.rem_euclid(1000)));
+    let mut tick_ms = subtitle::StartTime(position.right.0 - (position.right.0.rem_euclid(1000)));
 
-    while tick_ms >= subtitle::StartTime(0) && tick_ms >= left_edge_ms {
-        let tick_x = position
-            .time_delta(tick_ms)
-            .mul_add(position.zoom_factor, frame.width() / 2.0);
+    while tick_ms >= subtitle::StartTime(0) && tick_ms >= position.left {
+        let tick_x = position.time_delta(tick_ms) * position.pixel_per_ms(frame.width());
 
         frame.fill_rectangle(
             iced::Point::new(tick_x, 0.0),
