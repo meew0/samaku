@@ -227,6 +227,7 @@ pub fn run() -> iced::Result {
             default_text_size: iced::Pixels(16.0),
             antialiasing: true,
         })
+        .window_size(iced::Size::new(1600.0, 1000.0))
         .theme(theme)
         .run()
 }
