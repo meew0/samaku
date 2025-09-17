@@ -4,11 +4,12 @@
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
 )]
 
-use crate::{config, pane, subtitle};
+use crate::{action, config, message, pane, subtitle};
 use anyhow::Context as _;
 use iced::widget::pane_grid;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Serialize data into Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64)
@@ -56,56 +57,78 @@ pub enum DeserializeError {
     DeserialiseError(String),
 }
 
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Properties {
+    pub video_path: Option<PathBuf>,
+    pub audio_path: Option<PathBuf>,
+}
+
 pub const METADATA_KEY: &str = "Samaku Project Metadata";
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct Project<'a> {
+struct Project<'a> {
     pane_layout: PaneLayout<'a>,
     selected_event_indices: Cow<'a, HashSet<subtitle::EventIndex>>,
+    properties: Cow<'a, Properties>,
 }
 
-impl<'a> Project<'a> {
-    #[must_use]
-    pub fn compile_from(
-        panes: &'a pane_grid::State<pane::State>,
-        selected_event_indices: &'a HashSet<subtitle::EventIndex>,
-    ) -> Self {
-        let pane_layout = PaneLayout::from_pane_grid(panes, panes.layout());
-
-        Self {
-            pane_layout,
-            selected_event_indices: Cow::Borrowed(selected_event_indices),
-        }
-    }
-
-    pub fn update_global(self, global_state: &mut crate::Samaku) {
-        let Self {
+/// Copy project data from subtitle data into global state.
+/// On success, returns a boolean whether project metadata was found or not
+pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
+    if let Some(czb) = global_state
+        .subtitles
+        .script_info
+        .extra_info
+        .get(METADATA_KEY)
+    {
+        let project = deserialize_czb::<Project>(czb.as_bytes())
+            .context("Failed to deserialize project metadata")?;
+        let Project {
             pane_layout,
             selected_event_indices,
-        } = self;
+            properties,
+        } = project;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
         global_state.selected_event_indices = selected_event_indices.into_owned();
+        global_state.project_properties = properties.into_owned();
+        Ok(true)
+    } else {
+        println!("No project metadata found in opened subtitle file");
+        Ok(false)
+    }
+}
+
+/// Copy project data from the global state into subtitle data
+pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
+    let pane_layout = PaneLayout::from_pane_grid(&global_state.panes, global_state.panes.layout());
+
+    let project = Project {
+        pane_layout,
+        selected_event_indices: Cow::Borrowed(&global_state.selected_event_indices),
+        // TODO store video/audio paths to be relative to the subtitle/project file (e.g. using the `pathdiff` crate)
+        properties: Cow::Borrowed(&global_state.project_properties),
+    };
+
+    let czb = serialize_czb(&project, config::PROJECT_COMPRESSION_LEVEL)?;
+    global_state
+        .subtitles
+        .script_info
+        .extra_info
+        .insert(METADATA_KEY.to_owned(), czb);
+    Ok(())
+}
+
+/// Perform after-load tasks such as opening linked audio and video files
+pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Message> {
+    if let Some(video_path) = &global_state.project_properties.video_path {
+        action::load_video(global_state, video_path.clone());
     }
 
-    pub fn load(subtitle_file: &subtitle::File) -> anyhow::Result<Option<Self>> {
-        if let Some(czb) = subtitle_file.script_info.extra_info.get(METADATA_KEY) {
-            let project = deserialize_czb::<Project>(czb.as_bytes())
-                .context("Failed to deserialize project metadata")?;
-            Ok(Some(project))
-        } else {
-            println!("No project metadata found in opened subtitle file");
-            Ok(None)
-        }
+    if let Some(audio_path) = &global_state.project_properties.audio_path {
+        action::load_audio(global_state, audio_path.clone());
     }
 
-    pub fn store(&self, subtitle_file: &mut subtitle::File) -> anyhow::Result<()> {
-        let czb = serialize_czb(&self, config::PROJECT_COMPRESSION_LEVEL)?;
-        subtitle_file
-            .script_info
-            .extra_info
-            .insert(METADATA_KEY.to_owned(), czb);
-        Ok(())
-    }
+    iced::Task::none()
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

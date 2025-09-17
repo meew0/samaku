@@ -191,6 +191,7 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{Alignment, Event, event};
 use iced::{Element, Length, Settings, Subscription};
 
+mod action;
 pub mod config;
 pub mod keyboard;
 pub mod media;
@@ -270,6 +271,10 @@ pub struct Samaku {
     /// Indices of currently selected events. May be any length, or empty if no event is currently
     /// selected.
     pub selected_event_indices: HashSet<subtitle::EventIndex>,
+
+    /// Project properties, that is, data not stored elsewhere that conceptually belongs to a “Samaku project”,
+    /// for example, paths to linked media files etc.
+    pub project_properties: project::Properties,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -511,6 +516,7 @@ impl Default for Samaku {
             video_metadata: None,
             subtitles: subtitle::File::default(),
             selected_event_indices: HashSet::new(),
+            project_properties: Default::default(),
             shared: shared_state,
             view: RefCell::new(ViewState {
                 subtitle_renderer: media::subtitle::Renderer::new(),

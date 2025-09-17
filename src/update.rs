@@ -1,7 +1,7 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{media, message, model, nde, pane, project, subtitle, view};
+use crate::{action, media, message, model, nde, pane, project, subtitle, view};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
@@ -139,7 +139,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             );
         }
         Message::VideoFileSelected(path_buf) => {
-            global_state.workers.emit_load_video(path_buf);
+            global_state.project_properties.video_path = Some(path_buf.clone());
+            action::load_video(global_state, path_buf);
         }
         Message::VideoLoaded(metadata) => {
             global_state.video_metadata = Some(*metadata);
@@ -154,10 +155,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             );
         }
         Message::AudioFileSelected(path_buf) => {
-            let mut audio_lock = global_state.shared.audio.lock().unwrap();
-            *audio_lock = Some(media::Audio::load(path_buf));
-            drop(audio_lock);
-            global_state.workers.emit_restart_audio();
+            global_state.project_properties.audio_path = Some(path_buf.clone());
+            action::load_audio(global_state, path_buf);
         }
         Message::ImportSubtitleFile => {
             let future = async {
@@ -231,10 +230,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 ));
             }
 
-            if let Some(Some(project)) =
-                global_state.anyhow_toast(project::Project::load(&global_state.subtitles))
-            {
-                project.update_global(global_state);
+            let project_load_result = project::load(global_state);
+            if global_state.anyhow_toast(project_load_result) == Some(true) {
+                // Some project metadata was loaded, we might have to perform after-load tasks such as opening linked video/audio files
+                return project::after_load(global_state);
             }
         }
         Message::SubtitleParseError(err) => {
@@ -245,15 +244,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             ));
         }
         Message::SaveSubtitleFile => {
-            let project = project::Project::compile_from(
-                &global_state.panes,
-                &global_state.selected_event_indices,
-            );
-
             let result = (|| {
-                project
-                    .store(&mut global_state.subtitles)
-                    .context("Failed to serialize project data")?;
+                project::store(global_state).context("Failed to serialize project data")?;
 
                 let mut data = String::new();
                 subtitle::emit(&mut data, &global_state.subtitles, None)
