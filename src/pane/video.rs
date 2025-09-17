@@ -1,3 +1,4 @@
+use iced::mouse;
 use iced::widget::canvas;
 
 use crate::{media, message, model, style, subtitle, view};
@@ -125,6 +126,23 @@ struct ReticuleState {
     drag_offset: iced::Vector,
 }
 
+impl ReticuleProgram<'_> {
+    fn find_hovered_reticule(
+        &self,
+        mouse_position: iced::Point,
+        bounds: iced::Rectangle,
+    ) -> Option<(usize, &model::reticule::Reticule, iced::Point)> {
+        for (i, reticule) in self.reticules.iter().enumerate().rev() {
+            let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
+            if iced_pos.distance(mouse_position) < reticule.radius {
+                return Some((i, reticule, iced_pos));
+            }
+        }
+
+        None
+    }
+}
+
 impl canvas::Program<message::Message> for ReticuleProgram<'_> {
     type State = ReticuleState;
 
@@ -133,23 +151,22 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         state: &mut Self::State,
         event: canvas::Event,
         bounds: iced::Rectangle,
-        cursor: iced::mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> (iced::event::Status, Option<message::Message>) {
         if let Some(position) = cursor.position_in(bounds)
             && let canvas::Event::Mouse(mouse_event) = event
         {
             match mouse_event {
-                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
-                    for (i, reticule) in self.reticules.iter().enumerate().rev() {
-                        let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
-                        if iced_pos.distance(position) < reticule.radius {
-                            state.dragging = Some(i);
-                            state.drag_offset = position - iced_pos;
-                            return (iced::event::Status::Captured, None);
-                        }
+                mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                    if let Some((i, _reticule, iced_pos)) =
+                        self.find_hovered_reticule(position, bounds)
+                    {
+                        state.dragging = Some(i);
+                        state.drag_offset = position - iced_pos;
+                        return (iced::event::Status::Captured, None);
                     }
                 }
-                iced::mouse::Event::CursorMoved { .. } => {
+                mouse::Event::CursorMoved { .. } => {
                     if let Some(dragging_reticule_index) = state.dragging {
                         return (
                             iced::event::Status::Captured,
@@ -165,7 +182,7 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                         );
                     }
                 }
-                iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                mouse::Event::ButtonReleased(mouse::Button::Left) => {
                     if state.dragging.is_some() {
                         state.dragging = None;
                         return (iced::event::Status::Captured, None);
@@ -184,11 +201,18 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         renderer: &iced::Renderer,
         _theme: &iced::Theme,
         bounds: iced::Rectangle,
-        _cursor: iced::mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
 
-        for reticule in self.reticules {
+        let hovered_reticule_index = cursor
+            .position_in(bounds)
+            .and_then(|mouse_position| self.find_hovered_reticule(mouse_position, bounds))
+            .map(|(i, _, _)| i);
+
+        for (i, reticule) in self.reticules.iter().enumerate() {
+            let hovered = hovered_reticule_index.is_some_and(|hovered_index| i == hovered_index);
+            let alpha_factor: f32 = if hovered { 0.4 } else { 0.2 };
             let center_point = reticule.iced_position(bounds.size(), self.storage_size);
 
             match reticule.shape {
@@ -199,7 +223,7 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                     frame.fill_rectangle(
                         rect_top_left,
                         rect_size,
-                        style::SAMAKU_TEXT.scale_alpha(0.2),
+                        style::SAMAKU_TEXT.scale_alpha(alpha_factor),
                     );
 
                     frame.stroke_rectangle(
@@ -232,21 +256,68 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                     );
                 }
                 model::reticule::Shape::CornerTopLeft => {
-                    corner(&mut frame, center_point, reticule.radius, 1.0, 1.0);
+                    corner(
+                        &mut frame,
+                        center_point,
+                        reticule.radius,
+                        1.0,
+                        1.0,
+                        alpha_factor,
+                    );
                 }
                 model::reticule::Shape::CornerTopRight => {
-                    corner(&mut frame, center_point, reticule.radius, -1.0, 1.0);
+                    corner(
+                        &mut frame,
+                        center_point,
+                        reticule.radius,
+                        -1.0,
+                        1.0,
+                        alpha_factor,
+                    );
                 }
                 model::reticule::Shape::CornerBottomLeft => {
-                    corner(&mut frame, center_point, reticule.radius, 1.0, -1.0);
+                    corner(
+                        &mut frame,
+                        center_point,
+                        reticule.radius,
+                        1.0,
+                        -1.0,
+                        alpha_factor,
+                    );
                 }
                 model::reticule::Shape::CornerBottomRight => {
-                    corner(&mut frame, center_point, reticule.radius, -1.0, -1.0);
+                    corner(
+                        &mut frame,
+                        center_point,
+                        reticule.radius,
+                        -1.0,
+                        -1.0,
+                        alpha_factor,
+                    );
                 }
             }
         }
 
         vec![frame.into_geometry()]
+    }
+
+    fn mouse_interaction(
+        &self,
+        state: &Self::State,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if state.dragging.is_some() {
+            return mouse::Interaction::Grabbing;
+        }
+
+        if let Some(mouse_position) = cursor.position_in(bounds)
+            && let Some(_) = self.find_hovered_reticule(mouse_position, bounds)
+        {
+            return mouse::Interaction::Grab;
+        }
+
+        mouse::Interaction::None
     }
 }
 
@@ -256,6 +327,7 @@ fn corner(
     radius: f32,
     x_sign: f32,
     y_sign: f32,
+    alpha_factor: f32,
 ) {
     let path = canvas::Path::new(|path| {
         path.move_to(center_point + iced::Vector::new(x_sign * radius, 0.0));
@@ -265,7 +337,7 @@ fn corner(
 
     frame.fill(
         &canvas::Path::circle(center_point, radius * 0.5),
-        style::SAMAKU_TEXT.scale_alpha(0.2),
+        style::SAMAKU_TEXT.scale_alpha(alpha_factor),
     );
 
     frame.stroke(
