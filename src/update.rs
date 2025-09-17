@@ -191,12 +191,14 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 ));
             }
 
-            global_state.subtitles = subtitle::File {
+            let new_file = subtitle::File {
                 events: opaque.to_event_track(),
                 styles: model::Trace::new(style_list),
                 script_info: opaque.script_info(),
                 ..Default::default()
-            }
+            };
+
+            action::replace_subtitle_file(global_state, new_file);
         }
         Message::OpenSubtitleFile => {
             let future = async {
@@ -220,7 +222,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::SubtitleFileReadForOpen(file_box) => {
             // Load ASS subtitles themselves
             let (ass_file, warnings) = *(file_box.0);
-            global_state.subtitles = ass_file;
+            action::replace_subtitle_file(global_state, ass_file);
 
             for warning in &warnings {
                 global_state.toast(view::toast::Toast::new(
@@ -672,13 +674,13 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
 /// NDE filter list to update their internal representations
-fn notify_selected_events(global_state: &mut super::Samaku) {
+pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
     if let Some(active_event) = active_event!(global_state) {
         notify_active_event_text(&mut global_state.panes, active_event, None);
     }
 }
 
-fn notify_active_event_text(
+pub(crate) fn notify_active_event_text(
     panes: &mut iced::widget::pane_grid::State<pane::State>,
     active_event: &subtitle::Event,
     except_pane: Option<iced::widget::pane_grid::Pane>,
@@ -695,7 +697,7 @@ fn notify_active_event_text(
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
 /// NDE filter list to update their internal representations
-fn notify_filter_lists(global_state: &mut super::Samaku) {
+pub(crate) fn notify_filter_lists(global_state: &mut super::Samaku) {
     for pane in global_state.panes.panes.values_mut() {
         pane.local
             .update_filter_names(&global_state.subtitles.extradata);
@@ -705,7 +707,7 @@ fn notify_filter_lists(global_state: &mut super::Samaku) {
 /// Notifies all entities (like text editor panes) that keep some internal copy of the
 /// styles list to update their internal representations. If `copy_styles` is false, only the
 /// selected style will be updated.
-fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
+pub(crate) fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
 
     for pane in global_state.panes.panes.values_mut() {
