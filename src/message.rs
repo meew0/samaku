@@ -182,6 +182,30 @@ impl Message {
             Err(err_val) => f_err(err_val),
         }
     }
+
+    /// Returns a function that takes an `anyhow::Result`, maps the Ok value to some message, and the Err value to a message opening an error toast.
+    pub fn map_anyhow<A, F1: FnOnce(A) -> Self>(
+        f_ok: F1,
+    ) -> impl FnOnce(anyhow::Result<A>) -> Self {
+        |result| match result {
+            Ok(ok_val) => f_ok(ok_val),
+            Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
+        }
+    }
+
+    /// Returns a function that takes an `anyhow::Result<Option<A>>` and maps:
+    ///  - `Ok(Some(...))` to a given message
+    ///  - `Ok(None)` to `message::None`
+    ///  - `Err(...)` to an error toast message
+    pub fn map_anyhow_option<A, F1: Fn(A) -> Self>(
+        f_ok: F1,
+    ) -> impl Fn(anyhow::Result<Option<A>>) -> Self {
+        move |result| match result {
+            Ok(Some(ok_val)) => f_ok(ok_val),
+            Ok(None) => Message::None,
+            Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
+        }
+    }
 }
 
 // Utility functions to create toasts
