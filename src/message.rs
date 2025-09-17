@@ -184,10 +184,8 @@ impl Message {
     }
 
     /// Returns a function that takes an `anyhow::Result`, maps the Ok value to some message, and the Err value to a message opening an error toast.
-    pub fn map_anyhow<A, F1: FnOnce(A) -> Self>(
-        f_ok: F1,
-    ) -> impl FnOnce(anyhow::Result<A>) -> Self {
-        |result| match result {
+    pub fn map_anyhow<A, F1: Fn(A) -> Self>(f_ok: F1) -> impl Fn(anyhow::Result<A>) -> Self {
+        move |result| match result {
             Ok(ok_val) => f_ok(ok_val),
             Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
         }

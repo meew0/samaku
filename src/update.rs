@@ -298,10 +298,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                         .insert(project::METADATA_KEY.to_owned(), czb);
 
                     let mut data = String::new();
-                    subtitle::emit(&mut data, &global_state.subtitles, None).unwrap();
+                    subtitle::emit(&mut data, &global_state.subtitles, None)
+                        .expect("subtitle::emit() failed"); // should never happen
 
                     let future = select_file_and_save(data);
-                    return iced::Task::perform(future, |()| Message::None);
+                    return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
                 }
                 Err(err) => {
                     global_state.toast(view::toast::Toast::new(
@@ -319,7 +320,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 &global_state.subtitles,
                 Some(global_state.compile_context()),
             )
-            .unwrap();
+            .expect("subtitle::emit() failed"); // should never happen
 
             if global_state.video_metadata.is_none() {
                 global_state.toast(view::toast::Toast::new(
@@ -330,7 +331,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
 
             let future = select_file_and_save(data);
-            return iced::Task::perform(future, |()| Message::None);
+            return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
         }
         Message::VideoFrameAvailable(new_frame, handle) => {
             global_state.actual_frame = Some((new_frame, handle));
@@ -762,8 +763,11 @@ fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
     }
 }
 
-async fn select_file_and_save(data: String) -> () {
+async fn select_file_and_save(data: String) -> anyhow::Result<()> {
     if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
-        smol::fs::write(handle.path(), data).await.unwrap();
+        smol::fs::write(handle.path(), data).await?;
     }
+
+    // No file selected
+    Ok(())
 }
