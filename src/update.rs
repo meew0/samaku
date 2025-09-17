@@ -158,6 +158,9 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             global_state.project_properties.audio_path = Some(path_buf.clone());
             action::load_audio(global_state, path_buf);
         }
+        Message::NewSubtitleFile => {
+            action::replace_subtitle_file(global_state, subtitle::File::default());
+        }
         Message::ImportSubtitleFile => {
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {

@@ -42,6 +42,9 @@ pub enum Message {
     SelectVideoFile,
     SelectAudioFile,
 
+    /// Clear loaded subtitles and start anew
+    NewSubtitleFile,
+
     /// Import — use libass for parsing the .ass file. This will strip all extra
     /// Aegisub-/samaku-specific data.
     ImportSubtitleFile,
