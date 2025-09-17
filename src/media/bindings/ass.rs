@@ -252,12 +252,21 @@ impl Renderer {
         // so using a callback that just gets a reference to a wrapped image
         // ensures safety compared to passing “ownership” of it.
         while !image.is_null() {
+            // Sanity check for the size of the returned image
+            let stride = unsafe { (*image).stride } as isize;
+            let height = unsafe { (*image).h - 1 } as isize;
+            let width = unsafe { (*image).w } as isize;
+            let bitmap_size_signed: isize = stride * height + width;
+            assert!(
+                bitmap_size_signed > 0 || bitmap_size_signed < 1_000_000_000,
+                "libass returned invalid image size: {bitmap_size_signed} (stride = {stride}, height = {height}, width = {width})"
+            );
+
             #[expect(
                 clippy::cast_sign_loss,
                 reason = "converting falsely signed value from native code"
             )]
-            let bitmap_size: usize =
-                unsafe { (*image).stride * ((*image).h - 1) + (*image).w } as usize;
+            let bitmap_size: usize = bitmap_size_signed as usize;
             let safe_image = Image {
                 metadata: unsafe { &(*image) },
                 bitmap: unsafe { std::slice::from_raw_parts((*image).bitmap, bitmap_size) },
