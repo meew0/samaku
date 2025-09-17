@@ -160,6 +160,10 @@
     reason = "too useful to disallow entirely, but should only be done locally"
 )]
 #![allow(
+    clippy::missing_errors_doc,
+    reason = "not so useful in application code where results are widely used for error handling without usually being able to delineate specific circumstances"
+)]
+#![allow(
     clippy::struct_field_names,
     reason = "https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359"
 )]

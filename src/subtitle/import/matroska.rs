@@ -1,14 +1,23 @@
 use crate::subtitle;
+use anyhow::Context as _;
 use matroska_demuxer::{Frame, MatroskaFile, TrackType};
 use std::fmt::Write;
 use std::fs::File;
+use std::path::Path;
 use thiserror::Error;
+
+pub(crate) fn open_and_read(path: &Path) -> anyhow::Result<String> {
+    let file = File::open(path).context("Failed to open file")?;
+    let matroska = read_first_subtitle_track_to_ass(&file)
+        .context("Failed to read subtitles from matroska file")?;
+    Ok(matroska)
+}
 
 /// Reads the first subtitle track from the given Matroska file into a string parseable e.g. by libass.
 ///
 /// # Errors
 /// Errors in a variety of situations, see `LoadError` variants for details
-pub fn read(file: &File) -> Result<String, LoadError> {
+fn read_first_subtitle_track_to_ass(file: &File) -> Result<String, LoadError> {
     let mut matroska_file = MatroskaFile::open(file).map_err(LoadError::DemuxErrorLoad)?;
     let track = matroska_file
         .tracks()
@@ -89,7 +98,7 @@ fn write_ass_line_from_matroska_frame<W: Write>(
 }
 
 #[derive(Error, Debug)]
-pub enum LoadError {
+pub(crate) enum LoadError {
     #[error("Demux error on initial load: {0:?}")]
     DemuxErrorLoad(matroska_demuxer::DemuxError),
 
@@ -133,7 +142,7 @@ mod tests {
     fn subtitle_from_mkv() -> Result<(), LoadError> {
         let file =
             &File::open(crate::test_utils::test_file("test_files/cube_sub_ass.mkv")).unwrap();
-        let ass_data = read(file)?;
+        let ass_data = read_first_subtitle_track_to_ass(file)?;
 
         assert!(ass_data.contains("Style: Style 2,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H7F000000,-1,0,0,0,100,100,0,0,1,3,2,2,10,10,10,1"));
         assert!(ass_data.contains(

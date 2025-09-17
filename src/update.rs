@@ -1,9 +1,7 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
-use anyhow::Context;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
-use std::ffi::OsStr;
 use std::fmt::Write as _;
 
 use crate::message::Message;
@@ -165,30 +163,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         Message::ImportSubtitleFile => {
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {
-                    Some(handle) => match handle.path().extension().and_then(OsStr::to_str) {
-                        Some("mkv" | "mka" | "mks") => {
-                            // If we find a matroska file, parse it and read the subtitles from there.
-                            // TODO make this async
-                            (|| {
-                                let file = std::fs::File::open(handle.path())
-                                    .context("Failed to open file")?;
-                                let matroska = media::matroska::read(&file)
-                                    .context("Failed to read subtitles from matroska file")?;
-                                Ok(Some(matroska))
-                            })()
-                        }
-                        _ => {
-                            // Otherwise just read the file normally (assuming it is an .ass file)
-                            // TODO verify this and add further subtitle formats for importing
-                            async {
-                                let file = smol::fs::read_to_string(handle.path())
-                                    .await
-                                    .context("Failed to open file")?;
-                                Ok(Some(file))
-                            }
-                            .await
-                        }
-                    },
+                    Some(handle) => subtitle::import(handle.path()).await.map(Some),
                     None => Ok(None),
                 }
             };

@@ -10,6 +10,8 @@ use std::ops::{Add, Index, IndexMut, Sub};
 pub use emit::emit;
 pub use emit::emit_timecode;
 
+pub use import::import;
+
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
 };
@@ -17,6 +19,7 @@ use crate::{message, model, nde, style};
 
 pub mod compile;
 mod emit;
+mod import;
 pub mod parse;
 mod uu;
 
