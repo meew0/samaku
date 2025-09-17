@@ -249,6 +249,8 @@ impl Node for InputRectangle {
         index: usize,
         new_position: nde::tags::Position,
     ) {
+        let mut new_value = self.value;
+
         #[expect(
             clippy::cast_possible_truncation,
             reason = "extremely large values not expected in UI code"
@@ -256,28 +258,31 @@ impl Node for InputRectangle {
         match index {
             0 => {
                 // top left
-                self.value.x1 = new_position.x as i32;
-                self.value.y1 = new_position.y as i32;
+                new_value.x1 = new_position.x as i32;
+                new_value.y1 = new_position.y as i32;
             }
             1 => {
                 // top right
-                self.value.x2 = new_position.x as i32;
-                self.value.y1 = new_position.y as i32;
+                new_value.x2 = new_position.x as i32;
+                new_value.y1 = new_position.y as i32;
             }
             2 => {
                 // bottom left
-                self.value.x1 = new_position.x as i32;
-                self.value.y2 = new_position.y as i32;
+                new_value.x1 = new_position.x as i32;
+                new_value.y2 = new_position.y as i32;
             }
             3 => {
                 // bottom right
-                self.value.x2 = new_position.x as i32;
-                self.value.y2 = new_position.y as i32;
+                new_value.x2 = new_position.x as i32;
+                new_value.y2 = new_position.y as i32;
             }
             _ => {}
         }
 
-        self.reticule_update_internal(&mut reticules.list);
+        if new_value.is_positive() {
+            self.value = new_value;
+            self.reticule_update_internal(&mut reticules.list);
+        }
     }
 
     fn content_size(&self) -> iced::Size {

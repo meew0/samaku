@@ -1698,6 +1698,13 @@ pub struct Rectangle {
     pub y2: i32,
 }
 
+impl Rectangle {
+    #[must_use]
+    pub fn is_positive(&self) -> bool {
+        self.x1 <= self.x2 && self.y1 <= self.y2
+    }
+}
+
 impl emit::Value for Rectangle {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
