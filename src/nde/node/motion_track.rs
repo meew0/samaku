@@ -57,7 +57,7 @@ impl Node for MotionTrack {
                 list: vec![model::reticule::Reticule {
                     shape: model::reticule::Shape::Cross,
                     position: self.region_center,
-                    radius: 10.0,
+                    radius: 15.0,
                 }],
                 source_node_index: self_index,
             }),

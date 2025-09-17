@@ -106,7 +106,7 @@ impl Node for InputPosition {
                 list: vec![model::reticule::Reticule {
                     shape: model::reticule::Shape::Cross,
                     position: self.value,
-                    radius: 10.0,
+                    radius: 15.0,
                 }],
                 source_node_index: self_index,
             },
@@ -203,22 +203,22 @@ impl Node for InputRectangle {
             model::reticule::Reticule {
                 shape: model::reticule::Shape::CornerTopLeft,
                 position: nde::tags::Position::default(),
-                radius: 7.0,
+                radius: 15.0,
             },
             model::reticule::Reticule {
                 shape: model::reticule::Shape::CornerTopRight,
                 position: nde::tags::Position::default(),
-                radius: 7.0,
+                radius: 15.0,
             },
             model::reticule::Reticule {
                 shape: model::reticule::Shape::CornerBottomLeft,
                 position: nde::tags::Position::default(),
-                radius: 7.0,
+                radius: 15.0,
             },
             model::reticule::Reticule {
                 shape: model::reticule::Shape::CornerBottomRight,
                 position: nde::tags::Position::default(),
-                radius: 7.0,
+                radius: 15.0,
             },
         ];
 

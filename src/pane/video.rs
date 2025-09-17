@@ -193,24 +193,22 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
 
             match reticule.shape {
                 model::reticule::Shape::Cross => {
-                    let back_x = canvas::Path::new(|path| {
-                        path.move_to(center_point + iced::Vector::new(-reticule.radius, 3.0));
-                        path.line_to(center_point + iced::Vector::new(reticule.radius, -3.0));
-                        path.line_to(center_point + iced::Vector::new(reticule.radius, 3.0));
-                        path.line_to(center_point + iced::Vector::new(-reticule.radius, -3.0));
-                        path.close();
-                    });
+                    let rect_top_left = center_point
+                        - iced::Vector::new(reticule.radius * 0.5, reticule.radius * 0.5);
+                    let rect_size = iced::Size::new(reticule.radius, reticule.radius);
+                    frame.fill_rectangle(
+                        rect_top_left,
+                        rect_size,
+                        style::SAMAKU_TEXT.scale_alpha(0.2),
+                    );
 
-                    let back_y = canvas::Path::new(|path| {
-                        path.move_to(center_point + iced::Vector::new(3.0, -reticule.radius));
-                        path.line_to(center_point + iced::Vector::new(-3.0, reticule.radius));
-                        path.line_to(center_point + iced::Vector::new(3.0, reticule.radius));
-                        path.line_to(center_point + iced::Vector::new(-3.0, -reticule.radius));
-                        path.close();
-                    });
-
-                    frame.fill(&back_x, iced::Color::BLACK);
-                    frame.fill(&back_y, iced::Color::BLACK);
+                    frame.stroke_rectangle(
+                        rect_top_left,
+                        rect_size,
+                        canvas::Stroke::default()
+                            .with_color(style::SAMAKU_BACKGROUND)
+                            .with_width(1.0),
+                    );
 
                     let thin_path = canvas::Path::new(|path| {
                         path.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
@@ -218,6 +216,13 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                         path.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
                         path.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
                     });
+
+                    frame.stroke(
+                        &thin_path,
+                        canvas::Stroke::default()
+                            .with_color(style::SAMAKU_BACKGROUND)
+                            .with_width(2.0),
+                    );
 
                     frame.stroke(
                         &thin_path,
@@ -253,22 +258,34 @@ fn corner(
     y_sign: f32,
 ) {
     let path = canvas::Path::new(|path| {
-        path.move_to(center_point + iced::Vector::new(x_sign * radius * 1.5, 0.0));
+        path.move_to(center_point + iced::Vector::new(x_sign * radius, 0.0));
         path.line_to(center_point);
-        path.line_to(center_point + iced::Vector::new(0.0, y_sign * radius * 1.5));
+        path.line_to(center_point + iced::Vector::new(0.0, y_sign * radius));
     });
+
+    frame.fill(
+        &canvas::Path::circle(center_point, radius * 0.5),
+        style::SAMAKU_TEXT.scale_alpha(0.2),
+    );
+
+    frame.stroke(
+        &canvas::Path::circle(center_point, radius * 0.5),
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_BACKGROUND)
+            .with_width(1.0),
+    );
+
+    frame.stroke(
+        &path,
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_BACKGROUND)
+            .with_width(2.5),
+    );
 
     frame.stroke(
         &path,
         canvas::Stroke::default()
             .with_color(style::SAMAKU_PRIMARY)
-            .with_width(1.0),
-    );
-
-    frame.stroke(
-        &canvas::Path::circle(center_point, radius),
-        canvas::Stroke::default()
-            .with_color(iced::Color::BLACK)
             .with_width(1.0),
     );
 }
