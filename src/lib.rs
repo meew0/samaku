@@ -516,7 +516,7 @@ impl Default for Samaku {
             video_metadata: None,
             subtitles: subtitle::File::default(),
             selected_event_indices: HashSet::new(),
-            project_properties: Default::default(),
+            project_properties: project::Properties::default(),
             shared: shared_state,
             view: RefCell::new(ViewState {
                 subtitle_renderer: media::subtitle::Renderer::new(),
