@@ -4,11 +4,11 @@
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
 )]
 
-use crate::{pane, subtitle};
+use crate::{config, pane, subtitle};
+use anyhow::Context as _;
+use iced::widget::pane_grid;
 use std::borrow::Cow;
 use std::collections::HashSet;
-
-use iced::widget::pane_grid;
 use thiserror::Error;
 
 /// Serialize data into Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64)
@@ -18,9 +18,9 @@ use thiserror::Error;
 pub fn serialize_czb<T: ?Sized + serde::Serialize>(
     value: &T,
     compression_level: u8,
-) -> Result<String, String> {
+) -> anyhow::Result<String> {
     let mut data: Vec<u8> = vec![];
-    ciborium::into_writer(value, &mut data).map_err(|err| err.to_string())?;
+    ciborium::into_writer(value, &mut data)?;
 
     Ok(data_encoding::BASE64.encode(
         miniz_oxide::deflate::compress_to_vec(data.as_slice(), compression_level).as_slice(),
@@ -65,13 +65,16 @@ pub struct Project<'a> {
 }
 
 impl<'a> Project<'a> {
-    pub fn compile_from(global_state: &'a crate::Samaku) -> Self {
-        let pane_layout =
-            PaneLayout::from_pane_grid(&global_state.panes, global_state.panes.layout());
+    #[must_use]
+    pub fn compile_from(
+        panes: &'a pane_grid::State<pane::State>,
+        selected_event_indices: &'a HashSet<subtitle::EventIndex>,
+    ) -> Self {
+        let pane_layout = PaneLayout::from_pane_grid(panes, panes.layout());
 
         Self {
             pane_layout,
-            selected_event_indices: Cow::Borrowed(&global_state.selected_event_indices),
+            selected_event_indices: Cow::Borrowed(selected_event_indices),
         }
     }
 
@@ -82,6 +85,26 @@ impl<'a> Project<'a> {
         } = self;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
         global_state.selected_event_indices = selected_event_indices.into_owned();
+    }
+
+    pub fn load(subtitle_file: &subtitle::File) -> anyhow::Result<Option<Self>> {
+        if let Some(czb) = subtitle_file.script_info.extra_info.get(METADATA_KEY) {
+            let project = deserialize_czb::<Project>(czb.as_bytes())
+                .context("Failed to deserialize project metadata")?;
+            Ok(Some(project))
+        } else {
+            println!("No project metadata found in opened subtitle file");
+            Ok(None)
+        }
+    }
+
+    pub fn store(&self, subtitle_file: &mut subtitle::File) -> anyhow::Result<()> {
+        let czb = serialize_czb(&self, config::PROJECT_COMPRESSION_LEVEL)?;
+        subtitle_file
+            .script_info
+            .extra_info
+            .insert(METADATA_KEY.to_owned(), czb);
+        Ok(())
     }
 }
 

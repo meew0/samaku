@@ -358,6 +358,21 @@ impl Samaku {
         }
     }
 
+    /// Utility method that takes an `anyhow::Result` and either turns it into an `Option` or displays a toast on error
+    pub fn anyhow_toast<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
+        match result {
+            Ok(val) => Some(val),
+            Err(err) => {
+                self.toast(view::toast::Toast::new(
+                    view::toast::Status::Danger,
+                    "Error".to_owned(),
+                    format!("{err:#}"),
+                ));
+                None
+            }
+        }
+    }
+
     /// Construct the user interface. Called whenever iced needs to rerender the application.
     fn view(&'_ self) -> Element<'_, message::Message> {
         let focus = self.focus;

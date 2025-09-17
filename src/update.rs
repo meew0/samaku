@@ -1,12 +1,11 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
+use crate::message::Message;
+use crate::{media, message, model, nde, pane, project, subtitle, view};
+use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
 use std::fmt::Write as _;
-
-use crate::message::Message;
-use crate::pane::text_editor::State;
-use crate::{config, media, message, model, nde, pane, project, subtitle, view};
 
 macro_rules! active_event {
     ($global_state:ident) => {
@@ -232,27 +231,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 ));
             }
 
-            // Load additional project data private to Samaku
-            if let Some(czb) = global_state
-                .subtitles
-                .script_info
-                .extra_info
-                .get(project::METADATA_KEY)
+            if let Some(Some(project)) =
+                global_state.anyhow_toast(project::Project::load(&global_state.subtitles))
             {
-                match project::deserialize_czb::<project::Project>(czb.as_bytes()) {
-                    Ok(project) => {
-                        project.update_global(global_state);
-                    }
-                    Err(err) => {
-                        global_state.toast(view::toast::Toast::new(
-                            view::toast::Status::Primary,
-                            "Error while reading project metadata".to_owned(),
-                            format!("{err:?}"),
-                        ));
-                    }
-                }
-            } else {
-                println!("No project metadata found in opened subtitle file");
+                project.update_global(global_state);
             }
         }
         Message::SubtitleParseError(err) => {
@@ -263,29 +245,31 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             ));
         }
         Message::SaveSubtitleFile => {
-            let project = project::Project::compile_from(global_state);
-            match project::serialize_czb(&project, config::PROJECT_COMPRESSION_LEVEL) {
-                Ok(czb) => {
-                    global_state
-                        .subtitles
-                        .script_info
-                        .extra_info
-                        .insert(project::METADATA_KEY.to_owned(), czb);
+            let project = project::Project::compile_from(
+                &global_state.panes,
+                &global_state.selected_event_indices,
+            );
 
-                    let mut data = String::new();
-                    subtitle::emit(&mut data, &global_state.subtitles, None)
-                        .expect("subtitle::emit() failed"); // should never happen
+            let result = (|| {
+                project
+                    .store(&mut global_state.subtitles)
+                    .context("Failed to serialize project data")?;
 
-                    let future = select_file_and_save(data);
-                    return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
-                }
-                Err(err) => {
-                    global_state.toast(view::toast::Toast::new(
-                        view::toast::Status::Danger,
-                        "Error while writing project data".to_owned(),
-                        err,
-                    ));
-                }
+                let mut data = String::new();
+                subtitle::emit(&mut data, &global_state.subtitles, None)
+                    .context("subtitle::emit() failed")?; // should never happen
+
+                Ok(data)
+            })();
+
+            if let Some(data) = global_state.anyhow_toast(result) {
+                let future = async {
+                    select_file_and_save(data)
+                        .await
+                        .context("Failed to write to file")?;
+                    Ok(())
+                };
+                return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
             }
         }
         Message::ExportSubtitleFile => {
@@ -483,7 +467,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 }
 
                 impl pane::Visitor for Visitor {
-                    fn visit_text_editor(&mut self, text_editor_state: &mut State) {
+                    fn visit_text_editor(
+                        &mut self,
+                        text_editor_state: &mut pane::text_editor::State,
+                    ) {
                         let is_edit = self.action.as_ref().unwrap().is_edit();
 
                         text_editor_state.perform(self.action.take().unwrap());
