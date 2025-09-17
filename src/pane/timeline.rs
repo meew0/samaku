@@ -11,7 +11,7 @@ pub struct State {
     position: Position,
 }
 
-#[typetag::serde(name = "text_editor")]
+#[typetag::serde(name = "timeline")]
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,
