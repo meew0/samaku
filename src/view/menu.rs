@@ -87,6 +87,6 @@ pub fn sub_menu<'a>(
             msg,
         )
         .width(Length::Fill),
-        Menu::new(children),
+        Menu::new(children).width(150.0),
     )
 }
