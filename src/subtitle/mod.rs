@@ -439,7 +439,7 @@ impl Default for Style {
     fn default() -> Self {
         Self {
             name: "Default".to_owned(),
-            font_name: "Arial".to_owned(),
+            font_name: "Barlow".to_owned(),
             font_size: 120.0,
             primary_colour: Colour::WHITE,
             secondary_colour: Colour {
