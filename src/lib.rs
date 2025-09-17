@@ -225,7 +225,7 @@ pub fn run() -> iced::Result {
             ],
             default_font: DEFAULT_FONT,
             default_text_size: iced::Pixels(16.0),
-            antialiasing: false,
+            antialiasing: true,
         })
         .theme(theme)
         .run()
