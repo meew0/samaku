@@ -738,7 +738,6 @@ pub mod tests {
     use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
     use crate::test_utils::test_file;
 
-    use super::super::EventIndex;
     use super::*;
 
     /// Parse the file at the given path to a `File`
@@ -789,7 +788,7 @@ pub mod tests {
             AttachmentType::Graphic
         );
 
-        let event5 = &ass_file.events[EventIndex(5)];
+        let (_, event5) = &ass_file.events.nth(5);
         assert_eq!(event5.style_index, 0);
         assert_matches!(
             ass_file.extradata.nde_filter_for_event(event5),

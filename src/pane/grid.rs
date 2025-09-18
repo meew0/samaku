@@ -24,7 +24,7 @@ impl super::LocalState for State {
                 self.body_scrollable_id.clone(),
                 global_state,
                 self.columns.as_slice(),
-                global_state.subtitles.events.as_slice(),
+                &[],
                 move |offset| {
                     message::Message::Pane(self_pane, message::Pane::GridSyncHeader(offset))
                 },
@@ -191,7 +191,7 @@ fn comment_style(theme: &iced::Theme) -> iced::widget::container::Style {
 }
 
 impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Renderer> for Column {
-    type Row = subtitle::Event<'static>;
+    type Row = (subtitle::EventIndex, subtitle::Event<'static>);
     type State = crate::Samaku;
 
     fn header(&'a self, _col_index: usize) -> iced::Element<'a, message::Message> {
@@ -203,13 +203,11 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
     fn cell(
         &'a self,
         _col_index: usize,
-        row_index: usize,
+        _row_index: usize,
         state: &'a Self::State,
-        row: &'a Self::Row,
+        (event_index, event): &'a Self::Row,
     ) -> iced::Element<'a, message::Message> {
-        let selected = state
-            .selected_event_indices
-            .contains(&subtitle::EventIndex(row_index));
+        let selected = state.selected_event_indices.contains(event_index);
 
         let cell_content: iced::Element<message::Message> = match self.field {
             ColumnField::SelectButton => {
@@ -220,13 +218,11 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
                 };
 
                 iced::widget::button(view::icon(icon).size(12.0))
-                    .on_press(message::Message::ToggleEventSelection(
-                        subtitle::EventIndex(row_index),
-                    ))
+                    .on_press(message::Message::ToggleEventSelection(*event_index))
                     .into()
             }
-            ColumnField::FilterName => {
-                iced::widget::text(match state.subtitles.extradata.nde_filter_for_event(row) {
+            ColumnField::FilterName => iced::widget::text(
+                match state.subtitles.extradata.nde_filter_for_event(event) {
                     Some(filter) => {
                         let stored_name = &filter.name;
                         if stored_name.is_empty() {
@@ -236,12 +232,12 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
                         }
                     }
                     None => "",
-                })
-                .into()
-            }
-            ColumnField::Start => iced::widget::text(format!("{}", row.start.0)).into(),
-            ColumnField::Duration => iced::widget::text(format!("{}", row.duration.0)).into(),
-            ColumnField::Text => iced::widget::text(row.text.to_string()).into(),
+                },
+            )
+            .into(),
+            ColumnField::Start => iced::widget::text(format!("{}", event.start.0)).into(),
+            ColumnField::Duration => iced::widget::text(format!("{}", event.duration.0)).into(),
+            ColumnField::Text => iced::widget::text(event.text.to_string()).into(),
         };
 
         // Highlight the selected event
@@ -249,7 +245,7 @@ impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Rend
 
         let styled_container = if selected {
             container.style(highlighted_style)
-        } else if row.is_comment() {
+        } else if event.is_comment() {
             container.style(comment_style)
         } else {
             container

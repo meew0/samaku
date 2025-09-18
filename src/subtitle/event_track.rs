@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct EventIndex(pub usize);
+pub struct EventIndex(usize);
 
 /// Ordered collection of [`Event`]s.
 /// For now, this is just a wrapper around [`Vec`], but in the future it might become more advanced,
@@ -48,6 +48,11 @@ impl EventTrack {
     #[must_use]
     pub fn get_mut(&mut self, index: EventIndex) -> Option<&mut Event<'static>> {
         self.events.get_mut(index.0)
+    }
+
+    #[must_use]
+    pub fn nth(&self, n: usize) -> (EventIndex, &Event<'static>) {
+        (EventIndex(n), &self.events[n])
     }
 
     pub fn update_event_times(&mut self, index: EventIndex, start: StartTime, duration: Duration) {

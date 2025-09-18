@@ -58,8 +58,8 @@ impl EventSource {
         Duration(self.rng.random_range(0..self.max_duration.0))
     }
 
-    fn random_index(&mut self) -> EventIndex {
-        EventIndex(self.rng.random_range(0..self.count))
+    fn random_index(&mut self) -> usize {
+        self.rng.random_range(0..self.count)
     }
 }
 
@@ -131,7 +131,7 @@ pub fn benchmark_insert(c: &mut Criterion) {
                     let additional_count = 100;
                     let step = source.count / additional_count;
                     let additional_events: Vec<_> = (0..additional_count)
-                        .map(|i| (EventIndex(i * step), source.next_event()))
+                        .map(|i| (track.nth(i * step).0, source.next_event()))
                         .collect();
                     (track, additional_events)
                 },
@@ -156,7 +156,7 @@ pub fn benchmark_remove(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let track = EventTrack::from_vec(EventSource::new(10000).collect());
-                    let remove_set = HashSet::from([EventIndex(9999)]);
+                    let remove_set = HashSet::from([track.nth(9999).0]);
                     (track, remove_set)
                 },
                 |(track, remove_set)| track.remove_from_set(remove_set),
@@ -171,7 +171,7 @@ pub fn benchmark_remove(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let track = EventTrack::from_vec(EventSource::new(10000).collect());
-                    let remove_set = HashSet::from([EventIndex(5000)]);
+                    let remove_set = HashSet::from([track.nth(5000).0]);
                     (track, remove_set)
                 },
                 |(track, remove_set)| track.remove_from_set(remove_set),
@@ -186,7 +186,8 @@ pub fn benchmark_remove(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let track = EventTrack::from_vec(EventSource::new(10000).collect());
-                    let remove_set = HashSet::from_iter((0..10000).step_by(100).map(EventIndex));
+                    let remove_set =
+                        HashSet::from_iter((0..10000).step_by(100).map(|i| track.nth(i).0));
                     (track, remove_set)
                 },
                 |(track, remove_set)| track.remove_from_set(remove_set),
@@ -251,7 +252,7 @@ pub fn benchmark_update(c: &mut Criterion) {
             || {
                 let mut source = EventSource::new(10000);
                 let track = black_box(EventTrack::from_vec(source.collect()));
-                let index = source.random_index();
+                let index = track.nth(source.random_index()).0;
                 let new_start = source.random_start_time();
                 let new_duration = source.random_duration();
                 (track, index, new_start, new_duration)
@@ -266,7 +267,7 @@ pub fn benchmark_update(c: &mut Criterion) {
     fn setup() -> (EventTrack, EventIndex) {
         let mut source = EventSource::new(10000);
         let track = black_box(EventTrack::from_vec(source.collect()));
-        let index = source.random_index();
+        let index = track.nth(source.random_index()).0;
         (track, index)
     }
 
