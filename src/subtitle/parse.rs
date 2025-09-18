@@ -176,7 +176,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         attachments,
         other_sections: opaque_sections,
         styles: model::Trace::new(style_list),
-        events: EventTrack { events },
+        events: EventTrack::from_vec(events),
         extradata,
     };
 
@@ -738,6 +738,7 @@ pub mod tests {
     use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
     use crate::test_utils::test_file;
 
+    use super::super::EventIndex;
     use super::*;
 
     /// Parse the file at the given path to a `File`
@@ -788,7 +789,7 @@ pub mod tests {
             AttachmentType::Graphic
         );
 
-        let event5 = &ass_file.events.events[5];
+        let event5 = &ass_file.events[EventIndex(5)];
         assert_eq!(event5.style_index, 0);
         assert_matches!(
             ass_file.extradata.nde_filter_for_event(event5),
