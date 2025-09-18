@@ -1,4 +1,4 @@
-use crate::subtitle::{Event, Extradata, StartTime, compile};
+use crate::subtitle::{Duration, Event, Extradata, StartTime, compile};
 use crate::{message, nde};
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -16,6 +16,12 @@ pub struct EventTrack {
 }
 
 impl EventTrack {
+    /// Create a new empty `EventTrack`.
+    #[must_use]
+    pub fn new_empty() -> Self {
+        Self { events: vec![] }
+    }
+
     /// Create a new `EventTrack` from the given `Vec` of events.
     #[must_use]
     pub fn from_vec(events: Vec<Event<'static>>) -> Self {
@@ -44,6 +50,12 @@ impl EventTrack {
         self.events.get_mut(index.0)
     }
 
+    pub fn update_event_times(&mut self, index: EventIndex, start: StartTime, duration: Duration) {
+        let event = &mut self[index];
+        event.start = start;
+        event.duration = duration;
+    }
+
     #[must_use]
     pub fn as_slice(&self) -> &[Event<'static>] {
         self.events.as_slice()
@@ -51,6 +63,10 @@ impl EventTrack {
 
     pub fn push(&mut self, event: Event<'static>) {
         self.events.push(event);
+    }
+
+    pub fn insert(&mut self, index: EventIndex, event: Event<'static>) {
+        self.events.insert(index.0, event);
     }
 
     /// Remove all events whose indices are contained in the given set. Clears the set afterwards
@@ -133,7 +149,16 @@ impl EventTrack {
         self.events
             .iter()
             .enumerate()
-            .filter(move |(_, event)| (event.start + event.duration) >= start && event.start < end)
+            .filter(move |(_, event)| (event.start + event.duration) > start && event.start < end)
+            .map(|(index, event)| (EventIndex(index), event))
+    }
+
+    /// Iterate over the events at the given time point.
+    pub fn iter_stab(&'_ self, time: StartTime) -> impl Iterator<Item = (EventIndex, &Event<'_>)> {
+        self.events
+            .iter()
+            .enumerate()
+            .filter(move |(_, event)| (event.start + event.duration) > time && event.start <= time)
             .map(|(index, event)| (EventIndex(index), event))
     }
 
@@ -223,5 +248,88 @@ impl Index<EventIndex> for EventTrack {
 impl IndexMut<EventIndex> for EventTrack {
     fn index_mut(&mut self, index: EventIndex) -> &mut Self::Output {
         &mut self.events[index.0]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_track_modify() {
+        let events = vec![
+            Event {
+                start: StartTime(0),
+                duration: Duration(1000),
+                ..Event::default()
+            },
+            Event {
+                start: StartTime(1000),
+                duration: Duration(1000),
+                ..Event::default()
+            },
+        ];
+
+        let mut track = EventTrack::from_vec(events.clone());
+        assert!(!track.is_empty());
+        assert_eq!(track.len(), events.len());
+
+        assert_eq!(track[EventIndex(0)].start, StartTime(0));
+        assert!(track.get(EventIndex(2)).is_none());
+
+        track.push(Event {
+            start: StartTime(3000),
+            duration: Duration(1000),
+            ..Event::default()
+        });
+        assert_eq!(track[EventIndex(2)].start, StartTime(3000));
+
+        track.insert(
+            EventIndex(1),
+            Event {
+                start: StartTime(2000),
+                duration: Duration(1000),
+                ..Event::default()
+            },
+        );
+        assert_eq!(track[EventIndex(1)].start, StartTime(2000));
+        assert_eq!(track[EventIndex(3)].start, StartTime(3000));
+
+        let mut to_remove = HashSet::from([EventIndex(1), EventIndex(2)]);
+        track.remove_from_set(&mut to_remove);
+        assert_eq!(track.len(), 2);
+    }
+
+    #[test]
+    fn event_track_query() {
+        let mut track = EventTrack::new_empty();
+        assert!(track.is_empty());
+        assert_eq!(track.events.len(), 0);
+        assert_eq!(track.iter_range(StartTime(0), StartTime(1000)).count(), 0);
+
+        track.push(Event {
+            start: StartTime(1000),
+            duration: Duration(1000),
+            ..Event::default()
+        });
+        assert_eq!(track.iter_range(StartTime(0), StartTime(1000)).count(), 0);
+        assert_eq!(track.iter_range(StartTime(500), StartTime(1500)).count(), 1);
+        assert_eq!(
+            track.iter_range(StartTime(1000), StartTime(2000)).count(),
+            1
+        );
+        assert_eq!(
+            track.iter_range(StartTime(1500), StartTime(2500)).count(),
+            1
+        );
+        assert_eq!(
+            track.iter_range(StartTime(2000), StartTime(3000)).count(),
+            0
+        );
+        assert_eq!(track.iter_stab(StartTime(0)).count(), 0);
+        assert_eq!(track.iter_stab(StartTime(1000)).count(), 1);
+        assert_eq!(track.iter_stab(StartTime(1500)).count(), 1);
+        assert_eq!(track.iter_stab(StartTime(2000)).count(), 0);
+        assert_eq!(track.iter_stab(StartTime(3000)).count(), 0);
     }
 }

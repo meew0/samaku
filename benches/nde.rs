@@ -1,8 +1,8 @@
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::Criterion;
 
-fn parse_benchmark(c: &mut Criterion) {
+pub fn benchmark_parse(c: &mut Criterion) {
     const NO_TAGS: &str = "Sphinx of black quartz, judge my vow.";
     const FEW_TAGS: &str = r"{\i1\c&HFF0000&}Sphinx of black quartz, judge my vow.";
     const MANY_TAGS: &str = r"{\xbord1\ybord2\xshad3\yshad4\fax5\fay6\clip(70,80,90,100)\iclip(20,20,30,30)\iclip(1,m 0 0 s 20 0 20 20 0 20 c)\clip(2,m 0 0 s 20 0 20 20 0 20 c)\blur11\fscx12\fscy13\fsp14\fs15\frx16\fry17\frz18\fnAlegreya\an5\pos(19,20)\fade(0,255,0,0,1000,2000,3000)\org(21,22)\t(\xbord23)\1c&HFF0000&\2c&H00FF00&\3c&H0000FF&\4c&HFF00FF&\1a&H22&\2a&H44&\3a&H66&\4a&H88&\be24\b1\i1\kt25\s1\u1\pbo26\q1\fe1}All tags 1{\p1}m 0 0 s 100 0 100 100 0 100 c{\p0}";
@@ -21,6 +21,3 @@ fn parse_benchmark(c: &mut Criterion) {
         b.iter(|| samaku::nde::tags::parse(black_box(MANY_SPANS)))
     });
 }
-
-criterion_group!(parse, parse_benchmark);
-criterion_main!(parse);
