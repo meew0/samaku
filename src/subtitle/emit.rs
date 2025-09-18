@@ -53,13 +53,18 @@ pub fn emit<W: Write>(
 
     if let Some(context) = compile_context {
         // Compile events
-        let compiled = subtitles
-            .events
-            .compile(&subtitles.extradata, &context, 0, None);
-        emit_events(writer, &compiled, subtitles.styles.as_slice())?;
+        let compiled = subtitles.events.compile_all(&subtitles.extradata, &context);
+        emit_events(writer, compiled.iter(), subtitles.styles.as_slice())?;
     } else {
         // Export events verbatim
-        emit_events(writer, &subtitles.events, subtitles.styles.as_slice())?;
+        emit_events(
+            writer,
+            subtitles
+                .events
+                .iter_all_time_sorted()
+                .map(|event_index| &subtitles.events[event_index]),
+            subtitles.styles.as_slice(),
+        )?;
         emit_extradata(writer, &subtitles.extradata)?;
         emit_other_sections(writer, &subtitles.other_sections)?;
     }
@@ -240,9 +245,9 @@ fn emit_attachments<W: Write>(
     Ok(())
 }
 
-fn emit_events<'a, 'b, W: Write>(
+fn emit_events<'a, 'b, W: Write, I: Iterator<Item = &'a Event<'b>>>(
     writer: &mut W,
-    events: impl IntoIterator<Item = &'a Event<'b>>,
+    events: I,
     styles: &[Style],
 ) -> Result<(), Error>
 where

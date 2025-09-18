@@ -43,7 +43,7 @@ impl EventSource {
         }
     }
 
-    fn collect(&mut self) -> Vec<Event<'static>> {
+    fn collect<T: FromIterator<Event<'static>>>(&mut self) -> T {
         let count = self.count;
         iter::repeat_with(|| self.next_event())
             .take(count)
@@ -67,13 +67,13 @@ pub fn benchmark_create(c: &mut Criterion) {
     fn to_bench(events_slice: &[Event<'static>]) {
         let count = events_slice.len();
         let events_vec = events_slice.to_owned(); // we explicitly want to time this as well
-        let track = EventTrack::from_vec(events_vec);
+        let track = events_vec.into_iter().collect::<EventTrack>();
         assert_eq!(track.len(), count);
     }
 
     fn perform_bench(c: &mut Criterion, count: usize) {
         c.bench_function(format!("create from slice: {count} events").as_str(), |b| {
-            let data = EventSource::new(count).collect();
+            let data: Vec<Event<'static>> = EventSource::new(count).collect();
             b.iter(|| to_bench(data.as_slice()));
         });
     }
@@ -86,7 +86,7 @@ pub fn benchmark_create(c: &mut Criterion) {
 pub fn benchmark_insert(c: &mut Criterion) {
     c.bench_function("insert 100 events at end into fresh track", |b| {
         b.iter_batched_ref(
-            || EventSource::new(100).collect(),
+            || EventSource::new(100).collect::<Vec<Event<'static>>>(),
             |events| {
                 let count = events.len();
                 let mut track = EventTrack::new_empty();
@@ -103,7 +103,7 @@ pub fn benchmark_insert(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let mut source = EventSource::new(10000);
-                let track = EventTrack::from_vec(source.collect());
+                let track: EventTrack = source.collect();
                 let additional_count = 100;
                 let additional_events: Vec<_> =
                     (0..additional_count).map(|_| source.next_event()).collect();
@@ -127,7 +127,7 @@ pub fn benchmark_insert(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let mut source = EventSource::new(10000);
-                    let track = EventTrack::from_vec(source.collect());
+                    let track: EventTrack = source.collect();
                     let additional_count = 100;
                     let step = source.count / additional_count;
                     let additional_events: Vec<_> = (0..additional_count)
@@ -155,7 +155,7 @@ pub fn benchmark_remove(c: &mut Criterion) {
         |b| {
             b.iter_batched_ref(
                 || {
-                    let track = EventTrack::from_vec(EventSource::new(10000).collect());
+                    let track: EventTrack = EventSource::new(10000).collect();
                     let remove_set = HashSet::from([track.nth(9999).0]);
                     (track, remove_set)
                 },
@@ -170,7 +170,7 @@ pub fn benchmark_remove(c: &mut Criterion) {
         |b| {
             b.iter_batched_ref(
                 || {
-                    let track = EventTrack::from_vec(EventSource::new(10000).collect());
+                    let track: EventTrack = EventSource::new(10000).collect();
                     let remove_set = HashSet::from([track.nth(5000).0]);
                     (track, remove_set)
                 },
@@ -185,7 +185,7 @@ pub fn benchmark_remove(c: &mut Criterion) {
         |b| {
             b.iter_batched_ref(
                 || {
-                    let track = EventTrack::from_vec(EventSource::new(10000).collect());
+                    let track: EventTrack = EventSource::new(10000).collect();
                     let remove_set =
                         HashSet::from_iter((0..10000).step_by(100).map(|i| track.nth(i).0));
                     (track, remove_set)
@@ -199,20 +199,21 @@ pub fn benchmark_remove(c: &mut Criterion) {
 
 pub fn benchmark_query(c: &mut Criterion) {
     fn perform_bench_range(c: &mut Criterion, count: usize) {
+        let mut source = EventSource::new(count);
+        let track: EventTrack = source.collect();
+
         c.bench_function(
             format!("query range (10 seconds) with {count} events").as_str(),
             |b| {
-                let mut source = EventSource::new(count);
-                let track = EventTrack::from_vec(source.collect());
-                b.iter_batched(
+                b.iter_batched_ref(
                     || {
                         let start = source.random_start_time();
                         let end = start + Duration(10000);
                         (start, end)
                     },
                     |(start, end)| {
-                        for (_, event) in track.iter_range(start, end) {
-                            black_box(event);
+                        for index in track.iter_range(&(*start..*end)) {
+                            black_box(index);
                         }
                     },
                     BatchSize::SmallInput,
@@ -226,14 +227,15 @@ pub fn benchmark_query(c: &mut Criterion) {
     perform_bench_range(c, 1000000);
 
     fn perform_bench_stab(c: &mut Criterion, count: usize) {
+        let mut source = EventSource::new(count);
+        let track: EventTrack = source.collect();
+
         c.bench_function(format!("query stab with {count} events").as_str(), |b| {
-            let mut source = EventSource::new(count);
-            let track = EventTrack::from_vec(source.collect());
-            b.iter_batched(
+            b.iter_batched_ref(
                 || source.random_start_time(),
                 |time| {
-                    for (_, event) in track.iter_stab(time) {
-                        black_box(event);
+                    for index in track.iter_range(&time.stab()) {
+                        black_box(index);
                     }
                 },
                 BatchSize::SmallInput,
@@ -251,7 +253,7 @@ pub fn benchmark_update(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let mut source = EventSource::new(10000);
-                let track = black_box(EventTrack::from_vec(source.collect()));
+                let track: EventTrack = source.collect();
                 let index = track.nth(source.random_index()).0;
                 let new_start = source.random_start_time();
                 let new_duration = source.random_duration();
@@ -266,7 +268,7 @@ pub fn benchmark_update(c: &mut Criterion) {
 
     fn setup() -> (EventTrack, EventIndex) {
         let mut source = EventSource::new(10000);
-        let track = black_box(EventTrack::from_vec(source.collect()));
+        let track: EventTrack = source.collect();
         let index = track.nth(source.random_index()).0;
         (track, index)
     }

@@ -28,12 +28,15 @@ impl super::LocalState for State {
             events: global_state
                 .subtitles
                 .events
-                .iter_range(self.position.left, self.position.right)
-                .map(|(index, event)| EventReference {
-                    index,
-                    start: event.start,
-                    duration: event.duration,
-                    selected: global_state.selected_event_indices.contains(&index),
+                .iter_range(&(self.position.left..self.position.right))
+                .map(|index| {
+                    let event = &global_state.subtitles.events[index];
+                    EventReference {
+                        index,
+                        start: event.start,
+                        duration: event.duration,
+                        selected: global_state.selected_event_indices.contains(&index),
+                    }
                 })
                 .collect(),
         };

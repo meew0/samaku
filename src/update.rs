@@ -349,7 +349,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             // Update style references in events: assign the default style to all events that had
             // the removed style assigned, and decrement style indices of applicable events (with
             // existing style indices > the removed index)
-            for event in &mut global_state.subtitles.events {
+            for event in global_state.subtitles.events.iter_events_mut() {
                 match event.style_index.cmp(&index) {
                     std::cmp::Ordering::Less => {}
                     std::cmp::Ordering::Equal => event.style_index = 0,
@@ -525,7 +525,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::DeleteFilter(filter_index) => {
             // Unassign filters from events that might have it assigned
-            for event in &mut global_state.subtitles.events {
+            for event in global_state.subtitles.events.iter_events_mut() {
                 event.extradata_ids.retain(|id| *id != filter_index);
             }
 

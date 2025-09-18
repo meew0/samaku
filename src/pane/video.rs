@@ -41,17 +41,17 @@ impl super::LocalState for State {
                     } else {
                         let instant = std::time::Instant::now();
                         let context = global_state.compile_context();
-                        let compiled = global_state.subtitles.events.compile(
+                        let current_frame_time = video_metadata.frame_rate.frame_to_ms(*num_frame);
+                        let compiled = global_state.subtitles.events.compile_range(
                             &global_state.subtitles.extradata,
                             &context,
-                            0,
-                            None,
-                        ); // TODO give actual frame range values here
+                            subtitle::StartTime(current_frame_time).stab(),
+                        );
                         let elapsed_compile = instant.elapsed();
 
                         let instant2 = std::time::Instant::now();
                         let ass = media::subtitle::OpaqueTrack::from_compiled(
-                            &compiled,
+                            compiled.iter(),
                             global_state.subtitles.styles.as_slice(),
                             &global_state.subtitles.script_info,
                         );

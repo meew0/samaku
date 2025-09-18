@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 
 use crate::{media, message, model, subtitle, view};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct State {
     pub selected_style_index: usize,
     #[serde(skip, default = "default_preview_events")]
@@ -84,7 +84,7 @@ impl super::LocalState for State {
         // We don't need to actually compile the subtitles here, since the `preview_events` will never use any NDE filters. So we can
         // just pretend they have already been compiled.
         let ass = media::subtitle::OpaqueTrack::from_compiled(
-            self.preview_events.as_slice(),
+            self.preview_events.iter_events(),
             std::slice::from_ref(selected_style),
             // Match the script metadata we use globally, except, ignore any extra info (since it never really contains any useful data
             // anyway, and would be costly to clone) and set the playback resolution to a useful value to maximise visibility.
@@ -181,12 +181,14 @@ inventory::submit! {
 }
 
 fn default_preview_events() -> subtitle::EventTrack {
-    subtitle::EventTrack::from_vec(vec![subtitle::Event {
+    vec![subtitle::Event {
         start: subtitle::StartTime(0_i64),
         duration: subtitle::Duration(1000_i64),
         text: "Sphinx of black quartz, judge my vow".into(),
         ..Default::default()
-    }])
+    }]
+    .into_iter()
+    .collect()
 }
 
 impl Default for State {

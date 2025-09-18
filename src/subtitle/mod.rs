@@ -5,7 +5,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
-use std::ops::{Add, Index, IndexMut, Sub};
+use std::ops::{Add, Index, IndexMut, Range, Sub};
 
 pub use emit::emit;
 pub use emit::emit_timecode;
@@ -85,6 +85,11 @@ impl Event<'_> {
     }
 
     #[must_use]
+    pub fn time_range(&self) -> Range<StartTime> {
+        self.start..self.end()
+    }
+
+    #[must_use]
     pub fn is_comment(&self) -> bool {
         matches!(self.event_type, EventType::Comment)
     }
@@ -127,6 +132,11 @@ pub enum EventType {
 pub struct StartTime(pub i64);
 
 impl StartTime {
+    #[must_use]
+    pub fn stab(self) -> Range<StartTime> {
+        self..StartTime(self.0 + 1)
+    }
+
     /// Fixed-width: `hh:mm:ss.mmm`
     #[must_use]
     pub fn format_long(&self) -> String {
@@ -1069,7 +1079,7 @@ mod tests {
         };
 
         let ass_file = File {
-            events: EventTrack::from_vec(vec![event]),
+            events: vec![event].into_iter().collect(),
             extradata,
             ..Default::default()
         };
@@ -1091,7 +1101,7 @@ mod tests {
     fn compile_comments() {
         // Test that comments are skipped in compilation
 
-        let events = EventTrack::from_vec(vec![
+        let events: EventTrack = vec![
             Event {
                 event_type: EventType::Dialogue,
                 duration: Duration(5000),
@@ -1102,7 +1112,9 @@ mod tests {
                 duration: Duration(5000),
                 ..Default::default()
             },
-        ]);
+        ]
+        .into_iter()
+        .collect();
 
         let context = compile::Context {
             frame_rate: media::FrameRate {
@@ -1110,7 +1122,7 @@ mod tests {
                 denominator: 1,
             },
         };
-        let compiled = events.compile(&Extradata::default(), &context, 0, None);
+        let compiled = events.compile_all(&Extradata::default(), &context);
 
         assert_eq!(compiled.len(), 1);
     }

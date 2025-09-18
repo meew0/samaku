@@ -42,6 +42,8 @@ thiserror = "2.0"
 anyhow = "1.0"
 inventory = "0.3.21"
 regex = "1.11"
+interavl = "0.3"
+indexmap = "2.11"
 serde = "1.0.219"
 typetag = "0.2.20"
 ciborium = "0.2.2"
@@ -60,3 +62,10 @@ rand_pcg = "0.9"
 [[bench]]
 name = "main"
 harness = false
+
+[profile.bench]
+opt-level = 3
+debug = 2
+debug-assertions = false
+lto = "thin"
+codegen-units = 1

@@ -226,12 +226,9 @@ mod tests {
         let track = media::subtitle::OpaqueTrack::parse(&ass_data);
         assert_eq!(track.script_info().playback_resolution.x, 320);
         let events = track.to_event_track();
-        assert_eq!(events.as_slice()[1].start, subtitle::StartTime(1000));
-        assert_eq!(events.as_slice()[1].text, "色は匂えど散りぬるを");
-        assert_eq!(
-            track.styles()[events.as_slice()[1].style_index].name,
-            "Style 2"
-        );
+        assert_eq!(events.nth(1).1.start, subtitle::StartTime(1000));
+        assert_eq!(events.nth(1).1.text, "色は匂えど散りぬるを");
+        assert_eq!(track.styles()[events.nth(1).1.style_index].name, "Style 2");
 
         Ok(())
     }

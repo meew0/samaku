@@ -60,17 +60,20 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to construct a new subtitle track or when there are more events than
     /// would fit into an `i32`.
-    pub fn from_compiled<'a, E: IntoIterator<Item = &'a subtitle::Event<'a>>>(
+    pub fn from_compiled<'a, 'b, 'c, E: Iterator<Item = &'a subtitle::Event<'c>> + 'a>(
         events: E,
-        styles: &[subtitle::Style],
-        metadata: &subtitle::ScriptInfo,
-    ) -> OpaqueTrack {
+        styles: &'b [subtitle::Style],
+        metadata: &'b subtitle::ScriptInfo,
+    ) -> OpaqueTrack
+    where
+        'c: 'a,
+    {
         let mut track = LIBRARY.new_track().expect("failed to construct new track");
 
         track.set_header(metadata);
 
         assert_eq!(track.events().len(), 0); // No events should exist yet
-        for (read_index, event) in events.into_iter().enumerate() {
+        for (read_index, event) in events.enumerate() {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() =
                 ass::event_to_raw(event, i32::try_from(read_index).unwrap());
@@ -87,7 +90,7 @@ impl OpaqueTrack {
 
     #[must_use]
     pub fn to_event_track(&self) -> subtitle::EventTrack {
-        subtitle::EventTrack::from_vec(self.events())
+        self.events().into_iter().collect()
     }
 
     #[must_use]
@@ -257,10 +260,10 @@ pub fn ass_image_to_iced(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::media;
     use crate::nde::tags::Transparency;
-
-    use super::*;
+    use crate::subtitle::StartTime;
 
     /// Test to verify that our handling of events and their styles is lossless.
     #[test]
@@ -438,8 +441,11 @@ mod tests {
         let context = subtitle::compile::Context {
             frame_rate: FRAME_RATE,
         };
-        let compiled_events =
-            event_track.compile(&subtitle::Extradata::default(), &context, 24, Some(1));
+        let compiled_events = event_track.compile_range(
+            &subtitle::Extradata::default(),
+            &context,
+            StartTime(1000)..StartTime(3000),
+        );
         assert_eq!(compiled_events[0].style_index, default_usize);
         assert_eq!(compiled_events[1].style_index, alternate_usize);
 
@@ -448,7 +454,7 @@ mod tests {
             ..Default::default()
         };
 
-        let opaque2 = OpaqueTrack::from_compiled(&compiled_events, &styles, &script_info);
+        let opaque2 = OpaqueTrack::from_compiled(compiled_events.iter(), &styles, &script_info);
         renderer = Renderer::new();
         colours.clear();
         renderer.render_subtitles_with_callback(

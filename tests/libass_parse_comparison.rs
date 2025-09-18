@@ -28,7 +28,8 @@ fn libass_parse_comparison() {
 
     let mut found_any_difference = false;
 
-    for event in &track {
+    for event_index in track.iter_all_in_order() {
+        let event = &track[event_index];
         let direct = subtitle::Event {
             start: event.start,
             duration: event.duration,

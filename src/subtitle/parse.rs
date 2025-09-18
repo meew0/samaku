@@ -160,7 +160,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     }
 
     // Match event style names to styles, and construct event track
-    let mut events: Vec<Event> = vec![];
+    let mut events = EventTrack::new_empty();
     for (mut raw_event, style_name) in raw_events_and_style_names {
         if let Some(style_index) = style_list.find_by_name(&style_name) {
             raw_event.style_index = style_index;
@@ -176,7 +176,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         attachments,
         other_sections: opaque_sections,
         styles: model::Trace::new(style_list),
-        events: EventTrack::from_vec(events),
+        events,
         extradata,
     };
 
