@@ -425,13 +425,27 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::SetActiveEventStartTime(new_start_time) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.start = new_start_time;
+            if let Some(event_index) =
+                subtitle::EventTrack::active_event_index(&global_state.selected_event_indices)
+            {
+                let event = &global_state.subtitles.events[event_index];
+                global_state.subtitles.events.update_event_times(
+                    event_index,
+                    new_start_time,
+                    event.duration,
+                );
             }
         }
         Message::SetActiveEventDuration(new_duration) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.duration = new_duration;
+            if let Some(event_index) =
+                subtitle::EventTrack::active_event_index(&global_state.selected_event_indices)
+            {
+                let event = &global_state.subtitles.events[event_index];
+                global_state.subtitles.events.update_event_times(
+                    event_index,
+                    event.start,
+                    new_duration,
+                );
             }
         }
         Message::SetActiveEventStyleIndex(new_style_index) => {
@@ -450,10 +464,10 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::SetEventStartTimeAndDuration(event_index, start, duration) => {
-            if let Some(event) = global_state.subtitles.events.get_mut(event_index) {
-                event.start = start;
-                event.duration = duration;
-            }
+            global_state
+                .subtitles
+                .events
+                .update_event_times(event_index, start, duration);
         }
         Message::TextEditorActionPerformed(pane, action) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {

@@ -8,6 +8,18 @@ use std::ops::{Index, IndexMut, Range};
 pub struct EventIndex(usize);
 
 /// Ordered collection of [`Event`]s.
+///
+/// Internally, an `EventTrack` is a combination of 3 data structures:
+///  - an array (`Vec`) to hold the event data itself in an unordered fashion;
+///  - an ordered hash table (`indexmap::IndexSet`) to store the order of the array items;
+///  - and an augmented AVL interval tree (`interavl::IntervalTree`) for logarithmic interval-based indexing.
+///
+/// To ensure the array can serve as a stable lookup table for indices stored as values in the other 2 data structures,
+/// the order of entries in the array is never changed. Entries are only ever appended at the end of the array, and if
+/// an event is deleted, its corresponding entry is simply nulled without changing the rest of the array.
+///
+/// Note that a key invariant that must be upheld on the caller side is that event timing data (`start`/`duration`)
+/// should never be manually changed within event data; instead, use `update_event_times`.
 pub struct EventTrack {
     events: Vec<Option<Event<'static>>>,
     query_index: interavl::IntervalTree<StartTime, Leaf>,
@@ -51,6 +63,9 @@ impl EventTrack {
     }
 
     /// Get the `n`th entry of the track in order.
+    ///
+    /// # Panics
+    /// Panics if `n` is out of bounds.
     #[must_use]
     pub fn nth(&self, n: usize) -> (EventIndex, &Event<'static>) {
         self.get_nth(n).unwrap()
@@ -227,7 +242,11 @@ impl EventTrack {
 
     /// If exactly one event is selected, this method returns the index of that element. Otherwise,
     /// it returns `None`.
-    fn active_event_index(selected_event_indices: &HashSet<EventIndex>) -> Option<EventIndex> {
+    ///
+    /// # Panics
+    /// Should not panic in normal operation.
+    #[must_use]
+    pub fn active_event_index(selected_event_indices: &HashSet<EventIndex>) -> Option<EventIndex> {
         (selected_event_indices.len() == 1).then(|| *selected_event_indices.iter().next().unwrap())
     }
 
@@ -299,7 +318,7 @@ impl EventTrack {
     }
 
     /// Iterate over all event indices, sorted by start time.
-    pub fn iter_all_time_sorted<'a>(&'a self) -> impl Iterator<Item = EventIndex> + 'a {
+    pub fn iter_all_time_sorted(&self) -> impl Iterator<Item = EventIndex> {
         let iter = self.query_index.iter().map(|(_, leaf)| leaf);
 
         LeafIterator {
@@ -309,17 +328,17 @@ impl EventTrack {
     }
 
     /// Iterate over all event indices in logical order.
-    pub fn iter_all_in_order<'a>(&'a self) -> impl Iterator<Item = EventIndex> + 'a {
+    pub fn iter_all_in_order(&self) -> impl Iterator<Item = EventIndex> {
         self.order.iter().copied()
     }
 
     /// Iterate over all events immutably in an arbitrary order.
-    pub fn iter_events<'a>(&'a self) -> impl Iterator<Item = &'a Event<'static>> + 'a {
+    pub fn iter_events(&self) -> impl Iterator<Item = &Event<'static>> {
         self.events.iter().flatten()
     }
 
     /// Iterate over all events mutably in an arbitrary order.
-    pub fn iter_events_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Event<'static>> + 'a {
+    pub fn iter_events_mut(&mut self) -> impl Iterator<Item = &mut Event<'static>> {
         self.events.iter_mut().flatten()
     }
 
