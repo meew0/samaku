@@ -1,15 +1,12 @@
-use std::fmt::{Display, Formatter};
-
 use crate::{message, style, subtitle, view};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
 pub struct State {
-    #[serde(skip, default = "unique_scrollable_id")]
-    header_scrollable_id: iced::widget::scrollable::Id,
-    #[serde(skip, default = "unique_scrollable_id")]
-    body_scrollable_id: iced::widget::scrollable::Id,
-    columns: Vec<Column>,
+    #[serde(skip)]
+    last_viewport: Option<iced::widget::scrollable::Viewport>,
 }
+
+const EVENT_HEIGHT: f32 = 32.0;
 
 #[typetag::serde(name = "grid")]
 impl super::LocalState for State {
@@ -18,28 +15,50 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
+        let total_events = global_state.subtitles.events.len();
+        let first_event_float: f32 = if let Some(last_viewport) = self.last_viewport {
+            (last_viewport.absolute_offset().y / EVENT_HEIGHT).floor()
+        } else {
+            0.0
+        };
+
+        #[expect(clippy::cast_sign_loss, reason = "value should be positive")]
+        #[expect(clippy::cast_possible_truncation, reason = "rounded via floor()")]
+        let first_event_to_display = (first_event_float as usize).min(total_events);
+
         let table = iced::widget::responsive(move |size| {
-            iced_table::table(
-                self.header_scrollable_id.clone(),
-                self.body_scrollable_id.clone(),
-                global_state,
-                self.columns.as_slice(),
-                &[],
-                move |offset| {
-                    message::Message::Pane(self_pane, message::Pane::GridSyncHeader(offset))
-                },
-            )
-            .on_column_resize(
-                move |index, offset| {
-                    message::Message::Pane(
-                        self_pane,
-                        message::Pane::GridColumnResizing(index, offset),
-                    )
-                },
-                message::Message::Pane(self_pane, message::Pane::GridColumnResized),
-            )
-            .min_width(size.width)
-            .into()
+            #[expect(clippy::cast_sign_loss, reason = "value should be positive")]
+            #[expect(clippy::cast_possible_truncation, reason = "rounded via ceil()")]
+            let num_events_to_display = (size.height / EVENT_HEIGHT).ceil() as usize;
+            let last_event_to_display =
+                (first_event_to_display + num_events_to_display).min(total_events);
+            let range = first_event_to_display..last_event_to_display;
+
+            let mut column: iced::widget::Column<message::Message> =
+                iced::widget::Column::with_capacity(range.len() + 2);
+            let top_height = first_event_float * EVENT_HEIGHT;
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "actually a real problem in this case, with the late conversion after the subtraction it was minimized as much as possible though"
+            )]
+            let bottom_height =
+                (total_events - range.len() - first_event_to_display) as f32 * EVENT_HEIGHT;
+            column = column.push(iced::widget::vertical_space().height(top_height));
+
+            let mut parity = false;
+            for event_index in global_state.subtitles.events.iter_range_in_order(range) {
+                column = column.push(row(self_pane, global_state, self, event_index, parity));
+                parity = !parity;
+            }
+
+            column = column.push(iced::widget::vertical_space().height(bottom_height));
+
+            iced::widget::scrollable(column)
+                .on_scroll(move |viewport| {
+                    message::Message::Pane(self_pane, message::Pane::GridScroll(viewport))
+                })
+                .width(iced::Length::Fill)
+                .into()
         });
 
         let add_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Plus))
@@ -69,24 +88,7 @@ impl super::LocalState for State {
 
     fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
         match pane_message {
-            message::Pane::GridSyncHeader(offset) => {
-                return iced::widget::scrollable::scroll_to(
-                    self.header_scrollable_id.clone(),
-                    offset,
-                );
-            }
-            message::Pane::GridColumnResizing(index, offset) => {
-                if let Some(column) = self.columns.get_mut(index) {
-                    column.resize_offset = Some(offset);
-                }
-            }
-            message::Pane::GridColumnResized => {
-                self.columns.iter_mut().for_each(|column| {
-                    if let Some(offset) = column.resize_offset.take() {
-                        column.width += offset;
-                    }
-                });
-            }
+            message::Pane::GridScroll(viewport) => self.last_viewport = Some(viewport),
             _ => (),
         }
 
@@ -101,164 +103,38 @@ inventory::submit! {
     )
 }
 
-fn unique_scrollable_id() -> iced::widget::scrollable::Id {
-    iced::widget::scrollable::Id::unique()
-}
+fn row<'a>(
+    _self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    _pane_state: &'a State,
+    event_index: subtitle::EventIndex,
+    parity: bool,
+) -> iced::Element<'a, message::Message> {
+    let event = &global_state.subtitles.events[event_index];
 
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            header_scrollable_id: unique_scrollable_id(),
-            body_scrollable_id: unique_scrollable_id(),
-            columns: vec![
-                Column {
-                    field: ColumnField::SelectButton,
-                    width: 100.0,
-                    resize_offset: None,
-                },
-                Column {
-                    field: ColumnField::FilterName,
-                    width: 200.0,
-                    resize_offset: None,
-                },
-                Column {
-                    field: ColumnField::Start,
-                    width: 100.0,
-                    resize_offset: None,
-                },
-                Column {
-                    field: ColumnField::Duration,
-                    width: 100.0,
-                    resize_offset: None,
-                },
-                Column {
-                    field: ColumnField::Text,
-                    width: 400.0,
-                    resize_offset: None,
-                },
-            ],
-        }
-    }
-}
+    // Cut off event text after a bit
+    let cutoff = event.text.len().min(250);
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Column {
-    field: ColumnField,
-    width: f32,
-    resize_offset: Option<f32>,
-}
+    let background_color = if parity {
+        style::SAMAKU_BACKGROUND_WEAK
+    } else {
+        style::SAMAKU_BACKGROUND
+    };
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
-pub enum ColumnField {
-    SelectButton,
-    FilterName,
-    Start,
-    Duration,
-    Text,
-}
-
-impl Display for ColumnField {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "{}",
-            match self {
-                ColumnField::SelectButton => "Select",
-                ColumnField::FilterName => "Filter name",
-                ColumnField::Start => "Start",
-                ColumnField::Duration => "Duration",
-                ColumnField::Text => "Text",
-            }
-        )
-    }
-}
-
-fn highlighted_style(theme: &iced::Theme) -> iced::widget::container::Style {
-    let pair = theme.extended_palette().primary.weak;
-
-    iced::widget::container::Style {
-        background: Some(pair.color.into()),
-        text_color: pair.text.into(),
-        ..iced::widget::container::rounded_box(theme)
-    }
-}
-
-fn comment_style(theme: &iced::Theme) -> iced::widget::container::Style {
-    iced::widget::container::Style {
-        text_color: style::SAMAKU_TEXT_WEAK.into(),
-        ..iced::widget::container::rounded_box(theme)
-    }
-}
-
-impl<'a> iced_table::table::Column<'a, message::Message, iced::Theme, iced::Renderer> for Column {
-    type Row = (subtitle::EventIndex, subtitle::Event<'static>);
-    type State = crate::Samaku;
-
-    fn header(&'a self, _col_index: usize) -> iced::Element<'a, message::Message> {
-        iced::widget::container(iced::widget::text(format!("{}", self.field)))
-            .center_y(24)
-            .into()
-    }
-
-    fn cell(
-        &'a self,
-        _col_index: usize,
-        _row_index: usize,
-        state: &'a Self::State,
-        (event_index, event): &'a Self::Row,
-    ) -> iced::Element<'a, message::Message> {
-        let selected = state.selected_event_indices.contains(event_index);
-
-        let cell_content: iced::Element<message::Message> = match self.field {
-            ColumnField::SelectButton => {
-                let icon = if selected {
-                    iced_fonts::Bootstrap::Dot
-                } else {
-                    iced_fonts::Bootstrap::CircleFill
-                };
-
-                iced::widget::button(view::icon(icon).size(12.0))
-                    .on_press(message::Message::ToggleEventSelection(*event_index))
-                    .into()
-            }
-            ColumnField::FilterName => iced::widget::text(
-                match state.subtitles.extradata.nde_filter_for_event(event) {
-                    Some(filter) => {
-                        let stored_name = &filter.name;
-                        if stored_name.is_empty() {
-                            "(unnamed filter)"
-                        } else {
-                            stored_name
-                        }
-                    }
-                    None => "",
-                },
-            )
-            .into(),
-            ColumnField::Start => iced::widget::text(format!("{}", event.start.0)).into(),
-            ColumnField::Duration => iced::widget::text(format!("{}", event.duration.0)).into(),
-            ColumnField::Text => iced::widget::text(event.text.to_string()).into(),
-        };
-
-        // Highlight the selected event
-        let container = iced::widget::container(cell_content);
-
-        let styled_container = if selected {
-            container.style(highlighted_style)
-        } else if event.is_comment() {
-            container.style(comment_style)
-        } else {
-            container
-        };
-
-        styled_container.center_y(24).into()
-    }
-
-    fn width(&self) -> f32 {
-        self.width
-    }
-
-    fn resize_offset(&self) -> Option<f32> {
-        self.resize_offset
-    }
+    iced::widget::container(
+        iced::widget::row![
+            iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
+            iced::widget::text(event.end().format_long()).width(iced::Length::Fixed(150.0)),
+            iced::widget::text(&event.text[0..cutoff])
+        ]
+        .height(iced::Length::Fill)
+        .align_y(iced::Alignment::Center),
+    )
+    .style(move |_| iced::widget::container::Style {
+        background: Some(background_color.into()),
+        ..iced::widget::container::Style::default()
+    })
+    .width(iced::Length::Fill)
+    .height(EVENT_HEIGHT)
+    .into()
 }

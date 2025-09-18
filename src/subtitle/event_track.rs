@@ -332,6 +332,11 @@ impl EventTrack {
         self.order.iter().copied()
     }
 
+    /// Iterate over some range of event indices in logical order.
+    pub fn iter_range_in_order(&self, range: Range<usize>) -> impl Iterator<Item = EventIndex> {
+        self.order[range].iter().copied()
+    }
+
     /// Iterate over all events immutably in an arbitrary order.
     pub fn iter_events(&self) -> impl Iterator<Item = &Event<'static>> {
         self.events.iter().flatten()

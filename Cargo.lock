@@ -2195,15 +2195,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced_table"
-version = "0.13.1"
-source = "git+https://github.com/meew0/iced_table.git?rev=aa3d3cc1713de3f2a5301ab575e6b632e48b6765#aa3d3cc1713de3f2a5301ab575e6b632e48b6765"
-dependencies = [
- "iced_core",
- "iced_widget",
-]
-
-[[package]]
 name = "iced_tiny_skia"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4111,7 +4102,6 @@ dependencies = [
  "iced_aw",
  "iced_fonts 0.2.1",
  "iced_node_editor",
- "iced_table",
  "indexmap",
  "interavl",
  "inventory",

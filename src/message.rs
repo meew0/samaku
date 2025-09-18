@@ -223,9 +223,7 @@ pub fn toast_danger(title: String, body: String) -> Message {
 #[derive(Debug, Clone)]
 pub enum Pane {
     // Messages for the subtitle grid
-    GridSyncHeader(iced::widget::scrollable::AbsoluteOffset),
-    GridColumnResizing(usize, f32),
-    GridColumnResized,
+    GridScroll(iced::widget::scrollable::Viewport),
 
     // Messages for the node editor
     NodeEditorScaleChanged(f32, f32, f32),
