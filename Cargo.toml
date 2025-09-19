@@ -14,6 +14,8 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+# GUI
 iced = { version = "0.13.1", features = [
     "lazy",
     "image",
@@ -24,6 +26,10 @@ iced = { version = "0.13.1", features = [
 iced_aw = { version = "0.12.0", features = ["menu", "selection_list"] }
 iced_fonts = { version = "0.2.1", features = ["bootstrap"] }
 iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", rev = "3ab7671ed8155d34afc5a5485a66b7a7cd9d05f5" }
+rfd = "0.15.4"
+smol = "2.0"
+
+# Media libraries
 rustsynth-sys = { version = "0.5.0", features = [
     "vapoursynth-functions",
     "vsscript-functions",
@@ -32,28 +38,39 @@ libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
 libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
 matroska-demuxer = "0.7"
-rfd = "0.15.4"
-smol = "2.0"
 cpal = "0.16"
+
+# FFI utilities
 libc = "0.2.175"
-fast-float2 = "0.2"
-thiserror = "2.0"
-anyhow = "1.0"
-inventory = "0.3.21"
+vsprintf = "2.0.0"
+static_assertions = "1.1.0"
+
+# Various data structures and utilities
 regex = "1.11"
 interavl = "0.3"
 indexmap = "2.11"
+fast-float2 = "0.2"
+
+# dtolnay collection
+thiserror = "2.0"
+anyhow = "1.0"
+inventory = "0.3.21"
+dyn-clone = "1.0"
+
+# Serialization & deserialization
 serde = "1.0.219"
 typetag = "0.2.20"
 ciborium = "0.2.2"
 data-encoding = "2.9"
-miniz_oxide = "0.8.9"
 data-encoding-macro = "0.1.18"
-vsprintf = "2.0.0"
-static_assertions = "1.1.0"
+miniz_oxide = "0.8.9"
 
 [dev-dependencies]
+
+# Test dependencies
 assert_matches2 = "0.1.2"
+
+# Benchmark dependencies
 criterion = "0.7"
 rand = "0.9"
 rand_pcg = "0.9"

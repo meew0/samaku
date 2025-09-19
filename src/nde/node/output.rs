@@ -2,7 +2,7 @@ use crate::nde;
 
 use super::{Error, Node, SocketType, SocketValue};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Output;
 
 #[typetag::serde]

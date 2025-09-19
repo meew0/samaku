@@ -2,7 +2,7 @@ use crate::nde;
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SetPosition;
 
 #[typetag::serde]

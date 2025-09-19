@@ -9,7 +9,7 @@ pub mod graph;
 pub mod node;
 pub mod tags;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Filter {
     pub name: String,
     pub graph: Graph,

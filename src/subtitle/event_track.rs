@@ -20,6 +20,7 @@ pub struct EventIndex(usize);
 ///
 /// Note that a key invariant that must be upheld on the caller side is that event timing data (`start`/`duration`)
 /// should never be manually changed within event data; instead, use `update_event_times`.
+#[derive(Clone)]
 pub struct EventTrack {
     events: Vec<Option<Event<'static>>>,
     query_index: interavl::IntervalTree<StartTime, Leaf>,
@@ -455,6 +456,7 @@ impl IndexMut<EventIndex> for EventTrack {
     }
 }
 
+#[derive(Clone)]
 enum Leaf {
     Single(EventIndex),
     Multiple(Vec<EventIndex>),

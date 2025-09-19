@@ -2,7 +2,7 @@ use crate::{model, nde, subtitle};
 
 use super::{Error, Node, Shell, SocketType, SocketValue};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SplitFrameByFrame;
 
 #[typetag::serde]

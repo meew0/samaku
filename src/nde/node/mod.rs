@@ -180,7 +180,7 @@ pub enum LeafInputType {
 
 #[typetag::serde(tag = "type")]
 #[expect(unused_variables, reason = "trait with default methods")]
-pub trait Node: Debug + Send {
+pub trait Node: dyn_clone::DynClone + Debug + Send {
     fn name(&self) -> &'static str;
     fn desired_inputs(&self) -> &[SocketType];
     fn predicted_outputs(&self) -> &[SocketType];
@@ -220,6 +220,9 @@ pub trait Node: Debug + Send {
         iced::Size::new(200.0, 75.0)
     }
 }
+
+// Generates an impl of `Clone` for `Box<dyn Node>`, to ensure nodes (and thus NDE filters) are cloneable
+dyn_clone::clone_trait_object!(Node);
 
 pub enum Error {
     MismatchedTypes,

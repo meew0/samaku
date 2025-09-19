@@ -4,7 +4,7 @@ use super::node;
 
 /// A directed acyclic graph of nodes, representing a NDE filter as a whole.
 /// Stored as an adjacency map.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Graph {
     pub nodes: Vec<VisualNode>,
     pub connections: HashMap<NextEndpoint, PreviousEndpoint>,
@@ -245,7 +245,7 @@ impl CycleFound {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VisualNode {
     pub node: Box<dyn node::Node>,
 

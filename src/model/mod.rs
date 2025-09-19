@@ -44,6 +44,7 @@ impl SubAssign<FrameDelta> for FrameNumber {
 ///
 /// We use this to track changes to global state that needs to be reflected in the state of specific
 /// iced/iced_aw widgets.
+#[derive(Clone)]
 pub struct Trace<T> {
     trace: bool,
     inner: T,
