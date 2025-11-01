@@ -94,6 +94,12 @@ impl EventTrack {
     ) {
         // Find the event so we know what interval to remove.
         let event = self.events[event_index.0].as_mut().unwrap();
+
+        if event.start == start && event.duration == duration {
+            // nothing to do
+            return;
+        }
+
         let interval = event.time_range();
 
         // Remove the interval.
