@@ -229,6 +229,7 @@ use iced::{Element, Length, Settings, Subscription};
 
 mod action;
 pub mod config;
+pub mod history;
 pub mod keyboard;
 pub mod media;
 pub mod menu;
@@ -289,6 +290,10 @@ pub struct Samaku {
     /// State that needs to be mutable in view code, like caching of results to avoid rerunning
     /// certain calculations over and over.
     view: RefCell<ViewState>,
+
+    /// The history (undo/redo) tree, containing previous states that can be returned to
+    /// by undo and redo
+    history: history::History,
 
     /// Currently pressed keyboard modifiers.
     modifiers: iced::keyboard::Modifiers,
@@ -572,6 +577,7 @@ impl Default for Samaku {
             }),
             playing: false,
             reticules: None,
+            history: history::History::new(),
         }
     }
 }
