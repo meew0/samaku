@@ -861,7 +861,7 @@ pub(crate) fn color_matrix_description(vi: &VideoInfo, props: &ConstMap) -> Stri
 pub(crate) fn init_resize(vi: &VideoInfo, args: &mut MutMap, props: &ConstMap) {
     args.append_int(
         CString::new("format").unwrap().as_c_str(),
-        i64::from(vs::pfRGB24),
+        i64::from(vs::VSPresetVideoFormat::pfRGB24 as u32),
     );
 
     if vi.get_color_family() != vs::VSColorFamily::cfGray as i32
