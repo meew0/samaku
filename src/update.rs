@@ -1,7 +1,7 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{action, media, message, model, nde, pane, project, subtitle, view};
+use crate::{action, history, media, message, model, nde, pane, project, subtitle, view};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
@@ -28,6 +28,12 @@ macro_rules! active_event_mut {
 /// whatever processing is required, and updates the global state based on it. This will cause
 /// iced to rerender the application afterwards.
 pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
+    let last_node = global_state.history.last();
+    // Record the state as it currently stands in the undo history
+    if let Some(history_node) = history::record(&message, global_state, last_node) {
+        global_state.history.append(history_node);
+    }
+
     // Run the internal update method, which does the actual updating of global state.
     let task = update_internal(global_state, message);
 
