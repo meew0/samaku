@@ -18,7 +18,7 @@ pub struct StackedImage<H> {
 }
 
 /// Displays a stack of images overlaid on top of each other.
-/// The size is defined by the first image in the stack
+/// The size is defined by the first image in the stack.
 #[derive(Debug)]
 pub struct ImageStack<Handle, Message, Program, Theme, Renderer>
 where
@@ -73,7 +73,7 @@ where
 
     /// Sets the [`ContentFit`] of the [`ImageStack`].
     ///
-    /// Defaults to [`ContentFit::Contain`]
+    /// Defaults to [`ContentFit::Contain`].
     #[must_use]
     pub fn content_fit(self, content_fit: ContentFit) -> Self {
         Self {
@@ -140,7 +140,7 @@ where
     layout::Node::new(final_size)
 }
 
-/// Draws an [`ImageStack`]
+/// Draws an [`ImageStack`].
 pub(super) fn draw<Renderer, Handle>(
     renderer: &mut Renderer,
     layout: Layout<'_>,

@@ -118,7 +118,7 @@ pub enum Span {
     /// Reset overrides to a named style.
     ResetToStyle(String),
 
-    /// Vector drawing
+    /// Vector drawing.
     Drawing(tags::Local, tags::Drawing),
 }
 

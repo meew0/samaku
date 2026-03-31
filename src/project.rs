@@ -1,4 +1,4 @@
-//! Utility types and methods for storing Samaku session data (like pane layouts or loaded videos) in ASS files
+//! Utility types and methods for storing Samaku session data (like pane layouts or loaded videos) in ASS files.
 #![allow(
     clippy::min_ident_chars,
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
@@ -12,10 +12,10 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use thiserror::Error;
 
-/// Serialize data into Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64)
+/// Serialize data into Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64).
 ///
 /// # Errors
-/// Returns an error when serialization failed, see `ciborium`'s error type for details
+/// Returns an error when serialization failed, see `ciborium`'s error type for details.
 pub fn serialize_czb<T: ?Sized + serde::Serialize>(
     value: &T,
     compression_level: u8,
@@ -28,10 +28,10 @@ pub fn serialize_czb<T: ?Sized + serde::Serialize>(
     ))
 }
 
-/// Deserialize data from Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64)
+/// Deserialize data from Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64).
 ///
 /// # Errors
-/// Returns an error when deserialization failed, see `DeserializeError` variants for details
+/// Returns an error when deserialization failed, see `DeserializeError` variants for details.
 pub fn deserialize_czb<T: serde::de::DeserializeOwned>(
     value: &[u8],
 ) -> Result<T, DeserializeError> {
@@ -73,7 +73,7 @@ struct Project<'a> {
 }
 
 /// Copy project data from subtitle data into global state.
-/// On success, returns a boolean whether project metadata was found or not
+/// On success, returns a boolean whether project metadata was found or not.
 pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
     if let Some(czb) = global_state
         .subtitles
@@ -98,7 +98,7 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
     }
 }
 
-/// Copy project data from the global state into subtitle data
+/// Copy project data from the global state into subtitle data.
 pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
     let pane_layout = PaneLayout::from_pane_grid(&global_state.panes, global_state.panes.layout());
 
@@ -118,7 +118,7 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Perform after-load tasks such as opening linked audio and video files
+/// Perform after-load tasks such as opening linked audio and video files.
 pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Message> {
     if let Some(video_path) = &global_state.project_properties.video_path {
         action::load_video(global_state, video_path.clone());

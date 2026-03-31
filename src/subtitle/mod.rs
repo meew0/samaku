@@ -137,7 +137,7 @@ impl StartTime {
         self..StartTime(self.0 + 1)
     }
 
-    /// Fixed-width: `hh:mm:ss.mmm`
+    /// Fixed-width: `hh:mm:ss.mmm`.
     #[must_use]
     pub fn format_long(&self) -> String {
         let (sign, hours, minutes, seconds, millis) = self.split(false);
@@ -220,7 +220,7 @@ pub struct Duration(pub i64);
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Angle(pub f64);
 
-/// 1.0 represents 100%
+/// 1.0 represents 100%.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scale {
     pub x: f64,
@@ -380,7 +380,7 @@ pub enum YCbCrMatrix {
 /// the value.
 ///
 /// See the following libass issue for a detailed explanation:
-/// https://github.com/libass/libass/issues/662
+/// https://github.com/libass/libass/issues/662.
 #[derive(Debug, Clone, Copy)]
 pub struct FontEncoding(pub i32);
 
@@ -432,7 +432,7 @@ pub struct Style {
     /// Specify which Windows codepage you require glyph coverage for.
     ///
     /// See the following libass issue for a detailed explanation:
-    /// https://github.com/libass/libass/issues/662
+    /// https://github.com/libass/libass/issues/662.
     pub encoding: FontEncoding,
 
     pub blur: f64,

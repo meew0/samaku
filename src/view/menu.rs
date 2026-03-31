@@ -1,5 +1,5 @@
 //! Utilities for creating menus.
-//! Adapted from <https://github.com/iced-rs/iced_aw/blob/main/examples/menu/src/main.rs>
+//! Adapted from <https://github.com/iced-rs/iced_aw/blob/main/examples/menu/src/main.rs>.
 use iced::widget::{button, row, svg, text};
 use iced::{Color, Element, Length, alignment};
 use iced_aw::menu::{Item, Menu};

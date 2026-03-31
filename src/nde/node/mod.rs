@@ -33,7 +33,7 @@ mod style_basic;
 ///
 /// This struct takes a lifetime argument because it needs to support references to events stored
 /// in the global state. But those should not be passed around in the node tree, so only leaf
-/// nodes should have to deal with these — for the most part, the lifetime should be `'static`
+/// nodes should have to deal with these — for the most part, the lifetime should be `'static`.
 #[derive(Debug, Clone)]
 pub enum SocketValue<'a> {
     /// No value; unconnected socket.
@@ -237,7 +237,7 @@ pub type Constructor = fn() -> Box<dyn Node>;
 ///
 /// Represents the idea of a node, with any specific type information being erased. We use the
 /// `inventory` crate to collect node shells, to be able to iterate over them in all places where
-/// we need a list of registered nodes (like in the node editor “Add” menu)
+/// we need a list of registered nodes (like in the node editor “Add” menu).
 pub struct Shell {
     pub menu_path: &'static [&'static str],
     pub constructor: Constructor,

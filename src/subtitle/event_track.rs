@@ -293,7 +293,7 @@ impl EventTrack {
         extradata.nde_filter_for_event_mut(event)
     }
 
-    /// Dispatch message to node
+    /// Dispatch message to node.
     pub fn update_node(
         &mut self,
         selected_event_indices: &HashSet<EventIndex>,

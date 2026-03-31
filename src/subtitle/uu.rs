@@ -1,4 +1,4 @@
-//! Use the `data_encoding` crate to provide an implementation of Aegisub's UUEncode/Decode
+//! Use the `data_encoding` crate to provide an implementation of Aegisub's UUEncode/Decode.
 
 use data_encoding_macro::new_encoding;
 

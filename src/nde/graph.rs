@@ -120,7 +120,7 @@ impl Graph {
     }
 
     /// Iterate over the sockets connecting into the specified node.
-    /// Returns tuples `(previous_endpoint, next_socket_index)`
+    /// Returns tuples `(previous_endpoint, next_socket_index)`.
     pub fn iter_previous(
         &self,
         next_node_index: usize,

@@ -55,7 +55,7 @@ pub trait LocalState {
     }
 }
 
-/// Visitor pattern implementation for local state types that potentially need custom pane-specific global update behavior
+/// Visitor pattern implementation for local state types that potentially need custom pane-specific global update behavior.
 ///
 /// For instance, the node editor pane needs to be accessible for the global update method because certain messages
 /// require the global update method to change some details about the pane state. For this purpose, a type implementing
@@ -72,7 +72,7 @@ pub type Constructor = fn() -> Box<dyn LocalState>;
 ///
 /// Represents the idea of a pane, with any specific type information being erased. We use the
 /// `inventory` crate to collect pane shells, to be able to iterate over them in all places where
-/// we need a list of registered panes (like on the unassigned pane)
+/// we need a list of registered panes (like on the unassigned pane).
 #[derive(Debug, Clone)]
 pub struct Shell {
     pub name: &'static str,

@@ -690,7 +690,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 }
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
-/// NDE filter list to update their internal representations
+/// NDE filter list to update their internal representations.
 pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
     if let Some(active_event) = active_event!(global_state) {
         notify_active_event_text(&mut global_state.panes, active_event, None);
@@ -713,7 +713,7 @@ pub(crate) fn notify_active_event_text(
 }
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
-/// NDE filter list to update their internal representations
+/// NDE filter list to update their internal representations.
 pub(crate) fn notify_filter_lists(global_state: &mut super::Samaku) {
     for pane in global_state.panes.panes.values_mut() {
         pane.local

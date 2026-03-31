@@ -24,6 +24,7 @@
 #![warn(clippy::derive_partial_eq_without_eq)]
 #![warn(clippy::doc_include_without_cfg)]
 #![warn(clippy::doc_link_code)]
+#![warn(clippy::doc_paragraphs_missing_punctuation)]
 #![warn(clippy::empty_drop)]
 #![warn(clippy::empty_enum_variants_with_brackets)]
 #![warn(clippy::empty_line_after_doc_comments)]
@@ -89,7 +90,6 @@
 #![warn(clippy::single_option_map)]
 #![warn(clippy::str_to_string)]
 #![warn(clippy::string_lit_chars_any)]
-#![warn(clippy::string_to_string)]
 #![warn(clippy::suboptimal_flops)]
 #![warn(clippy::suspicious_operation_groupings)]
 #![warn(clippy::suspicious_xor_used_as_pow)]
@@ -309,7 +309,7 @@ pub struct ViewState {
     pub subtitle_renderer: media::subtitle::Renderer,
 }
 
-/// Utility methods for global state
+/// Utility methods for global state.
 impl Samaku {
     /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
     pub fn frame_rate(&self) -> media::FrameRate {
@@ -364,7 +364,7 @@ impl Samaku {
         }
     }
 
-    /// Utility method that takes an `anyhow::Result` and either turns it into an `Option` or displays a toast on error
+    /// Utility method that takes an `anyhow::Result` and either turns it into an `Option` or displays a toast on error.
     pub fn anyhow_toast<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
         match result {
             Ok(val) => Some(val),

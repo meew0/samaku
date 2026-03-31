@@ -1,4 +1,4 @@
-//! Functions for parsing `.ass` files. For parsing ASS override tags, see [`nde::tags::parse`]
+//! Functions for parsing `.ass` files. For parsing ASS override tags, see [`nde::tags::parse`].
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -740,10 +740,10 @@ pub mod tests {
 
     use super::*;
 
-    /// Parse the file at the given path to a `File`
+    /// Parse the file at the given path to a `File`.
     ///
     /// # Panics
-    /// Panics if any error occurs (IO or parsing)
+    /// Panics if any error occurs (IO or parsing).
     #[must_use]
     pub fn parse_blocking(path: &Path) -> (File, Vec<Warning>) {
         smol::block_on(async {
@@ -753,10 +753,10 @@ pub mod tests {
         .unwrap()
     }
 
-    /// Parse the given string to a `File`
+    /// Parse the given string to a `File`.
     ///
     /// # Panics
-    /// Panics if a parse error occurs
+    /// Panics if a parse error occurs.
     #[must_use]
     pub fn parse_str(str: &str) -> (File, Vec<Warning>) {
         smol::block_on(async {

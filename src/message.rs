@@ -6,12 +6,12 @@ use crate::{media, model, nde, pane, subtitle, view};
 pub enum Message {
     /// Empty message. Does nothing.
     /// Useful when you need to return a Message from something,
-    /// but don't want anything to happen
+    /// but don't want anything to happen.
     None,
 
     /// Message pertaining to a specific pane (PaneState)
     /// Will be dispatched to the given pane (`Pane`) or the focused one (`FocusedPane`).
-    /// For example changing video display settings, or scrolling the timeline
+    /// For example changing video display settings, or scrolling the timeline.
     Pane(pane_grid::Pane, Pane),
     FocusedPane(Pane),
 
@@ -29,20 +29,20 @@ pub enum Message {
     /// Set the type of the given pane based on the given pane constructor.
     SetPaneType(pane_grid::Pane, pane::Constructor),
 
-    /// Same as [`SetPaneType`], but sets the focused pane
+    /// Same as [`SetPaneType`], but sets the focused pane.
     SetFocusedPaneType(pane::Constructor),
 
-    /// Show a toast notification
+    /// Show a toast notification.
     Toast(view::toast::Toast),
 
-    /// Dismiss a toast notification
+    /// Dismiss a toast notification.
     CloseToast(usize),
 
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
     SelectAudioFile,
 
-    /// Clear loaded subtitles and start anew
+    /// Clear loaded subtitles and start anew.
     NewSubtitleFile,
 
     /// Import — use libass for parsing the .ass file. This will strip all extra
@@ -54,10 +54,10 @@ pub enum Message {
     OpenSubtitleFile,
 
     /// Save subtitle file — storing events as they are represented internally, with NDE filters
-    /// reproduced intact as extradata
+    /// reproduced intact as extradata.
     SaveSubtitleFile,
 
-    /// Export subtitle file — compiling events and removing extraneous metadata
+    /// Export subtitle file — compiling events and removing extraneous metadata.
     ExportSubtitleFile,
 
     /// A video file has been selected and should be loaded.

@@ -258,10 +258,10 @@ pub struct Local {
     /// be drawn.
     pub shadow: Maybe2D,
 
-    /// Maps to `\be`
+    /// Maps to `\be`.
     pub soften: Resettable<i32>,
 
-    /// Maps to `\blur`
+    /// Maps to `\blur`.
     pub gaussian_blur: Resettable<f64>,
 
     pub font_name: Resettable<String>,
@@ -1540,7 +1540,7 @@ impl Karaoke {
 pub enum KaraokeError {
     /// Creating a `Karaoke` object with relative-delay
     /// onset requires specifying an effect. See
-    /// `Karaoke` docs for details
+    /// `Karaoke` docs for details.
     EffectRequiredForRelativeOnset,
 }
 
@@ -1554,12 +1554,12 @@ pub enum KaraokeOnset {
     /// relative to the previous karaoke effect.
     /// Note that it is valid to specify zero centiseconds here, mapping to `\k0`,
     /// with subtly different behaviour from `NoDelay`. (TODO: document this subtly different
-    /// behaviour)
+    /// behaviour).
     RelativeDelay(Centiseconds),
 
     /// Maps to `\kt` — sets the absolute time of a karaoke syllable.
     /// Must be combined with `karaoke_effect`.
-    /// See https://aegisub.org/blog/vsfilter-hacks/
+    /// See https://aegisub.org/blog/vsfilter-hacks/.
     Absolute(Centiseconds),
 }
 
@@ -1733,7 +1733,7 @@ impl Drawing {
 }
 
 impl emit::Value for Drawing {
-    /// Only valid for vector clips, not for inline drawings
+    /// Only valid for vector clips, not for inline drawings.
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
@@ -1742,7 +1742,7 @@ impl emit::Value for Drawing {
     }
 }
 
-/// See <http://www.tcax.org/docs/ass-specs.htm>
+/// See <http://www.tcax.org/docs/ass-specs.htm>.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapStyle {
     SmartEven = 0,

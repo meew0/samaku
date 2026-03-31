@@ -1,4 +1,4 @@
-//! samaku's global menus
+//! samaku's global menus.
 
 use iced_aw::menu::{Item, Menu};
 

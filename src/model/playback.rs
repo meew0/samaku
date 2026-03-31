@@ -47,7 +47,7 @@ impl Position {
     /// Returns the current non-authoritative position as milliseconds for subtitle purposes.
     ///
     /// # Panics
-    /// Panics on overflow
+    /// Panics on overflow.
     pub fn subtitle_time(&self) -> subtitle::StartTime {
         subtitle::StartTime(
             self.position()
