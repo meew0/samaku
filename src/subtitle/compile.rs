@@ -48,7 +48,7 @@ pub fn nde<'a, 'b>(
 
     // Go through the process queue and process the individual nodes
     while let Some(node_index) = process_queue.pop_front() {
-        let node = &filter.nodes[node_index].node;
+        let node = &filter.nodes[node_index.0].node;
         let desired_inputs = node.desired_inputs();
         let mut inputs: Vec<&nde::node::SocketValue> =
             vec![&nde::node::SocketValue::None; desired_inputs.len()];
@@ -70,15 +70,15 @@ pub fn nde<'a, 'b>(
         // Find connections that would theoretically supply inputs to the current node,
         // check whether those nodes are active, and if they are, supply the inputs
         for (previous, next_socket_index) in filter.iter_previous(node_index) {
-            if let NodeState::Active(prev_cache) = &intermediates[previous.node_index] {
-                inputs[next_socket_index] = &prev_cache[previous.socket_index];
+            if let NodeState::Active(prev_cache) = &intermediates[previous.node_index.0] {
+                inputs[next_socket_index.0] = &prev_cache[previous.socket_index.0];
             }
         }
 
         // Run the node and store the results.
         // Note that this is still done even if some of the previous nodes are inactive/errored.
         // This means that the current node will likely error as well, but that is ok
-        intermediates[node_index] = match node.run(&inputs) {
+        intermediates[node_index.0] = match node.run(&inputs) {
             Ok(outputs) => NodeState::Active(outputs),
             Err(_) => NodeState::Error,
         }
@@ -138,7 +138,11 @@ mod tests {
 
         assert_eq!(
             filter.dfs(),
-            nde::graph::DfsResult::ProcessQueue(VecDeque::from([2, 1, 0]))
+            nde::graph::DfsResult::ProcessQueue(VecDeque::from([
+                nde::graph::NodeId(2),
+                nde::graph::NodeId(1),
+                nde::graph::NodeId(0)
+            ]))
         );
 
         let event = Event {

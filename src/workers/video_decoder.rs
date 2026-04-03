@@ -1,13 +1,13 @@
 use std::{sync::Arc, thread};
 
-use crate::{media, message, model};
+use crate::{media, message, model, nde};
 
 #[derive(Debug, Clone)]
 pub(super) enum MessageIn {
     PlaybackStep,
     LoadVideo(std::path::PathBuf),
     TrackMotionForNode(
-        usize,
+        nde::graph::NodeId,
         media::motion::Region,
         model::FrameNumber,
         model::FrameNumber,
@@ -32,7 +32,7 @@ pub(super) fn spawn(
             let mut video_opt: Option<media::Video> = None;
             let mut last_frame = model::FrameNumber(-1);
 
-            let mut node_index = 0;
+            let mut node_index = nde::graph::NodeId(0);
             let mut tracker_opt: Option<media::motion::Tracker<media::Video>> = None;
 
             loop {

@@ -142,7 +142,8 @@ fn active_first_line<'a>(
     active_event: &'a subtitle::Event,
 ) -> iced::Element<'a, message::Message> {
     // Checkbox to make the event a comment or not
-    let comment_checkbox = iced::widget::checkbox("Comment", active_event.is_comment())
+    let comment_checkbox = iced::widget::checkbox(active_event.is_comment())
+        .label("Comment")
         .on_toggle(|is_comment| {
             if is_comment {
                 message::Message::SetActiveEventType(subtitle::EventType::Comment)
@@ -171,7 +172,7 @@ fn active_first_line<'a>(
 
     iced::widget::row![
         comment_checkbox,
-        iced::widget::Space::with_width(iced::Length::Fixed(10.0)),
+        iced::widget::Space::new().width(iced::Length::Fixed(10.0)),
         style_selector,
         actor_text,
         effect_text
@@ -204,7 +205,7 @@ fn active_second_line<'a>(
         start_time_control,
         "Duration (ms):",
         duration_control,
-        iced::widget::horizontal_space(),
+        iced::widget::space::horizontal(),
         "Layer:",
         layer_control
     ]
@@ -222,7 +223,10 @@ fn active_main_text(
         .height(iced::Length::Fill)
         .on_action(move |action| message::Message::TextEditorActionPerformed(self_pane, action))
         .key_binding(|key_press| {
-            if key_press.status == text_editor::Status::Focused {
+            if let text_editor::Status::Focused {
+                is_hovered: _is_hovered,
+            } = key_press.status
+            {
                 return match key_press.key {
                     Key::Named(Named::Enter) => key_press.modifiers.shift().then(|| {
                         text_editor::Binding::Sequence(vec![

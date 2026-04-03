@@ -3,20 +3,17 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::LazyLock;
 
+use crate::nde::graph::{NodeId, SocketId};
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
 use crate::{message, nde, style, subtitle, view};
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
-    #[serde(with = "MatrixDef")]
-    matrix: iced_node_editor::Matrix,
+    camera: Camera,
     filters: Vec<FilterReference>,
     selection_index: Option<usize>,
     selected_filter: Option<FilterReference>,
-    #[serde(skip)]
-    pub dangling_source: Option<iced_node_editor::LogicalEndpoint>,
-    #[serde(skip)]
-    pub dangling_connection: Option<iced_node_editor::Link>,
+    selected_nodes: Vec<NodeId>,
 }
 
 #[typetag::serde(name = "node_editor")]
@@ -65,29 +62,11 @@ impl super::LocalState for State {
 
     fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
         match pane_message {
-            message::Pane::NodeEditorScaleChanged(x, y, scale) => {
-                let current_scale = self.matrix.get_scale();
-
-                // Limit the scale factor to the range [0.3, 3.0], to avoid problems with zooming in
-                // or out too far.
-                if (current_scale > 0.3 || scale > 0.0) && (current_scale < 3.0 || scale < 0.0) {
-                    self.matrix = self
-                        .matrix
-                        .translate(-x, -y)
-                        .scale(if scale > 0.0 { 1.2 } else { 1.0 / 1.2 })
-                        .translate(x, y);
-                }
+            message::Pane::NodeEditorCameraChanged(point, zoom) => {
+                self.camera = Camera::new(point, zoom);
             }
-            message::Pane::NodeEditorTranslationChanged(x, y) => {
-                self.matrix = self.matrix.translate(x, y);
-            }
-            message::Pane::NodeEditorDangling(Some((source, link))) => {
-                self.dangling_source = Some(source);
-                self.dangling_connection = Some(link);
-            }
-            message::Pane::NodeEditorDangling(None) => {
-                self.dangling_source = None;
-                self.dangling_connection = None;
+            message::Pane::NodeEditorSelectionChanged(selected) => {
+                self.selected_nodes = selected;
             }
             message::Pane::NodeEditorFilterSelected(selection_index, filter_ref) => {
                 self.selection_index = Some(selection_index);
@@ -117,22 +96,6 @@ impl super::LocalState for State {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(remote = "iced_node_editor::Matrix")]
-struct MatrixDef {
-    a11: f32,
-    a12: f32,
-    a13: f32,
-
-    a21: f32,
-    a22: f32,
-    a23: f32,
-
-    a31: f32,
-    a32: f32,
-    a33: f32,
-}
-
 inventory::submit! {
     super::Shell::new(
         "Node editor",
@@ -151,15 +114,94 @@ impl Debug for State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            matrix: iced_node_editor::Matrix::identity(),
+            camera: Camera::new(iced::Point::ORIGIN, 1.0),
             filters: vec![],
             selection_index: None,
             selected_filter: None,
-            dangling_connection: None,
-            dangling_source: None,
+            selected_nodes: vec![],
         }
     }
 }
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct Camera {
+    position_x: f32,
+    position_y: f32,
+    zoom: f32,
+}
+
+impl Camera {
+    fn new(position: iced::Point, zoom: f32) -> Self {
+        Self {
+            position_x: position.x,
+            position_y: position.y,
+            zoom,
+        }
+    }
+
+    fn position(&self) -> iced::Point {
+        iced::Point::new(self.position_x, self.position_y)
+    }
+}
+
+impl iced_nodegraph::NodeId for NodeId {}
+
+/// Pin IDs and socket IDs need to be different,
+/// since the NDE code assumes socket IDs are only unique per side,
+/// whereas `iced_nodegraph` assumes pin IDs are unique per node.
+/// So we do this in a pragmatic way by using negative numbers (shifted by -1) for inputs,
+/// and positive numbers for outputs.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+struct PinId(isize);
+
+impl PinId {
+    fn input(socket_id: SocketId) -> Self {
+        Self(-1_isize - socket_id.0.cast_signed())
+    }
+
+    fn output(socket_id: SocketId) -> Self {
+        Self(socket_id.0.cast_signed())
+    }
+
+    fn socket_id(self) -> SocketId {
+        if self.0 < 0 {
+            SocketId((-1 - self.0).cast_unsigned())
+        } else {
+            SocketId(self.0.cast_unsigned())
+        }
+    }
+}
+
+impl iced_nodegraph::PinId for PinId {}
+
+struct SocketRole {
+    side: iced_nodegraph::PinSide,
+    direction: iced_nodegraph::PinDirection,
+    pin_id_func: fn(SocketId) -> PinId,
+}
+
+impl SocketRole {
+    const IN: SocketRole = SocketRole {
+        side: iced_nodegraph::PinSide::Left,
+        direction: iced_nodegraph::PinDirection::Input,
+        pin_id_func: PinId::input,
+    };
+    const OUT: SocketRole = SocketRole {
+        side: iced_nodegraph::PinSide::Right,
+        direction: iced_nodegraph::PinDirection::Output,
+        pin_id_func: PinId::output,
+    };
+}
+
+type NodeGraph<'a> = iced_nodegraph::NodeGraph<
+    'a,
+    NodeId,
+    PinId,
+    usize,
+    message::Message,
+    iced::Theme,
+    iced::Renderer,
+>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FilterReference {
@@ -173,41 +215,6 @@ impl Display for FilterReference {
             formatter.write_str("(unnamed filter)")
         } else {
             formatter.write_str(self.name.as_str())
-        }
-    }
-}
-
-struct NodeStyle {
-    border_colour: iced::Color,
-}
-
-impl iced_node_editor::styles::node::StyleSheet for NodeStyle {
-    type Style = iced::Theme;
-
-    fn appearance(&self, style: &Self::Style) -> iced_node_editor::styles::node::Appearance {
-        let palette = style.extended_palette();
-
-        iced_node_editor::styles::node::Appearance {
-            background: Some(iced::Background::Color(palette.background.base.color)),
-            border_color: self.border_colour,
-            border_radius: 5.0,
-            border_width: 1.0,
-            text_color: Some(palette.primary.base.color),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ConnectionStyle {
-    colour: iced::Color,
-}
-
-impl iced_node_editor::styles::connection::StyleSheet for ConnectionStyle {
-    type Style = iced::Theme;
-
-    fn appearance(&self, _style: &Self::Style) -> iced_node_editor::styles::connection::Appearance {
-        iced_node_editor::styles::connection::Appearance {
-            color: Some(self.colour),
         }
     }
 }
@@ -226,64 +233,127 @@ fn view_filter<'a>(
     let context = global_state.compile_context();
     let nde_result_or_error = subtitle::compile::nde(active_event, &nde_filter.graph, &context);
 
-    let mut graph_content = vec![];
-    let scale = pane_state.matrix.get_scale(); // For correct node grid translation behaviour
+    // Create the (empty) node graph
+    let mut graph = create_graph(self_pane, pane_state);
 
     // Create `node_editor` nodes with sockets for each of the nodes in the filter,
     // and append them to the content
-    create_nodes(&mut graph_content, nde_filter, &nde_result_or_error, scale);
-    create_connections(&mut graph_content, nde_filter, &nde_result_or_error);
+    create_nodes(&mut graph, nde_filter, &nde_result_or_error);
+    create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
-    // Append the dangling connection, if one exists
-    if let Some(link) = &pane_state.dangling_connection {
-        graph_content.push(iced_node_editor::Connection::new(link.clone()).into());
-    }
+    view_graph(nde_filter, &nde_result_or_error, graph)
+}
 
-    view_graph(
-        self_pane,
-        pane_state,
-        nde_filter,
-        &nde_result_or_error,
-        graph_content,
-    )
+fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<'_>> {
+    let mut graph: NodeGraph = iced_nodegraph::NodeGraph::default();
+
+    graph = graph
+        .on_connect(|previous, next| {
+            message::Message::ConnectNodes(
+                nde::graph::PreviousEndpoint {
+                    node_index: previous.node_id,
+                    socket_index: previous.pin_id.socket_id(),
+                },
+                nde::graph::NextEndpoint {
+                    node_index: next.node_id,
+                    socket_index: next.pin_id.socket_id(),
+                },
+            )
+        })
+        .on_disconnect(|previous, next| {
+            message::Message::DisconnectNodes(
+                nde::graph::PreviousEndpoint {
+                    node_index: previous.node_id,
+                    socket_index: previous.pin_id.socket_id(),
+                },
+                nde::graph::NextEndpoint {
+                    node_index: next.node_id,
+                    socket_index: next.pin_id.socket_id(),
+                },
+            )
+        })
+        .on_move(message::Message::MoveNode)
+        .on_select(move |nodes| {
+            message::Message::Pane(self_pane, message::Pane::NodeEditorSelectionChanged(nodes))
+        })
+        .on_group_move(message::Message::MoveNodeGroup)
+        .on_camera_change(move |position, zoom| {
+            message::Message::Pane(
+                self_pane,
+                message::Pane::NodeEditorCameraChanged(position, zoom),
+            )
+        })
+        .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill);
+
+    Box::new(graph)
 }
 
 fn create_nodes(
-    graph_content: &mut Vec<
-        iced_node_editor::GraphNodeElement<message::Message, iced::Theme, iced::Renderer>,
-    >,
+    graph: &mut NodeGraph,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    scale: f32,
 ) {
     // Convert NDE graph nodes into `iced_node_editor` nodes
     for (node_index, visual_node) in nde_filter.graph.nodes.iter().enumerate() {
         let node = &visual_node.node;
+        let node_id = NodeId(node_index);
 
         // First, we need to create sockets for the node, based on the actual
         // values of intermediate type if present,
         // falling back on the desired/predicted types otherwise.
-        let out_sockets: Cow<[nde::node::SocketType]> =
-            create_out_sockets(nde_result_or_error, node_index, node.as_ref());
         let in_sockets: Cow<[nde::node::SocketType]> =
-            create_in_sockets(nde_filter, nde_result_or_error, node_index, node.as_ref());
+            create_in_sockets(nde_filter, nde_result_or_error, node_id, node.as_ref());
+        let out_sockets: Cow<[nde::node::SocketType]> =
+            create_out_sockets(nde_result_or_error, node_id, node.as_ref());
+
+        let socket_row_count = out_sockets.len().max(in_sockets.len());
 
         // Iterate over the collected input and output types,
-        // and create appropriately-styled sockets
-        let mut node_sockets = vec![];
-        for (role, sockets) in [
-            (iced_node_editor::SocketRole::In, in_sockets),
-            (iced_node_editor::SocketRole::Out, out_sockets),
-        ] {
-            for socket_type in &*sockets {
-                // Call our own utility function to create the socket
-                if let Some(new_socket) =
-                    make_socket::<message::Message, iced::Theme, iced::Renderer>(role, *socket_type)
-                {
-                    node_sockets.push(new_socket);
-                }
-            }
+        // and create rows containing appropriately-styled sockets.
+        let mut socket_rows: Vec<iced::Element<'_, message::Message>> =
+            Vec::with_capacity(socket_row_count);
+        for row_num in 0..socket_row_count {
+            let socket_id = SocketId(row_num);
+            let (in_socket, out_socket) =
+                if row_num < in_sockets.len() && row_num < out_sockets.len() {
+                    // Both input and output pin at this row
+                    (Some(in_sockets[row_num]), Some(out_sockets[row_num]))
+                } else if row_num < in_sockets.len() {
+                    // Only input pin at this row
+                    (Some(in_sockets[row_num]), None)
+                } else if row_num < out_sockets.len() {
+                    // Only output pin
+                    (None, Some(out_sockets[row_num]))
+                } else {
+                    unreachable!();
+                };
+
+            let row = make_pin_row(socket_id, in_socket, out_socket);
+            socket_rows.push(row);
         }
+
+        let pin_list = iced::widget::column(socket_rows).spacing(4);
+        let content_style = iced_nodegraph::NodeContentStyle::process(&style::samaku_theme());
+        let title_bar = iced_nodegraph::node_header(
+            iced::widget::container(iced::widget::text(node.name())).padding(iced::Padding {
+                top: 4.0,
+                bottom: 4.0,
+                left: 8.0,
+                right: 8.0,
+            }),
+            content_style.title_background,
+            content_style.corner_radius,
+            content_style.border_width,
+        );
+        let node_element: iced::Element<'_, message::Message> = iced::widget::column![
+            title_bar,
+            iced::widget::container(visual_node.node.content(node_id)).padding([10, 12]),
+            iced::widget::container(pin_list).padding([10, 12])
+        ]
+        .width(200.0)
+        .into();
 
         let node_border_colour = match &nde_result_or_error {
             Ok(nde_result) => match nde_result.intermediates.get(node_index) {
@@ -298,33 +368,14 @@ fn create_nodes(
             }
         };
 
-        let content_size = visual_node.node.content_size();
-
-        graph_content.push(
-            iced_node_editor::node(visual_node.node.content(node_index))
-                .sockets(node_sockets)
-                .padding(iced::Padding::from(12.0))
-                .center_x()
-                .center_y()
-                .on_translate(move |(x, y)| {
-                    message::Message::MoveNode(node_index, x / scale, y / scale)
-                })
-                .width(iced::Length::Fixed(content_size.width))
-                .height(iced::Length::Fixed(content_size.height))
-                .position(visual_node.position)
-                .style(iced_node_editor::styles::node::Node::Custom(Box::new(
-                    NodeStyle {
-                        border_colour: node_border_colour,
-                    },
-                )))
-                .into(),
-        );
+        let node_style = iced_nodegraph::NodeConfig::new().border_color(node_border_colour);
+        graph.push_node_styled(node_id, visual_node.position, node_element, node_style);
     }
 }
 
 fn create_out_sockets<'a>(
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    node_index: usize,
+    node_id: NodeId,
     node: &'a dyn nde::Node,
 ) -> Cow<'a, [nde::node::SocketType]> {
     // For the outputs, just iterate and merge one list
@@ -332,7 +383,7 @@ fn create_out_sockets<'a>(
     // like whether the compilation was successful and whether the current node
     // is even active
     match &nde_result_or_error {
-        Ok(nde_result) => match &nde_result.intermediates[node_index] {
+        Ok(nde_result) => match &nde_result.intermediates[node_id.0] {
             NodeState::Active(socket_values) => {
                 let mut merged: Vec<nde::node::SocketType> = vec![];
                 for (i, predicted) in node.predicted_outputs().iter().enumerate() {
@@ -374,7 +425,7 @@ fn create_out_sockets<'a>(
 fn create_in_sockets<'a>(
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    node_index: usize,
+    node_id: NodeId,
     node: &'a dyn nde::Node,
 ) -> Cow<'a, [nde::node::SocketType]> {
     // For the inputs, we use the same general logic as before,
@@ -391,19 +442,19 @@ fn create_in_sockets<'a>(
             let mut merged: Vec<nde::node::SocketType> = Vec::from(node.desired_inputs());
 
             // Iterate over the nodes that connect into our node
-            for (previous, next_socket_index) in nde_filter.graph.iter_previous(node_index) {
+            for (previous, next_socket_index) in nde_filter.graph.iter_previous(node_id) {
                 // Check whether the previous node is active
                 // (otherwise, ignore it)
                 if let NodeState::Active(previous_socket_values) =
-                    &nde_result.intermediates[previous.node_index]
+                    &nde_result.intermediates[previous.node_index.0]
                 {
                     // Check whether the previous node has returned
                     // a type-representable value at the given socket position
                     if let Some(actual_type) = previous_socket_values
-                        .get(previous.socket_index)
+                        .get(previous.socket_index.0)
                         .and_then(nde::node::SocketValue::as_type)
                     {
-                        merged[next_socket_index] = actual_type;
+                        merged[next_socket_index.0] = actual_type;
                     }
                 }
             }
@@ -415,80 +466,30 @@ fn create_in_sockets<'a>(
 }
 
 fn create_connections(
-    graph_content: &mut Vec<
-        iced_node_editor::GraphNodeElement<message::Message, iced::Theme, iced::Renderer>,
-    >,
+    graph: &mut NodeGraph,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
-    let connection_style = match nde_result_or_error {
-        Ok(_) => ConnectionStyle {
-            colour: style::SAMAKU_PRIMARY,
-        },
-        Err(_) => ConnectionStyle {
-            colour: style::SAMAKU_DESTRUCTIVE,
-        },
+    let color = match nde_result_or_error {
+        Ok(_) => style::SAMAKU_PRIMARY,
+        Err(_) => style::SAMAKU_DESTRUCTIVE,
     };
 
+    let edge_config = iced_nodegraph::EdgeConfig::new().solid_color(color);
+
     for (next, previous) in &nde_filter.graph.connections {
-        graph_content.push(
-            iced_node_editor::Connection::between(
-                iced_node_editor::Endpoint::Socket(iced_node_editor::LogicalEndpoint {
-                    node_index: previous.node_index,
-                    role: iced_node_editor::SocketRole::Out,
-                    socket_index: previous.socket_index,
-                }),
-                iced_node_editor::Endpoint::Socket(iced_node_editor::LogicalEndpoint {
-                    node_index: next.node_index,
-                    role: iced_node_editor::SocketRole::In,
-                    socket_index: next.socket_index,
-                }),
-            )
-            .style(iced_node_editor::styles::connection::Node::Custom(
-                Box::new(connection_style),
-            ))
-            .into(),
-        );
+        let from =
+            iced_nodegraph::PinRef::new(previous.node_index, PinId::output(previous.socket_index));
+        let to = iced_nodegraph::PinRef::new(next.node_index, PinId::input(next.socket_index));
+        graph.push_edge_styled(from, to, edge_config.clone());
     }
 }
 
 fn view_graph<'a>(
-    self_pane: super::Pane,
-    pane_state: &State,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    graph_content: Vec<
-        iced_node_editor::GraphNodeElement<'a, message::Message, iced::Theme, iced::Renderer>,
-    >,
+    graph: Box<NodeGraph<'a>>,
 ) -> iced::Element<'a, message::Message> {
-    let graph_container =
-        iced_node_editor::graph_container::<message::Message, iced::Theme, iced::Renderer>(
-            graph_content,
-        )
-        .dangling_source(pane_state.dangling_source)
-        .on_translate(move |translation| {
-            message::Message::Pane(
-                self_pane,
-                message::Pane::NodeEditorTranslationChanged(translation.0, translation.1),
-            )
-        })
-        .on_scale(move |x, y, scale| {
-            message::Message::Pane(
-                self_pane,
-                message::Pane::NodeEditorScaleChanged(x, y, scale),
-            )
-        })
-        .on_connect(message::Message::ConnectNodes)
-        .on_disconnect(move |endpoint, new_dangling_end_position| {
-            message::Message::DisconnectNodes(endpoint, new_dangling_end_position, self_pane)
-        })
-        .on_dangling(move |maybe_dangling| {
-            message::Message::Pane(self_pane, message::Pane::NodeEditorDangling(maybe_dangling))
-        })
-        .width(iced::Length::Fill)
-        .height(iced::Length::Fill)
-        .matrix(pane_state.matrix);
-
     let menu_bar = iced_aw::menu::MenuBar::new(add_menu())
         .width(180)
         .height(32);
@@ -514,7 +515,7 @@ fn view_graph<'a>(
             menu_bar,
             unassign_button,
             name_box,
-            iced::widget::horizontal_space(),
+            iced::widget::space::horizontal(),
             error_message
         ]
         .spacing(5.0)
@@ -522,7 +523,8 @@ fn view_graph<'a>(
     )
     .padding(5.0);
 
-    iced::widget::column![graph_container, view::separator(), bottom_bar].into()
+    let graph: NodeGraph = *graph;
+    iced::widget::column![graph, view::separator(), bottom_bar].into()
 }
 
 fn view_non_selected(
@@ -577,30 +579,16 @@ fn view_non_selected(
     .into()
 }
 
-fn make_socket<'a, Message, Theme, Renderer>(
-    role: iced_node_editor::SocketRole,
+fn make_pin<'a>(
+    role: &SocketRole,
+    socket_id: SocketId,
     socket_type: nde::node::SocketType,
-) -> Option<iced_node_editor::Socket<'a, Message, Theme, Renderer>>
-where
-    Renderer: iced::advanced::text::Renderer + 'a,
-    Theme: iced::widget::text::Catalog + 'a,
-{
+) -> Option<iced_nodegraph::NodePin<'a, PinId, message::Message, iced::Theme, iced::Renderer>> {
     const BLOB_RADIUS: f32 = 7.0;
-
-    let (blob_side, content_alignment) = match role {
-        iced_node_editor::SocketRole::In => (
-            iced_node_editor::SocketSide::Left,
-            iced::alignment::Horizontal::Left,
-        ),
-        iced_node_editor::SocketRole::Out => (
-            iced_node_editor::SocketSide::Right,
-            iced::alignment::Horizontal::Right,
-        ),
-    };
 
     // The style of the blob is not determined by a style sheet, but by properties of the `Socket`
     // itself.
-    let (blob_border_radius, blob_color, label) = match socket_type {
+    let (_blob_border_radius, blob_color, label) = match socket_type {
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
         nde::node::SocketType::MultipleEvents => (0.0, style::SAMAKU_PRIMARY, ""),
         nde::node::SocketType::AnyEvents => (0.0, style::SAMAKU_BACKGROUND, ""),
@@ -632,20 +620,57 @@ where
         nde::node::SocketType::LeafInput(_) => return None,
     };
 
-    Some(iced_node_editor::Socket {
-        role,
-        blob_side,
-        content_alignment,
+    // TODO: figure out how to apply shape/border radius, and size
 
-        blob_radius: BLOB_RADIUS,
-        blob_border_radius,
-        blob_color,
-        content: iced::widget::text(label).into(), // Arbitrary widgets can be used here.
+    Some(
+        iced_nodegraph::node_pin(
+            role.side,
+            (role.pin_id_func)(socket_id),
+            iced::widget::text(label),
+        )
+        .direction(role.direction)
+        .color(blob_color),
+    )
+}
 
-        min_height: 0.0,
-        max_height: f32::INFINITY,
-        blob_border_color: None, // If `None`, the one from the style sheet will be used.
-    })
+fn make_pin_row<'a>(
+    socket_id: SocketId,
+    in_socket: Option<nde::node::SocketType>,
+    out_socket: Option<nde::node::SocketType>,
+) -> iced::Element<'a, message::Message> {
+    let in_pin = in_socket.map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
+    let out_pin = out_socket.map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
+
+    if let Some(in_pin) = in_pin {
+        if let Some(out_pin) = out_pin {
+            // Both pins present
+            iced::widget::row![
+                iced::widget::container(in_pin)
+                    .width(iced::Length::FillPortion(1))
+                    .align_x(iced::alignment::Horizontal::Left),
+                iced::widget::container(out_pin)
+                    .width(iced::Length::FillPortion(1))
+                    .align_x(iced::alignment::Horizontal::Right),
+            ]
+            .into()
+        } else {
+            // Only in pin
+            iced::widget::container(in_pin)
+                .width(iced::Length::Fill)
+                .align_x(iced::alignment::Horizontal::Left)
+                .into()
+        }
+    } else {
+        if let Some(out_pin) = out_pin {
+            // Only out pin
+            iced::widget::container(out_pin)
+                .width(iced::Length::Fill)
+                .align_x(iced::alignment::Horizontal::Right)
+                .into()
+        } else {
+            unreachable!();
+        }
+    }
 }
 
 fn menu_item(

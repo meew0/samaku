@@ -560,76 +560,45 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 filter.graph.nodes.push(visual_node);
             }
         }
-        Message::MoveNode(node_index, x, y) => {
+        Message::MoveNode(node_id, point) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
                 &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
-                let node = &mut filter.graph.nodes[node_index];
-                node.position = iced::Point::new(node.position.x + x, node.position.y + y);
+                let node = &mut filter.graph.nodes[node_id.0];
+                node.position = point;
             }
         }
-        Message::ConnectNodes(link) => {
+        Message::MoveNodeGroup(node_ids, delta) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
                 &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
-                let (start, end) = link.unwrap_sockets();
-                filter.graph.connect(
-                    nde::graph::NextEndpoint {
-                        node_index: end.node_index,
-                        socket_index: end.socket_index,
-                    },
-                    nde::graph::PreviousEndpoint {
-                        node_index: start.node_index,
-                        socket_index: start.socket_index,
-                    },
-                );
+                for node_id in node_ids {
+                    let node = &mut filter.graph.nodes[node_id.0];
+                    node.position += delta;
+                }
             }
         }
-        Message::DisconnectNodes(endpoint, new_dangling_end_position, source_pane) => {
+        Message::ConnectNodes(previous, next) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
                 &global_state.selected_event_indices,
                 &mut global_state.subtitles.extradata,
             ) {
-                let maybe_previous = filter.graph.disconnect(nde::graph::NextEndpoint {
-                    node_index: endpoint.node_index,
-                    socket_index: endpoint.socket_index,
-                });
-
-                if let Some(previous) = maybe_previous
-                    && let Some(pane_state) = global_state.panes.get_mut(source_pane)
+                filter.graph.connect(previous, next);
+            }
+        }
+        Message::DisconnectNodes(previous, next) => {
+            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
+                &global_state.selected_event_indices,
+                &mut global_state.subtitles.extradata,
+            ) {
+                let maybe_previous = filter.graph.disconnect(next);
+                if let Some(true_previous) = maybe_previous
+                    && true_previous.node_index != previous.node_index
+                    && true_previous.socket_index != previous.socket_index
                 {
-                    struct Visitor {
-                        previous: nde::graph::PreviousEndpoint,
-                        new_dangling_end_position: iced::Point,
-                    }
-                    impl pane::Visitor for Visitor {
-                        fn visit_node_editor(
-                            &mut self,
-                            node_editor_state: &mut pane::node_editor::State,
-                        ) {
-                            let new_dangling_source = iced_node_editor::LogicalEndpoint {
-                                node_index: self.previous.node_index,
-                                role: iced_node_editor::SocketRole::Out,
-                                socket_index: self.previous.socket_index,
-                            };
-                            node_editor_state.dangling_source = Some(new_dangling_source);
-                            node_editor_state.dangling_connection =
-                                Some(iced_node_editor::Link::from_unordered(
-                                    iced_node_editor::Endpoint::Socket(new_dangling_source),
-                                    iced_node_editor::Endpoint::Absolute(
-                                        self.new_dangling_end_position,
-                                    ),
-                                ));
-                        }
-                    }
-
-                    let mut visitor = Visitor {
-                        previous,
-                        new_dangling_end_position,
-                    };
-                    pane_state.local.visit(&mut visitor);
+                    println!("warning: previous {previous:?} != true_previous {true_previous:?}");
                 }
             }
         }
@@ -642,7 +611,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     &global_state.selected_event_indices,
                     &mut global_state.subtitles.extradata,
                 )
-                && let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index)
+                && let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index.0)
             {
                 node.node.reticule_update(reticules, index, position);
             }

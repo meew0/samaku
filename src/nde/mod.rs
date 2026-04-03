@@ -175,12 +175,12 @@ mod tests {
 
         graph.connections.insert(
             graph::NextEndpoint {
-                node_index: 1,
-                socket_index: 1,
+                node_index: graph::NodeId(1),
+                socket_index: graph::SocketId(1),
             },
             graph::PreviousEndpoint {
-                node_index: 3,
-                socket_index: 0,
+                node_index: graph::NodeId(3),
+                socket_index: graph::SocketId(0),
             },
         );
 

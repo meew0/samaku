@@ -1,8 +1,7 @@
 use crate::media::FrameRate;
 use crate::{message, model, style, subtitle, view};
 use iced::keyboard::Modifiers;
-use iced::widget::canvas;
-use iced::widget::canvas::event;
+use iced::widget::{Action, canvas};
 use iced::{Renderer, Theme, keyboard, mouse};
 use std::cell::RefCell;
 
@@ -221,10 +220,10 @@ impl canvas::Program<message::Message> for CanvasData {
     fn update(
         &self,
         state: &mut Self::State,
-        event: canvas::Event,
+        event: &canvas::Event,
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
-    ) -> (iced::event::Status, Option<message::Message>) {
+    ) -> Option<Action<message::Message>> {
         match event {
             canvas::Event::Mouse(mouse_event) => {
                 match mouse_event {
@@ -252,56 +251,53 @@ impl canvas::Program<message::Message> for CanvasData {
                                 DragMode::None | DragMode::Pan(_) | DragMode::Cursor => {
                                     let new_time = self.position.left
                                         + self.position.ms_from_left(mouse_position, bounds.width);
-                                    (
-                                        event::Status::Captured,
-                                        Some(message::Message::PlaybackSetPosition(new_time)),
-                                    )
+                                    let message = message::Message::PlaybackSetPosition(new_time);
+                                    Some(Action::publish(message).and_capture())
                                 }
-                                DragMode::Event(_, ref event_reference) => (
-                                    event::Status::Captured,
-                                    Some(if state.control_held {
+                                DragMode::Event(_, ref event_reference) => {
+                                    let message = if state.control_held {
                                         message::Message::ToggleEventSelection(
                                             event_reference.index,
                                         )
                                     } else {
                                         message::Message::SelectOnlyEvent(event_reference.index)
-                                    }),
-                                ),
+                                    };
+                                    Some(Action::publish(message).and_capture())
+                                }
                             };
                         }
                     }
                     mouse::Event::CursorMoved { .. } => {
                         if let Some(mouse_position) = cursor.position_in(bounds) {
                             state.moved = true;
-                            if let Some(drag_start) = state.drag_start
-                                && let Some(value) =
-                                    self.handle_drag(state, bounds, mouse_position, drag_start)
-                            {
-                                return value;
+                            if let Some(drag_start) = state.drag_start {
+                                let action =
+                                    self.handle_drag(state, bounds, mouse_position, drag_start);
+                                return action;
                             }
                         }
                     }
                     mouse::Event::WheelScrolled { delta } => {
                         if cursor.position_in(bounds).is_some() {
-                            return self.calculate_zoom(bounds, cursor, delta);
+                            return Some(self.calculate_zoom(bounds, cursor, delta));
                         }
                     }
 
                     _ => {}
                 }
 
-                return (event::Status::Captured, None);
+                return Some(Action::capture());
             }
-            canvas::Event::Touch(_) => {}
             canvas::Event::Keyboard(keyboard_event) => match keyboard_event {
                 keyboard::Event::ModifiersChanged(modifiers) => {
                     state.control_held = modifiers.contains(Modifiers::CTRL);
                 }
                 _ => {}
             },
+            canvas::Event::Touch(_) | canvas::Event::Window(_) | canvas::Event::InputMethod(_) => {}
         }
 
-        (event::Status::Ignored, None)
+        None
     }
 
     fn draw(
@@ -380,11 +376,11 @@ impl CanvasData {
         &self,
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
-        delta: mouse::ScrollDelta,
-    ) -> (iced::event::Status, Option<message::Message>) {
+        delta: &mouse::ScrollDelta,
+    ) -> Action<message::Message> {
         let y = match delta {
-            mouse::ScrollDelta::Lines { y, .. } => y,
-            mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
+            mouse::ScrollDelta::Lines { y, .. } => *y,
+            mouse::ScrollDelta::Pixels { y, .. } => *y / 100.0, // TODO is this reasonable?
         };
 
         let modifier_factor = 1.2_f32.powf(y);
@@ -421,16 +417,13 @@ impl CanvasData {
 
         let new_pixel_per_ms = new_position.pixel_per_ms(bounds.width);
         if new_pixel_per_ms < 1.0 && new_pixel_per_ms > 0.001 {
-            return (
-                event::Status::Captured,
-                Some(message::Message::Pane(
-                    self.pane,
-                    message::Pane::TimelineDragged(new_position),
-                )),
-            );
+            let message =
+                message::Message::Pane(self.pane, message::Pane::TimelineDragged(new_position));
+
+            return Action::publish(message).and_capture();
         }
 
-        (event::Status::Captured, None)
+        Action::capture()
     }
 
     fn handle_drag(
@@ -439,7 +432,7 @@ impl CanvasData {
         bounds: iced::Rectangle,
         mouse_position: iced::Point,
         drag_start: iced::Point,
-    ) -> Option<(event::Status, Option<message::Message>)> {
+    ) -> Option<Action<message::Message>> {
         const MIN_DURATION: i64 = 10;
 
         let x_from_start = drag_start.x - mouse_position.x;
@@ -452,63 +445,55 @@ impl CanvasData {
 
         match state.drag_mode {
             DragMode::Pan(start_position) => {
-                return Some((
-                    event::Status::Captured,
-                    Some(message::Message::Pane(
-                        self.pane,
-                        message::Pane::TimelineDragged(start_position.offset(ms_dragged)),
-                    )),
-                ));
+                let message = message::Message::Pane(
+                    self.pane,
+                    message::Pane::TimelineDragged(start_position.offset(ms_dragged)),
+                );
+                return Some(Action::publish(message).and_capture());
             }
             DragMode::Cursor => {
                 let new_time =
                     self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
-                return Some((
-                    event::Status::Captured,
-                    Some(message::Message::PlaybackSetPosition(new_time)),
-                ));
+                let message = message::Message::PlaybackSetPosition(new_time);
+                return Some(Action::publish(message).and_capture());
             }
             DragMode::Event(drag_action, ref event_reference) => {
                 let new_time =
                     self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
-
-                return Some((
-                    event::Status::Captured,
-                    Some(match drag_action {
-                        EventDragAction::Left => {
-                            let new_duration = subtitle::Duration(
-                                (event_reference.duration.0 - (new_time - event_reference.start).0)
-                                    .max(MIN_DURATION),
-                            );
-                            message::Message::SetEventStartTimeAndDuration(
-                                event_reference.index,
-                                event_reference.start + event_reference.duration - new_duration,
-                                new_duration,
-                            )
-                        }
-                        EventDragAction::Center => {
-                            let drag_start_time = self.position.left
-                                + self.position.ms_from_left(drag_start, bounds.width);
-                            let offset = new_time - drag_start_time;
-                            message::Message::SetEventStartTimeAndDuration(
-                                event_reference.index,
-                                event_reference.start + offset,
-                                event_reference.duration,
-                            )
-                        }
-                        EventDragAction::Right => message::Message::SetEventStartTimeAndDuration(
+                let message = match drag_action {
+                    EventDragAction::Left => {
+                        let new_duration = subtitle::Duration(
+                            (event_reference.duration.0 - (new_time - event_reference.start).0)
+                                .max(MIN_DURATION),
+                        );
+                        message::Message::SetEventStartTimeAndDuration(
                             event_reference.index,
-                            event_reference.start,
-                            subtitle::Duration(
-                                (event_reference.duration.0
-                                    - ((event_reference.start + event_reference.duration)
-                                        - new_time)
-                                        .0)
-                                    .max(10),
-                            ),
+                            event_reference.start + event_reference.duration - new_duration,
+                            new_duration,
+                        )
+                    }
+                    EventDragAction::Center => {
+                        let drag_start_time = self.position.left
+                            + self.position.ms_from_left(drag_start, bounds.width);
+                        let offset = new_time - drag_start_time;
+                        message::Message::SetEventStartTimeAndDuration(
+                            event_reference.index,
+                            event_reference.start + offset,
+                            event_reference.duration,
+                        )
+                    }
+                    EventDragAction::Right => message::Message::SetEventStartTimeAndDuration(
+                        event_reference.index,
+                        event_reference.start,
+                        subtitle::Duration(
+                            (event_reference.duration.0
+                                - ((event_reference.start + event_reference.duration) - new_time)
+                                    .0)
+                                .max(10),
                         ),
-                    }),
-                ));
+                    ),
+                };
+                return Some(Action::publish(message).and_capture());
             }
             DragMode::None => {}
         }
@@ -583,7 +568,7 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
             color: style::SAMAKU_TEXT,
             font: crate::DEFAULT_FONT,
             size: iced::Pixels(14.0),
-            horizontal_alignment: iced::alignment::Horizontal::Center,
+            align_x: iced::widget::text::Alignment::Center,
             ..Default::default()
         });
 
@@ -618,7 +603,7 @@ fn draw_frame_ticks(
             color: style::SAMAKU_TEXT_WEAK,
             font: crate::DEFAULT_FONT,
             size: iced::Pixels(9.0),
-            horizontal_alignment: iced::alignment::Horizontal::Center,
+            align_x: iced::widget::text::Alignment::Center,
             ..Default::default()
         });
     }

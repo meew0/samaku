@@ -61,13 +61,17 @@ impl super::LocalState for State {
         let i = self.selected_style_index;
         let selected_style = &global_state.subtitles.styles[i];
 
-        let bold_checkbox = iced::widget::checkbox("Bold", selected_style.bold)
+        let bold_checkbox = iced::widget::checkbox(selected_style.bold)
+            .label("Bold")
             .on_toggle(move |val| message::Message::SetStyleBold(i, val));
-        let italic_checkbox = iced::widget::checkbox("Italic", selected_style.italic)
+        let italic_checkbox = iced::widget::checkbox(selected_style.italic)
+            .label("Italic")
             .on_toggle(move |val| message::Message::SetStyleItalic(i, val));
-        let underline_checkbox = iced::widget::checkbox("Underline", selected_style.underline)
+        let underline_checkbox = iced::widget::checkbox(selected_style.underline)
+            .label("Underline")
             .on_toggle(move |val| message::Message::SetStyleUnderline(i, val));
-        let strike_out_checkbox = iced::widget::checkbox("Strike out", selected_style.strike_out)
+        let strike_out_checkbox = iced::widget::checkbox(selected_style.strike_out)
+            .label("Strike out")
             .on_toggle(move |val| message::Message::SetStyleStrikeOut(i, val));
 
         let flags_row = iced::widget::row![

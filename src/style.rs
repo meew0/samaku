@@ -63,6 +63,12 @@ pub const SAMAKU_DESTRUCTIVE: Color = Color::from_rgb(
     0x4e as f32 / 255.0,
 );
 
+pub const SAMAKU_WARNING: Color = Color::from_rgb(
+    0xf5 as f32 / 255.0,
+    0x60 as f32 / 255.0,
+    0x16 as f32 / 255.0,
+);
+
 #[must_use]
 pub fn samaku_theme() -> Theme {
     Theme::custom(
@@ -73,6 +79,7 @@ pub fn samaku_theme() -> Theme {
             primary: SAMAKU_PRIMARY,
             danger: SAMAKU_DESTRUCTIVE,
             success: SAMAKU_SUCCESS,
+            warning: SAMAKU_WARNING,
         },
     )
 }

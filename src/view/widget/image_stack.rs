@@ -7,7 +7,7 @@ use iced::advanced::renderer;
 use iced::advanced::widget::{Tree, tree};
 use iced::advanced::{Clipboard, Shell, image};
 use iced::advanced::{Layout, Widget};
-use iced::widget::canvas;
+use iced::widget::{Action, canvas};
 use iced::{ContentFit, Element, Event, Length, Rectangle, Size, Vector};
 
 #[derive(Debug)]
@@ -106,8 +106,11 @@ where
 {
     // The raw w/h of the first image, or the override, if specified
     let image_size = {
-        let Size { width, height } =
-            image_size_override.unwrap_or_else(|| renderer.measure_image(&images[0].handle));
+        let Size { width, height } = image_size_override.unwrap_or_else(|| {
+            renderer
+                .measure_image(&images[0].handle)
+                .unwrap_or(Size::new(0, 0)) // default to zero size if image size is not yet available
+        });
 
         #[expect(
             clippy::cast_precision_loss,
@@ -152,8 +155,11 @@ pub(super) fn draw<Renderer, Handle>(
     Handle: Clone,
 {
     // Find out maximum size (assuming the first image covers the entire area)
-    let Size { width, height } =
-        image_size_override.unwrap_or_else(|| renderer.measure_image(&images[0].handle));
+    let Size { width, height } = image_size_override.unwrap_or_else(|| {
+        renderer
+            .measure_image(&images[0].handle)
+            .unwrap_or(Size::new(0, 0))
+    });
     #[expect(
         clippy::cast_precision_loss,
         reason = "precision loss acceptable for rendering"
@@ -169,33 +175,36 @@ pub(super) fn draw<Renderer, Handle>(
     // Preprocess images
     let to_draw: Vec<(&StackedImage<Handle>, Rectangle)> = images
         .iter()
-        .map(|image| {
-            let Size { width, height } = renderer.measure_image(&image.handle);
+        .filter_map(|image| {
+            if let Some(Size { width, height }) = renderer.measure_image(&image.handle) {
+                let center_offset = Vector::new(
+                    (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
+                    (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
+                );
 
-            let center_offset = Vector::new(
-                (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
-                (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
-            );
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "precision loss acceptable for rendering"
+                )]
+                let pos_offset =
+                    Vector::new((image.x as f32) * x_scale, (image.y as f32) * y_scale);
 
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "precision loss acceptable for rendering"
-            )]
-            let pos_offset = Vector::new((image.x as f32) * x_scale, (image.y as f32) * y_scale);
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "precision loss acceptable for rendering"
+                )]
+                let drawing_bounds = Rectangle {
+                    width: width as f32 * x_scale,
+                    height: height as f32 * y_scale,
+                    ..bounds
+                };
 
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "precision loss acceptable for rendering"
-            )]
-            let drawing_bounds = Rectangle {
-                width: width as f32 * x_scale,
-                height: height as f32 * y_scale,
-                ..bounds
-            };
+                let sum_bounds = drawing_bounds + center_offset + pos_offset;
 
-            let sum_bounds = drawing_bounds + center_offset + pos_offset;
-
-            (image, sum_bounds)
+                Some((image, sum_bounds))
+            } else {
+                None
+            }
         })
         .collect();
     let render = |renderer: &mut Renderer| {
@@ -206,8 +215,9 @@ pub(super) fn draw<Renderer, Handle>(
                 rotation: iced::Radians(0.0),
                 opacity: 1.0,
                 snap: false,
+                border_radius: iced::border::radius(0),
             };
-            renderer.draw_image(image, bounds);
+            renderer.draw_image(image, bounds, Rectangle::INFINITE);
         }
     };
 
@@ -233,7 +243,7 @@ where
     }
 
     fn layout(
-        &self,
+        &mut self,
         _state: &mut Tree,
         renderer: &Renderer,
         limits: &layout::Limits,
@@ -291,39 +301,35 @@ where
         tree::State::new(Program::State::default())
     }
 
-    fn on_event(
+    fn update(
         &mut self,
         tree: &mut Tree,
-        event: Event,
+        event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
-    ) -> iced::event::Status {
+    ) {
         let bounds = layout.bounds();
 
-        let canvas_event = match event {
-            Event::Mouse(mouse_event) => Some(canvas::Event::Mouse(mouse_event)),
-            Event::Touch(touch_event) => Some(canvas::Event::Touch(touch_event)),
-            Event::Keyboard(keyboard_event) => Some(canvas::Event::Keyboard(keyboard_event)),
-            Event::Window(..) => None,
-        };
+        let state = tree.state.downcast_mut::<Program::State>();
 
-        if let Some(canvas_event) = canvas_event {
-            let state = tree.state.downcast_mut::<Program::State>();
+        let action = self.program.update(state, event, bounds, cursor);
 
-            let (event_status, message) = self.program.update(state, canvas_event, bounds, cursor);
+        if let Some(action) = action {
+            let (message, redraw_request, status) = action.into_inner();
 
             if let Some(message) = message {
                 shell.publish(message);
             }
 
-            return event_status;
+            shell.request_redraw_at(redraw_request);
+            if status == iced::event::Status::Captured {
+                shell.capture_event();
+            }
         }
-
-        iced::event::Status::Ignored
     }
 
     fn mouse_interaction(
@@ -369,11 +375,11 @@ where
     fn update(
         &self,
         _state: &mut Self::State,
-        _event: canvas::Event,
+        _event: &Event,
         _bounds: Rectangle,
         _cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
-        (canvas::event::Status::Ignored, None)
+    ) -> Option<Action<Message>> {
+        None
     }
 
     fn draw(

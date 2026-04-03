@@ -43,7 +43,7 @@ impl super::LocalState for State {
             )]
             let bottom_height =
                 (total_events - range.len() - first_event_to_display) as f32 * EVENT_HEIGHT;
-            column = column.push(iced::widget::vertical_space().height(top_height));
+            column = column.push(iced::widget::space::vertical().height(top_height));
 
             let mut parity = false;
             for event_index in global_state.subtitles.events.iter_range_in_order(range) {
@@ -51,7 +51,7 @@ impl super::LocalState for State {
                 parity = !parity;
             }
 
-            column = column.push(iced::widget::vertical_space().height(bottom_height));
+            column = column.push(iced::widget::space::vertical().height(bottom_height));
 
             iced::widget::scrollable(column)
                 .on_scroll(move |viewport| {
@@ -61,11 +61,19 @@ impl super::LocalState for State {
                 .into()
         });
 
-        let add_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Plus))
-            .on_press(message::Message::AddEvent);
+        let add_button = iced::widget::button(
+            iced_fonts::bootstrap::plus()
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(iced::Length::Fill),
+        )
+        .on_press(message::Message::AddEvent);
 
-        let delete_button = iced::widget::button(view::icon(iced_fonts::Bootstrap::Dash))
-            .on_press(message::Message::DeleteSelectedEvents);
+        let delete_button = iced::widget::button(
+            iced_fonts::bootstrap::dash()
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(iced::Length::Fill),
+        )
+        .on_press(message::Message::DeleteSelectedEvents);
 
         let top_bar = iced::widget::container(
             iced::widget::row![add_button, delete_button]

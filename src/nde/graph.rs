@@ -30,12 +30,12 @@ impl Graph {
         let mut connections = HashMap::new();
         connections.insert(
             NextEndpoint {
-                node_index: 0,
-                socket_index: 0,
+                node_index: NodeId(0),
+                socket_index: SocketId(0),
             },
             PreviousEndpoint {
-                node_index: 1,
-                socket_index: 0,
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
             },
         );
 
@@ -61,22 +61,22 @@ impl Graph {
         let mut connections = HashMap::new();
         connections.insert(
             NextEndpoint {
-                node_index: 0,
-                socket_index: 0,
+                node_index: NodeId(0),
+                socket_index: SocketId(0),
             },
             PreviousEndpoint {
-                node_index: 1,
-                socket_index: 0,
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
             },
         );
         connections.insert(
             NextEndpoint {
-                node_index: 1,
-                socket_index: 0,
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
             },
             PreviousEndpoint {
-                node_index: 2,
-                socket_index: 0,
+                node_index: NodeId(2),
+                socket_index: SocketId(0),
             },
         );
 
@@ -111,7 +111,7 @@ impl Graph {
         );
     }
 
-    pub fn connect(&mut self, next: NextEndpoint, previous: PreviousEndpoint) {
+    pub fn connect(&mut self, previous: PreviousEndpoint, next: NextEndpoint) {
         self.connections.insert(next, previous);
     }
 
@@ -123,9 +123,9 @@ impl Graph {
     /// Returns tuples `(previous_endpoint, next_socket_index)`.
     pub fn iter_previous(
         &self,
-        next_node_index: usize,
-    ) -> impl Iterator<Item = (&PreviousEndpoint, usize)> {
-        self.nodes[next_node_index]
+        next_node_index: NodeId,
+    ) -> impl Iterator<Item = (&PreviousEndpoint, SocketId)> {
+        self.nodes[next_node_index.0]
             .node
             .desired_inputs()
             .iter()
@@ -134,20 +134,25 @@ impl Graph {
                 self.connections
                     .get(&NextEndpoint {
                         node_index: next_node_index,
-                        socket_index,
+                        socket_index: SocketId(socket_index),
                     })
-                    .map(|previous_endpoint| (previous_endpoint, socket_index))
+                    .map(|previous_endpoint| (previous_endpoint, SocketId(socket_index)))
             })
     }
 
     #[must_use]
     pub fn dfs(&self) -> DfsResult {
-        let mut process_queue: VecDeque<usize> = VecDeque::new();
+        let mut process_queue: VecDeque<NodeId> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];
         let mut cycle_detector = CycleDetector::new(self.nodes.len());
 
         if self
-            .dfs_internal(0, &mut process_queue, &mut seen, &mut cycle_detector)
+            .dfs_internal(
+                NodeId(0),
+                &mut process_queue,
+                &mut seen,
+                &mut cycle_detector,
+            )
             .cycle_found()
         {
             return DfsResult::CycleFound;
@@ -158,19 +163,19 @@ impl Graph {
 
     fn dfs_internal(
         &self,
-        next: usize,
-        process_queue: &mut VecDeque<usize>,
+        next: NodeId,
+        process_queue: &mut VecDeque<NodeId>,
         seen: &mut Vec<bool>,
         cycle_detector: &mut CycleDetector,
     ) -> CycleFound {
-        seen[next] = true;
+        seen[next.0] = true;
 
         for (previous, _) in self.iter_previous(next) {
             let prev = previous.node_index;
             if cycle_detector.set_parent(next, prev).cycle_found() {
                 return CycleFound(true);
             }
-            if !seen[prev]
+            if !seen[prev.0]
                 && self
                     .dfs_internal(prev, process_queue, seen, cycle_detector)
                     .cycle_found()
@@ -187,7 +192,7 @@ impl Graph {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DfsResult {
     CycleFound,
-    ProcessQueue(VecDeque<usize>),
+    ProcessQueue(VecDeque<NodeId>),
 }
 
 struct CycleDetector {
@@ -203,20 +208,20 @@ impl CycleDetector {
         }
     }
 
-    fn set_ancestor(&mut self, parent: usize, child: usize) -> CycleFound {
+    fn set_ancestor(&mut self, parent: NodeId, child: NodeId) -> CycleFound {
         if parent == child {
             return CycleFound(true);
         }
 
-        self.matrix[parent + self.n * child] = true;
+        self.matrix[parent.0 + self.n * child.0] = true;
         CycleFound(false)
     }
 
-    fn is_ancestor(&self, parent: usize, child: usize) -> bool {
-        self.matrix[parent + self.n * child]
+    fn is_ancestor(&self, parent: NodeId, child: NodeId) -> bool {
+        self.matrix[parent.0 + self.n * child.0]
     }
 
-    pub(crate) fn set_parent(&mut self, parent: usize, child: usize) -> CycleFound {
+    pub(crate) fn set_parent(&mut self, parent: NodeId, child: NodeId) -> CycleFound {
         if self.is_ancestor(parent, child) {
             return CycleFound(false); // because we would have detected the cycle before
         }
@@ -224,9 +229,9 @@ impl CycleDetector {
         self.set_ancestor(parent, child);
 
         for potential_grandparent in 0..self.n {
-            if self.is_ancestor(potential_grandparent, parent)
+            if self.is_ancestor(NodeId(potential_grandparent), parent)
                 && self
-                    .set_ancestor(potential_grandparent, child)
+                    .set_ancestor(NodeId(potential_grandparent), child)
                     .cycle_found()
             {
                 return CycleFound(true);
@@ -260,16 +265,24 @@ struct IcedPointDef {
     pub y: f32,
 }
 
+#[derive(
+    Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct NodeId(pub usize);
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SocketId(pub usize);
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NextEndpoint {
-    pub node_index: usize,
-    pub socket_index: usize,
+    pub node_index: NodeId,
+    pub socket_index: SocketId,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct PreviousEndpoint {
-    pub node_index: usize,
-    pub socket_index: usize,
+    pub node_index: NodeId,
+    pub socket_index: SocketId,
 }
 
 #[cfg(test)]
@@ -281,12 +294,12 @@ mod tests {
         let mut graph_with_cycle = Graph::from_single_intermediate(Box::new(node::Italic {}));
         graph_with_cycle.connections.insert(
             NextEndpoint {
-                node_index: 2,
-                socket_index: 0,
+                node_index: NodeId(2),
+                socket_index: SocketId(0),
             },
             PreviousEndpoint {
-                node_index: 0,
-                socket_index: 0,
+                node_index: NodeId(0),
+                socket_index: SocketId(0),
             },
         );
         let dfs_result = graph_with_cycle.dfs();

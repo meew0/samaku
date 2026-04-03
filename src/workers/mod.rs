@@ -1,6 +1,6 @@
 use std::{cell::RefCell, thread};
 
-use crate::{media, message, model};
+use crate::{media, message, model, nde};
 
 mod cpal_playback;
 mod log_toasts;
@@ -83,7 +83,7 @@ impl Workers {
 
     pub fn emit_track_motion_for_node(
         &self,
-        node_index: usize,
+        node_index: nde::graph::NodeId,
         initial_region: media::motion::Region,
         start_frame: model::FrameNumber,
         end_frame: model::FrameNumber,

@@ -3,7 +3,7 @@ use crate::{nde, subtitle};
 #[derive(Debug, Clone)]
 pub struct Reticules {
     pub list: Vec<Reticule>,
-    pub source_node_index: usize,
+    pub source_node_index: nde::graph::NodeId,
 }
 
 #[derive(Debug, Clone)]

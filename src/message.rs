@@ -17,7 +17,7 @@ pub enum Message {
 
     /// Message pertaining to a specific node. Will be dispatched to the given node,
     /// if it exists.
-    Node(usize, Node),
+    Node(nde::graph::NodeId, Node),
 
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),
@@ -148,13 +148,10 @@ pub enum Message {
 
     // Create and update nodes in the current NDE filter.
     AddNode(nde::node::Constructor),
-    MoveNode(usize, f32, f32),
-    ConnectNodes(iced_node_editor::Link),
-    DisconnectNodes(
-        iced_node_editor::LogicalEndpoint,
-        iced::Point,
-        pane_grid::Pane,
-    ),
+    MoveNode(nde::graph::NodeId, iced::Point),
+    MoveNodeGroup(Vec<nde::graph::NodeId>, iced::Vector),
+    ConnectNodes(nde::graph::PreviousEndpoint, nde::graph::NextEndpoint),
+    DisconnectNodes(nde::graph::PreviousEndpoint, nde::graph::NextEndpoint),
 
     // Create and update reticules — the controls visible on top of the video when triggered by
     // certain NDE nodes.
@@ -163,7 +160,7 @@ pub enum Message {
 
     /// Tell the video playback worker to start motion tracking and sending the results to the
     /// node with the given ID.
-    TrackMotionForNode(usize, media::motion::Region),
+    TrackMotionForNode(nde::graph::NodeId, media::motion::Region),
 }
 
 impl Message {
@@ -226,9 +223,8 @@ pub enum Pane {
     GridScroll(iced::widget::scrollable::Viewport),
 
     // Messages for the node editor
-    NodeEditorScaleChanged(f32, f32, f32),
-    NodeEditorTranslationChanged(f32, f32),
-    NodeEditorDangling(Option<(iced_node_editor::LogicalEndpoint, iced_node_editor::Link)>),
+    NodeEditorCameraChanged(iced::Point, f32),
+    NodeEditorSelectionChanged(Vec<nde::graph::NodeId>),
     NodeEditorFilterSelected(usize, pane::node_editor::FilterReference),
 
     // Messages for the style editor

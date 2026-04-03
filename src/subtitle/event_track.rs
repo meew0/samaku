@@ -123,7 +123,10 @@ impl EventTrack {
         );
         debug_assert_eq!(
             self.count,
-            self.query_index.iter().map(|(_, leaf)| leaf.count()).sum()
+            self.query_index
+                .iter()
+                .map(|(_, leaf)| leaf.count())
+                .sum::<usize>()
         );
 
         for (i, event) in self
@@ -298,11 +301,11 @@ impl EventTrack {
         &mut self,
         selected_event_indices: &HashSet<EventIndex>,
         extradata: &mut Extradata,
-        node_index: usize,
+        node_index: nde::graph::NodeId,
         message: message::Node,
     ) {
         if let Some(filter) = self.active_nde_filter_mut(selected_event_indices, extradata)
-            && let Some(node) = filter.graph.nodes.get_mut(node_index)
+            && let Some(node) = filter.graph.nodes.get_mut(node_index.0)
         {
             node.node.update(message);
         }

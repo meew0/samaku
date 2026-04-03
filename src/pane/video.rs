@@ -1,5 +1,5 @@
 use iced::mouse;
-use iced::widget::canvas;
+use iced::widget::{Action, canvas};
 
 use crate::{media, message, model, style, subtitle, view};
 
@@ -149,10 +149,10 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
     fn update(
         &self,
         state: &mut Self::State,
-        event: canvas::Event,
+        event: &canvas::Event,
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
-    ) -> (iced::event::Status, Option<message::Message>) {
+    ) -> Option<Action<message::Message>> {
         if let Some(position) = cursor.position_in(bounds)
             && let canvas::Event::Mouse(mouse_event) = event
         {
@@ -163,14 +163,13 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                     {
                         state.dragging = Some(i);
                         state.drag_offset = position - iced_pos;
-                        return (iced::event::Status::Captured, None);
+                        return Some(Action::capture());
                     }
                 }
                 mouse::Event::CursorMoved { .. } => {
                     if let Some(dragging_reticule_index) = state.dragging {
-                        return (
-                            iced::event::Status::Captured,
-                            Some(message::Message::UpdateReticulePosition(
+                        return Some(
+                            Action::publish(message::Message::UpdateReticulePosition(
                                 dragging_reticule_index,
                                 model::reticule::Reticule::position_from_iced(
                                     position,
@@ -178,21 +177,22 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                                     bounds.size(),
                                     self.storage_size,
                                 ),
-                            )),
+                            ))
+                            .and_capture(),
                         );
                     }
                 }
                 mouse::Event::ButtonReleased(mouse::Button::Left) => {
                     if state.dragging.is_some() {
                         state.dragging = None;
-                        return (iced::event::Status::Captured, None);
+                        return Some(Action::capture());
                     }
                 }
                 _ => {}
             }
         }
 
-        (iced::event::Status::Ignored, None)
+        None
     }
 
     fn draw(

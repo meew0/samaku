@@ -1053,13 +1053,13 @@ mod tests {
             position: iced::Point::new(0.0, 200.0),
         });
         graph.connect(
-            nde::graph::NextEndpoint {
-                node_index: 1,
-                socket_index: 1,
-            },
             nde::graph::PreviousEndpoint {
-                node_index: 3,
-                socket_index: 0,
+                node_index: nde::graph::NodeId(3),
+                socket_index: nde::graph::SocketId(0),
+            },
+            nde::graph::NextEndpoint {
+                node_index: nde::graph::NodeId(1),
+                socket_index: nde::graph::SocketId(1),
             },
         );
 

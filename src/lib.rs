@@ -188,7 +188,7 @@ use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::{Alignment, Event, event};
+use iced::{Alignment, Event};
 use iced::{Element, Length, Settings, Subscription};
 
 mod action;
@@ -215,7 +215,7 @@ pub mod workers;
     reason = "main function doesn't need error documentation"
 )]
 pub fn run() -> iced::Result {
-    iced::application(title, update::update, Samaku::view)
+    iced::application(Samaku::boot, update::update, Samaku::view)
         .subscription(Samaku::subscription)
         .settings(Settings {
             id: Some("samaku".to_owned()),
@@ -226,8 +226,10 @@ pub fn run() -> iced::Result {
             default_font: DEFAULT_FONT,
             default_text_size: iced::Pixels(16.0),
             antialiasing: true,
+            vsync: true,
         })
         .window_size(iced::Size::new(1600.0, 1000.0))
+        .title(title)
         .theme(theme)
         .run()
 }
@@ -379,6 +381,10 @@ impl Samaku {
         }
     }
 
+    fn boot() -> (Self, iced::Task<message::Message>) {
+        (Samaku::default(), iced::Task::none())
+    }
+
     /// Construct the user interface. Called whenever iced needs to rerender the application.
     fn view(&'_ self) -> Element<'_, message::Message> {
         let focus = self.focus;
@@ -436,7 +442,7 @@ impl Samaku {
                 .style(|_theme| iced::widget::text::Style {
                     color: Some(style::SAMAKU_PRIMARY)
                 }),
-            iced::widget::Space::with_width(Length::Fixed(10.0)),
+            iced::widget::Space::new().width(Length::Fixed(10.0)),
             menu_bar
         ]
         .spacing(5)
@@ -455,11 +461,40 @@ impl Samaku {
     }
 
     fn subscription(&self) -> Subscription<message::Message> {
+        use iced::advanced::graphics::futures::{MaybeSend, boxed_stream};
+        use iced::advanced::subscription::{EventStream, Recipe};
         use iced::futures::StreamExt as _;
+        use std::hash::Hasher as _;
+
+        // Basically this reimplements a simplified version of `iced::subscription::Runner` which is private.
+        struct StreamListener<S, T>
+        where
+            S: iced::futures::Stream<Item = T> + MaybeSend + 'static,
+        {
+            stream: S,
+        }
+
+        impl<S, T> Recipe for StreamListener<S, T>
+        where
+            S: iced::futures::Stream<Item = T> + MaybeSend + 'static,
+        {
+            type Output = T;
+
+            fn hash(&self, state: &mut iced::advanced::subscription::Hasher) {
+                state.write_u64(0xcafe_babe);
+            }
+
+            fn stream(
+                self: Box<Self>,
+                _input: EventStream,
+            ) -> iced::futures::stream::BoxStream<'static, Self::Output> {
+                boxed_stream(self.stream)
+            }
+        }
 
         // Handle incoming global events, like key presses
-        let events = event::listen_with(|event, status, _window_id| {
-            if status == event::Status::Captured {
+        let events = iced::event::listen_with(|event, status, _window_id| {
+            if status == iced::event::Status::Captured {
                 return None;
             }
 
@@ -476,22 +511,21 @@ impl Samaku {
         });
 
         // This is the magic code that allows us to listen to messages emitted by the workers.
-        // While `subscription` is called frequently, we specify the same ID (`TypeID` of `Workers`)
-        // every time, so only the result of the first `unfold` call is actually used, which is the
-        // only one where `self.workers.receiver.take()` produces a `Some` value. For all subsequent
-        // times `subscription` is called, the second argument will be `None` and would lead to a
-        // panic if it were unwrapped within the closure, but the closure is never called because
-        // the initially created subscription is never overwritten.
-        let worker_messages = Subscription::run_with_id(
-            std::any::TypeId::of::<workers::Workers>(),
-            iced::futures::stream::unfold(
+        // While `subscription` is called frequently, only the result of the first `unfold` call is actually used,
+        // which is the only one where `self.workers.receiver.take()` produces a `Some` value.
+        // For all subsequent times `subscription` is called, the second argument will be `None`
+        // and would lead to a panic if it were unwrapped within the closure, but the closure is never
+        // called because the initially created subscription is never overwritten.
+        let runner = StreamListener {
+            stream: iced::futures::stream::unfold(
                 self.workers.receiver.take(),
                 async move |mut receiver| {
                     let message = receiver.as_mut().unwrap().next().await.unwrap();
                     Some((message, receiver))
                 },
             ),
-        );
+        };
+        let worker_messages = iced::advanced::subscription::from_recipe(runner);
 
         Subscription::batch(vec![events, worker_messages])
     }

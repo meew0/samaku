@@ -16,16 +16,16 @@ publish = false
 [dependencies]
 
 # GUI
-iced = { version = "0.13.1", features = [
+iced = { version = "0.14.0", features = [
     "lazy",
     "image",
     "advanced",
     "smol",
     "svg",
 ] }
-iced_aw = { version = "0.12.0", features = ["menu", "selection_list"] }
-iced_fonts = { version = "0.2.1", features = ["bootstrap"] }
-iced_node_editor = { git = "https://github.com/meew0/iced-node-editor.git", rev = "3ab7671ed8155d34afc5a5485a66b7a7cd9d05f5" }
+iced_aw = { version = "0.13.1", features = ["menu", "selection_list"] }
+iced_fonts = { version = "0.3.0", features = ["bootstrap"] }
+iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "e4dd909680a1f668b6cbc0150d5c5c84cbe473c2" }
 rfd = "0.15.4"
 smol = "2.0"
 
