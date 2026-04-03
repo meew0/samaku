@@ -132,6 +132,12 @@ fn row<'a>(
         (style::SAMAKU_BACKGROUND, style::SAMAKU_TEXT)
     };
 
+    let message = if global_state.modifiers.control() {
+        message::Message::ToggleEventSelection(event_index)
+    } else {
+        message::Message::SelectOnlyEvent(event_index)
+    };
+
     iced::widget::button(
         iced::widget::row![
             iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
@@ -141,7 +147,7 @@ fn row<'a>(
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center),
     )
-    .on_press(message::Message::SelectOnlyEvent(event_index))
+    .on_press(message)
     .width(iced::Length::Fill)
     .height(EVENT_HEIGHT)
     .style(move |_, _| iced::widget::button::Style {

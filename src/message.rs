@@ -19,6 +19,9 @@ pub enum Message {
     /// if it exists.
     Node(nde::graph::NodeId, Node),
 
+    /// The currently pressed keyboard modifiers (control, shift, etc) have changed.
+    ModifiersChanged(iced::keyboard::Modifiers),
+
     // Messages pertaining to the fundamental pane grid UI (Samaku object)
     SplitPane(pane_grid::Axis),
     ClosePane,

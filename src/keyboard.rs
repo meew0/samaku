@@ -1,12 +1,12 @@
+use crate::model;
+use crate::{message::Message, pane};
+use iced::keyboard::Event;
 use iced::{
     keyboard::{Key, Location, Modifiers, key::Named},
     widget::pane_grid::Axis,
 };
 
-use crate::model;
-use crate::{message::Message, pane};
-
-pub(crate) fn handle_key_press(
+pub(crate) fn handle_shortcut(
     key: &Key,
     modifiers: Modifiers,
     _location: Location,
@@ -34,6 +34,13 @@ pub(crate) fn handle_key_press(
         Key::Named(Named::ArrowRight) => Some(Message::PlaybackAdvanceSeconds(1.0)),
         Key::Named(Named::Space) => Some(Message::TogglePlayback),
         Key::Character("+") => Some(Message::AddEvent),
+        _ => None,
+    }
+}
+
+pub(crate) fn handle_modifiers(keyboard_event: &Event) -> Option<Message> {
+    match keyboard_event {
+        Event::ModifiersChanged(modifiers) => Some(Message::ModifiersChanged(*modifiers)),
         _ => None,
     }
 }

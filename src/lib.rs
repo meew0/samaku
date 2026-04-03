@@ -254,6 +254,9 @@ pub struct Samaku {
     /// certain calculations over and over.
     view: RefCell<ViewState>,
 
+    /// Currently pressed keyboard modifiers.
+    modifiers: iced::keyboard::Modifiers,
+
     /// The current state of the global pane grid.
     /// Includes all state for the individual panes themselves.
     panes: pane_grid::State<pane::State>,
@@ -492,8 +495,8 @@ impl Samaku {
             }
         }
 
-        // Handle incoming global events, like key presses
-        let events = iced::event::listen_with(|event, status, _window_id| {
+        // Handle key presses for shortcut purposes
+        let shortcut_events = iced::event::listen_with(|event, status, _window_id| {
             if status == iced::event::Status::Captured {
                 return None;
             }
@@ -505,9 +508,15 @@ impl Samaku {
                     modifiers,
                     location,
                     ..
-                }) => keyboard::handle_key_press(&key, modifiers, location),
+                }) => keyboard::handle_shortcut(&key, modifiers, location),
                 _ => None,
             }
+        });
+
+        // Separate keyboard listener that only listens to modifier keys (for multi-select and the like)
+        let modifier_events = iced::event::listen_with(|event, _status, _window_id| match event {
+            Event::Keyboard(keyboard_event) => keyboard::handle_modifiers(&keyboard_event),
+            _ => None,
         });
 
         // This is the magic code that allows us to listen to messages emitted by the workers.
@@ -527,7 +536,7 @@ impl Samaku {
         };
         let worker_messages = iced::advanced::subscription::from_recipe(runner);
 
-        Subscription::batch(vec![events, worker_messages])
+        Subscription::batch(vec![shortcut_events, modifier_events, worker_messages])
     }
 }
 
@@ -544,6 +553,7 @@ impl Default for Samaku {
         // ...and initial global state
         Samaku {
             panes,
+            modifiers: iced::keyboard::Modifiers::empty(),
             focus: None,
             toasts: vec![],
             workers: workers::Workers::spawn_all(&shared_state),

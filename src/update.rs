@@ -56,6 +56,9 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
     )]
     match message {
         Message::None => {}
+        Message::ModifiersChanged(modifiers) => {
+            global_state.modifiers = modifiers;
+        }
         Message::SplitPane(axis) => {
             if let Some(pane) = global_state.focus {
                 let result = global_state
