@@ -542,7 +542,7 @@ impl Samaku {
 
 impl Default for Samaku {
     fn default() -> Self {
-        let (panes, _) = pane_grid::State::new(pane::State::unassigned());
+        let panes = pane_grid::State::with_configuration(initial_pane_configuration());
 
         // Initial shared state...
         let shared_state = SharedState {
@@ -578,6 +578,46 @@ fn title(_state: &Samaku) -> String {
 
 fn theme(_state: &Samaku) -> iced::Theme {
     style::samaku_theme()
+}
+
+fn initial_pane_configuration() -> pane_grid::Configuration<pane::State> {
+    let video = pane::State::new(Box::new(pane::video::State {}));
+    let node_editor = pane::State::new(Box::new(pane::node_editor::State::default()));
+    let subtitle_grid = pane::State::new(Box::new(pane::grid::State::default()));
+    let text_editor = pane::State::new(Box::new(pane::text_editor::State::default()));
+    let timeline = pane::State::new(Box::new(pane::timeline::State::default()));
+
+    // First row: video & node editor
+    let top = pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Vertical,
+        ratio: 0.5,
+        a: Box::new(pane_grid::Configuration::Pane(video)),
+        b: Box::new(pane_grid::Configuration::Pane(node_editor)),
+    };
+
+    // Second row: subtitle grid & text editor
+    let bottom_row_1 = pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Vertical,
+        ratio: 0.66,
+        a: Box::new(pane_grid::Configuration::Pane(subtitle_grid)),
+        b: Box::new(pane_grid::Configuration::Pane(text_editor)),
+    };
+
+    // Assemble second row (see above) and third row (timeline)
+    let bottom = pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Horizontal,
+        ratio: 0.5,
+        a: Box::new(bottom_row_1),
+        b: Box::new(pane_grid::Configuration::Pane(timeline)),
+    };
+
+    // Assemble layout
+    pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Horizontal,
+        ratio: 0.6, // with this, 16:9 videos fit into the video pane
+        a: Box::new(top),
+        b: Box::new(bottom),
+    }
 }
 
 #[cfg(test)]
