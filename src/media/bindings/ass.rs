@@ -252,26 +252,32 @@ impl Renderer {
         // so using a callback that just gets a reference to a wrapped image
         // ensures safety compared to passing “ownership” of it.
         while !image.is_null() {
-            // Sanity check for the size of the returned image
             let stride = unsafe { (*image).stride } as isize;
             let height = unsafe { (*image).h } as isize;
             let width = unsafe { (*image).w } as isize;
-            let bitmap_size_signed: isize = stride * (height - 1) + width;
-            assert!(
-                (0..1_000_000_000).contains(&bitmap_size_signed),
-                "libass returned invalid image size: {bitmap_size_signed} (stride = {stride}, height = {height}, width = {width})"
-            );
 
-            #[expect(
-                clippy::cast_sign_loss,
-                reason = "converting falsely signed value from native code"
-            )]
-            let bitmap_size: usize = bitmap_size_signed as usize;
-            let safe_image = Image {
-                metadata: unsafe { &(*image) },
-                bitmap: unsafe { std::slice::from_raw_parts((*image).bitmap, bitmap_size) },
-            };
-            callback(&safe_image);
+            // If width/height is zero, the image should not be rendered.
+            if width > 0 && height > 0 {
+                let bitmap_size_signed: isize = stride * (height - 1) + width;
+
+                // Sanity check for the size of the returned image
+                assert!(
+                    (0..1_000_000_000).contains(&bitmap_size_signed),
+                    "libass returned invalid image size: {bitmap_size_signed} (stride = {stride}, height = {height}, width = {width})"
+                );
+
+                #[expect(
+                    clippy::cast_sign_loss,
+                    reason = "converting falsely signed value from native code"
+                )]
+                let bitmap_size: usize = bitmap_size_signed as usize;
+                let safe_image = Image {
+                    metadata: unsafe { &(*image) },
+                    bitmap: unsafe { std::slice::from_raw_parts((*image).bitmap, bitmap_size) },
+                };
+                callback(&safe_image);
+            }
+
             image = unsafe { (*image).next };
         }
 
