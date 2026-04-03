@@ -140,3 +140,121 @@ impl Default for Position {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU32, AtomicU64};
+
+    use super::*;
+
+    fn make_position(position: u64, rate: u32) -> Position {
+        Position {
+            authoritative_position: Mutex::new(position),
+            position: AtomicU64::new(position),
+            rate: AtomicU32::new(rate),
+        }
+    }
+
+    #[test]
+    fn seconds_zero_rate() {
+        assert_eq!(make_position(1000, 0).seconds(), 0.0);
+    }
+
+    #[test]
+    fn seconds_normal() {
+        assert_eq!(make_position(0, 1000).seconds(), 0.0);
+        assert_eq!(make_position(1000, 1000).seconds(), 1.0);
+        assert_eq!(make_position(500, 1000).seconds(), 0.5);
+        assert_eq!(make_position(3000, 1000).seconds(), 3.0);
+    }
+
+    #[test]
+    fn subtitle_time_basic() {
+        assert_eq!(
+            make_position(0, 1000).subtitle_time(),
+            subtitle::StartTime(0)
+        );
+        assert_eq!(
+            make_position(1000, 1000).subtitle_time(),
+            subtitle::StartTime(1000)
+        );
+        assert_eq!(
+            make_position(2500, 1000).subtitle_time(),
+            subtitle::StartTime(2500)
+        );
+    }
+
+    #[test]
+    fn current_frame_24fps() {
+        let frame_rate = media::FrameRate {
+            numerator: 24,
+            denominator: 1,
+        };
+        // 1 second → frame 24
+        assert_eq!(
+            make_position(1000, 1000).current_frame(frame_rate),
+            model::FrameNumber(24)
+        );
+        // 0 ticks → frame 0
+        assert_eq!(
+            make_position(0, 1000).current_frame(frame_rate),
+            model::FrameNumber(0)
+        );
+        // 500 ms → frame 12
+        assert_eq!(
+            make_position(500, 1000).current_frame(frame_rate),
+            model::FrameNumber(12)
+        );
+        // Rounds down: one tick less than a full frame
+        assert_eq!(
+            make_position(41, 1000).current_frame(frame_rate),
+            model::FrameNumber(0)
+        );
+        assert_eq!(
+            make_position(42, 1000).current_frame(frame_rate),
+            model::FrameNumber(1)
+        );
+    }
+
+    #[test]
+    fn add_ticks_basic() {
+        let pos = make_position(0, 1000);
+        pos.add_ticks(100);
+        assert_eq!(pos.position(), 100);
+        pos.add_ticks(50);
+        assert_eq!(pos.position(), 150);
+        pos.add_ticks(-100);
+        assert_eq!(pos.position(), 50);
+    }
+
+    #[test]
+    fn add_ticks_saturates_at_zero() {
+        let pos = make_position(10, 1000);
+        pos.add_ticks(-100);
+        assert_eq!(pos.position(), 0);
+    }
+
+    #[test]
+    fn set_to_event_basic() {
+        let pos = make_position(0, 1000);
+        pos.set_to_event(subtitle::StartTime(2000));
+        assert_eq!(pos.position(), 2000);
+        pos.set_to_event(subtitle::StartTime(0));
+        assert_eq!(pos.position(), 0);
+    }
+
+    #[test]
+    fn set_to_event_zero_rate() {
+        let pos = make_position(500, 0);
+        pos.set_to_event(subtitle::StartTime(2000));
+        // Should not change position when rate is 0
+        assert_eq!(pos.position(), 500);
+    }
+
+    #[test]
+    fn set_to_event_negative_clamped_to_zero() {
+        let pos = make_position(1000, 1000);
+        pos.set_to_event(subtitle::StartTime(-5000));
+        assert_eq!(pos.position(), 0);
+    }
+}

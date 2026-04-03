@@ -54,3 +54,92 @@ pub enum Shape {
     CornerBottomLeft,
     CornerBottomRight,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_reticule(x: f64, y: f64) -> Reticule {
+        Reticule {
+            shape: Shape::Cross,
+            position: nde::tags::Position { x, y },
+            radius: 5.0,
+        }
+    }
+
+    #[test]
+    fn iced_position_identity() {
+        // Same storage and display size: coordinates should be unchanged.
+        let r = make_reticule(100.0, 200.0);
+        let storage = subtitle::Resolution { x: 1920, y: 1080 };
+        let size = iced::Size {
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let p = r.iced_position(size, storage);
+        assert!((f64::from(p.x) - 100.0).abs() < 0.01);
+        assert!((f64::from(p.y) - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn iced_position_scaled_down() {
+        // Display is half the storage resolution: coordinates should be halved.
+        let r = make_reticule(960.0, 540.0);
+        let storage = subtitle::Resolution { x: 1920, y: 1080 };
+        let size = iced::Size {
+            width: 960.0,
+            height: 540.0,
+        };
+        let p = r.iced_position(size, storage);
+        assert!((f64::from(p.x) - 480.0).abs() < 0.01);
+        assert!((f64::from(p.y) - 270.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn position_from_iced_no_offset() {
+        // With a 1:1 ratio and no offset, iced point maps directly to storage position.
+        let storage = subtitle::Resolution { x: 1920, y: 1080 };
+        let size = iced::Size {
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let point = iced::Point { x: 350.0, y: 720.0 };
+        let pos =
+            Reticule::position_from_iced(point, iced::Vector { x: 0.0, y: 0.0 }, size, storage);
+        assert!((pos.x - 350.0).abs() < 0.01);
+        assert!((pos.y - 720.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn position_from_iced_with_offset() {
+        // The offset is subtracted before the scale, so point (200, 300) with offset (100, 50)
+        // maps to effective point (100, 250).
+        let storage = subtitle::Resolution { x: 1920, y: 1080 };
+        let size = iced::Size {
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let point = iced::Point { x: 200.0, y: 300.0 };
+        let offset = iced::Vector { x: 100.0, y: 50.0 };
+        let pos = Reticule::position_from_iced(point, offset, size, storage);
+        assert!((pos.x - 100.0).abs() < 0.01);
+        assert!((pos.y - 250.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn iced_position_round_trip() {
+        // Converting storage → iced → storage should recover the original position.
+        let storage = subtitle::Resolution { x: 1920, y: 1080 };
+        let size = iced::Size {
+            width: 1280.0,
+            height: 720.0,
+        };
+        let original = nde::tags::Position { x: 480.0, y: 270.0 };
+        let r = make_reticule(original.x, original.y);
+        let iced_pt = r.iced_position(size, storage);
+        let back =
+            Reticule::position_from_iced(iced_pt, iced::Vector { x: 0.0, y: 0.0 }, size, storage);
+        assert!((back.x - original.x).abs() < 0.1);
+        assert!((back.y - original.y).abs() < 0.1);
+    }
+}

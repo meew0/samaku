@@ -1126,4 +1126,78 @@ mod tests {
 
         assert_eq!(compiled.len(), 1);
     }
+
+    #[test]
+    fn unpack_rgbt_known_value() {
+        // Packed as 0xRRGGBBTT
+        let (colour, transparency) = unpack_colour_and_transparency_rgbt(0xFF_00_80_20);
+        assert_eq!(
+            colour,
+            Colour {
+                red: 0xFF,
+                green: 0x00,
+                blue: 0x80
+            }
+        );
+        assert_eq!(transparency, Transparency(0x20));
+    }
+
+    #[test]
+    fn unpack_tbgr_known_value() {
+        // Packed as 0xTTBBGGRR — same logical colour as above, different byte order
+        let (colour, transparency) = unpack_colour_and_transparency_tbgr(0x20_80_00_FF);
+        assert_eq!(
+            colour,
+            Colour {
+                red: 0xFF,
+                green: 0x00,
+                blue: 0x80
+            }
+        );
+        assert_eq!(transparency, Transparency(0x20));
+    }
+
+    #[test]
+    fn pack_unpack_rgbt_round_trip() {
+        let colour = Colour {
+            red: 0xAB,
+            green: 0xCD,
+            blue: 0xEF,
+        };
+        let transparency = Transparency(0x12);
+        let packed = pack_colour_and_transparency_rgbt(colour, transparency);
+        let (c2, t2) = unpack_colour_and_transparency_rgbt(packed);
+        assert_eq!(c2, colour);
+        assert_eq!(t2, transparency);
+    }
+
+    #[test]
+    fn pack_unpack_rgbt_black_opaque() {
+        let colour = Colour {
+            red: 0,
+            green: 0,
+            blue: 0,
+        };
+        let transparency = Transparency(0);
+        let packed = pack_colour_and_transparency_rgbt(colour, transparency);
+        assert_eq!(packed, 0);
+        let (c2, t2) = unpack_colour_and_transparency_rgbt(packed);
+        assert_eq!(c2, colour);
+        assert_eq!(t2, transparency);
+    }
+
+    #[test]
+    fn pack_unpack_rgbt_white_fully_transparent() {
+        let colour = Colour {
+            red: 0xFF,
+            green: 0xFF,
+            blue: 0xFF,
+        };
+        let transparency = Transparency(0xFF);
+        let packed = pack_colour_and_transparency_rgbt(colour, transparency);
+        assert_eq!(packed, 0xFF_FF_FF_FF);
+        let (c2, t2) = unpack_colour_and_transparency_rgbt(packed);
+        assert_eq!(c2, colour);
+        assert_eq!(t2, transparency);
+    }
 }
