@@ -169,6 +169,11 @@ pub(super) fn draw<Renderer, Handle>(
     let bounds = layout.bounds();
     let overall_adjusted_fit = content_fit.fit(overall_size, bounds.size());
 
+    let center_offset = Vector::new(
+        (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
+        (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
+    );
+
     let x_scale = overall_adjusted_fit.width / overall_size.width;
     let y_scale = overall_adjusted_fit.height / overall_size.height;
 
@@ -176,12 +181,13 @@ pub(super) fn draw<Renderer, Handle>(
     let to_draw: Vec<(&StackedImage<Handle>, Rectangle)> = images
         .iter()
         .filter_map(|image| {
-            if let Some(Size { width, height }) = renderer.measure_image(&image.handle) {
-                let center_offset = Vector::new(
-                    (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
-                    (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
-                );
+            // Load the image so we can measure its size and render it.
+            // This shouldn't take too long since the image should already be in memory.
+            renderer
+                .load_image(&image.handle)
+                .expect("image failed to load");
 
+            if let Some(Size { width, height }) = renderer.measure_image(&image.handle) {
                 #[expect(
                     clippy::cast_precision_loss,
                     reason = "precision loss acceptable for rendering"
