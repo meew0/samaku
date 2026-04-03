@@ -26,11 +26,11 @@ iced = { version = "0.14.0", features = [
 iced_aw = { version = "0.13.1", features = ["menu", "selection_list"] }
 iced_fonts = { version = "0.3.0", features = ["bootstrap"] }
 iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "e4dd909680a1f668b6cbc0150d5c5c84cbe473c2" }
-rfd = "0.15.4"
+rfd = "0.17.2"
 smol = "2.0"
 
 # Media libraries
-rustsynth-sys = { version = "0.5.0", features = [
+rustsynth-sys = { version = "0.5.6", features = [
     "vapoursynth-functions",
     "vsscript-functions",
 ] }
@@ -38,32 +38,32 @@ libass-sys = { version = "0.1.0", path = "libass-sys" }
 bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
 libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
 matroska-demuxer = "0.7"
-cpal = "0.16"
+cpal = "0.17"
 
 # FFI utilities
-libc = "0.2.175"
+libc = "0.2.183"
 vsprintf = "2.0.0"
 static_assertions = "1.1.0"
 
 # Various data structures and utilities
-regex = "1.11"
-interavl = "0.3"
-indexmap = "2.11"
+regex = "1.12"
+interavl = "0.5"
+indexmap = "2.13"
 fast-float2 = "0.2"
 
 # dtolnay collection
 thiserror = "2.0"
 anyhow = "1.0"
-inventory = "0.3.21"
+inventory = "0.3"
 dyn-clone = "1.0"
 
 # Serialization & deserialization
-serde = "1.0.219"
-typetag = "0.2.20"
+serde = "1.0.228"
+typetag = "0.2.21"
 ciborium = "0.2.2"
-data-encoding = "2.9"
-data-encoding-macro = "0.1.18"
-miniz_oxide = "0.8.9"
+data-encoding = "2.10"
+data-encoding-macro = "0.1.19"
+miniz_oxide = "0.9"
 
 [dev-dependencies]
 
@@ -71,9 +71,9 @@ miniz_oxide = "0.8.9"
 assert_matches2 = "0.1.2"
 
 # Benchmark dependencies
-criterion = "0.7"
-rand = "0.9"
-rand_pcg = "0.9"
+criterion = "0.8"
+rand = "0.10"
+rand_pcg = "0.10"
 
 [[bench]]
 name = "main"

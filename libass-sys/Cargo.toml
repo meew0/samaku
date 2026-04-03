@@ -1,8 +1,8 @@
 [package]
 name = "libass-sys"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 links = "ass"
 
 [build-dependencies]
-bindgen = "0.70.1"
+bindgen = "0.72.1"

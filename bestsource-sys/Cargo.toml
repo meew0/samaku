@@ -1,9 +1,9 @@
 [package]
 name = "bestsource-sys"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 links = "bestsource"
 
 [build-dependencies]
-bindgen = "0.70.1"
-cc = "1.1"
+bindgen = "0.72.1"
+cc = "1.2.59"

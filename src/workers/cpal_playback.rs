@@ -62,15 +62,15 @@ pub(super) fn spawn(
                         {
                             if audio_properties.channels == u32::from(supported_config.channels())
                                 && audio_properties.sample_rate
-                                >= supported_config.min_sample_rate().0
+                                >= supported_config.min_sample_rate()
                                 && audio_properties.sample_rate
-                                <= supported_config.max_sample_rate().0
+                                <= supported_config.max_sample_rate()
                                 && sample_format == supported_config.sample_format()
                             {
                                 config_opt =
-                                    Some(supported_config.with_sample_rate(cpal::SampleRate(
+                                    Some(supported_config.with_sample_rate(
                                         audio_properties.sample_rate,
-                                    )));
+                                    ));
                             }
                         }
 
