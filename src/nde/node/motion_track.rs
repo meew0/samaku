@@ -73,13 +73,16 @@ impl Node for MotionTrack {
         );
 
         let column = iced::widget::column![
-            iced::widget::text(self.name()),
             iced::widget::text(format!("{} frame(s) tracked", self.track.len())),
             set_marker_button,
             track_button,
         ];
 
-        column.align_x(iced::Alignment::Center).into()
+        column
+            .spacing(4.0)
+            .width(iced::Length::Fill)
+            .align_x(iced::Alignment::Center)
+            .into()
     }
 
     fn update(&mut self, message: message::Node) {

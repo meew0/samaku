@@ -113,12 +113,15 @@ impl Node for InputPosition {
         ));
 
         let column = iced::widget::column![
-            iced::widget::text(self.name()),
             iced::widget::text(format!("x: {:.1}, y: {:.1}", self.value.x, self.value.y)),
             button
         ];
 
-        column.align_x(iced::Alignment::Center).into()
+        column
+            .spacing(4.0)
+            .width(iced::Length::Fill)
+            .align_x(iced::Alignment::Center)
+            .into()
     }
 
     fn reticule_update(
@@ -232,7 +235,6 @@ impl Node for InputRectangle {
         ));
 
         let column = iced::widget::column![
-            iced::widget::text(self.name()),
             iced::widget::text(format!(
                 "({:.1}, {:.1}; {:.1}, {:.1})",
                 self.value.x1, self.value.y1, self.value.x2, self.value.y2,
@@ -240,7 +242,11 @@ impl Node for InputRectangle {
             button
         ];
 
-        column.align_x(iced::Alignment::Center).into()
+        column
+            .spacing(4.0)
+            .width(iced::Length::Fill)
+            .align_x(iced::Alignment::Center)
+            .into()
     }
 
     fn reticule_update(
@@ -348,9 +354,13 @@ impl Node for InputTags {
                 message::Message::Node(self_index, message::Node::TextInputChanged(new_text))
             });
 
-        let column = iced::widget::column![iced::widget::text(self.name()), input];
+        let column = iced::widget::column![input];
 
-        column.align_x(iced::Alignment::Center).into()
+        column
+            .spacing(4.0)
+            .width(iced::Length::Fill)
+            .align_x(iced::Alignment::Center)
+            .into()
     }
 
     fn update(&mut self, message: message::Node) {

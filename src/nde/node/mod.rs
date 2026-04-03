@@ -198,7 +198,7 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
     fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
-        iced::widget::text(self.name()).into()
+        iced::widget::space().into()
     }
 
     /// Called when a message for this node is received.
