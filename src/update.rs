@@ -360,6 +360,39 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 }
             }
         }
+        Message::SetStyleName(index, name) => {
+            global_state.subtitles.styles.rename(index, name);
+        }
+        Message::SetStyleFontName(index, value) => {
+            global_state.subtitles.styles[index].font_name = value;
+        }
+        Message::SetStyleFontSize(index, value) => {
+            global_state.subtitles.styles[index].font_size = value;
+        }
+        Message::SetStylePrimaryColour(index, value) => {
+            global_state.subtitles.styles[index].primary_colour = value;
+        }
+        Message::SetStylePrimaryTransparency(index, value) => {
+            global_state.subtitles.styles[index].primary_transparency = value;
+        }
+        Message::SetStyleSecondaryColour(index, value) => {
+            global_state.subtitles.styles[index].secondary_colour = value;
+        }
+        Message::SetStyleSecondaryTransparency(index, value) => {
+            global_state.subtitles.styles[index].secondary_transparency = value;
+        }
+        Message::SetStyleBorderColour(index, value) => {
+            global_state.subtitles.styles[index].border_colour = value;
+        }
+        Message::SetStyleBorderTransparency(index, value) => {
+            global_state.subtitles.styles[index].border_transparency = value;
+        }
+        Message::SetStyleShadowColour(index, value) => {
+            global_state.subtitles.styles[index].shadow_colour = value;
+        }
+        Message::SetStyleShadowTransparency(index, value) => {
+            global_state.subtitles.styles[index].shadow_transparency = value;
+        }
         Message::SetStyleBold(index, value) => {
             global_state.subtitles.styles[index].bold = value;
         }
@@ -371,6 +404,45 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::SetStyleStrikeOut(index, value) => {
             global_state.subtitles.styles[index].strike_out = value;
+        }
+        Message::SetStyleScaleX(index, value) => {
+            global_state.subtitles.styles[index].scale.x = value;
+        }
+        Message::SetStyleScaleY(index, value) => {
+            global_state.subtitles.styles[index].scale.y = value;
+        }
+        Message::SetStyleSpacing(index, value) => {
+            global_state.subtitles.styles[index].spacing = value;
+        }
+        Message::SetStyleAngle(index, value) => {
+            global_state.subtitles.styles[index].angle = subtitle::Angle(value);
+        }
+        Message::SetStyleBlur(index, value) => {
+            global_state.subtitles.styles[index].blur = value;
+        }
+        Message::SetStyleBorderStyle(index, value) => {
+            global_state.subtitles.styles[index].border_style = value;
+        }
+        Message::SetStyleBorderWidth(index, value) => {
+            global_state.subtitles.styles[index].border_width = value;
+        }
+        Message::SetStyleShadowDistance(index, value) => {
+            global_state.subtitles.styles[index].shadow_distance = value;
+        }
+        Message::SetStyleAlignment(index, value) => {
+            global_state.subtitles.styles[index].alignment = value;
+        }
+        Message::SetStyleMarginLeft(index, value) => {
+            global_state.subtitles.styles[index].margins.left = value;
+        }
+        Message::SetStyleMarginRight(index, value) => {
+            global_state.subtitles.styles[index].margins.right = value;
+        }
+        Message::SetStyleMarginVertical(index, value) => {
+            global_state.subtitles.styles[index].margins.vertical = value;
+        }
+        Message::SetStyleJustify(index, value) => {
+            global_state.subtitles.styles[index].justify = value;
         }
         Message::AddEvent => {
             let new_event = subtitle::Event {

@@ -321,6 +321,17 @@ impl From<i32> for JustifyMode {
     }
 }
 
+impl std::fmt::Display for JustifyMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => write!(f, "Auto"),
+            Self::Left => write!(f, "Left"),
+            Self::Center => write!(f, "Center"),
+            Self::Right => write!(f, "Right"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BorderStyle {
     /// Normal border style, with outline and shadow.
@@ -342,6 +353,16 @@ impl From<i32> for BorderStyle {
             // It seems like all other int values are treated as equivalent to Default in libass,
             // so this conversion seems ok
             _ => Self::Default,
+        }
+    }
+}
+
+impl std::fmt::Display for BorderStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Default => write!(f, "Outline & shadow"),
+            Self::OpaqueBox => write!(f, "Opaque box"),
+            Self::Background => write!(f, "Background"),
         }
     }
 }
