@@ -626,7 +626,9 @@ fn make_pin<'a>(
         iced_nodegraph::node_pin(
             role.side,
             (role.pin_id_func)(socket_id),
-            iced::widget::text(label),
+            iced::widget::text(label).style(|_| iced::widget::text::Style {
+                color: Some(style::SAMAKU_TEXT),
+            }),
         )
         .direction(role.direction)
         .color(blob_color),
