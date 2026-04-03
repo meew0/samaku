@@ -1,8 +1,7 @@
 [package]
-name = "bestsource-sys"
+name = "libp2p-sys"
 version = "0.1.0"
 edition = "2024"
-links = "bestsource"
 
 [build-dependencies]
 bindgen = "0.72.1"

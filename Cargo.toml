@@ -34,8 +34,9 @@ rustsynth-sys = { version = "0.5.6", features = [
     "vapoursynth-functions",
     "vsscript-functions",
 ] }
+ffms2 = "0.3"
 libass-sys = { version = "0.1.0", path = "libass-sys" }
-bestsource-sys = { version = "0.1.0", path = "bestsource-sys" }
+libp2p-sys = { version = "0.1.0", path = "libp2p-sys" }
 libmv-capi-sys = { git = "https://github.com/meew0/libmv-capi-sys.git" }
 matroska-demuxer = "0.7"
 cpal = "0.17"

@@ -39,7 +39,7 @@ pub(super) fn spawn(
                         let audio_properties = {
                             let audio_lock = audio_mutex.lock().unwrap();
                             if let Some(audio) = audio_lock.as_ref() {
-                                audio.properties
+                                audio.properties.clone()
                             } else {
                                 continue;
                             }
@@ -60,7 +60,7 @@ pub(super) fn spawn(
                             .supported_output_configs()
                             .expect("Error while querying audio output configurations")
                         {
-                            if audio_properties.channels == u32::from(supported_config.channels())
+                            if audio_properties.channels == supported_config.channels()
                                 && audio_properties.sample_rate
                                 >= supported_config.min_sample_rate()
                                 && audio_properties.sample_rate
@@ -116,27 +116,7 @@ pub(super) fn spawn(
 fn sample_format_for_audio_properties(
     audio_properties: &media::AudioProperties,
 ) -> cpal::SampleFormat {
-    let sample_format_opt: Option<cpal::SampleFormat> = if audio_properties.format.float {
-        const F32_SIZE: usize = size_of::<f32>();
-        const F64_SIZE: usize = size_of::<f64>();
-        match audio_properties.format.bytes_per_sample {
-            F32_SIZE => Some(cpal::SampleFormat::F32),
-            F64_SIZE => Some(cpal::SampleFormat::F64),
-            _ => None,
-        }
-    } else {
-        const U8_SIZE: usize = size_of::<u8>();
-        const I16_SIZE: usize = size_of::<i16>();
-        const I32_SIZE: usize = size_of::<i32>();
-        match audio_properties.format.bytes_per_sample {
-            U8_SIZE => Some(cpal::SampleFormat::U8),
-            I16_SIZE => Some(cpal::SampleFormat::I16),
-            I32_SIZE => Some(cpal::SampleFormat::I32),
-            _ => None,
-        }
-    };
-
-    sample_format_opt.expect("Audio sample format not representable by cpal")
+    audio_properties.sample_format
 }
 
 fn try_build_stream(
@@ -228,7 +208,7 @@ fn data_callback<T>(
     playback_position: &Arc<model::playback::Position>,
     tx_out: &super::GlobalSender,
 ) where
-    T: Default,
+    T: cpal::SizedSample + Default,
 {
     // Lock the audio mutex, so nothing else tries to access the audio data at the moment.
     let mut audio_lock = audio_mutex.lock().unwrap();

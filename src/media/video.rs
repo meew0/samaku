@@ -234,7 +234,7 @@ impl Video {
             0,
         ];
         let dst_stride = [pitch.try_into().expect("pitch overflow"), 0, 0, 0];
-        let p2p_params = bestsource_sys::p2p_buffer_param {
+        let p2p_params = libp2p_sys::p2p_buffer_param {
             src: [
                 vs_frame.get_read_ptr(0).as_ptr().cast::<libc::c_void>(),
                 vs_frame.get_read_ptr(1).as_ptr().cast::<libc::c_void>(),
@@ -251,13 +251,13 @@ impl Video {
             dst_stride,
             width,
             height,
-            packing: bestsource_sys::p2p_packing_p2p_rgba32_be,
+            packing: libp2p_sys::p2p_packing_p2p_rgba32_be,
         };
 
         unsafe {
-            bestsource_sys::p2p_pack_frame(
+            libp2p_sys::p2p_pack_frame(
                 &raw const p2p_params,
-                u64::from(bestsource_sys::P2P_ALPHA_SET_ONE),
+                u64::from(libp2p_sys::P2P_ALPHA_SET_ONE),
             );
         }
 

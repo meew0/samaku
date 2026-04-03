@@ -3,7 +3,7 @@
 //! The purpose of this module is to reduce code duplication for actions performed in multiple different places across the codebase, as well as reduce the code load within the `update` function.
 
 use crate::update::{notify_filter_lists, notify_selected_events, notify_style_lists};
-use crate::{media, subtitle};
+use crate::{media, subtitle, view};
 use std::path::PathBuf;
 
 pub(crate) fn replace_subtitle_file(
@@ -22,9 +22,22 @@ pub(crate) fn load_video(global_state: &crate::Samaku, path_buf: PathBuf) {
     global_state.workers.emit_load_video(path_buf);
 }
 
-pub(crate) fn load_audio(global_state: &crate::Samaku, path_buf: PathBuf) {
+pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
     let mut audio_lock = global_state.shared.audio.lock().unwrap();
-    *audio_lock = Some(media::Audio::load(path_buf));
-    drop(audio_lock);
+    match media::Audio::load(path_buf) {
+        Ok(audio) => {
+            *audio_lock = Some(audio);
+            drop(audio_lock);
+        }
+        Err(err) => {
+            *audio_lock = None;
+            drop(audio_lock);
+            global_state.toast(view::toast::Toast::new(
+                view::toast::Status::Danger,
+                "Error while loading audio file".to_owned(),
+                format!("{err:?}"),
+            ));
+        }
+    }
     global_state.workers.emit_restart_audio();
 }
