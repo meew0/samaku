@@ -143,8 +143,6 @@ impl Default for Position {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU32, AtomicU64};
-
     use super::*;
 
     fn make_position(position: u64, rate: u32) -> Position {
@@ -157,15 +155,16 @@ mod tests {
 
     #[test]
     fn seconds_zero_rate() {
-        assert_eq!(make_position(1000, 0).seconds(), 0.0);
+        // should equal zero
+        assert!(make_position(1000, 0).seconds().abs() < 0.0001);
     }
 
     #[test]
     fn seconds_normal() {
-        assert_eq!(make_position(0, 1000).seconds(), 0.0);
-        assert_eq!(make_position(1000, 1000).seconds(), 1.0);
-        assert_eq!(make_position(500, 1000).seconds(), 0.5);
-        assert_eq!(make_position(3000, 1000).seconds(), 3.0);
+        assert!((make_position(0, 1000).seconds()).abs() < 0.0001); // should equal zero
+        assert!((make_position(1000, 1000).seconds() - 1.0).abs() < 0.0001);
+        assert!((make_position(500, 1000).seconds() - 0.5).abs() < 0.0001);
+        assert!((make_position(3000, 1000).seconds() - 3.0).abs() < 0.0001);
     }
 
     #[test]

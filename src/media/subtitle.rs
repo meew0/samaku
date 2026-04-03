@@ -556,7 +556,7 @@ mod tests {
         let center_y = render_min_y(VerticalAlignment::Center);
         let top_y = render_min_y(VerticalAlignment::Top);
 
-        let frame_h = i32::from(FRAME_SIZE.y);
+        let frame_h = FRAME_SIZE.y;
 
         // Top-aligned text should be in the upper half of the frame.
         assert!(

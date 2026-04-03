@@ -182,6 +182,42 @@
     )
 )]
 
+// These following 3 crates are only used in benchmarks.
+// We need to import them here to suppress the relevant clippy warnings.
+#[cfg(test)]
+#[expect(
+    clippy::useless_attribute,
+    reason = "not actually useless in this case, lint false positive"
+)]
+#[expect(
+    clippy::allow_attributes,
+    reason = "allow specifically needed to prevent IDE from automatically deleting 'unused' import"
+)]
+#[allow(unused_imports, reason = "only used in benchmarks")]
+use criterion as _;
+#[cfg(test)]
+#[expect(
+    clippy::useless_attribute,
+    reason = "not actually useless in this case, lint false positive"
+)]
+#[expect(
+    clippy::allow_attributes,
+    reason = "allow specifically needed to prevent IDE from automatically deleting 'unused' import"
+)]
+#[allow(unused_imports, reason = "only used in benchmarks")]
+use rand as _;
+#[cfg(test)]
+#[expect(
+    clippy::useless_attribute,
+    reason = "not actually useless in this case, lint false positive"
+)]
+#[expect(
+    clippy::allow_attributes,
+    reason = "allow specifically needed to prevent IDE from automatically deleting 'unused' import"
+)]
+#[allow(unused_imports, reason = "only used in benchmarks")]
+use rand_pcg as _;
+
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
