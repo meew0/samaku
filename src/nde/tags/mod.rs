@@ -1151,8 +1151,10 @@ impl emit::Value for Alignment {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerticalAlignment {
     Sub = 0,
-    Center = 4,
-    Top = 8,
+    /// Matches libass `VALIGN_TOP = 4`.
+    Top = 4,
+    /// Matches libass `VALIGN_CENTER = 8`.
+    Center = 8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

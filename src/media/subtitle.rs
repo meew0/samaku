@@ -262,7 +262,7 @@ pub fn ass_image_to_iced(
 mod tests {
     use super::*;
     use crate::media;
-    use crate::nde::tags::Transparency;
+    use crate::nde::tags::{Alignment, HorizontalAlignment, Transparency, VerticalAlignment};
     use crate::subtitle::StartTime;
 
     /// Test to verify that our handling of events and their styles is lossless.
@@ -498,5 +498,92 @@ mod tests {
             subtitle::unpack_colour_and_transparency_rgbt(colours[2]),
             (SHADOW_2_COLOUR, SHADOW_2_TRANSPARENCY)
         );
+    }
+
+    /// Verify that vertical alignment values are passed correctly to libass.
+    ///
+    /// The `VerticalAlignment` enum discriminants must match libass' VALIGN_* constants
+    /// (Sub=0, Top=4, Center=8). If they are swapped, top-aligned and center-aligned subtitles
+    /// render at the wrong positions.
+    #[test]
+    fn alignment_vertical_positions() {
+        // Use a large frame so the default 120pt font is a reasonable size relative to the frame.
+        const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 1920, y: 1080 };
+
+        let script_info = subtitle::ScriptInfo {
+            playback_resolution: FRAME_SIZE,
+            ..Default::default()
+        };
+
+        set_libass_test_callback();
+        let mut renderer = Renderer::new();
+
+        // Helper: render a single event with the given vertical alignment, return the minimum dst_y
+        // across all rendered images (i.e. the topmost pixel of the rendered glyph).
+        let mut render_min_y = |vertical: VerticalAlignment| {
+            let style = subtitle::Style {
+                alignment: Alignment {
+                    vertical,
+                    horizontal: HorizontalAlignment::Center,
+                },
+                ..subtitle::Style::default()
+            };
+            let event = subtitle::Event {
+                start: StartTime(0),
+                duration: subtitle::Duration(2000),
+                text: "X".into(),
+                ..Default::default()
+            };
+            let track = OpaqueTrack::from_compiled(
+                std::slice::from_ref(&event).iter(),
+                std::slice::from_ref(&style),
+                &script_info,
+            );
+            let mut min_y = i32::MAX;
+            renderer.render_subtitles_with_callback(
+                &track,
+                1000,
+                FRAME_SIZE,
+                FRAME_SIZE,
+                &mut |image| {
+                    min_y = min_y.min(image.metadata.dst_y);
+                },
+            );
+            min_y
+        };
+
+        let sub_y = render_min_y(VerticalAlignment::Sub);
+        let center_y = render_min_y(VerticalAlignment::Center);
+        let top_y = render_min_y(VerticalAlignment::Top);
+
+        let frame_h = i32::from(FRAME_SIZE.y);
+
+        // Top-aligned text should be in the upper half of the frame.
+        assert!(
+            top_y < frame_h / 2,
+            "top-aligned text should render in upper half (dst_y={top_y}, frame_h={frame_h})"
+        );
+        // Sub-aligned (bottom) text should be in the lower half.
+        assert!(
+            sub_y > frame_h / 2,
+            "sub-aligned text should render in lower half (dst_y={sub_y}, frame_h={frame_h})"
+        );
+        // Center-aligned text should be between top and sub.
+        assert!(
+            top_y < center_y && center_y < sub_y,
+            "vertical order should be top({top_y}) < center({center_y}) < sub({sub_y})"
+        );
+
+        // Also verify pack()/try_unpack() round-trip is consistent for all numpad values.
+        for an in 1..=9_i32 {
+            let alignment = Alignment::try_from_an(an).expect("valid an value");
+            let repacked = alignment.pack();
+            let roundtripped =
+                Alignment::try_unpack(repacked).expect("pack should produce valid packed value");
+            assert_eq!(
+                alignment, roundtripped,
+                "pack/unpack round-trip failed for \\an{an}"
+            );
+        }
     }
 }
