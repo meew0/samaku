@@ -123,20 +123,35 @@ fn row<'a>(
     // Cut off event text after a bit
     let cutoff = event.text.len().min(250);
 
-    let background_color = if parity {
-        style::SAMAKU_BACKGROUND_WEAK
+    let selected = global_state.selected_event_indices.contains(&event_index);
+    let (background_color, text_color) = if selected {
+        (style::SAMAKU_PRIMARY, style::SAMAKU_BACKGROUND)
+    } else if parity {
+        (style::SAMAKU_BACKGROUND_WEAK, style::SAMAKU_TEXT)
     } else {
-        style::SAMAKU_BACKGROUND
+        (style::SAMAKU_BACKGROUND, style::SAMAKU_TEXT)
     };
 
     iced::widget::container(
-        iced::widget::row![
-            iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
-            iced::widget::text(event.end().format_long()).width(iced::Length::Fixed(150.0)),
-            iced::widget::text(&event.text[0..cutoff])
-        ]
+        iced::widget::button(
+            iced::widget::row![
+                iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
+                iced::widget::text(event.end().format_long()).width(iced::Length::Fixed(150.0)),
+                iced::widget::text(&event.text[0..cutoff])
+            ]
+            .height(iced::Length::Fill)
+            .align_y(iced::Alignment::Center),
+        )
+        .on_press(message::Message::SelectOnlyEvent(event_index))
+        .width(iced::Length::Fill)
         .height(iced::Length::Fill)
-        .align_y(iced::Alignment::Center),
+        .style(move |_, _| iced::widget::button::Style {
+            background: None,
+            text_color,
+            border: iced::Border::default(),
+            shadow: iced::Shadow::default(),
+            snap: false,
+        }),
     )
     .style(move |_| iced::widget::container::Style {
         background: Some(background_color.into()),
