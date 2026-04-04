@@ -1,73 +1,39 @@
 use anyhow::Context as _;
 
-#[derive(Debug, Clone)]
-pub struct Properties {
-    pub channels: u16,
-    pub sample_rate: u32,
-    pub sample_format: cpal::SampleFormat,
-}
+use super::bindings::ffms2;
+pub use ffms2::AudioProperties as Properties;
+pub(crate) use ffms2::init;
 
 pub struct Audio {
-    source: ffms2::audio::AudioSource,
+    source: ffms2::AudioSource,
     pub properties: Properties,
 }
 
 impl Audio {
     pub fn load<P: AsRef<std::path::Path>>(filename: P) -> anyhow::Result<Self> {
-        let indexer = ffms2::index::Indexer::new(filename.as_ref())
+        let mut indexer = ffms2::Indexer::new(filename.as_ref())
             .map_err(ffms2_map_error)
             .context("creating indexer")?;
-        indexer.TrackTypeIndexSettings(ffms2::track::TrackType::TYPE_AUDIO, 1);
-        let index = indexer
-            .DoIndexing2(ffms2::IndexErrorHandling::IEH_ABORT)
+        indexer.set_track_type_index_settings(ffms2::TrackType::Audio, 1);
+        let mut index = indexer
+            .do_indexing(ffms2::IndexErrorHandling::Abort)
             .map_err(ffms2_map_error)
             .context("indexing")?;
 
-        println!(
-            "delay_first_video_track = {:?}",
-            ffms2::audio::AudioDelay::DELAY_FIRST_VIDEO_TRACK as isize
-        );
-
-        let source = ffms2::audio::AudioSource::new(
+        let first_audio_track = index
+            .first_track_of_type(ffms2::TrackType::Audio)
+            .map_err(ffms2_map_error)
+            .context("finding first audio track")?;
+        let source = ffms2::AudioSource::new(
             filename.as_ref(),
-            index
-                .FirstTrackOfType(ffms2::track::TrackType::TYPE_AUDIO)
-                .map_err(ffms2_map_error)
-                .context("finding first audio track")?,
+            first_audio_track,
             &index,
-            // DELAY_FIRST_VIDEO_TRACK
-            // TODO report this to ffms2-rs, their enum `AudioDelay` doesn't match up with the values in ffms2.
-            -1,
+            ffms2::AudioDelayMode::FirstVideoTrack,
         )
         .map_err(ffms2_map_error)
         .context("creating audio source")?;
-        let internal_properties = source.GetAudioProperties();
 
-        println!("sample rate: {}", internal_properties.SampleRate);
-
-        let properties = Properties {
-            channels: internal_properties.Channels.try_into()?,
-            sample_rate: internal_properties.SampleRate.try_into()?,
-            sample_format: if internal_properties.SampleFormat
-                == ffms2::SampleFormat::FMT_S16 as i32
-            {
-                cpal::SampleFormat::I16
-            } else if internal_properties.SampleFormat == ffms2::SampleFormat::FMT_S32 as i32 {
-                cpal::SampleFormat::I32
-            } else if internal_properties.SampleFormat == ffms2::SampleFormat::FMT_U8 as i32 {
-                cpal::SampleFormat::U8
-            } else if internal_properties.SampleFormat == ffms2::SampleFormat::FMT_FLT as i32 {
-                cpal::SampleFormat::F32
-            } else if internal_properties.SampleFormat == ffms2::SampleFormat::FMT_DBL as i32 {
-                cpal::SampleFormat::F64
-            } else {
-                anyhow::bail!(
-                    "invalid sample format: {:?}",
-                    internal_properties.SampleFormat
-                );
-            },
-        };
-
+        let properties = source.properties.clone();
         Ok(Self { source, properties })
     }
 
@@ -80,14 +46,9 @@ impl Audio {
         T: Copy,
     {
         #[expect(clippy::cast_possible_truncation, reason = "64 bit only")]
-        let vec: Vec<T> = self
-            .source
-            .GetAudio(start_frame as usize, count_frames as usize)
+        self.source
+            .get_audio(start_frame as usize, count_frames as usize, data)
             .unwrap();
-
-        // TODO replace this with a method that doesn't allocate and copy a buffer
-        // (needs PR/fork to ffms2-rs since their only GetAudio method returns an allocated vec)
-        data.copy_from_slice(vec.as_slice());
     }
 }
 
@@ -95,7 +56,7 @@ impl Audio {
     clippy::needless_pass_by_value,
     reason = "needed to conveniently use the function without a closure"
 )]
-fn ffms2_map_error(err: ffms2::Error) -> anyhow::Error {
+fn ffms2_map_error(err: ffms2::FfmsError) -> anyhow::Error {
     anyhow::anyhow!("{err:?}")
 }
 
@@ -105,6 +66,8 @@ mod tests {
 
     #[test]
     fn load_music_mp3() {
+        init();
+
         let audio = Audio::load(crate::test_utils::test_file("test_files/music.mp3")).unwrap();
 
         assert_eq!(audio.properties.channels, 2);
@@ -114,6 +77,8 @@ mod tests {
 
     #[test]
     fn read_audio_frames() {
+        init();
+
         let mut audio = Audio::load(crate::test_utils::test_file("test_files/music.mp3")).unwrap();
 
         // Read 1024 frames starting from frame 1000 (packed: channels * frames samples)

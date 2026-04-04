@@ -1,6 +1,7 @@
 use std::{ffi::CString, path::Path};
 
 pub(super) mod ass;
+pub(super) mod ffms2;
 pub(super) mod mv;
 pub(super) mod vapoursynth;
 

@@ -1,0 +1,508 @@
+#![allow(
+    dead_code,
+    reason = "implements more of what ffms2 does for now than is currently used in samaku"
+)]
+
+use ffms2_sys as ffms2;
+use std::ffi::CStr;
+use std::fmt::{Debug, Display};
+use std::pin::Pin;
+use std::ptr;
+
+pub(crate) fn init() {
+    unsafe {
+        ffms2::FFMS_Init(0, 0);
+    }
+}
+
+pub(crate) struct Index {
+    index: *mut ffms2::FFMS_Index,
+    buffer: *mut u8,
+    error: InternalError,
+}
+
+unsafe impl Send for Index {}
+
+impl Index {
+    pub(crate) fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<Self, FfmsError> {
+        let source = super::path_to_cstring(filename);
+        let mut error = InternalError::allocate();
+        let index = unsafe { ffms2::FFMS_ReadIndex(source.as_ptr(), error.as_mut_ptr()) };
+
+        if index.is_null() {
+            Err(error.error())
+        } else {
+            Ok(Self {
+                index,
+                buffer: ptr::null_mut(),
+                error,
+            })
+        }
+    }
+
+    pub(crate) fn first_track_of_type(&mut self, track_type: TrackType) -> Result<i32, FfmsError> {
+        let num_tracks = unsafe {
+            ffms2::FFMS_GetFirstTrackOfType(self.index, track_type as i32, self.error.as_mut_ptr())
+        };
+        if num_tracks < 0 {
+            Err(self.error.error())
+        } else {
+            Ok(num_tracks)
+        }
+    }
+}
+
+impl Drop for Index {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.buffer.is_null() {
+                ffms2::FFMS_FreeIndexBuffer(&raw mut self.buffer);
+            }
+            ffms2::FFMS_DestroyIndex(self.index);
+        }
+    }
+}
+
+pub(crate) struct Indexer {
+    indexer: *mut ffms2::FFMS_Indexer,
+    error: InternalError,
+}
+
+unsafe impl Send for Indexer {}
+
+impl Indexer {
+    pub(crate) fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<Self, FfmsError> {
+        let source = super::path_to_cstring(filename);
+        let mut error = InternalError::allocate();
+        let indexer = unsafe { ffms2::FFMS_CreateIndexer(source.as_ptr(), error.as_mut_ptr()) };
+
+        if indexer.is_null() {
+            Err(error.error())
+        } else {
+            Ok(Self { indexer, error })
+        }
+    }
+
+    pub(crate) fn set_track_type_index_settings(&mut self, track_type: TrackType, index: i32) {
+        unsafe {
+            ffms2::FFMS_TrackTypeIndexSettings(self.indexer, track_type as i32, index, 0);
+        }
+    }
+
+    pub(crate) fn do_indexing(
+        mut self,
+        error_handling: IndexErrorHandling,
+    ) -> Result<Index, FfmsError> {
+        let index = unsafe {
+            ffms2::FFMS_DoIndexing2(
+                self.indexer,
+                (error_handling as u32).cast_signed(),
+                self.error.as_mut_ptr(),
+            )
+        };
+
+        if index.is_null() {
+            Err(self.error.error())
+        } else {
+            let Self {
+                indexer: _indexer,
+                error,
+            } = self;
+
+            Ok(Index {
+                index,
+                buffer: ptr::null_mut(),
+                error, // recycle the error allocation from the indexer
+            })
+        }
+    }
+
+    pub(crate) fn cancel_indexing(self) {
+        unsafe {
+            ffms2::FFMS_CancelIndexing(self.indexer);
+        }
+    }
+}
+
+#[repr(u32)]
+pub(crate) enum IndexErrorHandling {
+    Abort = ffms2::FFMS_IndexErrorHandling::FFMS_IEH_ABORT as u32,
+    ClearTrack = ffms2::FFMS_IndexErrorHandling::FFMS_IEH_CLEAR_TRACK as u32,
+    StopTrack = ffms2::FFMS_IndexErrorHandling::FFMS_IEH_STOP_TRACK as u32,
+    Ignore = ffms2::FFMS_IndexErrorHandling::FFMS_IEH_IGNORE as u32,
+}
+
+#[repr(i32)]
+pub(crate) enum TrackType {
+    Unknown = ffms2::FFMS_TrackType::FFMS_TYPE_UNKNOWN as i32,
+    Video = ffms2::FFMS_TrackType::FFMS_TYPE_VIDEO as i32,
+    Audio = ffms2::FFMS_TrackType::FFMS_TYPE_AUDIO as i32,
+    Data = ffms2::FFMS_TrackType::FFMS_TYPE_DATA as i32,
+    Subtitle = ffms2::FFMS_TrackType::FFMS_TYPE_SUBTITLE as i32,
+    Attachment = ffms2::FFMS_TrackType::FFMS_TYPE_ATTACHMENT as i32,
+}
+
+pub(crate) struct AudioSource {
+    audio_source: *mut ffms2::FFMS_AudioSource,
+    pub properties: AudioProperties,
+    error: InternalError,
+}
+
+unsafe impl Send for AudioSource {}
+
+impl AudioSource {
+    pub(crate) fn new<P: AsRef<std::path::Path>>(
+        filename: P,
+        track: i32,
+        index: &Index,
+        delay_mode: AudioDelayMode,
+    ) -> Result<Self, FfmsError> {
+        let source = super::path_to_cstring(filename);
+        let mut error = InternalError::allocate();
+        let audio_source = unsafe {
+            ffms2::FFMS_CreateAudioSource(
+                source.as_ptr(),
+                track,
+                index.index,
+                delay_mode as i32,
+                error.as_mut_ptr(),
+            )
+        };
+
+        if audio_source.is_null() {
+            Err(error.error())
+        } else {
+            let properties = match Self::get_audio_properties(audio_source) {
+                Ok(properties) => properties,
+                Err(error) => {
+                    return Err(FfmsError {
+                        main_type: ErrorType::Bindings,
+                        subtype: ErrorType::Unsupported,
+                        message: format!("error while reading audio properties: {error}"),
+                    });
+                }
+            };
+
+            Ok(Self {
+                audio_source,
+                properties,
+                error,
+            })
+        }
+    }
+
+    fn get_audio_properties(
+        audio_source: *mut ffms2::FFMS_AudioSource,
+    ) -> Result<AudioProperties, UnsupportedAudioError> {
+        let audio_prop = unsafe { ffms2::FFMS_GetAudioProperties(audio_source) };
+        let internal_properties = unsafe { &*audio_prop };
+
+        let properties = AudioProperties {
+            channels: internal_properties
+                .Channels
+                .try_into()
+                .map_err(UnsupportedAudioError::ChannelNumberOverflow)?,
+            sample_rate: internal_properties
+                .SampleRate
+                .try_into()
+                .map_err(UnsupportedAudioError::SampleRateOverflow)?,
+            num_frames: internal_properties
+                .NumSamples
+                .try_into()
+                .map_err(UnsupportedAudioError::NumSamplesUnderflow)?,
+            sample_format: if internal_properties.SampleFormat
+                == ffms2::FFMS_SampleFormat::FFMS_FMT_S16 as i32
+            {
+                cpal::SampleFormat::I16
+            } else if internal_properties.SampleFormat
+                == ffms2::FFMS_SampleFormat::FFMS_FMT_S32 as i32
+            {
+                cpal::SampleFormat::I32
+            } else if internal_properties.SampleFormat
+                == ffms2::FFMS_SampleFormat::FFMS_FMT_U8 as i32
+            {
+                cpal::SampleFormat::U8
+            } else if internal_properties.SampleFormat
+                == ffms2::FFMS_SampleFormat::FFMS_FMT_FLT as i32
+            {
+                cpal::SampleFormat::F32
+            } else if internal_properties.SampleFormat
+                == ffms2::FFMS_SampleFormat::FFMS_FMT_DBL as i32
+            {
+                cpal::SampleFormat::F64
+            } else {
+                return Err(UnsupportedAudioError::InvalidSampleFormat(
+                    internal_properties.SampleFormat,
+                ));
+            },
+        };
+
+        Ok(properties)
+    }
+
+    pub(crate) fn get_audio<T>(
+        &mut self,
+        start_frame: usize,
+        count_frames: usize,
+        buffer: &mut [T],
+    ) -> Result<(), FfmsError> {
+        let num_frames = self.properties.num_frames;
+
+        if start_frame + count_frames >= num_frames {
+            return Err(FfmsError {
+                main_type: ErrorType::Bindings,
+                subtype: ErrorType::InvalidArgument,
+                message: "requesting samples beyond end of track".to_owned(),
+            });
+        }
+
+        let num_channels = self.properties.channels;
+        let num_samples = count_frames * num_channels as usize;
+
+        if buffer.len() < num_samples {
+            return Err(FfmsError {
+                main_type: ErrorType::Bindings,
+                subtype: ErrorType::InvalidArgument,
+                message: "provided buffer too small".to_owned(),
+            });
+        }
+
+        if size_of::<T>() != self.properties.sample_format.sample_size() {
+            return Err(FfmsError {
+                main_type: ErrorType::Bindings,
+                subtype: ErrorType::InvalidArgument,
+                message: "provided buffer of wrong type".to_owned(),
+            });
+        }
+
+        let start_frame: i64 = start_frame.try_into().map_err(|_| FfmsError {
+            main_type: ErrorType::Bindings,
+            subtype: ErrorType::InvalidArgument,
+            message: "start_frame overflow".to_owned(),
+        })?;
+        let count_frames: i64 = count_frames.try_into().map_err(|_| FfmsError {
+            main_type: ErrorType::Bindings,
+            subtype: ErrorType::InvalidArgument,
+            message: "count_frames overflow".to_owned(),
+        })?;
+
+        let err = unsafe {
+            ffms2::FFMS_GetAudio(
+                self.audio_source,
+                buffer.as_mut_ptr().cast::<u8>().cast(),
+                start_frame,
+                count_frames,
+                self.error.as_mut_ptr(),
+            )
+        };
+
+        if err != 0 {
+            Err(self.error.error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioProperties {
+    pub channels: u16,
+    pub sample_rate: u32,
+    pub sample_format: cpal::SampleFormat,
+    pub num_frames: usize,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum UnsupportedAudioError {
+    #[error("channel number overflow: {0:?}")]
+    ChannelNumberOverflow(std::num::TryFromIntError),
+
+    #[error("sample rate overflow: {0:?}")]
+    SampleRateOverflow(std::num::TryFromIntError),
+
+    #[error("num samples underflow: {0:?}")]
+    NumSamplesUnderflow(std::num::TryFromIntError),
+
+    #[error("invalid sample format: {0}")]
+    InvalidSampleFormat(i32),
+}
+
+#[repr(i32)]
+pub(crate) enum AudioDelayMode {
+    NoShift = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_NO_SHIFT as i32,
+    TimeZero = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_TIME_ZERO as i32,
+    FirstVideoTrack = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_FIRST_VIDEO_TRACK as i32,
+}
+
+pub(crate) struct FfmsError {
+    main_type: ErrorType,
+    subtype: ErrorType,
+    pub message: String,
+}
+
+impl Debug for FfmsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Error type: {}\nSubtype: {}\nMessage: {}",
+            self.main_type, self.subtype, self.message
+        )
+    }
+}
+
+impl Display for FfmsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
+impl std::error::Error for FfmsError {}
+
+#[derive(Debug, thiserror::Error)]
+enum ErrorType {
+    #[error("No error")]
+    Success,
+
+    // Main types - where the error occurred
+    #[error("Index file handling error")]
+    Index,
+    #[error("Indexing error")]
+    Indexing,
+    #[error("Video postprocessing error")]
+    Postprocessing,
+    #[error("Image scaling error")]
+    Scaling,
+    #[error("Audio/video decoding error")]
+    Decoding,
+    #[error("Seeking error")]
+    Seeking,
+    #[error("File parsing error")]
+    Parser,
+    #[error("Track handling error")]
+    Track,
+    #[error("WAVE64 file writer error")]
+    WaveWriter,
+    #[error("Operation aborted")]
+    Cancelled,
+    #[error("Resampling")]
+    Resampling,
+    #[error("FFMS2 bindings error")]
+    Bindings,
+
+    // Subtypes - what caused the error
+    #[error("Unknown error")]
+    Unknown,
+    #[error("Format or operation is not supported")]
+    Unsupported,
+    #[error("Cannot read from file")]
+    FileRead,
+    #[error("Cannot write to file")]
+    FileWrite,
+    #[error("No such file or directory")]
+    NoFile,
+    #[error("Wrong version")]
+    Version,
+    #[error("Out of memory")]
+    AllocationFailed,
+    #[error("Invalid or nonsensical argument")]
+    InvalidArgument,
+    #[error("Decoder error")]
+    Codec,
+    #[error("Requested mode or operation unavailable")]
+    NotAvailable,
+    #[error("Provided index does not match the file")]
+    FileMismatch,
+    #[error("User error")]
+    User,
+}
+
+impl ErrorType {
+    fn from_code(code: i32) -> Self {
+        if code == ffms2::FFMS_Errors::FFMS_ERROR_SUCCESS as i32 {
+            Self::Success
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_INDEX as i32 {
+            Self::Index
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_INDEXING as i32 {
+            Self::Indexing
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_POSTPROCESSING as i32 {
+            Self::Postprocessing
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_SCALING as i32 {
+            Self::Scaling
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_DECODING as i32 {
+            Self::Decoding
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_SEEKING as i32 {
+            Self::Seeking
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_PARSER as i32 {
+            Self::Parser
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_TRACK as i32 {
+            Self::Track
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_WAVE_WRITER as i32 {
+            Self::WaveWriter
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_CANCELLED as i32 {
+            Self::Cancelled
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_RESAMPLING as i32 {
+            Self::Resampling
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_UNKNOWN as i32 {
+            Self::Unknown
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_UNSUPPORTED as i32 {
+            Self::Unsupported
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_FILE_READ as i32 {
+            Self::FileRead
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_FILE_WRITE as i32 {
+            Self::FileWrite
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_NO_FILE as i32 {
+            Self::NoFile
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_VERSION as i32 {
+            Self::Version
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_ALLOCATION_FAILED as i32 {
+            Self::AllocationFailed
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_INVALID_ARGUMENT as i32 {
+            Self::InvalidArgument
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_CODEC as i32 {
+            Self::Codec
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_NOT_AVAILABLE as i32 {
+            Self::NotAvailable
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_FILE_MISMATCH as i32 {
+            Self::FileMismatch
+        } else if code == ffms2::FFMS_Errors::FFMS_ERROR_USER as i32 {
+            Self::User
+        } else {
+            panic!("Invalid error code: {code}")
+        }
+    }
+}
+
+struct InternalError {
+    error_info: ffms2::FFMS_ErrorInfo,
+    buffer: Pin<Box<[u8; InternalError::BUFFER_SIZE as usize]>>,
+}
+
+impl InternalError {
+    const BUFFER_SIZE: u16 = 1024;
+
+    pub(crate) fn allocate() -> Self {
+        let mut buffer = Pin::new(Box::new([0_u8; Self::BUFFER_SIZE as usize]));
+        let error_info = ffms2::FFMS_ErrorInfo {
+            ErrorType: 0,
+            SubType: 0,
+            Buffer: buffer.as_mut().as_mut_ptr().cast(),
+            BufferSize: i32::from(Self::BUFFER_SIZE),
+        };
+
+        Self { error_info, buffer }
+    }
+
+    pub(crate) fn error(&self) -> FfmsError {
+        let c_str = CStr::from_bytes_until_nul(&*self.buffer)
+            .expect("error while converting error message to string");
+        FfmsError {
+            main_type: ErrorType::from_code(self.error_info.ErrorType),
+            subtype: ErrorType::from_code(self.error_info.SubType),
+            message: c_str.to_string_lossy().into_owned(),
+        }
+    }
+
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut ffms2::FFMS_ErrorInfo {
+        &raw mut self.error_info
+    }
+}

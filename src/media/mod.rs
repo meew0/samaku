@@ -9,3 +9,8 @@ mod bindings;
 pub mod motion;
 pub mod subtitle;
 mod video;
+
+/// Initialize media libraries that need to be initialized.
+pub fn init() {
+    audio::init();
+}
