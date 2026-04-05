@@ -12,6 +12,7 @@ pub struct Metadata {
     pub frame_rate: FrameRate,
     pub width: i32,
     pub height: i32,
+    pub num_frames: i32,
 }
 
 static PIXEL_FORMAT: std::sync::LazyLock<ffms2::PixelFormat> =
@@ -64,6 +65,8 @@ impl Video {
         let color_space = first_frame.color_space();
         println!("Color space: {color_space}");
 
+        let num_frames = source.properties.num_frames;
+
         source
             .set_output_format(*PIXEL_FORMAT, width, height, ffms2::Resizer::Bicubic)
             .context("setting video output format")?;
@@ -74,6 +77,7 @@ impl Video {
                 frame_rate,
                 width,
                 height,
+                num_frames,
             },
         })
     }
@@ -226,5 +230,84 @@ impl Video {
             width: true_width,
             height: true_height,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn get_frame_rgba(video: &Video, n: i32) -> Vec<u8> {
+        let (width, height, ffms_frame) = video.get_frame_internal(model::FrameNumber(n)).unwrap();
+        let mut out = vec![0_u8; width as usize * height as usize * 4];
+        ffms_frame.copy_plane(0, out.as_mut_slice(), None, None, 0, 0, 2, 2, |dst, src| {
+            dst.copy_from_slice(src);
+        });
+        out
+    }
+
+    fn pixel_rgba(data: &[u8], width: u32, x: u32, y: u32) -> (u8, u8, u8) {
+        let idx = ((y * width + x) * 4) as usize;
+        (data[idx], data[idx + 1], data[idx + 2])
+    }
+
+    /// Returns true if the pixel has a dominant red channel (i.e. is "red", not grey).
+    /// Uses a relative check so it works even with compressed/dark frames.
+    fn is_red(red: u8, green: u8) -> bool {
+        i32::from(red) - i32::from(green) > 30
+    }
+
+    #[test]
+    fn cube_h264_metadata_and_colors() {
+        crate::media::init();
+
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_files/cube_h264.mkv");
+
+        let video = Video::load(&path).expect("should load video");
+
+        assert_eq!(video.metadata.width, 320, "unexpected width");
+        assert_eq!(video.metadata.height, 200, "unexpected height");
+        assert_eq!(video.metadata.num_frames, 100, "unexpected frame count");
+
+        let first = get_frame_rgba(&video, 0);
+        let middle = get_frame_rgba(&video, 49);
+        let last = get_frame_rgba(&video, 99);
+
+        // First frame: M1 (0,100) grey, M2 (319,100) red
+        let (red, green, _) = pixel_rgba(&first, 320, 0, 100);
+        assert!(
+            !is_red(red, green),
+            "first frame M1 should be grey, got red={red} green={green}"
+        );
+        let (red, green, _) = pixel_rgba(&first, 320, 319, 100);
+        assert!(
+            is_red(red, green),
+            "first frame M2 should be red, got red={red} green={green}"
+        );
+
+        // Middle frame: both M1 and M2 grey
+        let (red, green, _) = pixel_rgba(&middle, 320, 0, 100);
+        assert!(
+            !is_red(red, green),
+            "middle frame M1 should be grey, got red={red} green={green}"
+        );
+        let (red, green, _) = pixel_rgba(&middle, 320, 319, 100);
+        assert!(
+            !is_red(red, green),
+            "middle frame M2 should be grey, got red={red} green={green}"
+        );
+
+        // Last frame: M1 red, M2 grey
+        let (red, green, _) = pixel_rgba(&last, 320, 0, 100);
+        assert!(
+            is_red(red, green),
+            "last frame M1 should be red, got red={red} green={green}"
+        );
+        let (red, green, _) = pixel_rgba(&last, 320, 319, 100);
+        assert!(
+            !is_red(red, green),
+            "last frame M2 should be grey, got red={red} green={green}"
+        );
     }
 }
