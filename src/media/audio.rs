@@ -11,18 +11,14 @@ pub struct Audio {
 
 impl Audio {
     pub fn load<P: AsRef<std::path::Path>>(filename: P) -> anyhow::Result<Self> {
-        let mut indexer = ffms2::Indexer::new(filename.as_ref())
-            .map_err(ffms2_map_error)
-            .context("creating indexer")?;
+        let mut indexer = ffms2::Indexer::new(filename.as_ref()).context("creating indexer")?;
         indexer.set_track_type_index_settings(ffms2::TrackType::Audio, 1);
         let mut index = indexer
             .do_indexing(ffms2::IndexErrorHandling::Abort)
-            .map_err(ffms2_map_error)
             .context("indexing")?;
 
         let first_audio_track = index
             .first_track_of_type(ffms2::TrackType::Audio)
-            .map_err(ffms2_map_error)
             .context("finding first audio track")?;
         let source = ffms2::AudioSource::new(
             filename.as_ref(),
@@ -30,7 +26,6 @@ impl Audio {
             &index,
             ffms2::AudioDelayMode::FirstVideoTrack,
         )
-        .map_err(ffms2_map_error)
         .context("creating audio source")?;
 
         let properties = source.properties.clone();
@@ -50,14 +45,6 @@ impl Audio {
             .get_audio(start_frame as usize, count_frames as usize, data)
             .unwrap();
     }
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "needed to conveniently use the function without a closure"
-)]
-fn ffms2_map_error(err: ffms2::FfmsError) -> anyhow::Error {
-    anyhow::anyhow!("{err:?}")
 }
 
 #[cfg(test)]

@@ -3,7 +3,9 @@
     reason = "implements more of what ffms2 does for now than is currently used in samaku"
 )]
 
+use crate::model;
 use ffms2_sys as ffms2;
+use std::cell::RefCell;
 use std::ffi::CStr;
 use std::fmt::{Debug, Display};
 use std::pin::Pin;
@@ -332,6 +334,349 @@ pub(crate) enum AudioDelayMode {
     NoShift = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_NO_SHIFT as i32,
     TimeZero = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_TIME_ZERO as i32,
     FirstVideoTrack = ffms2::FFMS_AudioDelayModes::FFMS_DELAY_FIRST_VIDEO_TRACK as i32,
+}
+
+pub(crate) struct VideoSource {
+    video_source: *mut ffms2::FFMS_VideoSource,
+    pub properties: VideoProperties,
+    track: *mut ffms2::FFMS_Track,
+    error: RefCell<InternalError>,
+}
+
+unsafe impl Send for VideoSource {}
+
+impl VideoSource {
+    pub(crate) fn new<P: AsRef<std::path::Path>>(
+        filename: P,
+        track: i32,
+        index: &Index,
+        threads: i32,
+        seek_mode: SeekMode,
+    ) -> Result<Self, FfmsError> {
+        let source = super::path_to_cstring(filename);
+        let error_cell = RefCell::new(InternalError::allocate());
+        let mut error = error_cell.borrow_mut();
+        let video_source = unsafe {
+            ffms2::FFMS_CreateVideoSource(
+                source.as_ptr(),
+                track,
+                index.index,
+                threads,
+                seek_mode as i32,
+                error.as_mut_ptr(),
+            )
+        };
+
+        if video_source.is_null() {
+            Err(error.error())
+        } else {
+            let properties = Self::get_video_properties(video_source);
+            let track = unsafe { ffms2::FFMS_GetTrackFromVideo(video_source) };
+
+            // as far as I can tell, `GetTrackFromVideo` should never fail
+            assert!(
+                !track.is_null(),
+                "null track returned from ffms2::FFMS_GetTrackFromVideo"
+            );
+
+            drop(error);
+            Ok(Self {
+                video_source,
+                properties,
+                track,
+                error: error_cell,
+            })
+        }
+    }
+
+    fn get_video_properties(video_source: *mut ffms2::FFMS_VideoSource) -> VideoProperties {
+        let video_prop = unsafe { ffms2::FFMS_GetVideoProperties(video_source) };
+        let internal_properties = unsafe { &*video_prop };
+
+        VideoProperties {
+            frame_rate: FrameRate {
+                numerator: internal_properties
+                    .FPSNumerator
+                    .try_into()
+                    .expect("negative framerate numerator"),
+                denominator: internal_properties
+                    .FPSDenominator
+                    .try_into()
+                    .expect("negative framerate denominator"),
+            },
+            num_frames: internal_properties.NumFrames,
+            sar_numerator: internal_properties.SARNum,
+            sar_denominator: internal_properties.SARDen,
+            first_time: internal_properties.FirstTime,
+            last_time: internal_properties.LastTime,
+        }
+    }
+
+    pub(crate) fn get_frame(&self, n: i32) -> Result<Frame, FfmsError> {
+        let mut error = self.error.borrow_mut();
+        let frame = unsafe { ffms2::FFMS_GetFrame(self.video_source, n, error.as_mut_ptr()) };
+
+        if frame.is_null() {
+            Err(error.error())
+        } else {
+            Ok(Frame { frame })
+        }
+    }
+
+    pub(crate) fn get_frame_info(&self, n: i32) -> Option<FrameInfo> {
+        let frame_info = unsafe { ffms2::FFMS_GetFrameInfo(self.track, n) };
+
+        if frame_info.is_null() {
+            None
+        } else {
+            Some(unsafe {
+                FrameInfo {
+                    pts: (*frame_info).PTS,
+                    repeat_pict: (*frame_info).RepeatPict,
+                    keyframe: (*frame_info).KeyFrame != 0,
+                }
+            })
+        }
+    }
+
+    pub(crate) fn set_output_format(
+        &mut self,
+        format: PixelFormat,
+        width: i32,
+        height: i32,
+        resizer: Resizer,
+    ) -> Result<(), FfmsError> {
+        let formats: [i32; 2] = [format.0, -1];
+
+        let mut error = self.error.borrow_mut();
+        let result = unsafe {
+            ffms2::FFMS_SetOutputFormatV2(
+                self.video_source,
+                (&raw const formats).cast(),
+                width,
+                height,
+                resizer as i32,
+                error.as_mut_ptr(),
+            )
+        };
+
+        if result != 0 {
+            Err(error.error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct VideoProperties {
+    pub frame_rate: FrameRate,
+    pub num_frames: i32,
+    pub sar_numerator: i32,
+    pub sar_denominator: i32,
+    pub first_time: f64,
+    pub last_time: f64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FrameRate {
+    pub numerator: u64,
+    pub denominator: u64,
+}
+
+impl FrameRate {
+    /// Get the number of the closest frame before the given time point in milliseconds.
+    ///
+    /// # Panics
+    /// Panics if the resulting frame number would not fit into an `i32`.
+    #[must_use]
+    pub(crate) fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "numerator is guaranteed to be smaller than i64 max"
+        )]
+        let numerator = ass_ms * self.numerator as i64;
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "denominator is guaranteed to be smaller than i64 max"
+        )]
+        let denominator = 1000 * self.denominator as i64;
+        model::FrameNumber(
+            (numerator / denominator)
+                .try_into()
+                .expect("overflow while converting time to frame number"),
+        )
+    }
+
+    #[must_use]
+    pub(crate) fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "denominator is guaranteed to be smaller than i64 max"
+        )]
+        let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "numerator is guaranteed to be smaller than i64 max"
+        )]
+        let result = inv_numerator / self.numerator as i64;
+        result
+    }
+
+    #[must_use]
+    pub(crate) fn frame_time_ms(&self) -> i64 {
+        self.frame_to_ms(model::FrameNumber(1))
+    }
+
+    pub(crate) fn iter_from(
+        &self,
+        frame: model::FrameNumber,
+    ) -> impl Iterator<Item = (model::FrameNumber, i64)> {
+        FrameIterator {
+            frame_rate: self,
+            current: frame,
+        }
+    }
+}
+
+impl From<FrameRate> for f64 {
+    /// Convert the frame rate to a floating-point value by dividing the numerator by the
+    /// denominator. May lose precision for very large numerators/denominators.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "amount of precision loss is acceptable in this case"
+    )]
+    fn from(value: FrameRate) -> Self {
+        value.numerator as f64 / value.denominator as f64
+    }
+}
+
+struct FrameIterator<'a> {
+    frame_rate: &'a FrameRate,
+    current: model::FrameNumber,
+}
+
+impl Iterator for FrameIterator<'_> {
+    type Item = (model::FrameNumber, i64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current += model::FrameDelta(1);
+        Some((self.current, self.frame_rate.frame_to_ms(self.current)))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PixelFormat(i32);
+
+impl PixelFormat {
+    pub(crate) fn from_name(name: &str) -> Self {
+        let c_string = super::c_string(name);
+        let format_num = unsafe { ffms2::FFMS_GetPixFmt(c_string.as_ptr()) };
+        Self(format_num)
+    }
+}
+
+#[repr(i32)]
+pub(crate) enum SeekMode {
+    LinearNoRw = ffms2::FFMS_SeekMode::FFMS_SEEK_LINEAR_NO_RW as i32,
+    Linear = ffms2::FFMS_SeekMode::FFMS_SEEK_LINEAR as i32,
+    Normal = ffms2::FFMS_SeekMode::FFMS_SEEK_NORMAL as i32,
+    Unsafe = ffms2::FFMS_SeekMode::FFMS_SEEK_UNSAFE as i32,
+    Aggressive = ffms2::FFMS_SeekMode::FFMS_SEEK_AGGRESSIVE as i32,
+}
+
+#[repr(u32)]
+pub(crate) enum Resizer {
+    FastBilinear = ffms2::FFMS_Resizers::FFMS_RESIZER_FAST_BILINEAR as u32,
+    Bilinear = ffms2::FFMS_Resizers::FFMS_RESIZER_BILINEAR as u32,
+    Bicubic = ffms2::FFMS_Resizers::FFMS_RESIZER_BICUBIC as u32,
+    Experimental = ffms2::FFMS_Resizers::FFMS_RESIZER_X as u32,
+    Point = ffms2::FFMS_Resizers::FFMS_RESIZER_POINT as u32,
+    Area = ffms2::FFMS_Resizers::FFMS_RESIZER_AREA as u32,
+    BicubLin = ffms2::FFMS_Resizers::FFMS_RESIZER_BICUBLIN as u32,
+    Gauss = ffms2::FFMS_Resizers::FFMS_RESIZER_GAUSS as u32,
+    Sinc = ffms2::FFMS_Resizers::FFMS_RESIZER_SINC as u32,
+    Lanczos = ffms2::FFMS_Resizers::FFMS_RESIZER_LANCZOS as u32,
+    Spline = ffms2::FFMS_Resizers::FFMS_RESIZER_SPLINE as u32,
+}
+
+pub(crate) struct Frame {
+    frame: *const ffms2::FFMS_Frame,
+}
+
+impl Frame {
+    pub(crate) fn width(&self) -> i32 {
+        let scaled_width = unsafe { (*self.frame).ScaledWidth };
+        if scaled_width < 0 {
+            unsafe { (*self.frame).EncodedWidth }
+        } else {
+            scaled_width
+        }
+    }
+
+    pub(crate) fn height(&self) -> i32 {
+        let scaled_height = unsafe { (*self.frame).ScaledHeight };
+        if scaled_height < 0 {
+            unsafe { (*self.frame).EncodedHeight }
+        } else {
+            scaled_height
+        }
+    }
+
+    pub(crate) fn color_space(&self) -> i32 {
+        unsafe { (*self.frame).ColorSpace }
+    }
+
+    pub(crate) fn pixel_format(&self) -> PixelFormat {
+        let format_num = unsafe { (*self.frame).ConvertedPixelFormat };
+        PixelFormat(format_num)
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "it seems sensible in this case")]
+    pub(crate) fn copy_plane<T: Copy>(
+        &self,
+        plane_index: usize,
+        target: &mut [T],
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        x_start: isize,
+        y_start: isize,
+        src_row_size_shift: usize,
+        dst_row_size_shift: usize,
+        row_assign: fn(&mut [T], &[u8]) -> (),
+    ) {
+        let width: usize =
+            width_override.unwrap_or_else(|| self.width().try_into().expect("negative width"));
+        let height: usize =
+            height_override.unwrap_or_else(|| self.height().try_into().expect("negative height"));
+        let linesize = unsafe { (*self.frame).Linesize[plane_index] } as isize;
+
+        let mut ptr = unsafe { (*self.frame).Data[plane_index].offset(linesize * y_start) };
+        assert!(!ptr.is_null(), "data pointer is null");
+
+        let mut dst_row_start = 0_usize;
+        let src_row_offset = x_start << src_row_size_shift;
+        let src_row_len = width << src_row_size_shift;
+        let dst_row_len = width << dst_row_size_shift;
+        for _ in 0..height {
+            let row_read_slice =
+                unsafe { std::slice::from_raw_parts(ptr.offset(src_row_offset), src_row_len) };
+            let dst_row_end = dst_row_start + dst_row_len;
+            let row_write_slice = &mut target[dst_row_start..dst_row_end];
+
+            row_assign(row_write_slice, row_read_slice);
+
+            ptr = unsafe { ptr.offset(linesize) };
+            dst_row_start = dst_row_end;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FrameInfo {
+    pts: i64,
+    repeat_pict: i32,
+    keyframe: bool,
 }
 
 pub(crate) struct FfmsError {

@@ -3,7 +3,6 @@ use std::{ffi::CString, path::Path};
 pub(super) mod ass;
 pub(super) mod ffms2;
 pub(super) mod mv;
-pub(super) mod vapoursynth;
 
 pub(super) fn c_string<T: Into<Vec<u8>>>(rust_str: T) -> CString {
     CString::new(rust_str).expect("string passed into c_string should not contain null bytes")

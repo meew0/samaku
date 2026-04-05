@@ -90,7 +90,7 @@ pub(super) fn spawn(
                                     playback_position.current_frame(video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
-                                    let handle = video.get_iced_frame(new_frame);
+                                    let handle = video.get_iced_frame(new_frame).unwrap(); // TODO: proper error handling
                                     if tx_out
                                         .unbounded_send(message::Message::VideoFrameAvailable(
                                             new_frame, handle,

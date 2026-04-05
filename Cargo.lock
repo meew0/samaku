@@ -2524,14 +2524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libp2p-sys"
-version = "0.1.0"
-dependencies = [
- "bindgen 0.72.1",
- "cc",
-]
-
-[[package]]
 name = "libredox"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4133,15 +4125,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustsynth-sys"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baa4bc04f1f6f4b4876f380c8c935793a762f29cc8bbb9b7325a2976317c7cc4"
-dependencies = [
- "bindgen 0.72.1",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4189,14 +4172,12 @@ dependencies = [
  "libass-sys",
  "libc",
  "libmv-capi-sys",
- "libp2p-sys",
  "matroska-demuxer",
  "miniz_oxide 0.9.1",
  "rand 0.10.0",
  "rand_pcg",
  "regex",
  "rfd",
- "rustsynth-sys",
  "serde",
  "smol",
  "static_assertions",
