@@ -453,6 +453,7 @@ impl VideoSource {
             sar_denominator: internal_properties.SARDen,
             first_time: internal_properties.FirstTime,
             last_time: internal_properties.LastTime,
+            last_end_time: internal_properties.LastEndTime,
         }
     }
 
@@ -520,6 +521,7 @@ pub(crate) struct VideoProperties {
     pub sar_denominator: i32,
     pub first_time: f64,
     pub last_time: f64,
+    pub last_end_time: f64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

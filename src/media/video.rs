@@ -2,7 +2,7 @@ pub use super::bindings::ffms2::FrameRate;
 use anyhow::Context as _;
 use std::path::Path;
 
-use crate::model;
+use crate::{model, subtitle};
 
 use super::bindings::ffms2;
 use super::index;
@@ -12,7 +12,8 @@ pub struct Metadata {
     pub frame_rate: FrameRate,
     pub width: i32,
     pub height: i32,
-    pub num_frames: i32,
+    pub num_frames: model::FrameNumber,
+    pub duration: subtitle::Duration,
 }
 
 static PIXEL_FORMAT: std::sync::LazyLock<ffms2::PixelFormat> =
@@ -69,6 +70,12 @@ impl Video {
 
         let num_frames = source.properties.num_frames;
 
+        // TODO handle videos with a delay (source.properties.first_time != 0)
+        // (currently the entire project assumes videos always start at 0)
+        let float_duration_secs = source.properties.last_end_time;
+        #[expect(clippy::cast_possible_truncation, reason = "unavoidable precision loss")]
+        let duration = subtitle::Duration((float_duration_secs * 1000.0).floor() as i64);
+
         source
             .set_output_format(*PIXEL_FORMAT, width, height, ffms2::Resizer::Bicubic)
             .context("setting video output format")?;
@@ -79,7 +86,8 @@ impl Video {
                 frame_rate,
                 width,
                 height,
-                num_frames,
+                num_frames: model::FrameNumber(num_frames),
+                duration,
             },
         })
     }
@@ -271,7 +279,11 @@ mod tests {
 
         assert_eq!(video.metadata.width, 320, "unexpected width");
         assert_eq!(video.metadata.height, 200, "unexpected height");
-        assert_eq!(video.metadata.num_frames, 100, "unexpected frame count");
+        assert_eq!(
+            video.metadata.num_frames,
+            model::FrameNumber(100),
+            "unexpected frame count"
+        );
 
         let first = get_frame_rgba(&video, 0);
         let middle = get_frame_rgba(&video, 49);

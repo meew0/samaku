@@ -1,8 +1,8 @@
 use crate::media::FrameRate;
 use crate::{message, model, style, subtitle, view};
 use iced::keyboard::Modifiers;
-use iced::widget::{Action, canvas};
-use iced::{Renderer, Theme, keyboard, mouse};
+use iced::widget::{canvas, Action};
+use iced::{keyboard, mouse, Renderer, Theme};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -17,12 +17,23 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
+        let video_start = subtitle::StartTime(0);
+
         let canvas_data = CanvasData {
             pane: self_pane,
             position: self.position,
             frame_rate: global_state
                 .video_metadata
                 .map(|video_metadata| video_metadata.frame_rate),
+            video_bounds: VideoBounds {
+                start: video_start,
+                end: video_start
+                    + global_state
+                        .video_metadata
+                        .map_or(subtitle::Duration(0), |video_metadata| {
+                            video_metadata.duration
+                        }),
+            },
             playback_position: global_state.shared.playback_position.subtitle_time(),
             events: global_state
                 .subtitles
@@ -142,7 +153,14 @@ struct CanvasData {
     position: Position,
     frame_rate: Option<FrameRate>,
     playback_position: subtitle::StartTime,
+    video_bounds: VideoBounds,
     events: Vec<EventReference>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VideoBounds {
+    start: subtitle::StartTime,
+    end: subtitle::StartTime,
 }
 
 #[derive(Clone)]
@@ -308,16 +326,17 @@ impl canvas::Program<message::Message> for CanvasData {
         bounds: iced::Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry<Renderer>> {
-        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        let draw_bounds = bounds;
+        let mut frame = canvas::Frame::new(renderer, draw_bounds.size());
 
-        draw_background(bounds, &mut frame, self.position);
+        draw_background(draw_bounds, &mut frame, self.video_bounds, self.position);
 
         if let Some(frame_rate) = self.frame_rate
-            && self.position.pixel_per_ms(bounds.width) > 0.4
+            && self.position.pixel_per_ms(draw_bounds.width) > 0.4
         {
-            draw_frame_ticks(&mut frame, self.position, frame_rate);
+            draw_frame_ticks(&mut frame, self.video_bounds, self.position, frame_rate);
         }
-        draw_seconds_ticks(&mut frame, self.position);
+        draw_seconds_ticks(&mut frame, self.video_bounds, self.position);
 
         if self.frame_rate.is_some() {
             draw_cursor(
@@ -502,8 +521,9 @@ impl CanvasData {
 }
 
 fn draw_background(
-    bounds: iced::Rectangle,
+    draw_bounds: iced::Rectangle,
     frame: &mut canvas::Frame<Renderer>,
+    _video_bounds: VideoBounds,
     position: Position,
 ) {
     let zero = subtitle::StartTime(0);
@@ -519,7 +539,7 @@ fn draw_background(
         frame.fill_rectangle(iced::Point::ORIGIN, frame.size(), style::SAMAKU_BACKGROUND);
     } else {
         // Part of the timeline is in the positive region: draw the part to the left of it darker than the part right of it
-        let midpoint_x = position.time_delta(zero) * position.pixel_per_ms(bounds.width);
+        let midpoint_x = position.time_delta(zero) * position.pixel_per_ms(draw_bounds.width);
         frame.fill_rectangle(
             iced::Point::ORIGIN,
             iced::Size {
@@ -542,7 +562,11 @@ fn draw_background(
     }
 }
 
-fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
+fn draw_seconds_ticks(
+    frame: &mut canvas::Frame<Renderer>,
+    _video_bounds: VideoBounds,
+    position: Position,
+) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
     #[expect(
         clippy::cast_possible_truncation,
@@ -550,6 +574,7 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
     )]
     let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64).max(500);
 
+    // Draw seconds ticks from right to left.
     // Find first full second to the left of the right bound.
     let mut tick_ms = subtitle::StartTime(position.right.0 - (position.right.0.rem_euclid(step)));
 
@@ -578,12 +603,14 @@ fn draw_seconds_ticks(frame: &mut canvas::Frame<Renderer>, position: Position) {
 
 fn draw_frame_ticks(
     frame: &mut canvas::Frame<Renderer>,
+    _video_bounds: VideoBounds,
     position: Position,
     frame_rate: FrameRate,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
     let first_frame = model::FrameNumber(frame_rate.ms_to_frame(position.left.0).0.max(0));
 
+    // Draw frame ticks from left to right.
     for (frame_number, time_ms) in frame_rate.iter_from(first_frame) {
         if time_ms > position.right.0 {
             break;
