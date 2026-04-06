@@ -1,9 +1,10 @@
+use crate::{media, message, model};
 use std::{
     sync::{Arc, Mutex, atomic},
     thread,
 };
 
-use crate::{media, message, model};
+use anyhow::Context as _;
 
 #[derive(Debug, Clone)]
 pub(super) enum MessageIn {
@@ -16,95 +17,80 @@ pub(super) fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {
-    use cpal::traits::{DeviceTrait as _, HostTrait as _};
-
     let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
 
     let playing = Arc::new(atomic::AtomicBool::new(false));
     let playback_position = Arc::clone(&shared_state.playback_position);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
-    let handle = thread::Builder::new().name("samaku_cpal_playback".to_owned()).spawn(move || {
-        use cpal::traits::StreamTrait as _;
-        let mut stream_opt: Option<cpal::Stream> = None;
+    let handle = thread::Builder::new()
+        .name("samaku_cpal_playback".to_owned())
+        .spawn(move || {
+            use cpal::traits::StreamTrait as _;
+            let mut stream_opt: Option<cpal::Stream> = None;
 
-        loop {
-            match rx_in.recv() {
-                Ok(message) => match message {
-                    MessageIn::TryRestart => {
-                        // This drops the existing stream, which is supposedly guaranteed to
-                        // close it (https://github.com/RustAudio/cpal/issues/652)
-                        stream_opt = None;
+            loop {
+                match rx_in.recv() {
+                    Ok(message) => match message {
+                        MessageIn::TryRestart => {
+                            // This drops the existing stream, which is supposedly guaranteed to
+                            // close it (https://github.com/RustAudio/cpal/issues/652)
+                            stream_opt = None;
 
-                        let audio_properties = {
-                            let audio_lock = audio_mutex.lock().unwrap();
-                            if let Some(audio) = audio_lock.as_ref() {
-                                audio.properties.clone()
-                            } else {
-                                continue;
-                            }
-                        };
+                            let audio_properties = {
+                                let audio_lock =
+                                    audio_mutex.lock().expect("Audio mutex lock poisoned");
+                                if let Some(audio) = audio_lock.as_ref() {
+                                    audio.properties.clone()
+                                } else {
+                                    continue;
+                                }
+                            };
 
-                        // Find the cpal sample format that matches the audio properties
-                        let sample_format = sample_format_for_audio_properties(&audio_properties);
-
-                        let mut config_opt: Option<cpal::SupportedStreamConfig> = None;
-
-                        let host = cpal::default_host();
-                        let device = host
-                            .default_output_device()
-                            .expect("No audio output device available");
-
-                        // Try to find a cpal playback config that matches the audio_properties
-                        for supported_config in device
-                            .supported_output_configs()
-                            .expect("Error while querying audio output configurations")
-                        {
-                            if audio_properties.channels == supported_config.channels()
-                                && audio_properties.sample_rate
-                                >= supported_config.min_sample_rate()
-                                && audio_properties.sample_rate
-                                <= supported_config.max_sample_rate()
-                                && sample_format == supported_config.sample_format()
-                            {
-                                config_opt =
-                                    Some(supported_config.with_sample_rate(
+                            match cpal_find_config(&audio_properties) {
+                                Ok((device, config)) => {
+                                    playback_position.rate.store(
                                         audio_properties.sample_rate,
-                                    ));
+                                        atomic::Ordering::Relaxed,
+                                    );
+
+                                    if let Some(stream) = try_build_stream(
+                                        audio_properties.sample_format,
+                                        &device,
+                                        config,
+                                        Arc::clone(&audio_mutex),
+                                        Arc::clone(&playing),
+                                        Arc::clone(&playback_position),
+                                        tx_out.clone(),
+                                    ) {
+                                        stream_opt = Some(stream);
+                                    }
+                                }
+                                Err(err) => {
+                                    tx_out.error(err, "Failed to open audio stream");
+                                }
                             }
                         }
-
-                        let config = config_opt.expect(
-                            "Could not find a suitable system audio configuration that matches the loaded audio file",
-                        );
-
-                        playback_position
-                            .rate
-                            .store(audio_properties.sample_rate, atomic::Ordering::Relaxed);
-
-                        if let Some(stream) = try_build_stream(sample_format, &device, config, Arc::clone(&audio_mutex), Arc::clone(&playing), Arc::clone(&playback_position), tx_out.clone()) {
-                            stream_opt = Some(stream);
+                        MessageIn::Play => {
+                            if let Some(ref stream) = stream_opt {
+                                playing.store(true, atomic::Ordering::Relaxed);
+                                tx_out.send(message::Message::Playing(true));
+                                stream.play().expect("Failed to play audio stream");
+                            }
                         }
-                    }
-                    MessageIn::Play => {
-                        if let Some(ref stream) = stream_opt {
-                            playing.store(true, atomic::Ordering::Relaxed);
-                            tx_out.unbounded_send(message::Message::Playing(true)).expect("Failed to send playing message");
-                            stream.play().expect("Failed to play audio stream");
+                        MessageIn::Pause => {
+                            if let Some(ref stream) = stream_opt {
+                                playing.store(false, atomic::Ordering::Relaxed);
+                                tx_out.send(message::Message::Playing(false));
+                                stream.pause().expect("Failed to pause audio stream");
+                            }
                         }
-                    }
-                    MessageIn::Pause => {
-                        if let Some(ref stream) = stream_opt {
-                            playing.store(false, atomic::Ordering::Relaxed);
-                            tx_out.unbounded_send(message::Message::Playing(false)).expect("Failed to send pausing message");
-                            stream.pause().expect("Failed to pause audio stream");
-                        }
-                    }
-                },
-                Err(_) => return,
+                    },
+                    Err(_) => return,
+                }
             }
-        }
-    }).unwrap();
+        })
+        .unwrap();
 
     super::Worker {
         worker_type: super::Type::CpalPlayback,
@@ -113,10 +99,42 @@ pub(super) fn spawn(
     }
 }
 
-fn sample_format_for_audio_properties(
+fn cpal_find_config(
     audio_properties: &media::AudioProperties,
-) -> cpal::SampleFormat {
-    audio_properties.sample_format
+) -> anyhow::Result<(cpal::Device, cpal::SupportedStreamConfig)> {
+    use cpal::traits::DeviceTrait as _;
+    use cpal::traits::HostTrait as _;
+
+    // Find the cpal sample format that matches the audio properties
+    let sample_format = audio_properties.sample_format;
+
+    let mut config_opt: Option<cpal::SupportedStreamConfig> = None;
+
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .context("No audio output device available")?;
+
+    // Try to find a cpal playback config that matches the audio_properties
+    for supported_config in device
+        .supported_output_configs()
+        .context("Error while querying audio output configurations")?
+    {
+        if audio_properties.channels == supported_config.channels()
+            && audio_properties.sample_rate >= supported_config.min_sample_rate()
+            && audio_properties.sample_rate <= supported_config.max_sample_rate()
+            && sample_format == supported_config.sample_format()
+        {
+            config_opt = Some(supported_config.with_sample_rate(audio_properties.sample_rate));
+            break;
+        }
+    }
+
+    let config = config_opt.ok_or_else(|| anyhow::anyhow!(
+        "Could not find a suitable system audio configuration that matches the loaded audio file",
+    ))?;
+
+    Ok((device, config))
 }
 
 fn try_build_stream(
@@ -244,8 +262,6 @@ fn data_callback<T>(
 
         drop(auth_pos);
 
-        tx_out
-            .unbounded_send(message::Message::PlaybackStep)
-            .expect("Error while emitting PlaybackStep");
+        tx_out.send(message::Message::PlaybackStep);
     }
 }

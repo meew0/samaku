@@ -35,7 +35,21 @@ impl<M> Worker<M> {
 }
 
 pub type GlobalReceiver = iced::futures::channel::mpsc::UnboundedReceiver<message::Message>;
-pub type GlobalSender = iced::futures::channel::mpsc::UnboundedSender<message::Message>;
+
+#[derive(Debug, Clone)]
+pub struct GlobalSender(iced::futures::channel::mpsc::UnboundedSender<message::Message>);
+
+impl GlobalSender {
+    pub fn send(&self, message: message::Message) {
+        self.0
+            .unbounded_send(message)
+            .expect("Failed to send message from worker");
+    }
+
+    pub fn error<S: Into<String>>(&self, err: anyhow::Error, info: S) {
+        self.send(message::toast_danger(info.into(), format!("{err:#}")));
+    }
+}
 
 pub struct Workers {
     _sender: GlobalSender,
@@ -53,6 +67,7 @@ impl Workers {
     #[must_use]
     pub fn spawn_all(shared_state: &crate::SharedState) -> Self {
         let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
+        let sender = GlobalSender(sender);
 
         Self {
             video_decoder: video_decoder::spawn(sender.clone(), shared_state),

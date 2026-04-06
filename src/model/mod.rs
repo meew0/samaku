@@ -12,6 +12,12 @@ pub struct FrameNumber(pub i32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FrameDelta(pub i32);
 
+impl std::fmt::Display for FrameNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Add<FrameDelta> for FrameNumber {
     type Output = FrameNumber;
 

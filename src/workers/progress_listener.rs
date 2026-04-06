@@ -20,16 +20,7 @@ pub(super) fn spawn(
                 match rx_in.recv() {
                     Ok(message) => match message {
                         MessageIn::Progress(key, progress) => {
-                            if tx_out
-                                .unbounded_send(message::Message::UpdateToastProgress(
-                                    key, progress,
-                                ))
-                                .is_err()
-                            {
-                                println!(
-                                    "failed to update toast progress: key {key:?} progress {progress}"
-                                );
-                            }
+                            tx_out.send(message::Message::UpdateToastProgress(key, progress));
                         }
                     },
                     Err(_) => return,

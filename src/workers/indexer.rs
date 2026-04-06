@@ -1,4 +1,4 @@
-use crate::{media, message, model};
+use crate::{media, message};
 use std::thread;
 
 pub(super) type MessageCallback = dyn FnOnce(media::Index) -> message::Message + Send;
@@ -21,19 +21,10 @@ pub(super) fn spawn(
                     Ok(message) => match message {
                         MessageIn::Index(indexer, callback) => match indexer.run() {
                             Ok(index) => {
-                                tx_out
-                                    .unbounded_send(callback(index))
-                                    .expect("indexer passback failed");
+                                tx_out.send(callback(index));
                             }
                             Err(err) => {
-                                if tx_out
-                                    .unbounded_send(message::Message::Toast(
-                                        model::toast::Toast::error(&err),
-                                    ))
-                                    .is_err()
-                                {
-                                    println!("failed to send error toast");
-                                }
+                                tx_out.error(err, "Indexing failed");
                             }
                         },
                     },

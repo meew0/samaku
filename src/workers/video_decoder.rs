@@ -48,18 +48,13 @@ pub(super) fn spawn(
 
                             match result {
                                 media::motion::TrackResult::Success => {
-                                    if tx_out
-                                        .unbounded_send(message::Message::Node(
-                                            node_index,
-                                            message::Node::MotionTrackUpdate(
-                                                tracker.last_tracked_frame(),
-                                                *tracker.track().last().unwrap(),
-                                            ),
-                                        ))
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
+                                    tx_out.send(message::Message::Node(
+                                        node_index,
+                                        message::Node::MotionTrackUpdate(
+                                            tracker.last_tracked_frame(),
+                                            *tracker.track().last().unwrap(),
+                                        ),
+                                    ));
                                 }
                                 media::motion::TrackResult::Failure
                                 | media::motion::TrackResult::Termination => tracker_opt = None,
@@ -90,14 +85,18 @@ pub(super) fn spawn(
                                     playback_position.current_frame(video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
-                                    let handle = video.get_iced_frame(new_frame).unwrap(); // TODO: proper error handling
-                                    if tx_out
-                                        .unbounded_send(message::Message::VideoFrameAvailable(
-                                            new_frame, handle,
-                                        ))
-                                        .is_err()
-                                    {
-                                        return;
+                                    match video.get_iced_frame(new_frame) {
+                                        Ok(handle) => {
+                                            tx_out.send(message::Message::VideoFrameAvailable(
+                                                new_frame, handle,
+                                            ));
+                                        }
+                                        Err(err) => {
+                                            tx_out.error(
+                                                err,
+                                                format!("Failed to decode frame {new_frame}"),
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -107,26 +106,13 @@ pub(super) fn spawn(
                             match media::Video::load(path_buf, index) {
                                 Ok(video) => {
                                     let metadata_box = Box::new(video.metadata);
-                                    if tx_out
-                                        .unbounded_send(message::Message::VideoLoaded(metadata_box))
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
+                                    tx_out.send(message::Message::VideoLoaded(metadata_box));
                                     tracker_opt = None;
                                     video_opt = Some(video);
                                 }
                                 Err(err) => {
                                     // Display the error to the user as a toast
-                                    if tx_out
-                                        .unbounded_send(message::toast_danger(
-                                            "Failed to load video".to_owned(),
-                                            err.to_string(),
-                                        ))
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
+                                    tx_out.error(err, "Failed to load video");
                                 }
                             }
                         }

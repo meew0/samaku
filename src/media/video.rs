@@ -46,9 +46,9 @@ impl Video {
             -1,
             ffms2::SeekMode::Normal,
         )
-        .context("creating video source")?;
+        .context("Failed to create video source")?;
 
-        let first_frame = source.get_frame(0).context("getting first frame")?;
+        let first_frame = source.get_frame(0).context("Failed to get first frame")?;
 
         let width = first_frame.width();
         let height = first_frame.height();

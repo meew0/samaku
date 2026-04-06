@@ -58,9 +58,7 @@ pub(super) fn spawn(
                                             title.to_owned(),
                                             string,
                                         );
-                                        tx_out
-                                            .unbounded_send(message::Message::Toast(toast))
-                                            .unwrap();
+                                        tx_out.send(message::Message::Toast(toast));
                                     }
                                 }
                             }
