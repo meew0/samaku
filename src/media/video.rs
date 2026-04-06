@@ -73,7 +73,10 @@ impl Video {
         // TODO handle videos with a delay (source.properties.first_time != 0)
         // (currently the entire project assumes videos always start at 0)
         let float_duration_secs = source.properties.last_end_time;
-        #[expect(clippy::cast_possible_truncation, reason = "unavoidable precision loss")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "unavoidable precision loss"
+        )]
         let duration = subtitle::Duration((float_duration_secs * 1000.0).floor() as i64);
 
         source
