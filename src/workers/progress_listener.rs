@@ -16,6 +16,7 @@ pub(super) fn spawn(
         .name("samaku_progress_listener".to_owned())
         .spawn(move || {
             loop {
+                // TODO: rate limiting, such that the worker doesn't spam iced with messages in case of fast updates
                 match rx_in.recv() {
                     Ok(message) => match message {
                         MessageIn::Progress(key, progress) => {

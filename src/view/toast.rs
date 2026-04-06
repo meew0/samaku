@@ -107,6 +107,7 @@ where
                     iced::widget::column![
                         iced::widget::text(toast.body.as_str()),
                         iced::widget::row![
+                            // TODO: these buttons don't do anything yet
                             iced::widget::button(confirm_label.as_str()).padding(3),
                             iced::widget::button(deny_label.as_str()).padding(3),
                         ]
