@@ -19,7 +19,11 @@ pub(crate) fn replace_subtitle_file(
 }
 
 pub(crate) fn index_video_and_load(global_state: &mut crate::Samaku, path_buf: PathBuf) {
-    let toast_id = global_state.toasts.progress("Indexing video", "");
+    let body = path_buf.file_name().map_or_else(
+        || "Unknown file".to_owned(),
+        |file_name| format!("{}", file_name.display()),
+    );
+    let toast_id = global_state.toasts.progress("Indexing video", body);
 
     let progress_sender = global_state.workers.progress_sender();
     let progress_sender_done = global_state.workers.progress_sender();

@@ -207,12 +207,8 @@ impl<M> List<M> {
     }
 
     // Utility methods for various toast types
-    pub fn progress(&mut self, title: &str, body: &str) -> Id {
-        self.push(Toast::progress(
-            Status::Primary,
-            title.to_owned(),
-            body.to_owned(),
-        ))
+    pub fn progress<S1: Into<String>, S2: Into<String>>(&mut self, title: S1, body: S2) -> Id {
+        self.push(Toast::progress(Status::Primary, title.into(), body.into()))
     }
 
     /// Remove the toast at `index`. Handles the race condition where two close events
