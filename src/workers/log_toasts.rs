@@ -1,6 +1,6 @@
 use std::{collections::HashSet, thread};
 
-use crate::{media, message, view};
+use crate::{media, message, model};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum MessageIn {
@@ -44,14 +44,16 @@ pub(super) fn spawn(
                                 MessageIn::Libass(level, string) => {
                                     let status_and_title = match level {
                                         0 | 1 => {
-                                            Some((view::toast::Status::Danger, "libass error"))
+                                            Some((model::toast::Status::Danger, "libass error"))
                                         }
-                                        2 => Some((view::toast::Status::Primary, "libass warning")),
+                                        2 => {
+                                            Some((model::toast::Status::Primary, "libass warning"))
+                                        }
                                         _ => None,
                                     };
 
                                     if let Some((status, title)) = status_and_title {
-                                        let toast = view::toast::Toast::new(
+                                        let toast = model::toast::Toast::message(
                                             status,
                                             title.to_owned(),
                                             string,

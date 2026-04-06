@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 
-use crate::{media, model, nde, pane, subtitle, view};
+use crate::{media, model, nde, pane, subtitle};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -36,10 +36,13 @@ pub enum Message {
     SetFocusedPaneType(pane::Constructor),
 
     /// Show a toast notification.
-    Toast(view::toast::Toast),
+    Toast(model::toast::Toast<Message>),
 
     /// Dismiss a toast notification.
     CloseToast(usize),
+
+    /// Update the progress value of the progress-bar toast with the given stable ID.
+    UpdateToastProgress(u64, f32),
 
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
@@ -236,8 +239,8 @@ impl Message {
 // Utility functions to create toasts
 #[must_use]
 pub fn toast_danger(title: String, body: String) -> Message {
-    Message::Toast(view::toast::Toast::new(
-        view::toast::Status::Danger,
+    Message::Toast(model::toast::Toast::message(
+        model::toast::Status::Danger,
         title,
         body,
     ))

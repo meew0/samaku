@@ -301,7 +301,7 @@ pub struct Samaku {
     focus: Option<pane_grid::Pane>,
 
     /// Toasts (notifications) to be shown over the UI.
-    toasts: Vec<view::toast::Toast>,
+    pub toasts: model::toast::List<message::Message>,
 
     /// Metadata of the currently loaded video, if and only if any is loaded.
     pub video_metadata: Option<media::VideoMetadata>,
@@ -384,42 +384,6 @@ impl Samaku {
         }
     }
 
-    /// Add a toast to be shown. Also prints the message to the command line. If multiple toasts
-    /// with the same content arrive at the same time, they will be grouped together.
-    pub fn toast(&mut self, toast: view::toast::Toast) {
-        println!(
-            "[toast status={:?}] [{}] {}",
-            &toast.status, &toast.title, &toast.body
-        );
-
-        // Try to find an existing toast with the same content. `Toast`'s implementation of
-        // `PartialEq` ignores the count
-        if let Some(existing_toast) = self
-            .toasts
-            .iter_mut()
-            .find(|toast_to_check| **toast_to_check == toast)
-        {
-            existing_toast.count += 1;
-        } else {
-            self.toasts.push(toast);
-        }
-    }
-
-    /// Utility method that takes an `anyhow::Result` and either turns it into an `Option` or displays a toast on error.
-    pub fn anyhow_toast<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
-        match result {
-            Ok(val) => Some(val),
-            Err(err) => {
-                self.toast(view::toast::Toast::new(
-                    view::toast::Status::Danger,
-                    "Error".to_owned(),
-                    format!("{err:#}"),
-                ));
-                None
-            }
-        }
-    }
-
     fn boot() -> (Self, iced::Task<message::Message>) {
         (Samaku::default(), iced::Task::none())
     }
@@ -494,9 +458,13 @@ impl Samaku {
                 .padding(5)
                 .into();
 
-        view::toast::Manager::new(content, &self.toasts, message::Message::CloseToast)
-            .timeout(view::toast::DEFAULT_TIMEOUT)
-            .into()
+        view::toast::Manager::new(
+            content,
+            self.toasts.as_slice(),
+            message::Message::CloseToast,
+        )
+        .timeout(view::toast::DEFAULT_TIMEOUT)
+        .into()
     }
 
     fn subscription(&self) -> Subscription<message::Message> {
@@ -591,7 +559,7 @@ impl Default for Samaku {
             panes,
             modifiers: iced::keyboard::Modifiers::empty(),
             focus: None,
-            toasts: vec![],
+            toasts: model::toast::List::new(),
             workers: workers::Workers::spawn_all(&shared_state),
             actual_frame: None,
             video_metadata: None,

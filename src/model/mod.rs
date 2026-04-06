@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
 
 pub mod playback;
 pub mod reticule;
+pub mod toast;
 
 /// Identifies a video frame by number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

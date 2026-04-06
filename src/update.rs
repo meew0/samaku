@@ -1,7 +1,7 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{action, media, message, model, nde, pane, project, subtitle, view};
+use crate::{action, media, message, model, nde, pane, project, subtitle};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
@@ -119,19 +119,13 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
         }
         Message::Toast(toast) => {
-            global_state.toast(toast);
+            global_state.toasts.push(toast);
         }
         Message::CloseToast(index) => {
-            // Sometimes, when two toasts are closed in very quick succession, we receive two
-            // consecutive `CloseToast` messages with the same ID, making the second one invalid.
-            // I suspect this is due to a race condition somewhere, but for now, try to handle the
-            // situation somewhat gracefully.
-            // TODO: figure out what causes this
-            if index < global_state.toasts.len() {
-                global_state.toasts.remove(index);
-            } else {
-                global_state.toasts.pop();
-            }
+            global_state.toasts.remove(index);
+        }
+        Message::UpdateToastProgress(id, progress) => {
+            global_state.toasts.update_progress(id, progress);
         }
         Message::SelectVideoFile => {
             return iced::Task::perform(
@@ -188,8 +182,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                     .map(subtitle::Style::name)
                     .collect::<Vec<&str>>()
                     .join(", ");
-                global_state.toast(view::toast::Toast::new(
-                    view::toast::Status::Primary,
+                global_state.toasts.push(model::toast::Toast::message(
+                    model::toast::Status::Primary,
                     "Duplicate styles".to_owned(),
                     format!(
                         "Skipped the following duplicate styles when loading: {duplicate_names}"
@@ -231,22 +225,22 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             action::replace_subtitle_file(global_state, ass_file);
 
             for warning in &warnings {
-                global_state.toast(view::toast::Toast::new(
-                    view::toast::Status::Primary,
+                global_state.toasts.push(model::toast::Toast::message(
+                    model::toast::Status::Primary,
                     "Warning while loading subtitle file".to_owned(),
                     format!("{warning}"),
                 ));
             }
 
             let project_load_result = project::load(global_state);
-            if global_state.anyhow_toast(project_load_result) == Some(true) {
+            if global_state.toasts.anyhow_toast(project_load_result) == Some(true) {
                 // Some project metadata was loaded, we might have to perform after-load tasks such as opening linked video/audio files
                 return project::after_load(global_state);
             }
         }
         Message::SubtitleParseError(err) => {
-            global_state.toast(view::toast::Toast::new(
-                view::toast::Status::Danger,
+            global_state.toasts.push(model::toast::Toast::message(
+                model::toast::Status::Danger,
                 "Error while loading subtitle file".to_owned(),
                 err.to_string(),
             ));
@@ -262,7 +256,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 Ok(data)
             })();
 
-            if let Some(data) = global_state.anyhow_toast(result) {
+            if let Some(data) = global_state.toasts.anyhow_toast(result) {
                 let future = async {
                     select_file_and_save(data)
                         .await
@@ -282,8 +276,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             .expect("subtitle::emit() failed"); // should never happen
 
             if global_state.video_metadata.is_none() {
-                global_state.toast(view::toast::Toast::new(
-                    view::toast::Status::Primary,
+                global_state.toasts.push(model::toast::Toast::message(
+                    model::toast::Status::Primary,
                     "Warning".to_owned(),
                     format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(global_state.frame_rate())),
                 ));

@@ -2,7 +2,6 @@
 //!
 //! Mostly copied from the iced `toast` example: https://github.com/iced-rs/iced/blob/bc9bb28b1ccd1248d63ccdfef2f57d7aa837abbb/examples/toast/src/main.rs.
 
-use std::fmt;
 use std::time::{Duration, Instant};
 
 use iced::advanced::layout::{self, Layout};
@@ -15,30 +14,23 @@ use iced::mouse;
 use iced::window;
 use iced::{Alignment, Element, Length, Rectangle, Renderer, Size, Theme, Vector};
 
+use crate::model::toast;
+
+// Re-export model types so existing callers via `view::toast::Status` / `view::toast::Toast`
+// continue to work without changes.
+pub use toast::List;
+
 pub const DEFAULT_TIMEOUT: u64 = 5;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Status {
-    #[default]
-    Primary,
-    Secondary,
-    Success,
-    Danger,
-}
-
-impl Status {
-    pub const ALL: &'static [Self] = &[Self::Primary, Self::Secondary, Self::Success, Self::Danger];
-}
-
-fn make_style(status: Status) -> impl Fn(&Theme) -> iced::widget::container::Style {
+fn make_style(status: toast::Status) -> impl Fn(&Theme) -> iced::widget::container::Style {
     move |theme| {
         let palette = theme.extended_palette();
 
         let pair = match status {
-            Status::Primary => palette.primary.weak,
-            Status::Secondary => palette.secondary.weak,
-            Status::Success => palette.success.weak,
-            Status::Danger => palette.danger.weak,
+            toast::Status::Primary => palette.primary.weak,
+            toast::Status::Secondary => palette.secondary.weak,
+            toast::Status::Success => palette.success.weak,
+            toast::Status::Danger => palette.danger.weak,
         };
 
         iced::widget::container::Style {
@@ -49,51 +41,13 @@ fn make_style(status: Status) -> impl Fn(&Theme) -> iced::widget::container::Sty
     }
 }
 
-impl fmt::Display for Status {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Status::Primary => "Primary",
-            Status::Secondary => "Secondary",
-            Status::Success => "Success",
-            Status::Danger => "Danger",
-        }
-        .fmt(formatter)
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Toast {
-    pub count: u32,
-    pub title: String,
-    pub body: String,
-    pub status: Status,
-}
-
-impl Toast {
-    #[must_use]
-    pub fn new(status: Status, title: String, body: String) -> Self {
-        Self {
-            count: 1,
-            title,
-            body,
-            status,
-        }
-    }
-}
-
-impl PartialEq for Toast {
-    fn eq(&self, other: &Self) -> bool {
-        // Ignore count
-        self.title == other.title && self.body == other.body && self.status == other.status
-    }
-}
-
-impl Eq for Toast {}
-
 pub struct Manager<'a, Message> {
     content: Element<'a, Message>,
-    toasts: Vec<Element<'a, Message>>,
-    timeout_secs: u64,
+    /// Pre-built iced elements: one leading vertical spacer + one per toast.
+    elements: Vec<Element<'a, Message>>,
+    /// Per-toast effective timeout in seconds (index matches toast slice).
+    timeouts: Vec<u64>,
+    default_timeout_secs: u64,
     on_close: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
@@ -101,21 +55,69 @@ impl<'a, Message> Manager<'a, Message>
 where
     Message: 'a + Clone,
 {
-    pub fn new<E: Into<Element<'a, Message, Theme>>, F: Fn(usize) -> Message + 'a>(
-        content: E,
-        toasts: &'a [Toast],
-        on_close: F,
-    ) -> Self {
+    /// Create a new `Manager`.
+    /// `on_close(index)` is published when a toast is dismissed (by timeout or the X button).
+    pub fn new<E, F>(content: E, toasts: &'a [toast::Toast<Message>], on_close: F) -> Self
+    where
+        E: Into<Element<'a, Message, Theme>>,
+        F: Fn(usize) -> Message + 'a,
+    {
         let mut elements: Vec<Element<'a, Message, Theme>> = vec![];
 
         // In samaku, we want the toasts to appear at the bottom, so add a vertical space.
         elements.push(iced::widget::space::vertical().into());
 
+        let mut timeouts: Vec<u64> = Vec::with_capacity(toasts.len());
+
         for (index, toast) in toasts.iter().enumerate() {
+            timeouts.push(toast.timeout_secs.unwrap_or(DEFAULT_TIMEOUT));
+
             let title_text = if toast.count == 1 {
                 iced::widget::text(toast.title.as_str())
             } else {
                 iced::widget::text(format!("({}x) {}", toast.count, toast.title))
+            };
+
+            let body_area: Element<'a, Message> = match &toast.content {
+                toast::Content::Message => {
+                    iced::widget::container(iced::widget::text(toast.body.as_str()))
+                        .width(Length::Fill)
+                        .padding(5)
+                        .style(iced::widget::container::rounded_box)
+                        .into()
+                }
+
+                toast::Content::Progress { progress } => iced::widget::container(
+                    iced::widget::column![
+                        iced::widget::text(toast.body.as_str()),
+                        iced::widget::progress_bar(0.0..=1.0, *progress),
+                    ]
+                    .spacing(4),
+                )
+                .width(Length::Fill)
+                .padding(5)
+                .style(iced::widget::container::rounded_box)
+                .into(),
+
+                toast::Content::Confirm {
+                    confirm_label,
+                    deny_label,
+                    ..
+                } => iced::widget::container(
+                    iced::widget::column![
+                        iced::widget::text(toast.body.as_str()),
+                        iced::widget::row![
+                            iced::widget::button(confirm_label.as_str()).padding(3),
+                            iced::widget::button(deny_label.as_str()).padding(3),
+                        ]
+                        .spacing(4),
+                    ]
+                    .spacing(4),
+                )
+                .width(Length::Fill)
+                .padding(5)
+                .style(iced::widget::container::rounded_box)
+                .into(),
             };
 
             elements.push(
@@ -134,10 +136,7 @@ where
                     .padding(5)
                     .style(make_style(toast.status)),
                     iced::widget::rule::horizontal(1),
-                    iced::widget::container(iced::widget::text(toast.body.as_str()))
-                        .width(Length::Fill)
-                        .padding(5)
-                        .style(iced::widget::container::rounded_box),
+                    body_area,
                 ])
                 .max_width(200)
                 .into(),
@@ -146,8 +145,9 @@ where
 
         Self {
             content: content.into(),
-            toasts: elements,
-            timeout_secs: DEFAULT_TIMEOUT,
+            elements,
+            timeouts,
+            default_timeout_secs: DEFAULT_TIMEOUT,
             on_close: Box::new(on_close),
         }
     }
@@ -155,7 +155,7 @@ where
     #[must_use]
     pub fn timeout(self, seconds: u64) -> Self {
         Self {
-            timeout_secs: seconds,
+            default_timeout_secs: seconds,
             ..self
         }
     }
@@ -209,7 +209,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
 
     fn children(&self) -> Vec<Tree> {
         std::iter::once(Tree::new(&self.content))
-            .chain(self.toasts.iter().map(Tree::new))
+            .chain(self.elements.iter().map(Tree::new))
             .collect()
     }
 
@@ -221,7 +221,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
         // is accurate
         instants.retain(Option::is_some);
 
-        match (instants.len(), self.toasts.len()) {
+        match (instants.len(), self.elements.len()) {
             (old, new) if old > new => {
                 instants.truncate(new);
             }
@@ -233,7 +233,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
 
         tree.diff_children(
             &std::iter::once(&self.content)
-                .chain(self.toasts.iter())
+                .chain(self.elements.iter())
                 .collect::<Vec<_>>(),
         );
     }
@@ -316,14 +316,15 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
             translation,
         );
 
-        let toasts = (!self.toasts.is_empty()).then(|| {
+        let toasts = (!self.elements.is_empty()).then(|| {
             overlay::Element::new(Box::new(Overlay {
                 viewport: *viewport,
-                toasts: &mut self.toasts,
+                elements: &mut self.elements,
                 state: toasts_state,
                 instants,
                 on_close: &self.on_close,
-                timeout_secs: self.timeout_secs,
+                timeouts: &self.timeouts,
+                default_timeout_secs: self.default_timeout_secs,
             }))
         });
         let overlays = content.into_iter().chain(toasts).collect::<Vec<_>>();
@@ -334,11 +335,13 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
 
 struct Overlay<'a, 'b, Message> {
     viewport: Rectangle,
-    toasts: &'b mut [Element<'a, Message>],
+    elements: &'b mut [Element<'a, Message>],
     state: &'b mut [Tree],
     instants: &'b mut [Option<Instant>],
     on_close: &'b dyn Fn(usize) -> Message,
-    timeout_secs: u64,
+    /// Per-toast effective timeout in seconds (index matches toast slice, not elements).
+    timeouts: &'b [u64],
+    default_timeout_secs: u64,
 }
 
 impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Message> {
@@ -356,7 +359,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
             10.into(),
             10.0,
             Alignment::End,
-            self.toasts,
+            self.elements,
             self.state,
         )
     }
@@ -372,7 +375,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
         let viewport = layout.bounds();
 
         for ((child, state), layout) in self
-            .toasts
+            .elements
             .iter()
             .zip(self.state.iter())
             .zip(layout.children())
@@ -386,7 +389,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
     fn operate(&mut self, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
         operation.container(None, layout.bounds());
         operation.traverse(&mut |operation| {
-            self.toasts
+            self.elements
                 .iter_mut()
                 .zip(self.state.iter_mut())
                 .zip(layout.children())
@@ -415,17 +418,26 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
                 .enumerate()
                 .for_each(|(index, maybe_instant)| {
                     if index == 0 {
-                        // The horizontal space at the start
+                        // The vertical space at the start
                         return;
                     }
 
                     if let Some(instant) = maybe_instant.as_mut() {
-                        let remaining = Duration::from_secs(self.timeout_secs)
-                            .saturating_sub(instant.elapsed());
+                        // `index - 1` maps from elements index (skip leading spacer) to toast
+                        // data index. Fall back to the default if somehow out of range.
+                        let toast_index = index - 1;
+                        let timeout_secs = self
+                            .timeouts
+                            .get(toast_index)
+                            .copied()
+                            .unwrap_or(self.default_timeout_secs);
+
+                        let remaining =
+                            Duration::from_secs(timeout_secs).saturating_sub(instant.elapsed());
 
                         if remaining == Duration::ZERO {
                             maybe_instant.take();
-                            shell.publish((self.on_close)(index - 1));
+                            shell.publish((self.on_close)(toast_index));
                             next_redraw = Some(window::RedrawRequest::NextFrame);
                         } else {
                             let redraw_at = window::RedrawRequest::At(*now + remaining);
@@ -444,7 +456,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
         let viewport = layout.bounds();
 
         for (((child, state), layout), instant) in self
-            .toasts
+            .elements
             .iter_mut()
             .zip(self.state.iter_mut())
             .zip(layout.children())
@@ -478,7 +490,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
         cursor: mouse::Cursor,
         renderer: &Renderer,
     ) -> mouse::Interaction {
-        self.toasts
+        self.elements
             .iter()
             .zip(self.state.iter())
             .zip(layout.children())
