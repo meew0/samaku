@@ -47,6 +47,9 @@ pub struct Manager<'a, Message> {
     elements: Vec<Element<'a, Message>>,
     /// Per-toast effective timeout in seconds (index matches toast slice).
     timeouts: Vec<u64>,
+    /// Per-toast freeze flag: when `true` the timer is held at zero until the toast unblocks
+    /// (i.e. a `Progress` toast whose progress has not yet reached 1.0).
+    frozen: Vec<bool>,
     default_timeout_secs: u64,
     on_close: Box<dyn Fn(usize) -> Message + 'a>,
 }
@@ -68,9 +71,14 @@ where
         elements.push(iced::widget::space::vertical().into());
 
         let mut timeouts: Vec<u64> = Vec::with_capacity(toasts.len());
+        let mut frozen: Vec<bool> = Vec::with_capacity(toasts.len());
 
         for (index, toast) in toasts.iter().enumerate() {
             timeouts.push(toast.timeout_secs.unwrap_or(DEFAULT_TIMEOUT));
+            frozen.push(matches!(
+                &toast.content,
+                toast::Content::Progress { progress } if *progress < 1.0
+            ));
 
             let title_text = if toast.count == 1 {
                 iced::widget::text(toast.title.as_str())
@@ -148,6 +156,7 @@ where
             content: content.into(),
             elements,
             timeouts,
+            frozen,
             default_timeout_secs: DEFAULT_TIMEOUT,
             on_close: Box::new(on_close),
         }
@@ -325,6 +334,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
                 instants,
                 on_close: &self.on_close,
                 timeouts: &self.timeouts,
+                frozen: &self.frozen,
                 default_timeout_secs: self.default_timeout_secs,
             }))
         });
@@ -342,6 +352,8 @@ struct Overlay<'a, 'b, Message> {
     on_close: &'b dyn Fn(usize) -> Message,
     /// Per-toast effective timeout in seconds (index matches toast slice, not elements).
     timeouts: &'b [u64],
+    /// Per-toast freeze flag: timer is held until the toast unblocks (e.g. progress finishes).
+    frozen: &'b [bool],
     default_timeout_secs: u64,
 }
 
@@ -427,6 +439,14 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
                         // `index - 1` maps from elements index (skip leading spacer) to toast
                         // data index. Fall back to the default if somehow out of range.
                         let toast_index = index - 1;
+
+                        // While frozen (e.g. a progress toast that hasn't finished), keep
+                        // resetting the instant so the full timeout begins only once unfrozen.
+                        if self.frozen.get(toast_index).copied().unwrap_or(false) {
+                            *instant = *now;
+                            return;
+                        }
+
                         let timeout_secs = self
                             .timeouts
                             .get(toast_index)

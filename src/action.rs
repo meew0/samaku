@@ -22,6 +22,7 @@ pub(crate) fn index_video_and_load(global_state: &mut crate::Samaku, path_buf: P
     let toast_id = global_state.toasts.progress("Indexing video", "");
 
     let progress_sender = global_state.workers.progress_sender();
+    let progress_sender_done = global_state.workers.progress_sender();
 
     let indexer = media::Video::create_indexer(&path_buf);
     if let Some(mut indexer) = global_state.toasts.anyhow(indexer) {
@@ -33,8 +34,10 @@ pub(crate) fn index_video_and_load(global_state: &mut crate::Samaku, path_buf: P
             model::CancellationState::Continue
         });
 
-        // Make the indexer worker index the video and return a message that will then load the video after indexing is finished
+        // Make the indexer worker index the video and return a message that will then load the video after indexing is finished.
+        // Also send a final progress=1.0 so the progress toast unfreezes and starts its closing countdown.
         global_state.workers.emit_index(indexer, move |index| {
+            progress_sender_done.update_progress(toast_id, 1.0);
             message::Message::VideoIndexed(path_buf, model::NeverClone(index))
         });
     }
