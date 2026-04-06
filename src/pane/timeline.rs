@@ -1,8 +1,8 @@
 use crate::media::FrameRate;
 use crate::{message, model, style, subtitle, view};
 use iced::keyboard::Modifiers;
-use iced::widget::{canvas, Action};
-use iced::{keyboard, mouse, Renderer, Theme};
+use iced::widget::{Action, canvas};
+use iced::{Renderer, Theme, keyboard, mouse};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -520,51 +520,80 @@ impl CanvasData {
     }
 }
 
+fn background_x_bounds(position: Position, video_bounds: VideoBounds, width: f32) -> (f32, f32) {
+    let pixel_per_ms = position.pixel_per_ms(width);
+    let start_x = (position.time_delta(video_bounds.start) * pixel_per_ms).clamp(0.0, width);
+    let end_x = (position.time_delta(video_bounds.end) * pixel_per_ms).clamp(0.0, width);
+    (start_x, end_x)
+}
+
+fn seconds_tick_positions(
+    position: Position,
+    video_bounds: VideoBounds,
+    step: i64,
+) -> Vec<subtitle::StartTime> {
+    let right_limit = position.right.0.min(video_bounds.end.0.saturating_sub(1));
+    let mut tick_ms = subtitle::StartTime(right_limit - right_limit.rem_euclid(step));
+    let mut ticks = Vec::new();
+    while tick_ms >= position.left && tick_ms >= video_bounds.start {
+        ticks.push(tick_ms);
+        tick_ms = tick_ms - subtitle::Duration(step);
+    }
+    ticks
+}
+
+fn frame_tick_bounds(position: Position, video_bounds: VideoBounds) -> (i64, i64) {
+    let left_bound = position.left.0.max(video_bounds.start.0);
+    let right_bound = position.right.0.min(video_bounds.end.0);
+    (left_bound, right_bound)
+}
+
 fn draw_background(
     draw_bounds: iced::Rectangle,
     frame: &mut canvas::Frame<Renderer>,
-    _video_bounds: VideoBounds,
+    video_bounds: VideoBounds,
     position: Position,
 ) {
-    let zero = subtitle::StartTime(0);
-    if zero < position.left {
-        // Entire timeline is in the positive region
-        frame.fill_rectangle(
-            iced::Point::ORIGIN,
-            frame.size(),
-            style::SAMAKU_BACKGROUND_WEAK,
-        );
-    } else if zero > position.right {
-        // Entire timeline is in the negative region
-        frame.fill_rectangle(iced::Point::ORIGIN, frame.size(), style::SAMAKU_BACKGROUND);
-    } else {
-        // Part of the timeline is in the positive region: draw the part to the left of it darker than the part right of it
-        let midpoint_x = position.time_delta(zero) * position.pixel_per_ms(draw_bounds.width);
+    let (start_x, end_x) = background_x_bounds(position, video_bounds, draw_bounds.width);
+
+    // Dark region before video start
+    if start_x > 0.0 {
         frame.fill_rectangle(
             iced::Point::ORIGIN,
             iced::Size {
-                width: midpoint_x,
+                width: start_x,
                 height: frame.height(),
             },
             style::SAMAKU_BACKGROUND,
         );
+    }
+    // Lighter region within video bounds
+    if end_x > start_x {
         frame.fill_rectangle(
-            iced::Point {
-                x: midpoint_x,
-                y: 0.0,
-            },
+            iced::Point { x: start_x, y: 0.0 },
             iced::Size {
-                width: frame.width() - midpoint_x,
+                width: end_x - start_x,
                 height: frame.height(),
             },
             style::SAMAKU_BACKGROUND_WEAK,
+        );
+    }
+    // Dark region after video end
+    if end_x < draw_bounds.width {
+        frame.fill_rectangle(
+            iced::Point { x: end_x, y: 0.0 },
+            iced::Size {
+                width: draw_bounds.width - end_x,
+                height: frame.height(),
+            },
+            style::SAMAKU_BACKGROUND,
         );
     }
 }
 
 fn draw_seconds_ticks(
     frame: &mut canvas::Frame<Renderer>,
-    _video_bounds: VideoBounds,
+    video_bounds: VideoBounds,
     position: Position,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
@@ -574,11 +603,7 @@ fn draw_seconds_ticks(
     )]
     let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64).max(500);
 
-    // Draw seconds ticks from right to left.
-    // Find first full second to the left of the right bound.
-    let mut tick_ms = subtitle::StartTime(position.right.0 - (position.right.0.rem_euclid(step)));
-
-    while tick_ms >= subtitle::StartTime(0) && tick_ms >= position.left {
+    for tick_ms in seconds_tick_positions(position, video_bounds, step) {
         let tick_x = position.time_delta(tick_ms) * pixel_per_ms;
 
         frame.fill_rectangle(
@@ -596,23 +621,22 @@ fn draw_seconds_ticks(
             align_x: iced::widget::text::Alignment::Center,
             ..Default::default()
         });
-
-        tick_ms = tick_ms - subtitle::Duration(step);
     }
 }
 
 fn draw_frame_ticks(
     frame: &mut canvas::Frame<Renderer>,
-    _video_bounds: VideoBounds,
+    video_bounds: VideoBounds,
     position: Position,
     frame_rate: FrameRate,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
-    let first_frame = model::FrameNumber(frame_rate.ms_to_frame(position.left.0).0.max(0));
+    let (left_bound, right_bound) = frame_tick_bounds(position, video_bounds);
+    let first_frame = model::FrameNumber(frame_rate.ms_to_frame(left_bound).0.max(0));
 
     // Draw frame ticks from left to right.
     for (frame_number, time_ms) in frame_rate.iter_from(first_frame) {
-        if time_ms > position.right.0 {
+        if time_ms >= right_bound {
             break;
         }
 
@@ -883,4 +907,154 @@ fn top_bar<'a>(
     )
     .padding(5.0)
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_position(left_ms: i64, right_ms: i64) -> Position {
+        Position {
+            left: subtitle::StartTime(left_ms),
+            right: subtitle::StartTime(right_ms),
+        }
+    }
+
+    fn make_bounds(start_ms: i64, end_ms: i64) -> VideoBounds {
+        VideoBounds {
+            start: subtitle::StartTime(start_ms),
+            end: subtitle::StartTime(end_ms),
+        }
+    }
+
+    fn tick_values(ticks: Vec<subtitle::StartTime>) -> Vec<i64> {
+        ticks.into_iter().map(|tick_time| tick_time.0).collect()
+    }
+
+    // --- seconds_tick_positions ---
+
+    #[test]
+    fn seconds_ticks() {
+        // Video [0, 5000), viewport [0, 10000], step 1000 → ticks at 0..=4000
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(0, 5000);
+        let mut ticks = tick_values(seconds_tick_positions(pos, bounds, 1000));
+        ticks.sort_unstable();
+        assert_eq!(ticks, vec![0, 1000, 2000, 3000, 4000]);
+
+        // Video [2000, 7000), viewport [0, 10000], step 1000 → ticks at 2000..=6000
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(2000, 7000);
+        let mut ticks = tick_values(seconds_tick_positions(pos, bounds, 1000));
+        ticks.sort_unstable();
+        assert_eq!(ticks, vec![2000, 3000, 4000, 5000, 6000]);
+
+        // Video [0, 3000) — end falls exactly on a tick boundary, must NOT appear
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(0, 3000);
+        let mut ticks = tick_values(seconds_tick_positions(pos, bounds, 1000));
+        ticks.sort_unstable();
+        assert_eq!(ticks, vec![0, 1000, 2000]);
+
+        // Empty video: start == end → no ticks
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(0, 0);
+        assert!(seconds_tick_positions(pos, bounds, 1000).is_empty());
+
+        // Empty video at a non-zero position
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(5000, 5000);
+        assert!(seconds_tick_positions(pos, bounds, 1000).is_empty());
+
+        // Video entirely before the viewport → no ticks visible
+        let pos = make_position(8000, 10000);
+        let bounds = make_bounds(0, 5000);
+        assert!(seconds_tick_positions(pos, bounds, 1000).is_empty());
+
+        // Video entirely after the viewport → no ticks visible
+        let pos = make_position(0, 3000);
+        let bounds = make_bounds(5000, 10000);
+        assert!(seconds_tick_positions(pos, bounds, 1000).is_empty());
+
+        // Video [1500, 4500), step 1000 → only aligned multiples within bounds: 2000, 3000, 4000
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(1500, 4500);
+        let mut ticks = tick_values(seconds_tick_positions(pos, bounds, 1000));
+        ticks.sort_unstable();
+        assert_eq!(ticks, vec![2000, 3000, 4000]);
+
+        // Viewport [2000, 4000], video [0, 10000) → only ticks in viewport
+        let pos = make_position(2000, 4000);
+        let bounds = make_bounds(0, 10000);
+        let mut ticks = tick_values(seconds_tick_positions(pos, bounds, 1000));
+        ticks.sort_unstable();
+        assert_eq!(ticks, vec![2000, 3000, 4000]);
+    }
+    #[test]
+    fn frame_bounds() {
+        // Viewport fully inside video → bounds match viewport
+        let pos = make_position(3000, 5000);
+        let bounds = make_bounds(2000, 7000);
+        assert_eq!(frame_tick_bounds(pos, bounds), (3000, 5000));
+
+        // Viewport encompasses video → bounds match video
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(2000, 7000);
+        assert_eq!(frame_tick_bounds(pos, bounds), (2000, 7000));
+
+        // Video entirely to the right → left_bound > right_bound, so no frames drawn
+        let pos = make_position(0, 1000);
+        let bounds = make_bounds(2000, 7000);
+        let (left, right) = frame_tick_bounds(pos, bounds);
+        assert!(left >= right);
+
+        // Video entirely to the left → left_bound > right_bound, so no frames drawn
+        let pos = make_position(8000, 10000);
+        let bounds = make_bounds(2000, 7000);
+        let (left, right) = frame_tick_bounds(pos, bounds);
+        assert!(left >= right);
+
+        // Empty video → left_bound == right_bound, no frames drawn
+        let pos = make_position(0, 10000);
+        let bounds = make_bounds(5000, 5000);
+        let (left, right) = frame_tick_bounds(pos, bounds);
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn background_bounds() {
+        // Video exactly matches viewport → start_x=0, end_x=width
+        let pos = make_position(0, 1000);
+        let bounds = make_bounds(0, 1000);
+        let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
+        assert!((start_x - 0.0).abs() < 0.001);
+        assert!((end_x - 100.0).abs() < 0.001);
+
+        // Video entirely right of viewport → start_x == end_x == width (all dark)
+        let pos = make_position(0, 1000);
+        let bounds = make_bounds(2000, 5000);
+        let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
+        assert!((start_x - 100.0).abs() < 0.001);
+        assert!((end_x - 100.0).abs() < 0.001);
+
+        // Video entirely left of viewport → start_x == end_x == 0 (all dark)
+        let pos = make_position(5000, 6000);
+        let bounds = make_bounds(0, 3000);
+        let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
+        assert!((start_x - 0.0).abs() < 0.001);
+        assert!((end_x - 0.0).abs() < 0.001);
+
+        // Viewport [0, 1000], video [250, 750] → start_x=25%, end_x=75%
+        let pos = make_position(0, 1000);
+        let bounds = make_bounds(250, 750);
+        let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
+        assert!((start_x - 25.0).abs() < 0.001);
+        assert!((end_x - 75.0).abs() < 0.001);
+
+        // Empty video → start_x == end_x (zero-width lighter region)
+        let pos = make_position(0, 1000);
+        let bounds = make_bounds(500, 500);
+        let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
+        assert!((start_x - end_x).abs() < 0.001);
+    }
 }
