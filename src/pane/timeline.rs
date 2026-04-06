@@ -439,7 +439,7 @@ impl CanvasData {
         };
 
         let new_pixel_per_ms = new_position.pixel_per_ms(bounds.width);
-        if new_pixel_per_ms < 1.0 && new_pixel_per_ms > 0.001 {
+        if new_pixel_per_ms < 1.0 && new_pixel_per_ms > 0.0001 {
             let message =
                 message::Message::Pane(self.pane, message::Pane::TimelineDragged(new_position));
 
