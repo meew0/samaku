@@ -269,7 +269,11 @@ impl canvas::Program<message::Message> for CanvasData {
                                 DragMode::None | DragMode::Pan(_) | DragMode::Cursor => {
                                     let new_time = self.position.left
                                         + self.position.ms_from_left(mouse_position, bounds.width);
-                                    let message = message::Message::PlaybackSetPosition(new_time);
+                                    let new_time_bounded = new_time
+                                        .max(self.video_bounds.start)
+                                        .min(self.video_bounds.end - subtitle::Duration(1));
+                                    let message =
+                                        message::Message::PlaybackSetPosition(new_time_bounded);
                                     Some(Action::publish(message).and_capture())
                                 }
                                 DragMode::Event(_, ref event_reference) => {
@@ -473,7 +477,10 @@ impl CanvasData {
             DragMode::Cursor => {
                 let new_time =
                     self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
-                let message = message::Message::PlaybackSetPosition(new_time);
+                let new_time_bounded = new_time
+                    .max(self.video_bounds.start)
+                    .min(self.video_bounds.end - subtitle::Duration(1));
+                let message = message::Message::PlaybackSetPosition(new_time_bounded);
                 return Some(Action::publish(message).and_capture());
             }
             DragMode::Event(drag_action, ref event_reference) => {
@@ -930,8 +937,6 @@ mod tests {
     fn tick_values(ticks: Vec<subtitle::StartTime>) -> Vec<i64> {
         ticks.into_iter().map(|tick_time| tick_time.0).collect()
     }
-
-    // --- seconds_tick_positions ---
 
     #[test]
     fn seconds_ticks() {
