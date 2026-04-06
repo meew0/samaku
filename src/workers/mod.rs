@@ -40,12 +40,17 @@ pub type GlobalReceiver = iced::futures::channel::mpsc::UnboundedReceiver<messag
 pub struct GlobalSender(iced::futures::channel::mpsc::UnboundedSender<message::Message>);
 
 impl GlobalSender {
+    /// Send a message to be processed by iced.
+    ///
+    /// # Panics
+    /// Panics if the channel has been closed.
     pub fn send(&self, message: message::Message) {
         self.0
             .unbounded_send(message)
             .expect("Failed to send message from worker");
     }
 
+    #[expect(clippy::needless_pass_by_value, reason = "for more ergonomic usage")]
     pub fn error<S: Into<String>>(&self, err: anyhow::Error, info: S) {
         self.send(message::toast_danger(info.into(), format!("{err:#}")));
     }
