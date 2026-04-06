@@ -1,5 +1,10 @@
 use crate::{message, model};
+use std::collections::HashMap;
+use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
+use std::time::Duration;
+
+const RATE_LIMIT_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum MessageIn {
@@ -15,15 +20,27 @@ pub(super) fn spawn(
     let handle = thread::Builder::new()
         .name("samaku_progress_listener".to_owned())
         .spawn(move || {
+            let mut pending: HashMap<model::toast::Id, f32> = HashMap::new();
             loop {
-                // TODO: rate limiting, such that the worker doesn't spam iced with messages in case of fast updates
-                match rx_in.recv() {
-                    Ok(message) => match message {
-                        MessageIn::Progress(key, progress) => {
-                            tx_out.send(message::Message::UpdateToastProgress(key, progress));
+                // Collect all messages that arrive within the next 100ms window,
+                // keeping only the latest value per key.
+                let deadline = std::time::Instant::now() + RATE_LIMIT_INTERVAL;
+                loop {
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    match rx_in.recv_timeout(remaining) {
+                        Ok(MessageIn::Progress(key, progress)) => {
+                            pending.insert(key, progress);
                         }
-                    },
-                    Err(_) => return,
+                        Err(RecvTimeoutError::Timeout) => break,
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
+                }
+                // Flush one update per key.
+                for (key, progress) in pending.drain() {
+                    tx_out.send(message::Message::UpdateToastProgress(key, progress));
                 }
             }
         })
