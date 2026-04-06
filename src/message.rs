@@ -42,7 +42,7 @@ pub enum Message {
     CloseToast(usize),
 
     /// Update the progress value of the progress-bar toast with the given stable ID.
-    UpdateToastProgress(u64, f32),
+    UpdateToastProgress(model::toast::Id, f32),
 
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
@@ -66,10 +66,14 @@ pub enum Message {
     /// Export subtitle file — compiling events and removing extraneous metadata.
     ExportSubtitleFile,
 
-    /// A video file has been selected and should be loaded.
+    /// A video file has been selected and should be indexed, then loaded.
     VideoFileSelected(std::path::PathBuf),
 
-    /// A video has been loaded; its metadata is now available and frames can now be decode
+    /// A video file has been successfully indexed and should now be loaded.
+    /// Uses `NeverClone`, so this message must never be cloned.
+    VideoIndexed(std::path::PathBuf, model::NeverClone<media::Index>),
+
+    /// A video has been loaded; its metadata is now available and frames can now be decoded
     /// from it.
     VideoLoaded(Box<media::VideoMetadata>),
 

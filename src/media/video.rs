@@ -1,11 +1,11 @@
+pub use super::bindings::ffms2::FrameRate;
 use anyhow::Context as _;
 use std::path::Path;
-
-pub use super::bindings::ffms2::FrameRate;
 
 use crate::model;
 
 use super::bindings::ffms2;
+use super::index;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Metadata {
@@ -24,13 +24,15 @@ pub struct Video {
 }
 
 impl Video {
-    /// Load the video from the given file using FFMS2.
-    pub fn load<P: AsRef<Path>>(filename: P) -> anyhow::Result<Video> {
+    pub fn create_indexer<P: AsRef<Path>>(filename: P) -> anyhow::Result<index::Indexer> {
         let mut indexer = ffms2::Indexer::new(filename.as_ref()).context("creating indexer")?;
         indexer.set_track_type_index_settings(ffms2::TrackType::Video, 1);
-        let mut index = indexer
-            .do_indexing(ffms2::IndexErrorHandling::Abort)
-            .context("indexing")?;
+        Ok(index::Indexer::new(indexer))
+    }
+
+    /// Load the video from the given file using FFMS2.
+    pub fn load<P: AsRef<Path>>(filename: P, index: index::Index) -> anyhow::Result<Video> {
+        let mut index = index.into_inner();
 
         let first_video_track = index
             .first_track_of_type(ffms2::TrackType::Video)
@@ -258,13 +260,14 @@ mod tests {
     }
 
     #[test]
-    fn cube_h264_metadata_and_colors() {
+    fn cube_h264_metadata_and_colors() -> anyhow::Result<()> {
         crate::media::init();
 
         let path =
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_files/cube_h264.mkv");
 
-        let video = Video::load(&path).expect("should load video");
+        let index = Video::create_indexer(&path)?.run()?;
+        let video = Video::load(&path, index).expect("should load video");
 
         assert_eq!(video.metadata.width, 320, "unexpected width");
         assert_eq!(video.metadata.height, 200, "unexpected height");
@@ -309,5 +312,7 @@ mod tests {
             !is_red(red, green),
             "last frame M2 should be grey, got red={red} green={green}"
         );
+
+        Ok(())
     }
 }

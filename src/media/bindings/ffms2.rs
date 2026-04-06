@@ -5,7 +5,7 @@
 
 use crate::model;
 use ffms2_sys as ffms2;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
 use std::fmt::{Debug, Display};
 use std::pin::Pin;
@@ -65,9 +65,12 @@ impl Drop for Index {
     }
 }
 
+pub type ProgressCallback = Box<dyn FnMut(i64, i64) -> model::CancellationState>;
+
 pub(crate) struct Indexer {
     indexer: *mut ffms2::FFMS_Indexer,
     error: InternalError,
+    callback: Cell<Option<Pin<Box<ProgressCallback>>>>,
 }
 
 unsafe impl Send for Indexer {}
@@ -81,7 +84,11 @@ impl Indexer {
         if indexer.is_null() {
             Err(error.error())
         } else {
-            Ok(Self { indexer, error })
+            Ok(Self {
+                indexer,
+                error,
+                callback: Cell::new(None),
+            })
         }
     }
 
@@ -89,6 +96,42 @@ impl Indexer {
         unsafe {
             ffms2::FFMS_TrackTypeIndexSettings(self.indexer, track_type as i32, index, 0);
         }
+    }
+    pub(crate) fn set_progress_callback<
+        F: FnMut(i64, i64) -> model::CancellationState + 'static,
+    >(
+        &mut self,
+        callback: F,
+    ) {
+        // We need the two levels of `Box` because the callback function pointer is a DST, so we
+        // essentially have (thin pointer) -> (wide pointer) -> (DST)
+        let ptr: *mut ProgressCallback = Box::into_raw(Box::new(Box::new(callback)));
+
+        unsafe {
+            ffms2::FFMS_SetProgressCallback(
+                self.indexer,
+                Some(Self::internal_callback),
+                ptr.cast(),
+            );
+        }
+
+        // Replace the previous callback, dropping it in the process
+        let box_again = unsafe { Box::from_raw(ptr) };
+        self.callback.replace(Some(Pin::new(box_again)));
+    }
+
+    unsafe extern "C" fn internal_callback(
+        current: i64,
+        total: i64,
+        opaque_data: *mut libc::c_void,
+    ) -> i32 {
+        let callback_ptr: *mut ProgressCallback = opaque_data.cast();
+        let callback: &mut dyn FnMut(i64, i64) -> model::CancellationState =
+            unsafe { &mut **callback_ptr };
+
+        let result = callback(current, total);
+
+        i32::from(result.should_cancel())
     }
 
     pub(crate) fn do_indexing(
@@ -109,6 +152,7 @@ impl Indexer {
             let Self {
                 indexer: _indexer,
                 error,
+                callback: _callback,
             } = self;
 
             Ok(Index {

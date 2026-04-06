@@ -157,9 +157,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn motion_track() {
-        let video =
-            video::Video::load(crate::test_utils::test_file("test_files/cube_av1.mkv")).unwrap();
+    fn motion_track() -> anyhow::Result<()> {
+        crate::media::init();
+
+        let path = crate::test_utils::test_file("test_files/cube_av1.mkv");
+
+        let index = video::Video::create_indexer(&path)?.run()?;
+        let video = video::Video::load(&path, index).expect("should load video");
 
         let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
         let mut tracker = Tracker::new(
@@ -182,5 +186,7 @@ mod tests {
         println!("{last_region:?}");
         assert!((last_region.center.x - 45.0).abs() < 2.0);
         assert!((last_region.center.y - 81.0).abs() < 2.0);
+
+        Ok(())
     }
 }

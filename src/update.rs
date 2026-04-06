@@ -137,7 +137,11 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
         }
         Message::VideoFileSelected(path_buf) => {
             global_state.project_properties.video_path = Some(path_buf.clone());
-            action::load_video(global_state, path_buf);
+            action::index_video_and_load(global_state, path_buf);
+        }
+        Message::VideoIndexed(path_buf, index) => {
+            let model::NeverClone(index) = index;
+            action::load_video(global_state, path_buf, index);
         }
         Message::VideoLoaded(metadata) => {
             global_state.video_metadata = Some(*metadata);
@@ -233,7 +237,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             }
 
             let project_load_result = project::load(global_state);
-            if global_state.toasts.anyhow_toast(project_load_result) == Some(true) {
+            if global_state.toasts.anyhow(project_load_result) == Some(true) {
                 // Some project metadata was loaded, we might have to perform after-load tasks such as opening linked video/audio files
                 return project::after_load(global_state);
             }
@@ -256,7 +260,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 Ok(data)
             })();
 
-            if let Some(data) = global_state.toasts.anyhow_toast(result) {
+            if let Some(data) = global_state.toasts.anyhow(result) {
                 let future = async {
                     select_file_and_save(data)
                         .await

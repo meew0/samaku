@@ -2,10 +2,10 @@ use std::{sync::Arc, thread};
 
 use crate::{media, message, model, nde};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) enum MessageIn {
     PlaybackStep,
-    LoadVideo(std::path::PathBuf),
+    LoadVideo(std::path::PathBuf, media::Index),
     TrackMotionForNode(
         nde::graph::NodeId,
         media::motion::Region,
@@ -102,9 +102,9 @@ pub(super) fn spawn(
                                 }
                             }
                         }
-                        MessageIn::LoadVideo(path_buf) => {
+                        MessageIn::LoadVideo(path_buf, index) => {
                             // Load new video
-                            match media::Video::load(path_buf) {
+                            match media::Video::load(path_buf, index) {
                                 Ok(video) => {
                                     let metadata_box = Box::new(video.metadata);
                                     if tx_out

@@ -40,6 +40,20 @@ impl SubAssign<FrameDelta> for FrameNumber {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub enum CancellationState {
+    #[default]
+    Continue,
+    Cancel,
+}
+
+impl CancellationState {
+    #[must_use]
+    pub fn should_cancel(self) -> bool {
+        matches!(self, Self::Cancel)
+    }
+}
+
 /// A wrapper around an arbitrary object that tracks whenever that object might have been modified
 /// (by being mutably borrowed).
 ///

@@ -69,7 +69,7 @@ impl<M: PartialEq> PartialEq for Content<M> {
 #[derive(Debug, Clone)]
 pub struct Toast<Message = ()> {
     /// Stable ID assigned by [`List::push`]. Zero until pushed.
-    pub id: u64,
+    pub id: Id,
     /// How many identical toasts have been grouped together (deduplication).
     pub count: u32,
     pub title: String,
@@ -85,7 +85,7 @@ impl<M> Toast<M> {
     #[must_use]
     pub fn message(status: Status, title: String, body: String) -> Self {
         Self {
-            id: 0,
+            id: Id(0),
             count: 1,
             title,
             body,
@@ -100,7 +100,7 @@ impl<M> Toast<M> {
     #[must_use]
     pub fn progress(status: Status, title: String, body: String) -> Self {
         Self {
-            id: 0,
+            id: Id(0),
             count: 1,
             title,
             body,
@@ -123,7 +123,7 @@ impl<M> Toast<M> {
         on_deny: M,
     ) -> Self {
         Self {
-            id: 0,
+            id: Id(0),
             count: 1,
             title,
             body,
@@ -136,6 +136,12 @@ impl<M> Toast<M> {
                 on_deny: Box::new(on_deny),
             },
         }
+    }
+
+    /// "Danger" status toast for anyhow errors.
+    #[must_use]
+    pub fn error(err: &anyhow::Error) -> Self {
+        Self::message(Status::Danger, "Error".to_owned(), format!("{err:#}"))
     }
 
     /// Override the timeout for this specific toast (builder-style).
@@ -164,7 +170,7 @@ impl<M> Eq for Toast<M> {}
 /// Manages a collection of toasts with deduplication and stable per-toast IDs.
 pub struct List<M> {
     toasts: Vec<Toast<M>>,
-    next_id: u64,
+    next_id: Id,
 }
 
 impl<M> List<M> {
@@ -172,14 +178,14 @@ impl<M> List<M> {
     pub fn new() -> Self {
         Self {
             toasts: Vec::new(),
-            next_id: 1,
+            next_id: Id(1),
         }
     }
 
     /// Add a toast. Assigns a stable ID. For plain-message toasts, deduplicates by
     /// incrementing the count on an identical existing toast instead of adding a new one.
     /// Also prints the toast to the console.
-    pub fn push(&mut self, mut toast: Toast<M>) {
+    pub fn push(&mut self, mut toast: Toast<M>) -> Id {
         println!(
             "[toast status={:?}] [{}] {}",
             toast.status, toast.title, toast.body
@@ -189,12 +195,24 @@ impl<M> List<M> {
             && let Some(existing) = self.toasts.iter_mut().find(|existing| **existing == toast)
         {
             existing.count += 1;
-            return;
+            return existing.id;
         }
 
-        toast.id = self.next_id;
-        self.next_id += 1;
+        let id = self.next_id;
+        toast.id = id;
+        self.next_id = Id(self.next_id.0 + 1);
         self.toasts.push(toast);
+
+        id
+    }
+
+    // Utility methods for various toast types
+    pub fn progress(&mut self, title: &str, body: &str) -> Id {
+        self.push(Toast::progress(
+            Status::Primary,
+            title.to_owned(),
+            body.to_owned(),
+        ))
     }
 
     /// Remove the toast at `index`. Handles the race condition where two close events
@@ -214,7 +232,7 @@ impl<M> List<M> {
 
     /// Update the progress value of the toast with the given stable ID.
     /// Returns `true` if the toast was found and updated.
-    pub fn update_progress(&mut self, id: u64, progress: f32) -> bool {
+    pub fn update_progress(&mut self, id: Id, progress: f32) -> bool {
         if let Some(toast) = self.toasts.iter_mut().find(|existing| existing.id == id)
             && let Content::Progress {
                 progress: ref mut stored_progress,
@@ -228,15 +246,11 @@ impl<M> List<M> {
 
     /// Convenience method: if `result` is `Ok`, returns `Some(val)`. If it is `Err`,
     /// adds a danger toast with the error message and returns `None`.
-    pub fn anyhow_toast<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
+    pub fn anyhow<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
         match result {
             Ok(val) => Some(val),
             Err(err) => {
-                self.push(Toast::message(
-                    Status::Danger,
-                    "Error".to_owned(),
-                    format!("{err:#}"),
-                ));
+                self.push(Toast::error(&err));
                 None
             }
         }
@@ -248,3 +262,6 @@ impl<M> Default for List<M> {
         Self::new()
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Id(u64);

@@ -121,7 +121,7 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
 /// Perform after-load tasks such as opening linked audio and video files.
 pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Message> {
     if let Some(video_path) = &global_state.project_properties.video_path {
-        action::load_video(global_state, video_path.clone());
+        action::index_video_and_load(global_state, video_path.clone());
     }
 
     if let Some(audio_path) = &global_state.project_properties.audio_path {
