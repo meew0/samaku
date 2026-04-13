@@ -1,6 +1,6 @@
 use crate::{message, model, nde};
 
-use super::{Error, LeafInputType, Node, Shell, SocketType, SocketValue};
+use super::{BasicError, LeafInputType, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputEvent;
@@ -19,9 +19,9 @@ impl Node for InputEvent {
         &[SocketType::IndividualEvent]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         let SocketValue::SourceEvent(source_event) = inputs[0] else {
-            return Err(Error::MismatchedTypes);
+            return Err(BasicError::MismatchedTypes.into());
         };
 
         let (global, spans) = nde::tags::parse(&source_event.text);
@@ -64,7 +64,7 @@ impl Node for InputFrameRate {
         &[SocketType::FrameRate]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         super::retrieve!(inputs[0], SocketValue::FrameRate(frame_rate));
         Ok(vec![SocketValue::FrameRate(*frame_rate)])
     }
@@ -96,7 +96,7 @@ impl Node for InputPosition {
         &[SocketType::Position]
     }
 
-    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         Ok(vec![SocketValue::Position(self.value)])
     }
 
@@ -197,7 +197,7 @@ impl Node for InputRectangle {
         &[SocketType::Rectangle]
     }
 
-    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         Ok(vec![SocketValue::Rectangle(self.value)])
     }
 
@@ -329,9 +329,9 @@ impl Node for InputTags {
         &[SocketType::LocalTags, SocketType::GlobalTags]
     }
 
-    fn run(&'_ self, _inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, _inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         if self.value.contains('{') || self.value.contains('}') {
-            return Err(Error::ContainsBrackets);
+            anyhow::bail!("Input tags contain brackets");
         }
 
         let block = format!("{{{}}}", self.value);

@@ -80,8 +80,8 @@ impl SocketValue<'_> {
     /// given function, returning a [`SocketValue`] of the same kind as `self`.
     ///
     /// # Errors
-    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
-    pub fn map_events<F>(&self, func: F) -> Result<SocketValue<'static>, Error>
+    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
+    pub fn map_events<F>(&self, func: F) -> anyhow::Result<SocketValue<'static>>
     where
         F: Fn(&super::Event) -> super::Event,
     {
@@ -92,7 +92,7 @@ impl SocketValue<'_> {
             SocketValue::MultipleEvents(events) => Ok(SocketValue::MultipleEvents(
                 events.iter().map(func).collect(),
             )),
-            _ => Err(Error::MismatchedTypes),
+            other => type_error(other),
         }
     }
 
@@ -100,15 +100,15 @@ impl SocketValue<'_> {
     /// given function, returning a [`Vec`] of returned values.
     ///
     /// # Errors
-    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
-    pub fn map_events_into<T, F>(&self, func: F) -> Result<Vec<T>, Error>
+    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
+    pub fn map_events_into<T, F>(&self, func: F) -> anyhow::Result<Vec<T>>
     where
         F: Fn(&super::Event) -> T,
     {
         match self {
             SocketValue::IndividualEvent(event) => Ok(vec![func(event.as_ref())]),
             SocketValue::MultipleEvents(events) => Ok(events.iter().map(func).collect()),
-            _ => Err(Error::MismatchedTypes),
+            other => type_error(other),
         }
     }
 
@@ -116,8 +116,8 @@ impl SocketValue<'_> {
     /// given event.
     ///
     /// # Errors
-    /// Returns [`Error::MismatchedTypes`] if `self` does not contain events.
-    pub fn each_event<F>(&self, mut func: F) -> Result<(), Error>
+    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
+    pub fn each_event<F>(&self, mut func: F) -> anyhow::Result<()>
     where
         F: FnMut(&super::Event),
     {
@@ -128,9 +128,18 @@ impl SocketValue<'_> {
                     func(event);
                 }
             }
-            _ => return Err(Error::MismatchedTypes),
+            other => return type_error(other),
         }
         Ok(())
+    }
+}
+
+// Handle an undesired socket value: if it is None, return a missing input error,
+// if it is any other type, report mismatched types.
+pub fn type_error<T>(other: &SocketValue) -> anyhow::Result<T> {
+    match other {
+        SocketValue::None => Err(BasicError::MissingInput.into()),
+        _ => Err(BasicError::MismatchedTypes.into()),
     }
 }
 
@@ -138,7 +147,7 @@ macro_rules! retrieve {
     ($val:expr, $pattern:pat) => {
         let value = $val;
         let $pattern = value else {
-            return Err(Error::MismatchedTypes);
+            return crate::nde::node::type_error(&value);
         };
     };
 }
@@ -191,9 +200,9 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// be different.
     ///
     /// # Errors
-    /// Can return an [`Error`] to indicate that the node is unable to process the given inputs
+    /// Can return an [`BasicError`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error>;
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>>;
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
@@ -224,11 +233,13 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
 // Generates an impl of `Clone` for `Box<dyn Node>`, to ensure nodes (and thus NDE filters) are cloneable
 dyn_clone::clone_trait_object!(Node);
 
-pub enum Error {
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+pub enum BasicError {
+    #[error("Mismatched types")]
     MismatchedTypes,
-    Empty,
-    InvertedRectangle,
-    ContainsBrackets,
+
+    #[error("Missing required input")]
+    MissingInput,
 }
 
 pub type Constructor = fn() -> Box<dyn Node>;

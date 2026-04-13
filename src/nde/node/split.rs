@@ -1,6 +1,6 @@
 use crate::{model, nde, subtitle};
 
-use super::{Error, Node, Shell, SocketType, SocketValue};
+use super::{Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SplitFrameByFrame;
@@ -19,7 +19,7 @@ impl Node for SplitFrameByFrame {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[0], SocketValue::IndividualEvent(event));

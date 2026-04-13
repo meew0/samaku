@@ -38,7 +38,14 @@ pub fn nde<'a, 'b>(
     filter: &'b nde::graph::Graph,
     context: &Context,
 ) -> Result<NdeResult<'a, 'b>, NdeError> {
-    let mut intermediates: Vec<NodeState> = vec![NodeState::Inactive; filter.nodes.len()];
+    let mut intermediates: Vec<NodeState> = Vec::with_capacity(filter.nodes.len());
+    // we cannot use a vec! macro or resize here because NodeStates aren't cloneable
+    for _ in &filter.nodes {
+        intermediates.push(NodeState::Inactive);
+    }
+
+    let mut first_error_index: Option<usize> = None;
+
     let mut process_queue = match filter.dfs() {
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
@@ -80,7 +87,12 @@ pub fn nde<'a, 'b>(
         // This means that the current node will likely error as well, but that is ok
         intermediates[node_index.0] = match node.run(&inputs) {
             Ok(outputs) => NodeState::Active(outputs),
-            Err(_) => NodeState::Error,
+            Err(err) => {
+                if first_error_index.is_none() {
+                    first_error_index = Some(node_index.0);
+                }
+                NodeState::Error(err)
+            }
         }
     }
 
@@ -93,6 +105,7 @@ pub fn nde<'a, 'b>(
                 nde::node::SocketValue::CompiledEvents(events) => Ok(NdeResult {
                     events: Some(events),
                     intermediates,
+                    first_error_index,
                 }),
                 _ => {
                     panic!("the output of the output node should be a CompiledEvents socket value")
@@ -102,6 +115,7 @@ pub fn nde<'a, 'b>(
         _ => Ok(NdeResult {
             events: None,
             intermediates,
+            first_error_index,
         }),
     }
 }
@@ -109,6 +123,7 @@ pub fn nde<'a, 'b>(
 pub struct NdeResult<'a, 'b> {
     pub events: Option<Vec<super::Event<'a>>>,
     pub intermediates: Vec<NodeState<'b>>,
+    pub first_error_index: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -116,11 +131,11 @@ pub enum NdeError {
     CycleInGraph,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NodeState<'a> {
     Inactive,
     Active(Vec<nde::node::SocketValue<'a>>),
-    Error,
+    Error(anyhow::Error),
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, Shell, SocketType, SocketValue};
+use super::{Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClipRectangle;
@@ -19,7 +19,7 @@ impl Node for ClipRectangle {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));

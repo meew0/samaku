@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{media, message, model, nde};
 
-use super::{Error, Node, Shell, SocketType, SocketValue};
+use super::{Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
@@ -27,7 +27,7 @@ impl Node for MotionTrack {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         super::retrieve!(inputs[0], SocketValue::MultipleEvents(events));

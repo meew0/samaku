@@ -241,7 +241,7 @@ fn view_filter<'a>(
     create_nodes(&mut graph, nde_filter, &nde_result_or_error);
     create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
-    view_graph(nde_filter, &nde_result_or_error, graph)
+    view_graph(pane_state, nde_filter, &nde_result_or_error, graph)
 }
 
 fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<'_>> {
@@ -336,13 +336,15 @@ fn create_nodes(
 
         let pin_list = iced::widget::column(socket_rows).spacing(4);
         let content_style = iced_nodegraph::NodeContentStyle::process(&style::samaku_theme());
-        let title_bar = iced_nodegraph::node_header(
+        let title =
             iced::widget::container(iced::widget::text(node.name())).padding(iced::Padding {
                 top: 4.0,
                 bottom: 4.0,
                 left: 8.0,
                 right: 8.0,
-            }),
+            });
+        let title_bar = iced_nodegraph::node_header(
+            title,
             content_style.title_background,
             content_style.corner_radius,
             content_style.border_width,
@@ -359,7 +361,7 @@ fn create_nodes(
             Ok(nde_result) => match nde_result.intermediates.get(node_index) {
                 Some(NodeState::Inactive) => style::SAMAKU_INACTIVE,
                 Some(NodeState::Active(_)) => style::SAMAKU_PRIMARY,
-                Some(NodeState::Error) => style::SAMAKU_DESTRUCTIVE,
+                Some(NodeState::Error(_)) => style::SAMAKU_DESTRUCTIVE,
                 None => panic!("intermediate node not found"),
             },
             Err(_) => {
@@ -486,6 +488,7 @@ fn create_connections(
 }
 
 fn view_graph<'a>(
+    pane_state: &'a State,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
     graph: Box<NodeGraph<'a>>,
@@ -502,13 +505,7 @@ fn view_graph<'a>(
         .padding(5.0)
         .width(iced::Length::Fixed(200.0));
 
-    let error_message = iced::widget::text(match nde_result_or_error {
-        Ok(_) => "",
-        Err(NdeError::CycleInGraph) => "Cycle detected!",
-    })
-    .style(|_theme| iced::widget::text::Style {
-        color: Some(style::SAMAKU_DESTRUCTIVE),
-    });
+    let error_tooltip = view_error(pane_state, nde_result_or_error);
 
     let bottom_bar = iced::widget::container(
         iced::widget::row![
@@ -516,7 +513,7 @@ fn view_graph<'a>(
             unassign_button,
             name_box,
             iced::widget::space::horizontal(),
-            error_message
+            error_tooltip,
         ]
         .spacing(5.0)
         .align_y(iced::Alignment::Center),
@@ -577,6 +574,122 @@ fn view_non_selected(
     ]
     .spacing(5)
     .into()
+}
+
+fn view_error<'a>(
+    pane_state: &'a State,
+    nde_result_or_error: &Result<NdeResult, NdeError>,
+) -> iced::Element<'a, message::Message> {
+    let error_state = match nde_result_or_error {
+        Ok(result) => {
+            let num_selected_nodes = pane_state.selected_nodes.len();
+            if num_selected_nodes == 1 {
+                format_error(result, pane_state.selected_nodes.first().unwrap().0, None)
+            } else {
+                // multiple or no nodes selected
+                let error_count = result
+                    .intermediates
+                    .iter()
+                    .filter(|node_state| matches!(node_state, NodeState::Error(_)))
+                    .count();
+
+                if error_count > 0 {
+                    if num_selected_nodes > 1 {
+                        // Multiple nodes selected
+                        GraphErrorState::message(
+                            "Multiple nodes selected",
+                            "Select a node to view details about the error that occurred in the node.",
+                        )
+                    } else {
+                        // No nodes selected, try to find the first error, and hide the rest
+                        let first_error_index = result.first_error_index.expect(
+                            "node error count greater than 0, but no first error index was set",
+                        );
+                        format_error(result, first_error_index, Some(error_count))
+                    }
+                } else {
+                    GraphErrorState::none()
+                }
+            }
+        }
+        Err(NdeError::CycleInGraph) => {
+            GraphErrorState::error("Cycle detected!", "A cycle was detected in the graph.")
+        }
+    };
+
+    let error_message =
+        iced::widget::text(error_state.message).style(move |_theme| iced::widget::text::Style {
+            color: Some(error_state.color),
+        });
+
+    iced::widget::tooltip(
+        error_message,
+        iced::widget::container(iced::widget::text(error_state.tooltip))
+            .padding(10)
+            .style(iced::widget::container::rounded_box),
+        iced::widget::tooltip::Position::Top,
+    )
+    .into()
+}
+
+fn format_error(
+    result: &NdeResult,
+    error_index: usize,
+    error_count: Option<usize>,
+) -> GraphErrorState {
+    let first_error = result
+        .intermediates
+        .get(error_index)
+        .expect("no node state present at error index");
+    if let NodeState::Error(error) = first_error {
+        let first_message = error.to_string();
+        let causes = error
+            .chain()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join("\nReason:");
+        let message = if let Some(error_count) = error_count
+            && error_count > 1
+        {
+            let remaining_error_count = error_count - 1;
+            let maybe_s = if remaining_error_count == 1 { "" } else { "s" };
+            format!("{first_message}, and {remaining_error_count} further error{maybe_s}")
+        } else {
+            first_message
+        };
+
+        GraphErrorState::error(message, causes)
+    } else {
+        GraphErrorState::none()
+    }
+}
+
+struct GraphErrorState {
+    message: String,
+    tooltip: String,
+    color: iced::Color,
+}
+
+impl GraphErrorState {
+    fn error<S1: Into<String>, S2: Into<String>>(message: S1, tooltip: S2) -> Self {
+        Self {
+            message: message.into(),
+            tooltip: tooltip.into(),
+            color: style::SAMAKU_DESTRUCTIVE,
+        }
+    }
+
+    fn message<S1: Into<String>, S2: Into<String>>(message: S1, tooltip: S2) -> Self {
+        Self {
+            message: message.into(),
+            tooltip: tooltip.into(),
+            color: style::SAMAKU_TEXT,
+        }
+    }
+
+    fn none() -> Self {
+        Self::message("", "")
+    }
 }
 
 fn make_pin<'a>(

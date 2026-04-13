@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, Shell, SocketType, SocketValue};
+use super::{Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Gradient;
@@ -23,7 +23,7 @@ impl Node for Gradient {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         const RESOLUTION: i32 = 5;
 
         assert!(inputs.len() > 2); // Elide bounds checks
@@ -31,8 +31,8 @@ impl Node for Gradient {
         super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));
         super::retrieve!(inputs[2], SocketValue::LocalTags(target_tags));
 
-        if rectangle.x2 < rectangle.x1 {
-            return Err(Error::InvertedRectangle);
+        if rectangle.x2 < rectangle.x1 || rectangle.y2 < rectangle.y1 {
+            anyhow::bail!("Input rectangle is inverted");
         }
 
         let mut events = vec![];

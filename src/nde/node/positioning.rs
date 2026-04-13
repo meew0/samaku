@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Error, Node, Shell, SocketType, SocketValue};
+use super::{BasicError, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SetPosition;
@@ -19,7 +19,7 @@ impl Node for SetPosition {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> Result<Vec<SocketValue<'_>>, Error> {
+    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         assert!(inputs.len() > 1); // Elide bounds checks
 
         if let SocketValue::Position(position) = inputs[1] {
@@ -31,7 +31,7 @@ impl Node for SetPosition {
             })?;
             Ok(vec![socket_value])
         } else {
-            Err(Error::MismatchedTypes)
+            Err(BasicError::MismatchedTypes.into())
         }
     }
 }
