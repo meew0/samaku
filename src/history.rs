@@ -1,48 +1,37 @@
 //! Types and functions to implement undo/redo history.
 //!
 //! The way history is recorded samaku is that every `iced` message, before being processed in `update`,
-//! is processed by `History::record`. This method will create a history entry (`Node`) based on the message
+//! is processed by `History::make_key` and `History::record`.
+//! These methods will create a history entry (`Node`) based on the message
 //! and the global state. The primary design goal here is to avoid storing copies of the full `subtitle::File`,
 //! or even just `EventTrack`, if at all possible (since it may be gigabytes large), and instead do as much
-//! as possible incrementally. This leads to two main scenarios in `record`:
-//!
-//! (1) the origin state and the changes to be made in `update` are trivially determined by the message.
-//! In this case, `record` does all the required processing and finishes the recording process on its own.
-//!
-//! (2) more complex processing is required to determine how exactly the global state is to be changed.
-//! (todo elaborate here)
+//! as possible incrementally.
 
 use crate::message::Message;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct History {
-    pub last: Rc<Node>,
+    last: Rc<RefCell<Node>>,
 }
 
 /// An entry in the history, as an intrusive linked list with the entries that precede and follow it in the chain.
 pub struct Node {
-    lore: Lore,
-    data: Vec<Message>,
-    discriminant: std::mem::Discriminant<Message>,
-    prev: Option<Rc<Node>>,
-    next: Option<Rc<Node>>,
-    timestamp: std::time::Instant,
-}
-
-/// The previous state of some object.
-pub enum Lore {
-    Root,
+    undo: Vec<Message>,
+    _redo: Box<Message>,
+    prev: Option<Rc<RefCell<Node>>>,
+    next: Option<Rc<RefCell<Node>>>,
+    _timestamp: std::time::Instant,
 }
 
 impl Node {
-    pub fn root() -> Self {
+    fn root() -> Self {
         Node {
-            lore: Lore::Root,
-            data: vec![],
-            discriminant: std::mem::discriminant(&Message::None),
+            undo: vec![],
+            _redo: Box::new(Message::None),
             prev: None,
             next: None,
-            timestamp: std::time::Instant::now(),
+            _timestamp: std::time::Instant::now(),
         }
     }
 }
@@ -54,101 +43,191 @@ impl Default for History {
 }
 
 impl History {
+    #[must_use]
     pub fn new() -> Self {
         History {
-            last: Rc::new(Node::root()),
+            last: Rc::new(RefCell::new(Node::root())),
         }
     }
 
-    pub fn append(&mut self, mut node: Box<Node>) {
-        node.prev = Some(Rc::clone(&self.last));
-        self.last = node.into();
+    fn last(&self) -> Rc<RefCell<Node>> {
+        Rc::clone(&self.last)
     }
 
-    pub fn last(&self) -> Rc<Node> {
-        Rc::clone(&self.last)
+    fn make_leaf(&self, message: Message) -> Node {
+        Node {
+            undo: vec![],
+            _redo: Box::new(message),
+            prev: Some(self.last()),
+            next: None,
+            _timestamp: std::time::Instant::now(),
+        }
+    }
+
+    /// Create a history key based on a reference to a message.
+    /// Essentially, this method determines whether the message could sensibly be recorded
+    /// in the history, and if so, clones it and creates a suitable `Key`.
+    /// Otherwise, it will create a key that panics whenever something tries to put an undo message.
+    pub fn make_key(&mut self, message: &Message) -> Key {
+        match message {
+            // messages that might eventually be recorded in the history (but this is not yet implemented)
+            Message::CreateStyle
+            | Message::DeleteStyle(_)
+            | Message::SetStyleName(_, _)
+            | Message::SetStyleFontName(_, _)
+            | Message::SetStyleFontSize(_, _)
+            | Message::SetStylePrimaryColour(_, _)
+            | Message::SetStylePrimaryTransparency(_, _)
+            | Message::SetStyleSecondaryColour(_, _)
+            | Message::SetStyleSecondaryTransparency(_, _)
+            | Message::SetStyleBorderColour(_, _)
+            | Message::SetStyleBorderTransparency(_, _)
+            | Message::SetStyleShadowColour(_, _)
+            | Message::SetStyleShadowTransparency(_, _)
+            | Message::SetStyleBold(_, _)
+            | Message::SetStyleItalic(_, _)
+            | Message::SetStyleUnderline(_, _)
+            | Message::SetStyleStrikeOut(_, _)
+            | Message::SetStyleScaleX(_, _)
+            | Message::SetStyleScaleY(_, _)
+            | Message::SetStyleSpacing(_, _)
+            | Message::SetStyleAngle(_, _)
+            | Message::SetStyleBlur(_, _)
+            | Message::SetStyleBorderStyle(_, _)
+            | Message::SetStyleBorderWidth(_, _)
+            | Message::SetStyleShadowDistance(_, _)
+            | Message::SetStyleAlignment(_, _)
+            | Message::SetStyleMarginLeft(_, _)
+            | Message::SetStyleMarginRight(_, _)
+            | Message::SetStyleMarginVertical(_, _)
+            | Message::SetStyleJustify(_, _)
+            | Message::AddEvent
+            | Message::DeleteSelectedEvents
+            | Message::SetActiveEventText(_)
+            | Message::SetActiveEventActor(_)
+            | Message::SetActiveEventEffect(_)
+            | Message::SetActiveEventStyleIndex(_)
+            | Message::SetActiveEventLayerIndex(_)
+            | Message::SetActiveEventType(_)
+            | Message::SetActiveEventStartTime(_)
+            | Message::SetActiveEventDuration(_)
+            | Message::SetEventStartTimeAndDuration(_, _, _)
+            | Message::TextEditorActionPerformed(_, _)
+            | Message::CreateEmptyFilter
+            | Message::AssignFilterToSelectedEvents(_)
+            | Message::UnassignFilterFromSelectedEvents
+            | Message::SetActiveFilterName(_)
+            | Message::DeleteFilter(_)
+            | Message::AddNode(_)
+            | Message::DeleteNodes(_)
+            | Message::MoveNode(_, _)
+            | Message::MoveNodeGroup(_, _)
+            | Message::ConnectNodes(_, _)
+            | Message::DisconnectNodes(_, _)
+            | Message::SetReticules(_)
+            | Message::UpdateReticulePosition(_, _) => {
+                let cloned = message.clone();
+                let node = self.make_leaf(cloned);
+                Key::Record(node)
+            }
+            // messages that will never need to be recorded in the history
+            Message::None
+            | Message::Pane(_, _)
+            | Message::FocusedPane(_)
+            | Message::Node(_, _)
+            | Message::SplitPane(_)
+            | Message::ClosePane
+            | Message::FocusPane(_)
+            | Message::DragPane(_)
+            | Message::ResizePane(_)
+            | Message::SetPaneType(_, _)
+            | Message::SetFocusedPaneType(_)
+            | Message::Toast(_)
+            | Message::CloseToast(_)
+            | Message::SelectVideoFile
+            | Message::SelectAudioFile
+            | Message::NewSubtitleFile
+            | Message::ImportSubtitleFile
+            | Message::OpenSubtitleFile
+            | Message::SaveSubtitleFile
+            | Message::ExportSubtitleFile
+            | Message::VideoFileSelected(_)
+            | Message::VideoLoaded(_)
+            | Message::VideoFrameAvailable(_, _)
+            | Message::AudioFileSelected(_)
+            | Message::SubtitleFileReadForImport(_)
+            | Message::SubtitleFileReadForOpen(_)
+            | Message::SubtitleParseError(_)
+            | Message::PlaybackStep
+            | Message::PlaybackAdvanceFrames(_)
+            | Message::PlaybackAdvanceSeconds(_)
+            | Message::PlaybackSetPosition(_)
+            | Message::TogglePlayback
+            | Message::Playing(_)
+            | Message::ToggleEventSelection(_)
+            | Message::SelectOnlyEvent(_)
+            | Message::TrackMotionForNode(_, _)
+            | Message::ModifiersChanged(_)
+            | Message::UpdateToastProgress(_, _)
+            | Message::VideoIndexed(_, _) => Key::Fail,
+        }
+    }
+
+    /// Record a previously obtained key (using `make_key`) into the history.
+    ///
+    /// # Panics
+    /// Panics if the key does not follow the leaf node, i.e. if the history has changed between `make_key` and `record`.
+    pub fn record(&mut self, key: Key) {
+        if let Key::Record(node) = key {
+            let prev = node.prev.as_ref().expect("tried to record unlinked node");
+            assert!(
+                Rc::ptr_eq(prev, &self.last),
+                "tried to record node not created from history leaf"
+            );
+            // TODO batching
+            let rc = Rc::new(RefCell::new(node));
+            self.last.borrow_mut().next = Some(Rc::clone(&rc));
+            self.last = rc;
+        }
     }
 }
 
-#[expect(
-    clippy::pointer_format,
-    reason = "some variants of Message may contain pointers deep inside their nesting hierarchy but this is irrelevant here"
-)]
-pub fn record(
-    message: &Message,
-    _global_state: &crate::Samaku,
-    last_node: Rc<Node>,
-) -> Option<Box<Node>> {
-    match message {
-        // messages that might eventually be recorded in the history (but this is not yet implemented)
-        Message::CreateStyle
-        | Message::DeleteStyle(_)
-        | Message::SetStyleBold(_, _)
-        | Message::SetStyleItalic(_, _)
-        | Message::SetStyleUnderline(_, _)
-        | Message::SetStyleStrikeOut(_, _)
-        | Message::AddEvent
-        | Message::DeleteSelectedEvents
-        | Message::SetActiveEventText(_)
-        | Message::SetActiveEventActor(_)
-        | Message::SetActiveEventEffect(_)
-        | Message::SetActiveEventStyleIndex(_)
-        | Message::SetActiveEventLayerIndex(_)
-        | Message::SetActiveEventType(_)
-        | Message::SetActiveEventStartTime(_)
-        | Message::SetActiveEventDuration(_)
-        | Message::SetEventStartTimeAndDuration(_, _, _)
-        | Message::TextEditorActionPerformed(_, _)
-        | Message::CreateEmptyFilter
-        | Message::AssignFilterToSelectedEvents(_)
-        | Message::UnassignFilterFromSelectedEvents
-        | Message::SetActiveFilterName(_)
-        | Message::DeleteFilter(_)
-        | Message::AddNode(_)
-        | Message::MoveNode(_, _, _)
-        | Message::ConnectNodes(_)
-        | Message::DisconnectNodes(_, _, _)
-        | Message::SetReticules(_)
-        | Message::UpdateReticulePosition(_, _) => {
-            println!("NYI: history recording for message {message:?}");
-            None
+/// A key to the end of the history.
+///
+/// A key is an object used by the update method to record “reverse” messages for a message
+/// being processed. It can have one of three states, depending on whether messages should
+/// or should not be put into it.
+pub enum Key {
+    /// This type of `Key` will correctly record any message put into it.
+    Record(Node),
+
+    /// This type of `Key` will panic when a message is put into it.
+    /// Used when a message should not be recorded into the history, to protect against
+    /// something trying to record it anyway.
+    Fail,
+
+    /// This type of `Key` will silently drop any messages put into it.
+    /// Useful in case messages need to be replayed without anything being recorded.
+    Dummy,
+}
+
+impl Key {
+    /// Place a message into this key, to ultimately be played back when the history node
+    /// it contains is undone.
+    ///
+    /// # Panics
+    /// Panics if trying to record something into a `Fail` key.
+    pub fn put(&mut self, message: Message) {
+        match self {
+            Key::Record(node) => {
+                node.undo.push(message);
+            }
+            Key::Fail => {
+                panic!("Tried to record undo data for a message that should not be undone");
+            }
+            Key::Dummy => {
+                // no-op
+            }
         }
-        // messages that will never need to be recorded in the history
-        Message::None
-        | Message::Pane(_, _)
-        | Message::FocusedPane(_)
-        | Message::Node(_, _)
-        | Message::SplitPane(_)
-        | Message::ClosePane
-        | Message::FocusPane(_)
-        | Message::DragPane(_)
-        | Message::ResizePane(_)
-        | Message::SetPaneType(_, _)
-        | Message::SetFocusedPaneType(_)
-        | Message::Toast(_)
-        | Message::CloseToast(_)
-        | Message::SelectVideoFile
-        | Message::SelectAudioFile
-        | Message::NewSubtitleFile
-        | Message::ImportSubtitleFile
-        | Message::OpenSubtitleFile
-        | Message::SaveSubtitleFile
-        | Message::ExportSubtitleFile
-        | Message::VideoFileSelected(_)
-        | Message::VideoLoaded(_)
-        | Message::VideoFrameAvailable(_, _)
-        | Message::AudioFileSelected(_)
-        | Message::SubtitleFileReadForImport(_)
-        | Message::SubtitleFileReadForOpen(_)
-        | Message::SubtitleParseError(_)
-        | Message::PlaybackStep
-        | Message::PlaybackAdvanceFrames(_)
-        | Message::PlaybackAdvanceSeconds(_)
-        | Message::PlaybackSetPosition(_)
-        | Message::TogglePlayback
-        | Message::Playing(_)
-        | Message::ToggleEventSelection(_)
-        | Message::SelectOnlyEvent(_)
-        | Message::TrackMotionForNode(_, _) => None,
     }
 }

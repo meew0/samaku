@@ -292,7 +292,7 @@ pub struct Samaku {
     view: RefCell<ViewState>,
 
     /// The history (undo/redo) tree, containing previous states that can be returned to
-    /// by undo and redo
+    /// by undo and redo.
     history: history::History,
 
     /// Currently pressed keyboard modifiers.

@@ -1,11 +1,12 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{action, history, media, message, model, nde, pane, project, subtitle, view};
+use crate::{action, history, media, message, model, nde, pane, project, subtitle};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
 use std::fmt::Write as _;
+use std::mem::replace;
 
 macro_rules! active_event {
     ($global_state:ident) => {
@@ -27,15 +28,28 @@ macro_rules! active_event_mut {
 /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
 /// whatever processing is required, and updates the global state based on it. This will cause
 /// iced to rerender the application afterwards.
+///
+/// This specific method is primarily concerned with updating the history (undo/redo),
+/// the message processing is handed by internal methods.
 pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
-    let last_node = global_state.history.last();
-    // Record the state as it currently stands in the undo history
-    if let Some(history_node) = history::record(&message, global_state, last_node) {
-        global_state.history.append(history_node);
-    }
+    // Create a history key, if the message is one that could potentially be undone.
+    let mut key = global_state.history.make_key(&message);
 
+    let task = update_direct(global_state, message, &mut key);
+
+    global_state.history.record(key);
+
+    task
+}
+
+/// Handle a message without recording it in the history.
+pub(crate) fn update_direct(
+    global_state: &mut super::Samaku,
+    message: Message,
+    undo: &mut history::Key,
+) -> iced::Task<Message> {
     // Run the internal update method, which does the actual updating of global state.
-    let task = update_internal(global_state, message);
+    let task = update_internal(global_state, message, undo);
 
     // Check whether certain properties have been modified. If they have, we need to notify
     // our panes about this, since some of them contain copies of the data in an iced-specific
@@ -55,7 +69,11 @@ pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced
     clippy::cognitive_complexity,
     reason = "the elm architecture more or less requires a complex global update method"
 )]
-fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
+fn update_internal(
+    global_state: &mut super::Samaku,
+    message: Message,
+    undo: &mut history::Key,
+) -> iced::Task<Message> {
     #[expect(
         clippy::match_same_arms,
         reason = "needed in this case to coherently group messages together"
@@ -434,7 +452,8 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
             global_state.subtitles.styles[index].shadow_distance = value;
         }
         Message::SetStyleAlignment(index, value) => {
-            global_state.subtitles.styles[index].alignment = value;
+            let old = replace(&mut global_state.subtitles.styles[index].alignment, value);
+            undo.put(Message::SetStyleAlignment(index, old));
         }
         Message::SetStyleMarginLeft(index, value) => {
             global_state.subtitles.styles[index].margins.left = value;
