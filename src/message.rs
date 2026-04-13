@@ -178,10 +178,11 @@ pub enum Message {
     AssignFilterToSelectedEvents(subtitle::ExtradataId),
     UnassignFilterFromSelectedEvents,
     SetActiveFilterName(String),
-    DeleteFilter(subtitle::ExtradataId), // NYI
+    DeleteFilter(subtitle::ExtradataId),
 
     // Create and update nodes in the current NDE filter.
     AddNode(nde::node::Constructor),
+    DeleteNodes(Vec<nde::graph::NodeId>),
     MoveNode(nde::graph::NodeId, iced::Point),
     MoveNodeGroup(Vec<nde::graph::NodeId>, iced::Vector),
     ConnectNodes(nde::graph::PreviousEndpoint, nde::graph::NextEndpoint),

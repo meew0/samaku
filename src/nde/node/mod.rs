@@ -257,6 +257,10 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 75.0)
     }
+
+    fn is_output(&self) -> bool {
+        false
+    }
 }
 
 // Generates an impl of `Clone` for `Box<dyn Node>`, to ensure nodes (and thus NDE filters) are cloneable

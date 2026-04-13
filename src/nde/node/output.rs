@@ -23,6 +23,10 @@ impl Node for Output {
         let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }
+
+    fn is_output(&self) -> bool {
+        true
+    }
 }
 
 // Do not inventory::submit this node, as the user should not be able to add it manually.

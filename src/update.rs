@@ -633,6 +633,32 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
                 filter.graph.nodes.push(visual_node);
             }
         }
+        Message::DeleteNodes(node_ids) => {
+            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
+                &global_state.selected_event_indices,
+                &mut global_state.subtitles.extradata,
+            ) {
+                // Create a visitor that will remap selected subtitles on node editor panes.
+                struct Visitor(Vec<Option<nde::graph::NodeId>>);
+                impl pane::Visitor for Visitor {
+                    fn visit_node_editor(
+                        &mut self,
+                        node_editor_state: &mut pane::node_editor::State,
+                    ) {
+                        node_editor_state.remap_selected(&self.0);
+                    }
+                }
+
+                // Delete the nodes (what we actually want to do)
+                let mapping = filter.graph.delete_nodes(&node_ids);
+
+                // Remap selected node IDs on all node panes
+                let mut visitor = Visitor(mapping);
+                for (_, pane_state) in global_state.panes.iter_mut() {
+                    pane_state.local.visit(&mut visitor);
+                }
+            }
+        }
         Message::MoveNode(node_id, point) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
                 &global_state.selected_event_indices,
@@ -732,7 +758,7 @@ fn update_internal(global_state: &mut super::Samaku, message: Message) -> iced::
 }
 
 /// Notifies all entities (like node editor panes) that keep some internal copy of the
-/// NDE filter list to update their internal representations.
+/// selected events to update their internal representations.
 pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
     if let Some(active_event) = active_event!(global_state) {
         notify_active_event_text(&mut global_state.panes, active_event, None);

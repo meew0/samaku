@@ -1,11 +1,11 @@
-use std::collections::{HashMap, VecDeque};
-
 use super::node;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A directed acyclic graph of nodes, representing a NDE filter as a whole.
 /// Stored as an adjacency map.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Graph {
+    // Invariant: must have at least one node, and the first node must be the output node.
     pub nodes: Vec<VisualNode>,
     pub connections: HashMap<NextEndpoint, PreviousEndpoint>,
 }
@@ -119,6 +119,53 @@ impl Graph {
         self.connections.remove(&next)
     }
 
+    pub fn delete_nodes(&mut self, to_delete_slice: &[NodeId]) -> Vec<Option<NodeId>> {
+        let mut to_delete: HashSet<NodeId> =
+            to_delete_slice.iter().copied().collect::<HashSet<_>>();
+        if to_delete.contains(&NodeId(0)) {
+            to_delete.remove(&NodeId(0));
+            println!("tried to delete node 0/output node (not allowed)");
+        }
+
+        let new_nodes: Vec<VisualNode> = Vec::with_capacity(self.nodes.len() - to_delete.len());
+        let old_nodes = std::mem::replace(&mut self.nodes, new_nodes);
+
+        // Create a mapping from source node IDs to either destination node IDs (if retained) or None (if deleted).
+        // In the process, consume the `old_nodes` vec and insert the retained nodes into the new nodes vec
+        let mut mapping: Vec<Option<NodeId>> = vec![None; self.nodes.len()];
+        for (i, node) in old_nodes.into_iter().enumerate() {
+            if to_delete.contains(&NodeId(i)) {
+                mapping.insert(i, None);
+            } else {
+                mapping.insert(i, Some(NodeId(self.nodes.len())));
+                self.nodes.push(node);
+            }
+        }
+
+        // TODO: maybe the hashmap and its allocations can be kept. Probably a very low priority optimization
+        let new_connections = HashMap::new();
+        let old_connections = std::mem::replace(&mut self.connections, new_connections);
+
+        for (next, previous) in old_connections {
+            if let Some(dest_next) = mapping[next.node_index.0]
+                && let Some(dest_previous) = mapping[previous.node_index.0]
+            {
+                self.connections.insert(
+                    NextEndpoint {
+                        node_index: dest_next,
+                        socket_index: next.socket_index,
+                    },
+                    PreviousEndpoint {
+                        node_index: dest_previous,
+                        socket_index: previous.socket_index,
+                    },
+                );
+            }
+        }
+
+        mapping
+    }
+
     /// Iterate over the sockets connecting into the specified node.
     /// Returns tuples `(previous_endpoint, next_socket_index)`.
     pub fn iter_previous(
@@ -140,8 +187,22 @@ impl Graph {
             })
     }
 
+    /// Run depth-first search on the nodes, creating a queue of nodes to process in order.
+    ///
+    /// # Panics
+    /// Panics if structural invariants are violated (node 0 missing/not output node).
     #[must_use]
     pub fn dfs(&self) -> DfsResult {
+        // Verify "node 0 == output node" invariant
+        let node_0 = self
+            .nodes
+            .first()
+            .expect("nde::Graph invariant violated: node 0 missing");
+        assert!(
+            node_0.node.is_output(),
+            "nde::Graph invariant violated: node 0 is not output node"
+        );
+
         let mut process_queue: VecDeque<NodeId> = VecDeque::new();
         let mut seen = vec![false; self.nodes.len()];
         let mut cycle_detector = CycleDetector::new(self.nodes.len());

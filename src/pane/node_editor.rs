@@ -96,6 +96,19 @@ impl super::LocalState for State {
     }
 }
 
+impl State {
+    pub fn remap_selected(&mut self, mapping: &[Option<NodeId>]) {
+        self.selected_nodes.retain_mut(|id| {
+            if let Some(new_id) = mapping[id.0] {
+                *id = new_id;
+                true
+            } else {
+                false
+            }
+        });
+    }
+}
+
 inventory::submit! {
     super::Shell::new(
         "Node editor",
@@ -283,6 +296,7 @@ fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<
                 message::Pane::NodeEditorCameraChanged(position, zoom),
             )
         })
+        .on_delete(message::Message::DeleteNodes)
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
