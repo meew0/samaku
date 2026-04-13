@@ -18,20 +18,22 @@ pub struct History {
 /// An entry in the history, as an intrusive linked list with the entries that precede and follow it in the chain.
 pub struct Node {
     undo: Vec<Message>,
-    _redo: Box<Message>,
+    redo: Vec<Message>,
+    discriminant: std::mem::Discriminant<Message>,
     prev: Option<Rc<RefCell<Node>>>,
     next: Option<Rc<RefCell<Node>>>,
-    _timestamp: std::time::Instant,
+    timestamp: std::time::Instant,
 }
 
 impl Node {
     fn root() -> Self {
         Node {
             undo: vec![],
-            _redo: Box::new(Message::None),
+            redo: vec![],
+            discriminant: std::mem::discriminant(&Message::None),
             prev: None,
             next: None,
-            _timestamp: std::time::Instant::now(),
+            timestamp: std::time::Instant::now(),
         }
     }
 }
@@ -55,12 +57,14 @@ impl History {
     }
 
     fn make_leaf(&self, message: Message) -> Node {
+        let discriminant = std::mem::discriminant(&message);
         Node {
             undo: vec![],
-            _redo: Box::new(message),
+            redo: vec![message],
+            discriminant,
             prev: Some(self.last()),
             next: None,
-            _timestamp: std::time::Instant::now(),
+            timestamp: std::time::Instant::now(),
         }
     }
 
@@ -184,10 +188,36 @@ impl History {
                 Rc::ptr_eq(prev, &self.last),
                 "tried to record node not created from history leaf"
             );
-            // TODO batching
-            let rc = Rc::new(RefCell::new(node));
-            self.last.borrow_mut().next = Some(Rc::clone(&rc));
-            self.last = rc;
+
+            // Batch the last two nodes together if they contain the same redo message
+            // and less than five seconds have passed.
+            let can_batch = {
+                let last = self.last.borrow();
+                let time_delay = node.timestamp - last.timestamp;
+                let same_message = last.discriminant == node.discriminant;
+                same_message && time_delay < std::time::Duration::from_secs(5)
+            };
+
+            if can_batch {
+                // Add the new messages into the leaf node
+                let Node {
+                    undo: mut new_undo,
+                    redo: mut new_redo,
+                    ..
+                } = node;
+
+                self.last.borrow_mut().undo.append(&mut new_undo);
+                self.last.borrow_mut().redo.append(&mut new_redo);
+
+                // We intentionally don't update the timestamp here,
+                // so that even with constant edits,
+                // 5-second undo “steps” are automatically created.
+            } else {
+                // Append the new node to the linked list
+                let rc = Rc::new(RefCell::new(node));
+                self.last.borrow_mut().next = Some(Rc::clone(&rc));
+                self.last = rc;
+            }
         }
     }
 }
