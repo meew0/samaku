@@ -76,6 +76,22 @@ impl SocketValue<'_> {
         }
     }
 
+    #[must_use]
+    pub fn identifier(&self) -> &'static str {
+        match self {
+            SocketValue::None => "None",
+            SocketValue::IndividualEvent(_) => "IndividualEvent",
+            SocketValue::MultipleEvents(_) => "MultipleEvents",
+            SocketValue::LocalTags(_) => "LocalTags",
+            SocketValue::GlobalTags(_) => "GlobalTags",
+            SocketValue::Position(_) => "Position",
+            SocketValue::Rectangle(_) => "Rectangle",
+            SocketValue::FrameRate(_) => "FrameRate",
+            SocketValue::SourceEvent(_) => "SourceEvent",
+            SocketValue::CompiledEvents(_) => "CompiledEvents",
+        }
+    }
+
     /// Assumes `self` contains events of some kind, and maps those events one-by-one using the
     /// given function, returning a [`SocketValue`] of the same kind as `self`.
     ///
@@ -92,7 +108,7 @@ impl SocketValue<'_> {
             SocketValue::MultipleEvents(events) => Ok(SocketValue::MultipleEvents(
                 events.iter().map(func).collect(),
             )),
-            other => type_error(other),
+            other => type_error(other, "event(s)"),
         }
     }
 
@@ -108,7 +124,7 @@ impl SocketValue<'_> {
         match self {
             SocketValue::IndividualEvent(event) => Ok(vec![func(event.as_ref())]),
             SocketValue::MultipleEvents(events) => Ok(events.iter().map(func).collect()),
-            other => type_error(other),
+            other => type_error(other, "event(s)"),
         }
     }
 
@@ -128,7 +144,7 @@ impl SocketValue<'_> {
                     func(event);
                 }
             }
-            other => return type_error(other),
+            other => return type_error(other, "event(s)"),
         }
         Ok(())
     }
@@ -136,10 +152,23 @@ impl SocketValue<'_> {
 
 // Handle an undesired socket value: if it is None, return a missing input error,
 // if it is any other type, report mismatched types.
-pub fn type_error<T>(other: &SocketValue) -> anyhow::Result<T> {
-    match other {
-        SocketValue::None => Err(BasicError::MissingInput.into()),
-        _ => Err(BasicError::MismatchedTypes.into()),
+pub fn type_error<T>(other: &SocketValue, expected: &'static str) -> anyhow::Result<T> {
+    if matches!(other, SocketValue::None) {
+        Err(BasicError::MissingInput.into())
+    } else {
+        // slightly hacky
+        let reason = if let Some(stripped) = expected.strip_prefix("SocketValue::") {
+            let first_parenthesis = stripped.find('(');
+            let sub = if let Some(first_parenthesis) = first_parenthesis {
+                &stripped[..first_parenthesis]
+            } else {
+                stripped
+            };
+            anyhow::anyhow!("expected {sub}, got {}", other.identifier())
+        } else {
+            anyhow::anyhow!("expected {expected}, got {}", other.identifier())
+        };
+        Err(reason.context(BasicError::MismatchedTypes))
     }
 }
 
@@ -147,7 +176,7 @@ macro_rules! retrieve {
     ($val:expr, $pattern:pat) => {
         let value = $val;
         let $pattern = value else {
-            return crate::nde::node::type_error(&value);
+            return crate::nde::node::type_error(&value, stringify!($pattern));
         };
     };
 }

@@ -647,7 +647,7 @@ fn format_error(
             .chain()
             .map(ToString::to_string)
             .collect::<Vec<String>>()
-            .join("\nReason:");
+            .join("\nReason: ");
         let message = if let Some(error_count) = error_count
             && error_count > 1
         {
