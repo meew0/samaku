@@ -322,7 +322,7 @@ impl Key {
             Key::Record(node, old_batch_mode) => {
                 node.undo.push(message);
                 if let Some(old_batch_mode) = old_batch_mode {
-                    assert_ne!(
+                    assert_eq!(
                         *old_batch_mode, batch_mode,
                         "Tried to overwrite batch mode with a different one"
                     );
@@ -398,4 +398,557 @@ pub enum BatchAppendMode {
     /// played back in the respective correct order. Suitable for messages that logically
     /// *increment*/*append to* a value.
     Incremental,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helpers
+
+    /// Record one action into history with NoBatching.
+    fn record_no_batch(history: &mut History, redo_msg: &Message, undo_msg: Message) {
+        let mut key = history.make_key(redo_msg);
+        key.put(undo_msg, BatchMode::NoBatching);
+        history.record(key);
+    }
+
+    /// Record one action into history with a given batching mode.
+    fn record_batched(
+        history: &mut History,
+        redo_msg: &Message,
+        undo_msg: Message,
+        undo_mode: BatchAppendMode,
+        redo_mode: BatchAppendMode,
+    ) {
+        let mut key = history.make_key(redo_msg);
+        key.put(
+            undo_msg,
+            BatchMode::Batched {
+                undo: undo_mode,
+                redo: redo_mode,
+            },
+        );
+        history.record(key);
+    }
+
+    // Tests
+
+    #[test]
+    fn new_history() {
+        let mut hist = History::new();
+        assert!(hist.undo().is_empty(), "undo at root should be empty");
+
+        let mut hist = History::new();
+        assert!(hist.redo().is_empty(), "redo at leaf should be empty");
+
+        // Both should start at the root with no history.
+        let mut hist = History::default();
+        assert!(hist.undo().is_empty());
+        assert!(hist.redo().is_empty());
+    }
+
+    #[test]
+    fn make_key() {
+        let mut hist = History::new();
+        assert!(matches!(
+            hist.make_key(&Message::AddEvent),
+            Key::Record(_, _)
+        ));
+
+        let mut hist = History::new();
+        assert!(matches!(hist.make_key(&Message::None), Key::Fail));
+
+        // The Record variant from make_key begins with an empty undo vec and a
+        // one-element redo vec containing the original message.
+        let mut hist = History::new();
+        if let Key::Record(node, batch_mode) = hist.make_key(&Message::AddEvent) {
+            assert!(node.undo.is_empty(), "undo should be empty before put()");
+            assert_eq!(
+                node.redo.len(),
+                1,
+                "redo should contain the original message"
+            );
+            assert!(matches!(node.redo[0], Message::AddEvent));
+            assert!(
+                batch_mode.is_none(),
+                "batch mode should be None before put()"
+            );
+        } else {
+            panic!("expected Key::Record");
+        }
+    }
+
+    #[test]
+    fn record() {
+        let mut hist = History::new();
+        let key = hist.make_key(&Message::AddEvent);
+        hist.record(key); // no put() → undo is empty → record does nothing
+        assert!(hist.undo().is_empty(), "history should still be at root");
+    }
+
+    #[test]
+    fn key_dummy() {
+        let mut key = Key::Dummy;
+        // put() on a Dummy key must not panic and must have no observable effect
+        key.put(Message::AddEvent, BatchMode::NoBatching);
+
+        let mut key = Key::Dummy;
+        key.put(Message::AddEvent, BatchMode::NoBatching);
+        key.put(Message::DeleteSelectedEvents, BatchMode::NoBatching);
+    }
+
+    #[test]
+    #[should_panic(expected = "should not be undone")]
+    fn key_fail_panics_on_put() {
+        let mut key = Key::Fail;
+        key.put(Message::AddEvent, BatchMode::NoBatching);
+    }
+
+    #[test]
+    fn put() {
+        // Test undo message being added
+        let mut hist = History::new();
+        if let Key::Record(ref mut node, ref mut batch_mode) = hist.make_key(&Message::AddEvent) {
+            node.undo.push(Message::DeleteSelectedEvents);
+            *batch_mode = Some(BatchMode::NoBatching);
+            assert_eq!(node.undo.len(), 1);
+            assert!(matches!(node.undo[0], Message::DeleteSelectedEvents));
+        } else {
+            panic!("expected Key::Record");
+        }
+
+        let mut hist = History::new();
+        let mut key = hist.make_key(&Message::AddEvent);
+        key.put_no_batch(Message::DeleteSelectedEvents);
+        if let Key::Record(node, batch_mode) = key {
+            assert_eq!(node.undo.len(), 1);
+            assert_eq!(batch_mode, Some(BatchMode::NoBatching));
+        } else {
+            panic!("expected Key::Record");
+        }
+    }
+
+    #[test]
+    fn undo_redo_basic() {
+        // single action undo
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+
+        let undo = hist.undo();
+        assert_eq!(undo.len(), 1);
+        assert!(matches!(undo[0], Message::DeleteSelectedEvents));
+
+        // move back to root
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        drop(hist.undo());
+        // Now at root — undo again should be empty
+        assert!(hist.undo().is_empty());
+
+        // single action redo
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        drop(hist.undo());
+
+        let redo = hist.redo();
+        assert_eq!(redo.len(), 1);
+        assert!(matches!(redo[0], Message::AddEvent));
+
+        // move forward to leaf
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        drop(hist.undo());
+        drop(hist.redo());
+        // Now at the leaf — redo again should be empty
+        assert!(hist.redo().is_empty());
+    }
+
+    #[test]
+    fn undo_redo_2() {
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        record_no_batch(&mut hist, &Message::CreateStyle, Message::DeleteStyle(0));
+
+        // Undo second action
+        let undo2 = hist.undo();
+        assert_eq!(undo2.len(), 1);
+        assert!(matches!(undo2[0], Message::DeleteStyle(0)));
+
+        // Undo first action
+        let undo1 = hist.undo();
+        assert_eq!(undo1.len(), 1);
+        assert!(matches!(undo1[0], Message::DeleteSelectedEvents));
+
+        // At root
+        assert!(hist.undo().is_empty());
+
+        // Redo first action
+        let redo1 = hist.redo();
+        assert_eq!(redo1.len(), 1);
+        assert!(matches!(redo1[0], Message::AddEvent));
+
+        // Redo second action
+        let redo2 = hist.redo();
+        assert_eq!(redo2.len(), 1);
+        assert!(matches!(redo2[0], Message::CreateStyle));
+
+        // At leaf
+        assert!(hist.redo().is_empty());
+    }
+
+    #[test]
+    fn undo_redo_3() {
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        record_no_batch(&mut hist, &Message::CreateStyle, Message::DeleteStyle(0));
+        record_no_batch(
+            &mut hist,
+            &Message::SetActiveEventText("hello".into()),
+            Message::SetActiveEventText(String::new()),
+        );
+
+        // Undo all three
+        assert_eq!(hist.undo().len(), 1); // undo 3rd
+        assert_eq!(hist.undo().len(), 1); // undo 2nd
+        assert_eq!(hist.undo().len(), 1); // undo 1st
+        assert!(hist.undo().is_empty()); // at root
+
+        // Redo all three
+        assert_eq!(hist.redo().len(), 1);
+        assert_eq!(hist.redo().len(), 1);
+        assert_eq!(hist.redo().len(), 1);
+        assert!(hist.redo().is_empty()); // at leaf
+    }
+
+    #[test]
+    fn redo_discard() {
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        record_no_batch(&mut hist, &Message::CreateStyle, Message::DeleteStyle(0));
+
+        // Undo back to after action 1
+        drop(hist.undo());
+
+        // Record a new, different action (action C)
+        record_no_batch(
+            &mut hist,
+            &Message::SetActiveEventText("new".into()),
+            Message::SetActiveEventText(String::new()),
+        );
+
+        // Now at node C (the leaf). Undo back to node A so that redo can be tested.
+        drop(hist.undo());
+
+        // Redo should lead to action C, not the original (discarded) action B
+        let redo = hist.redo();
+        assert_eq!(redo.len(), 1);
+        assert!(
+            matches!(&redo[0], Message::SetActiveEventText(text) if text == "new"),
+            "redo should return the newly recorded action, not the discarded branch"
+        );
+
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        record_no_batch(&mut hist, &Message::CreateStyle, Message::DeleteStyle(0));
+
+        drop(hist.undo()); // undo action 2, now at node 1
+        record_no_batch(
+            &mut hist,
+            &Message::SetActiveEventText("x".into()),
+            Message::SetActiveEventText(String::new()),
+        );
+
+        // After redoing the new action, there should be nothing more to redo
+        drop(hist.redo());
+        assert!(
+            hist.redo().is_empty(),
+            "no further redo entries after new branch"
+        );
+    }
+
+    #[test]
+    fn batch_modes() {
+        // No batching
+        let mut hist = History::new();
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+        record_no_batch(&mut hist, &Message::AddEvent, Message::DeleteSelectedEvents);
+
+        // Two separate undo steps
+        let undo2 = hist.undo();
+        assert_eq!(undo2.len(), 1);
+        let undo1 = hist.undo();
+        assert_eq!(undo1.len(), 1);
+        assert!(hist.undo().is_empty(), "should be at root after two undos");
+
+        // Instant
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("original".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("original".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+
+        // Both actions should be merged: only ONE undo step
+        let undo = hist.undo();
+        assert_eq!(
+            undo.len(),
+            1,
+            "instant batching should produce one undo message"
+        );
+        assert!(
+            hist.undo().is_empty(),
+            "should be at root after a single undo"
+        );
+
+        // In Instant mode the first undo message is kept unchanged, since it
+        // already restores the state from before the first edit.
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("before_a".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("before_b_should_be_ignored".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+
+        let undo = hist.undo();
+        assert_eq!(undo.len(), 1);
+        assert!(
+            matches!(&undo[0], Message::SetActiveEventText(text) if text == "before_a"),
+            "the first undo message should be retained in Instant mode"
+        );
+
+        // In Instant mode the redo vector is replaced with the latest message.
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("original".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("original".into()),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+
+        // Undo, then redo: should return the SECOND (latest) redo message
+        drop(hist.undo());
+        let redo = hist.redo();
+        assert_eq!(redo.len(), 1);
+        assert!(
+            matches!(&redo[0], Message::SetActiveEventText(text) if text == "b"),
+            "redo should return the latest message in Instant mode"
+        );
+
+        // Incremental
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("undo_a".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("undo_b".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+
+        // Should be ONE undo step (batched)
+        let undo = hist.undo();
+        assert_eq!(
+            undo.len(),
+            2,
+            "incremental batching accumulates undo messages"
+        );
+        assert!(
+            hist.undo().is_empty(),
+            "should be at root after one batched undo"
+        );
+
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("undo_a".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("undo_b".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+
+        let undo = hist.undo();
+        assert_eq!(undo.len(), 2);
+        assert!(matches!(&undo[0], Message::SetActiveEventText(text) if text == "undo_a"));
+        assert!(matches!(&undo[1], Message::SetActiveEventText(text) if text == "undo_b"));
+
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("a".into()),
+            Message::SetActiveEventText("undo_a".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+        record_batched(
+            &mut hist,
+            &Message::SetActiveEventText("b".into()),
+            Message::SetActiveEventText("undo_b".into()),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+
+        drop(hist.undo());
+        let redo = hist.redo();
+        assert_eq!(
+            redo.len(),
+            2,
+            "incremental batching accumulates redo messages"
+        );
+        assert!(matches!(&redo[0], Message::SetActiveEventText(text) if text == "a"));
+        assert!(matches!(&redo[1], Message::SetActiveEventText(text) if text == "b"));
+
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::AddEvent,
+            Message::DeleteSelectedEvents,
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+        record_batched(
+            &mut hist,
+            &Message::CreateStyle, // different type → no merge
+            Message::DeleteStyle(0),
+            BatchAppendMode::Instant,
+            BatchAppendMode::Instant,
+        );
+
+        let undo2 = hist.undo();
+        assert_eq!(undo2.len(), 1);
+        assert!(matches!(undo2[0], Message::DeleteStyle(0)));
+
+        let undo1 = hist.undo();
+        assert_eq!(undo1.len(), 1);
+        assert!(matches!(undo1[0], Message::DeleteSelectedEvents));
+
+        assert!(hist.undo().is_empty());
+
+        let mut hist = History::new();
+        record_batched(
+            &mut hist,
+            &Message::AddEvent,
+            Message::DeleteSelectedEvents,
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+        record_batched(
+            &mut hist,
+            &Message::CreateStyle,
+            Message::DeleteStyle(0),
+            BatchAppendMode::Incremental,
+            BatchAppendMode::Incremental,
+        );
+
+        assert_eq!(hist.undo().len(), 1); // second node, different type
+        assert_eq!(hist.undo().len(), 1); // first node
+        assert!(hist.undo().is_empty());
+
+        // Three messages
+        let mut hist = History::new();
+        for idx in 0_u8..3 {
+            record_batched(
+                &mut hist,
+                &Message::SetActiveEventText(format!("state_{idx}")),
+                Message::SetActiveEventText(format!("undo_{idx}")),
+                BatchAppendMode::Incremental,
+                BatchAppendMode::Incremental,
+            );
+        }
+
+        let undo = hist.undo();
+        assert_eq!(
+            undo.len(),
+            3,
+            "all three undo messages should be accumulated"
+        );
+        assert!(hist.undo().is_empty());
+
+        let redo = hist.redo();
+        assert_eq!(
+            redo.len(),
+            3,
+            "all three redo messages should be accumulated"
+        );
+    }
+
+    #[test]
+    fn undo_redo_symmetry() {
+        const STEP_COUNT: usize = 5;
+        let mut hist = History::new();
+        for idx in 0..STEP_COUNT {
+            record_no_batch(
+                &mut hist,
+                &Message::SetActiveEventText(format!("state_{idx}")),
+                Message::SetActiveEventText(format!("undo_{idx}")),
+            );
+        }
+
+        // Undo all
+        for _ in 0..STEP_COUNT {
+            assert!(!hist.undo().is_empty());
+        }
+        assert!(hist.undo().is_empty(), "should be at root");
+
+        // Redo all
+        for _ in 0..STEP_COUNT {
+            assert!(!hist.redo().is_empty());
+        }
+        assert!(hist.redo().is_empty(), "should be at leaf");
+    }
+
+    #[test]
+    #[should_panic(expected = "Tried to overwrite batch mode with a different one")]
+    fn put_different_modes() {
+        let mut hist = History::new();
+        let mut key = hist.make_key(&Message::AddEvent);
+        key.put(Message::DeleteSelectedEvents, BatchMode::NoBatching);
+        // Second put with different mode triggers assert_ne! in Key::put
+        key.put(
+            Message::DeleteSelectedEvents,
+            BatchMode::Batched {
+                undo: BatchAppendMode::Incremental,
+                redo: BatchAppendMode::Incremental,
+            },
+        );
+    }
 }
