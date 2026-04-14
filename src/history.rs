@@ -17,6 +17,7 @@ pub struct History {
 
 /// An entry in the history, as an intrusive linked list with the entries that precede and follow it in the chain.
 pub struct Node {
+    name: &'static str,
     undo: Vec<Message>,
     redo: Vec<Message>,
     discriminant: std::mem::Discriminant<Message>,
@@ -28,6 +29,7 @@ pub struct Node {
 impl Node {
     fn root() -> Self {
         Node {
+            name: "",
             undo: vec![],
             redo: vec![],
             discriminant: std::mem::discriminant(&Message::None),
@@ -59,6 +61,7 @@ impl History {
     fn make_leaf(&self, message: Message) -> Node {
         let discriminant = std::mem::discriminant(&message);
         Node {
+            name: "",
             undo: vec![],
             redo: vec![message],
             discriminant,
@@ -276,6 +279,15 @@ impl History {
         }
     }
 
+    #[must_use]
+    pub fn peek_undo(&self) -> Option<&'static str> {
+        let last = self.last.borrow();
+        // If a previous node exists (i.e. we have not reached the root),
+        // return the name of the current (last) node,
+        // since that is the one that will be undone.
+        last.prev.as_ref().map(|_| last.name)
+    }
+
     pub fn redo(&mut self) -> Vec<Message> {
         let last = self.last.borrow();
         if let Some(next) = &last.next {
@@ -288,6 +300,12 @@ impl History {
             // we reached the leaf node. Do nothing
             vec![]
         }
+    }
+
+    #[must_use]
+    pub fn peek_redo(&self) -> Option<&'static str> {
+        let last = self.last.borrow();
+        last.next.as_ref().map(|next| next.borrow().name)
     }
 }
 
@@ -317,9 +335,10 @@ impl Key {
     /// # Panics
     /// Panics if trying to record something into a `Fail` key.
     /// Also panics if a batch mode is specified that differs from an earlier one.
-    pub fn put(&mut self, message: Message, batch_mode: BatchMode) {
+    pub fn put(&mut self, name: &'static str, message: Message, batch_mode: BatchMode) {
         match self {
             Key::Record(node, old_batch_mode) => {
+                node.name = name;
                 node.undo.push(message);
                 if let Some(old_batch_mode) = old_batch_mode {
                     assert_eq!(
@@ -343,12 +362,13 @@ impl Key {
     // Convenience functions for common batching scenarios
     // See `BatchMode` and `BatchAppendMode` for documentation on how these functions behave
 
-    pub fn put_no_batch(&mut self, message: Message) {
-        self.put(message, BatchMode::NoBatching);
+    pub fn put_no_batch(&mut self, name: &'static str, message: Message) {
+        self.put(name, message, BatchMode::NoBatching);
     }
 
-    pub fn put_instant(&mut self, message: Message) {
+    pub fn put_instant(&mut self, name: &'static str, message: Message) {
         self.put(
+            name,
             message,
             BatchMode::Batched {
                 undo: BatchAppendMode::Instant,
@@ -357,8 +377,9 @@ impl Key {
         );
     }
 
-    pub fn put_incremental(&mut self, message: Message) {
+    pub fn put_incremental(&mut self, name: &'static str, message: Message) {
         self.put(
+            name,
             message,
             BatchMode::Batched {
                 undo: BatchAppendMode::Incremental,
@@ -403,13 +424,14 @@ pub enum BatchAppendMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches2::assert_matches;
 
     // Helpers
 
     /// Record one action into history with NoBatching.
     fn record_no_batch(history: &mut History, redo_msg: &Message, undo_msg: Message) {
         let mut key = history.make_key(redo_msg);
-        key.put(undo_msg, BatchMode::NoBatching);
+        key.put("test", undo_msg, BatchMode::NoBatching);
         history.record(key);
     }
 
@@ -423,6 +445,7 @@ mod tests {
     ) {
         let mut key = history.make_key(redo_msg);
         key.put(
+            "test",
             undo_msg,
             BatchMode::Batched {
                 undo: undo_mode,
@@ -491,18 +514,18 @@ mod tests {
     fn key_dummy() {
         let mut key = Key::Dummy;
         // put() on a Dummy key must not panic and must have no observable effect
-        key.put(Message::AddEvent, BatchMode::NoBatching);
+        key.put("test", Message::AddEvent, BatchMode::NoBatching);
 
         let mut key = Key::Dummy;
-        key.put(Message::AddEvent, BatchMode::NoBatching);
-        key.put(Message::DeleteSelectedEvents, BatchMode::NoBatching);
+        key.put("test", Message::AddEvent, BatchMode::NoBatching);
+        key.put("test", Message::DeleteSelectedEvents, BatchMode::NoBatching);
     }
 
     #[test]
     #[should_panic(expected = "should not be undone")]
     fn key_fail_panics_on_put() {
         let mut key = Key::Fail;
-        key.put(Message::AddEvent, BatchMode::NoBatching);
+        key.put("test", Message::AddEvent, BatchMode::NoBatching);
     }
 
     #[test]
@@ -520,7 +543,7 @@ mod tests {
 
         let mut hist = History::new();
         let mut key = hist.make_key(&Message::AddEvent);
-        key.put_no_batch(Message::DeleteSelectedEvents);
+        key.put_no_batch("test", Message::DeleteSelectedEvents);
         if let Key::Record(node, batch_mode) = key {
             assert_eq!(node.undo.len(), 1);
             assert_eq!(batch_mode, Some(BatchMode::NoBatching));
@@ -619,6 +642,43 @@ mod tests {
         assert_eq!(hist.redo().len(), 1);
         assert_eq!(hist.redo().len(), 1);
         assert!(hist.redo().is_empty()); // at leaf
+    }
+
+    #[test]
+    fn undo_redo_peek() {
+        let mut hist = History::new();
+
+        let mut key = hist.make_key(&Message::AddEvent);
+        key.put(
+            "earlier",
+            Message::DeleteSelectedEvents,
+            BatchMode::NoBatching,
+        );
+        hist.record(key);
+
+        let mut key = hist.make_key(&Message::CreateStyle);
+        key.put("later", Message::DeleteStyle(0), BatchMode::NoBatching);
+        hist.record(key);
+
+        assert_matches!(hist.peek_undo(), Some("later"));
+        assert_matches!(hist.peek_redo(), None);
+
+        // Undo second action
+        let undo2 = hist.undo();
+        assert_eq!(undo2.len(), 1);
+        assert!(matches!(undo2[0], Message::DeleteStyle(0)));
+
+        assert_matches!(hist.peek_undo(), Some("earlier"));
+        assert_matches!(hist.peek_redo(), Some("later"));
+
+        // Undo first action
+        let undo1 = hist.undo();
+        assert_eq!(undo1.len(), 1);
+        assert!(matches!(undo1[0], Message::DeleteSelectedEvents));
+
+        // At root
+        assert_matches!(hist.peek_undo(), None);
+        assert_matches!(hist.peek_redo(), Some("earlier"));
     }
 
     #[test]
@@ -941,9 +1001,10 @@ mod tests {
     fn put_different_modes() {
         let mut hist = History::new();
         let mut key = hist.make_key(&Message::AddEvent);
-        key.put(Message::DeleteSelectedEvents, BatchMode::NoBatching);
+        key.put("test", Message::DeleteSelectedEvents, BatchMode::NoBatching);
         // Second put with different mode triggers assert_ne! in Key::put
         key.put(
+            "test",
             Message::DeleteSelectedEvents,
             BatchMode::Batched {
                 undo: BatchAppendMode::Incremental,

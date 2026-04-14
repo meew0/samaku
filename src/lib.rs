@@ -435,10 +435,14 @@ impl Samaku {
         // We implement our own non-native menu using iced_aw. The entry definitions are located
         // in `menu.rs`.
         // Once iced supports native menus again, we may switch to that.
-        let menu_bar = iced_aw::menu::MenuBar::new(vec![menu::file(), menu::media()])
-            .spacing(5.0)
-            .width(180)
-            .height(32);
+        let menu_bar = iced_aw::menu::MenuBar::new(vec![
+            menu::file(),
+            menu::edit(&self.history),
+            menu::media(),
+        ])
+        .spacing(5.0)
+        .width(180)
+        .height(32);
 
         // The title row — currently only contains the logo and the application name.
         let title_row = iced::widget::row![

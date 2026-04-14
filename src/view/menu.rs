@@ -8,44 +8,53 @@ use crate::message::Message;
 use crate::resources;
 
 fn button_style(class: &iced::Theme, status: button::Status) -> button::Style {
+    let palette = class.extended_palette();
+
     let active_style = button::Style {
-        text_color: class.extended_palette().background.base.text,
+        text_color: palette.background.base.text,
         border: iced::border::rounded(iced::border::radius(4.0)),
         background: Some(Color::TRANSPARENT.into()),
         ..Default::default()
     };
 
-    // TODO add pressed/disabled styles
-    #[expect(clippy::match_same_arms, reason = "extra styles to be added later")]
+    let hovered_style = button::Style {
+        background: Some(palette.primary.weak.color.into()),
+        text_color: palette.primary.weak.text,
+        ..active_style
+    };
+
+    let pressed_style = button::Style {
+        background: Some(palette.background.weak.color.into()),
+        ..active_style
+    };
+
+    let disabled_style = button::Style {
+        text_color: palette.background.base.text.scale_alpha(0.5),
+        ..active_style
+    };
+
     match status {
         button::Status::Active => active_style,
-        button::Status::Hovered => {
-            let plt = class.extended_palette();
-            button::Style {
-                background: Some(plt.primary.weak.color.into()),
-                text_color: plt.primary.weak.text,
-                ..active_style
-            }
-        }
-        button::Status::Pressed => active_style,
-        button::Status::Disabled => active_style,
+        button::Status::Hovered => hovered_style,
+        button::Status::Pressed => pressed_style,
+        button::Status::Disabled => disabled_style,
     }
 }
 
 pub fn base_button<'a, E: Into<Element<'a, Message, iced::Theme, iced::Renderer>>>(
     content: E,
-    msg: Message,
+    msg: Option<Message>,
 ) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
     button(content)
         .padding([4, 8])
         .style(button_style)
-        .on_press(msg)
+        .on_press_maybe(msg)
 }
 
 #[must_use]
 pub fn labeled_button(
     label: &str,
-    msg: Message,
+    msg: Option<Message>,
 ) -> button::Button<'_, Message, iced::Theme, iced::Renderer> {
     base_button(
         text(label)
@@ -56,7 +65,22 @@ pub fn labeled_button(
 }
 
 pub fn item(label: &'_ str, msg: Message) -> Item<'_, Message, iced::Theme, iced::Renderer> {
-    Item::new(labeled_button(label, msg).width(Length::Fill))
+    Item::new(labeled_button(label, Some(msg)).width(Length::Fill))
+}
+
+// An item that can contain a non-static label, and can be disabled.
+pub fn intricate_item<'a, S: Into<String>>(
+    label: S,
+    msg: Option<Message>,
+) -> Item<'a, Message, iced::Theme, iced::Renderer> {
+    let string: String = label.into();
+    let button = base_button(
+        text(string)
+            .width(Length::Fill)
+            .align_y(alignment::Vertical::Center),
+        msg,
+    );
+    Item::new(button.width(Length::Fill))
 }
 
 #[expect(
@@ -84,7 +108,7 @@ pub fn sub_menu<'a>(
                 arrow
             ]
             .align_y(iced::Alignment::Center),
-            msg,
+            Some(msg),
         )
         .width(Length::Fill),
         Menu::new(children).width(150.0),
