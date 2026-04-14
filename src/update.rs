@@ -151,6 +151,26 @@ fn update_internal(
         Message::UpdateToastProgress(id, progress) => {
             global_state.toasts.update_progress(id, progress);
         }
+        Message::Undo => {
+            let messages = global_state.history.undo();
+            // Undo messages need to be processed in reverse order, since batching
+            // appends the newest messages at the end.
+            let tasks: Vec<iced::Task<Message>> = messages
+                .into_iter()
+                .rev()
+                .map(|message| update_direct(global_state, message, &mut history::Key::Dummy))
+                .collect();
+            return iced::Task::batch(tasks);
+        }
+        Message::Redo => {
+            let messages = global_state.history.redo();
+            // Redo messages need to be processed in forward order
+            let tasks: Vec<iced::Task<Message>> = messages
+                .into_iter()
+                .map(|message| update_direct(global_state, message, &mut history::Key::Dummy))
+                .collect();
+            return iced::Task::batch(tasks);
+        }
         Message::SelectVideoFile => {
             return iced::Task::perform(
                 rfd::AsyncFileDialog::new().pick_file(),

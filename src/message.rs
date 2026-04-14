@@ -44,6 +44,10 @@ pub enum Message {
     /// Update the progress value of the progress-bar toast with the given stable ID.
     UpdateToastProgress(model::toast::Id, f32),
 
+    // History control messages
+    Undo,
+    Redo,
+
     // Open a dialog to select the respective type of file.
     SelectVideoFile,
     SelectAudioFile,

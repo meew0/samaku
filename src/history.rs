@@ -72,6 +72,7 @@ impl History {
     /// Essentially, this method determines whether the message could sensibly be recorded
     /// in the history, and if so, clones it and creates a suitable `Key`.
     /// Otherwise, it will create a key that panics whenever something tries to put an undo message.
+    #[expect(clippy::too_many_lines, reason = "we need to match all messages here")]
     pub fn make_key(&mut self, message: &Message) -> Key {
         match message {
             // messages that might eventually be recorded in the history (but this is not yet implemented)
@@ -148,6 +149,8 @@ impl History {
             | Message::SetFocusedPaneType(_)
             | Message::Toast(_)
             | Message::CloseToast(_)
+            | Message::Undo
+            | Message::Redo
             | Message::SelectVideoFile
             | Message::SelectAudioFile
             | Message::NewSubtitleFile
@@ -218,6 +221,34 @@ impl History {
                 self.last.borrow_mut().next = Some(Rc::clone(&rc));
                 self.last = rc;
             }
+        }
+    }
+
+    pub fn undo(&mut self) -> Vec<Message> {
+        let last = self.last.borrow();
+        if let Some(prev) = &last.prev {
+            let undo_messages = last.undo.clone();
+            let new_last = Rc::clone(prev);
+            drop(last);
+            self.last = new_last; // step back
+            undo_messages
+        } else {
+            // we reached the root node. Do nothing
+            vec![]
+        }
+    }
+
+    pub fn redo(&mut self) -> Vec<Message> {
+        let last = self.last.borrow();
+        if let Some(next) = &last.next {
+            let redo_messages = next.borrow().redo.clone();
+            let new_last = Rc::clone(next);
+            drop(last);
+            self.last = new_last; // step forward
+            redo_messages
+        } else {
+            // we reached the leaf node. Do nothing
+            vec![]
         }
     }
 }
