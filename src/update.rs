@@ -403,92 +403,244 @@ fn update_internal(
             }
         }
         Message::SetStyleName(index, name) => {
+            let current_name = global_state.subtitles.styles[index].name.clone();
             global_state.subtitles.styles.rename(index, name);
+
+            undo.put_instant("Set style name", Message::SetStyleName(index, current_name));
         }
         Message::SetStyleFontName(index, value) => {
-            global_state.subtitles.styles[index].font_name = value;
+            let old = replace(&mut global_state.subtitles.styles[index].font_name, value);
+
+            undo.put_instant("Set style font name", Message::SetStyleFontName(index, old));
         }
         Message::SetStyleFontSize(index, value) => {
-            global_state.subtitles.styles[index].font_size = value;
+            let old = replace(&mut global_state.subtitles.styles[index].font_size, value);
+
+            undo.put_instant("Set style font size", Message::SetStyleFontSize(index, old));
         }
         Message::SetStylePrimaryColour(index, value) => {
-            global_state.subtitles.styles[index].primary_colour = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].primary_colour,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style primary color",
+                Message::SetStylePrimaryColour(index, old),
+            );
         }
         Message::SetStylePrimaryTransparency(index, value) => {
-            global_state.subtitles.styles[index].primary_transparency = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].primary_transparency,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style primary transparency",
+                Message::SetStylePrimaryTransparency(index, old),
+            );
         }
         Message::SetStyleSecondaryColour(index, value) => {
-            global_state.subtitles.styles[index].secondary_colour = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].secondary_colour,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style secondary color",
+                Message::SetStyleSecondaryColour(index, old),
+            );
         }
         Message::SetStyleSecondaryTransparency(index, value) => {
-            global_state.subtitles.styles[index].secondary_transparency = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].secondary_transparency,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style secondary transparency",
+                Message::SetStyleSecondaryTransparency(index, old),
+            );
         }
         Message::SetStyleBorderColour(index, value) => {
-            global_state.subtitles.styles[index].border_colour = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].border_colour,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style border color",
+                Message::SetStyleBorderColour(index, old),
+            );
         }
         Message::SetStyleBorderTransparency(index, value) => {
-            global_state.subtitles.styles[index].border_transparency = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].border_transparency,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style border transparency",
+                Message::SetStyleBorderTransparency(index, old),
+            );
         }
         Message::SetStyleShadowColour(index, value) => {
-            global_state.subtitles.styles[index].shadow_colour = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].shadow_colour,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style shadow color",
+                Message::SetStyleShadowColour(index, old),
+            );
         }
         Message::SetStyleShadowTransparency(index, value) => {
-            global_state.subtitles.styles[index].shadow_transparency = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].shadow_transparency,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style shadow transparency",
+                Message::SetStyleShadowTransparency(index, old),
+            );
         }
         Message::SetStyleBold(index, value) => {
-            global_state.subtitles.styles[index].bold = value;
+            let old = replace(&mut global_state.subtitles.styles[index].bold, value);
+
+            undo.put_no_batch("Set style bold", Message::SetStyleBold(index, old));
         }
         Message::SetStyleItalic(index, value) => {
-            global_state.subtitles.styles[index].italic = value;
+            let old = replace(&mut global_state.subtitles.styles[index].italic, value);
+
+            undo.put_no_batch("Set style italic", Message::SetStyleItalic(index, old));
         }
         Message::SetStyleUnderline(index, value) => {
-            global_state.subtitles.styles[index].underline = value;
+            let old = replace(&mut global_state.subtitles.styles[index].underline, value);
+
+            undo.put_no_batch(
+                "Set style underline",
+                Message::SetStyleUnderline(index, old),
+            );
         }
         Message::SetStyleStrikeOut(index, value) => {
-            global_state.subtitles.styles[index].strike_out = value;
+            let old = replace(&mut global_state.subtitles.styles[index].strike_out, value);
+
+            undo.put_no_batch(
+                "Set style strike-out",
+                Message::SetStyleStrikeOut(index, old),
+            );
         }
         Message::SetStyleScaleX(index, value) => {
-            global_state.subtitles.styles[index].scale.x = value;
+            let old = replace(&mut global_state.subtitles.styles[index].scale.x, value);
+
+            undo.put_instant("Set style scale X", Message::SetStyleScaleX(index, old));
         }
         Message::SetStyleScaleY(index, value) => {
-            global_state.subtitles.styles[index].scale.y = value;
+            let old = replace(&mut global_state.subtitles.styles[index].scale.y, value);
+
+            undo.put_instant("Set style scale Y", Message::SetStyleScaleY(index, old));
         }
         Message::SetStyleSpacing(index, value) => {
-            global_state.subtitles.styles[index].spacing = value;
+            let old = replace(&mut global_state.subtitles.styles[index].spacing, value);
+
+            undo.put_instant("Set style spacing", Message::SetStyleSpacing(index, old));
         }
         Message::SetStyleAngle(index, value) => {
-            global_state.subtitles.styles[index].angle = subtitle::Angle(value);
+            let old = replace(
+                &mut global_state.subtitles.styles[index].angle,
+                subtitle::Angle(value),
+            );
+
+            undo.put_instant("Set style angle", Message::SetStyleAngle(index, old.0));
         }
         Message::SetStyleBlur(index, value) => {
-            global_state.subtitles.styles[index].blur = value;
+            let old = replace(&mut global_state.subtitles.styles[index].blur, value);
+
+            undo.put_instant("Set style blur", Message::SetStyleBlur(index, old));
         }
         Message::SetStyleBorderStyle(index, value) => {
-            global_state.subtitles.styles[index].border_style = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].border_style,
+                value,
+            );
+
+            undo.put_no_batch(
+                "Set style border style",
+                Message::SetStyleBorderStyle(index, old),
+            );
         }
         Message::SetStyleBorderWidth(index, value) => {
-            global_state.subtitles.styles[index].border_width = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].border_width,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style border width",
+                Message::SetStyleBorderWidth(index, old),
+            );
         }
         Message::SetStyleShadowDistance(index, value) => {
-            global_state.subtitles.styles[index].shadow_distance = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].shadow_distance,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style shadow distance",
+                Message::SetStyleShadowDistance(index, old),
+            );
         }
         Message::SetStyleAlignment(index, value) => {
             let old = replace(&mut global_state.subtitles.styles[index].alignment, value);
+
             undo.put_no_batch(
                 "Set style alignment",
                 Message::SetStyleAlignment(index, old),
             );
         }
         Message::SetStyleMarginLeft(index, value) => {
-            global_state.subtitles.styles[index].margins.left = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].margins.left,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style left margin",
+                Message::SetStyleMarginLeft(index, old),
+            );
         }
         Message::SetStyleMarginRight(index, value) => {
-            global_state.subtitles.styles[index].margins.right = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].margins.right,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style right margin",
+                Message::SetStyleMarginRight(index, old),
+            );
         }
         Message::SetStyleMarginVertical(index, value) => {
-            global_state.subtitles.styles[index].margins.vertical = value;
+            let old = replace(
+                &mut global_state.subtitles.styles[index].margins.vertical,
+                value,
+            );
+
+            undo.put_instant(
+                "Set style vertical margin",
+                Message::SetStyleMarginVertical(index, old),
+            );
         }
         Message::SetStyleJustify(index, value) => {
-            global_state.subtitles.styles[index].justify = value;
+            let old = replace(&mut global_state.subtitles.styles[index].justify, value);
+
+            undo.put_no_batch(
+                "Set style justify mode",
+                Message::SetStyleJustify(index, old),
+            );
         }
         Message::AddEvent => {
             let new_event = subtitle::Event {
