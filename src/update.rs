@@ -473,7 +473,7 @@ fn update_internal(
         }
         Message::SetStyleAlignment(index, value) => {
             let old = replace(&mut global_state.subtitles.styles[index].alignment, value);
-            undo.put(Message::SetStyleAlignment(index, old));
+            undo.put_no_batch(Message::SetStyleAlignment(index, old));
         }
         Message::SetStyleMarginLeft(index, value) => {
             global_state.subtitles.styles[index].margins.left = value;

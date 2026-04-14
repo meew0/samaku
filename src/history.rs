@@ -133,7 +133,7 @@ impl History {
             | Message::UpdateReticulePosition(_, _) => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
-                Key::Record(node)
+                Key::Record(node, None)
             }
             // messages that will never need to be recorded in the history
             Message::None
@@ -184,24 +184,38 @@ impl History {
     ///
     /// # Panics
     /// Panics if the key does not follow the leaf node, i.e. if the history has changed between `make_key` and `record`.
+    /// Also panics if there is no batch mode specified even though messages have been appended.
     pub fn record(&mut self, key: Key) {
-        if let Key::Record(node) = key {
+        if let Key::Record(node, batch_mode) = key {
+            if node.undo.is_empty() {
+                // No data was put into this node
+                // (almost certainly because undo/redo is NYI for this particular message)
+                return;
+            }
+
+            let batch_mode = batch_mode
+                .expect("A batch mode should be specified if messages have been appended");
+
             let prev = node.prev.as_ref().expect("tried to record unlinked node");
             assert!(
                 Rc::ptr_eq(prev, &self.last),
                 "tried to record node not created from history leaf"
             );
 
-            // Batch the last two nodes together if they contain the same redo message
+            // Batch the last two nodes together if batching is allowed,
+            // if they contain the same redo message
             // and less than five seconds have passed.
-            let can_batch = {
-                let last = self.last.borrow();
-                let time_delay = node.timestamp - last.timestamp;
-                let same_message = last.discriminant == node.discriminant;
-                same_message && time_delay < std::time::Duration::from_secs(5)
-            };
-
-            if can_batch {
+            if let BatchMode::Batched {
+                undo: undo_append_mode,
+                redo: redo_append_mode,
+            } = batch_mode
+                && {
+                    let last = self.last.borrow();
+                    let time_delay = node.timestamp - last.timestamp;
+                    let same_message = last.discriminant == node.discriminant;
+                    same_message && time_delay < std::time::Duration::from_secs(5)
+                }
+            {
                 // Add the new messages into the leaf node
                 let Node {
                     undo: mut new_undo,
@@ -209,8 +223,32 @@ impl History {
                     ..
                 } = node;
 
-                self.last.borrow_mut().undo.append(&mut new_undo);
-                self.last.borrow_mut().redo.append(&mut new_redo);
+                match undo_append_mode {
+                    BatchAppendMode::Instant => {
+                        assert!(!self.last.borrow().undo.is_empty());
+                        // No-op. Since the last node already contains the message
+                        // needed to undo both the previous and the current message,
+                        // we don't need to do anything.
+                    }
+                    BatchAppendMode::Incremental => {
+                        self.last.borrow_mut().undo.append(&mut new_undo);
+                    }
+                }
+
+                match redo_append_mode {
+                    BatchAppendMode::Instant => {
+                        // While the undo vec doesn't need to be changed in Instant mode,
+                        // the redo vec does, since to redo the whole node, it needs to be
+                        // returned to the state after the current node, so we need to store
+                        // that state (but nothing else).
+                        let last_redo = &mut self.last.borrow_mut().redo;
+                        last_redo.clear();
+                        last_redo.append(&mut new_redo);
+                    }
+                    BatchAppendMode::Incremental => {
+                        self.last.borrow_mut().redo.append(&mut new_redo);
+                    }
+                }
 
                 // We intentionally don't update the timestamp here,
                 // so that even with constant edits,
@@ -260,7 +298,7 @@ impl History {
 /// or should not be put into it.
 pub enum Key {
     /// This type of `Key` will correctly record any message put into it.
-    Record(Node),
+    Record(Node, Option<BatchMode>),
 
     /// This type of `Key` will panic when a message is put into it.
     /// Used when a message should not be recorded into the history, to protect against
@@ -278,10 +316,20 @@ impl Key {
     ///
     /// # Panics
     /// Panics if trying to record something into a `Fail` key.
-    pub fn put(&mut self, message: Message) {
+    /// Also panics if a batch mode is specified that differs from an earlier one.
+    pub fn put(&mut self, message: Message, batch_mode: BatchMode) {
         match self {
-            Key::Record(node) => {
+            Key::Record(node, old_batch_mode) => {
                 node.undo.push(message);
+                if let Some(old_batch_mode) = old_batch_mode {
+                    assert_ne!(
+                        *old_batch_mode, batch_mode,
+                        "Tried to overwrite batch mode with a different one"
+                    );
+                    *old_batch_mode = batch_mode;
+                } else {
+                    *old_batch_mode = Some(batch_mode);
+                }
             }
             Key::Fail => {
                 panic!("Tried to record undo data for a message that should not be undone");
@@ -291,4 +339,63 @@ impl Key {
             }
         }
     }
+
+    // Convenience functions for common batching scenarios
+    // See `BatchMode` and `BatchAppendMode` for documentation on how these functions behave
+
+    pub fn put_no_batch(&mut self, message: Message) {
+        self.put(message, BatchMode::NoBatching);
+    }
+
+    pub fn put_instant(&mut self, message: Message) {
+        self.put(
+            message,
+            BatchMode::Batched {
+                undo: BatchAppendMode::Instant,
+                redo: BatchAppendMode::Instant,
+            },
+        );
+    }
+
+    pub fn put_incremental(&mut self, message: Message) {
+        self.put(
+            message,
+            BatchMode::Batched {
+                undo: BatchAppendMode::Incremental,
+                redo: BatchAppendMode::Incremental,
+            },
+        );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BatchMode {
+    /// No batching will be performed at all.
+    /// Every recorded message will be its own node in the history.
+    NoBatching,
+
+    /// Nodes will be batched together under certain conditions for better ergonomics
+    /// (e.g. such that when a text is edited, every individual single-character edit doesn't
+    /// become its own undo-redo node).
+    /// The `BatchAppendMode` specifies whether messages are appended or overwritten.
+    Batched {
+        undo: BatchAppendMode,
+        redo: BatchAppendMode,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BatchAppendMode {
+    /// Messages are logically treated as “setting” rather than “incrementally changing”
+    /// the state, with the consequence that when batching, the later undo message is simply
+    /// deleted, because the earlier undo message will restore both the previous edit and the
+    /// current edit.
+    /// For instance, this is suitable for a message where the destination data field is *set*
+    /// to some value rather than incrementing/decrementing it.
+    Instant,
+
+    /// Nodes will be batched together, but all undo/redo messages will be retained and
+    /// played back in the respective correct order. Suitable for messages that logically
+    /// *increment*/*append to* a value.
+    Incremental,
 }
