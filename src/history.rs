@@ -110,7 +110,9 @@ impl History {
             | Message::SetStyleMarginVertical(_, _)
             | Message::SetStyleJustify(_, _)
             | Message::AddEvent
+            | Message::DeleteEvents(_)
             | Message::DeleteSelectedEvents
+            | Message::RestoreEvents(_)
             | Message::SetActiveEventText(_)
             | Message::SetActiveEventActor(_)
             | Message::SetActiveEventEffect(_)
@@ -176,6 +178,7 @@ impl History {
             | Message::Playing(_)
             | Message::ToggleEventSelection(_)
             | Message::SelectOnlyEvent(_)
+            | Message::SelectEvents(_)
             | Message::TrackMotionForNode(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
@@ -189,7 +192,7 @@ impl History {
     /// Panics if the key does not follow the leaf node, i.e. if the history has changed between `make_key` and `record`.
     /// Also panics if there is no batch mode specified even though messages have been appended.
     pub fn record(&mut self, key: Key) {
-        if let Key::Record(node, batch_mode) = key {
+        if let Key::Record(mut node, batch_mode) = key {
             if node.undo.is_empty() {
                 // No data was put into this node
                 // (almost certainly because undo/redo is NYI for this particular message)
@@ -204,6 +207,11 @@ impl History {
                 Rc::ptr_eq(prev, &self.last),
                 "tried to record node not created from history leaf"
             );
+
+            // We need to reverse the new undo messages, since batched undo messages
+            // are logically played backwards, but we want to preserve the order
+            // the messages were put into the node.
+            node.undo.reverse();
 
             // Batch the last two nodes together if batching is allowed,
             // if they contain the same redo message
@@ -386,6 +394,26 @@ impl Key {
                 redo: BatchAppendMode::Incremental,
             },
         );
+    }
+
+    /// Instead of using the message the node was created with,
+    /// use the specified message when redoing the node.
+    ///
+    /// # Panics
+    /// Panics if trying to record something into a `Fail` key.
+    pub fn override_redo(&mut self, redo_message: Message) {
+        match self {
+            Key::Record(node, _) => {
+                node.redo.clear();
+                node.redo.push(redo_message);
+            }
+            Key::Fail => {
+                panic!("Tried to record undo data for a message that should not be undone");
+            }
+            Key::Dummy => {
+                // no-op
+            }
+        }
     }
 }
 

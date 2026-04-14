@@ -5,6 +5,7 @@ use crate::{action, history, media, message, model, nde, pane, project, subtitle
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::mem::replace;
 
@@ -659,14 +660,47 @@ fn update_internal(
                 event_type: subtitle::EventType::Dialogue,
                 extradata_ids: vec![],
             };
-            global_state.subtitles.events.push(new_event);
+            let new_index = global_state.subtitles.events.push(new_event.clone());
+            let position = global_state.subtitles.events.position(new_index);
+
+            undo.put_no_batch("Add event", Message::DeleteEvents(vec![new_index]));
+            undo.override_redo(Message::RestoreEvents(vec![(
+                subtitle::Tombstone::new(new_index),
+                position,
+                new_event,
+            )]));
+        }
+        Message::DeleteEvents(event_indices) => {
+            let mut set = HashSet::from_iter(event_indices);
+            let removed = global_state.subtitles.events.remove_from_set(&mut set);
+
+            undo.put_no_batch("Delete events", Message::RestoreEvents(removed));
         }
         Message::DeleteSelectedEvents => {
-            global_state
+            let selected: Vec<subtitle::EventIndex> = global_state
+                .selected_event_indices
+                .iter()
+                .copied()
+                .collect();
+            let removed = global_state
                 .subtitles
                 .events
                 .remove_from_set(&mut global_state.selected_event_indices);
             global_state.selected_event_indices.clear();
+
+            undo.put_no_batch("Delete events", Message::RestoreEvents(removed));
+            undo.put_no_batch("Delete events", Message::SelectEvents(selected.clone()));
+            undo.override_redo(Message::DeleteEvents(selected));
+        }
+        Message::RestoreEvents(events) => {
+            let new_indices: Vec<subtitle::EventIndex> = events
+                .into_iter()
+                .map(|(tombstone, pos, event)| {
+                    global_state.subtitles.events.restore(tombstone, pos, event)
+                })
+                .collect();
+
+            undo.put_no_batch("Restore events", Message::DeleteEvents(new_indices));
         }
         Message::ToggleEventSelection(index) => {
             if global_state.selected_event_indices.contains(&index) {
@@ -679,6 +713,10 @@ fn update_internal(
         Message::SelectOnlyEvent(index) => {
             global_state.selected_event_indices.clear();
             global_state.selected_event_indices.insert(index);
+            notify_selected_events(global_state);
+        }
+        Message::SelectEvents(indices) => {
+            global_state.selected_event_indices.extend(indices);
             notify_selected_events(global_state);
         }
         Message::SetActiveEventText(new_text) => {

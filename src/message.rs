@@ -150,11 +150,15 @@ pub enum Message {
     /// Add an empty event to the end of the track.
     AddEvent,
 
+    DeleteEvents(Vec<subtitle::EventIndex>),
     DeleteSelectedEvents,
+
+    RestoreEvents(Vec<(subtitle::Tombstone, usize, subtitle::Event<'static>)>),
 
     /// Select the given event if it is not selected, otherwise deselect it.
     ToggleEventSelection(subtitle::EventIndex),
     SelectOnlyEvent(subtitle::EventIndex),
+    SelectEvents(Vec<subtitle::EventIndex>),
 
     // Set various properties of the active event.
     SetActiveEventText(String),

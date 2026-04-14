@@ -4,8 +4,24 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::{Index, IndexMut, Range};
 
+/// A unique index to an event in an `EventTrack`.
+///
+/// The existence of an `EventIndex` associated with a particular track more-or-less guarantees
+/// that an event exists at that index. While this is not an invariant that should be relied upon unchecked,
+/// writing code that refers to non-existent event indices should be avoided (use `Tombstone` instead).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EventIndex(usize);
+
+/// An `EventIndex` that has been deleted and is no longer valid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct Tombstone(EventIndex);
+
+impl Tombstone {
+    #[must_use]
+    pub fn new(event_index: EventIndex) -> Self {
+        Self(event_index)
+    }
+}
 
 /// Ordered collection of [`Event`]s.
 ///
@@ -80,6 +96,15 @@ impl EventTrack {
     pub fn get_nth(&self, n: usize) -> Option<(EventIndex, &Event<'static>)> {
         let index = self.order.get_index(n).copied();
         index.map(|index| (index, self.events[index.0].as_ref().unwrap()))
+    }
+
+    /// Get the position of the event given by its index.
+    ///
+    /// # Panics
+    /// Panics if an invalid index is supplied.
+    #[must_use]
+    pub fn position(&self, event_index: EventIndex) -> usize {
+        self.order.get_index_of(&event_index).unwrap()
     }
 
     /// Update the times (start time and duration) of the given event, upholding invariants required for correct behavior of `EventTrack`.
@@ -203,7 +228,8 @@ impl EventTrack {
         new_index
     }
 
-    /// Add a new event to the track at the given index.
+    /// Add a new event to the track, such that it is logically positioned at the same position
+    /// as the event with the given index.
     ///
     /// # Panics
     /// Panics if the given index could not be found within the track.
@@ -234,20 +260,58 @@ impl EventTrack {
     /// Remove all events whose indices are contained in the given set. Clears the set afterwards
     /// (since the indices it references are no longer valid); hence, it requires a mutable
     /// reference to the set.
+    /// Returns a list of tombstones and associated events.
     ///
     /// # Panics
     /// Panics if any of the indices is invalid.
-    pub fn remove_from_set(&mut self, set: &mut HashSet<EventIndex>) {
-        self.order.retain(|event_index| !set.contains(event_index));
+    pub fn remove_from_set(
+        &mut self,
+        set: &mut HashSet<EventIndex>,
+    ) -> Vec<(Tombstone, usize, Event<'static>)> {
+        let mut removed = vec![];
+
         for event_index in set.iter() {
             let event = self.events[event_index.0].take().unwrap();
             let interval = event.time_range();
             Self::internal_query_index_remove(&mut self.query_index, interval, *event_index);
+            let pos = self.order.get_index_of(event_index).unwrap();
+            removed.push((Tombstone(*event_index), pos, event));
         }
+        self.order.retain(|event_index| !set.contains(event_index));
 
         self.count -= set.len();
         set.clear();
         debug_assert!(self.check_invariants());
+
+        removed.sort_by_key(|(_, pos, _)| *pos);
+        removed
+    }
+
+    /// Restores an event that was previously deleted.
+    /// The observable behavior of this method is more or less the same as `push`, but it conserves space
+    /// and allows reusing event indices, which is convenient for undo/redo logic.
+    ///
+    /// # Panics
+    /// Panics if an event that did not previously exist is tried to be restored.
+    pub fn restore(
+        &mut self,
+        tombstone: Tombstone,
+        pos: usize,
+        event: Event<'static>,
+    ) -> EventIndex {
+        let new_index = tombstone.0;
+        Self::internal_query_index_insert_merge(
+            &mut self.query_index,
+            event.time_range(),
+            new_index,
+        );
+        assert!(self.events[new_index.0].is_none());
+        assert!(self.order.shift_insert(pos, new_index));
+        self.events[new_index.0] = Some(event);
+        self.count += 1;
+
+        debug_assert!(self.check_invariants());
+        new_index
     }
 
     /// If exactly one event is selected, this method returns the index of that element. Otherwise,
@@ -548,7 +612,7 @@ mod tests {
         });
         assert_eq!(track.nth(2).1.start, StartTime(3000));
 
-        track.insert(
+        let index = track.insert(
             track.nth(1).0,
             Event {
                 start: StartTime(2000),
@@ -560,11 +624,22 @@ mod tests {
         assert_eq!(track.nth(1).1.start, StartTime(2000));
         assert_eq!(track.nth(3).1.start, StartTime(3000));
 
+        let position = track.position(index);
+        assert_eq!(position, 1);
+
         let mut to_remove = HashSet::from([track.nth(1).0, track.nth(2).0]);
-        track.remove_from_set(&mut to_remove);
+        let removed = track.remove_from_set(&mut to_remove);
         assert_eq!(track.len(), 2);
         assert_eq!(track.nth(0).1.start, StartTime(0));
         assert_eq!(track.nth(1).1.start, StartTime(3000));
+
+        for (tombstone, pos, event) in removed {
+            track.restore(tombstone, pos, event);
+        }
+        assert_eq!(track.len(), 4);
+        assert_eq!(track.nth(0).1.start, StartTime(0));
+        assert_eq!(track.nth(1).1.start, StartTime(2000));
+        assert_eq!(track.nth(3).1.start, StartTime(3000));
     }
 
     #[test]
