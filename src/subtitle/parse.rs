@@ -154,8 +154,8 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     // Create a StyleList from the styles we read. This ensures there will be at least one style,
     // and no styles will have duplicate names.
-    let (style_list, leftover) = StyleList::from_vec(styles);
-    for style in &leftover {
+    let (style_list, leftovers) = StyleList::from_vec(styles);
+    for style in &leftovers.leftover {
         warnings.push(Warning::DuplicateStyle(style.name().to_owned()));
     }
 

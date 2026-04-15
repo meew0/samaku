@@ -538,14 +538,15 @@ impl StyleList {
     /// Creates a new `StyleList` containing the given styles. If there are multiple styles with the
     /// same name, only the last one will be retained (matching libass' lookup behaviour).
     /// Returns the created list, together with the styles that were not inserted because they had
-    /// duplicate names.
+    /// duplicate names, and the mapping of style indices (from the original large list,
+    /// to the now smaller list of non-duplicates)
     #[must_use]
-    pub fn from_vec(styles: Vec<Style>) -> (Self, Vec<Style>) {
+    pub fn from_vec(styles: Vec<Style>) -> (Self, StyleLeftovers) {
         let capacity = styles.len();
 
         if capacity == 0 {
             // Return a list containing a default style
-            return (Self::new(), vec![]);
+            return (Self::new(), StyleLeftovers::empty(1));
         }
 
         let mut res = Self {
@@ -553,14 +554,24 @@ impl StyleList {
             styles: Vec::with_capacity(capacity),
         };
         let mut leftover: Vec<Style> = vec![];
+        let mut mapping: Vec<usize> = vec![0_usize; capacity];
 
-        for style in styles {
-            if let (_, Some(old_style)) = res.insert(style) {
-                leftover.push(old_style);
+        for (orig_index, style) in styles.into_iter().enumerate() {
+            let (new_index, old_style) = res.insert(style);
+
+            if let Some(leftover_style) = old_style {
+                leftover.push(leftover_style);
             }
+
+            // We can do this since `insert` will always insert a new style with the same name
+            // at the same index as the previous style with that name. So the new indices
+            // will continue to remain valid even as the style list grows.
+            mapping[orig_index] = new_index;
         }
 
-        (res, leftover)
+        let leftovers = StyleLeftovers { leftover, mapping };
+
+        (res, leftovers)
     }
 
     /// Add a new style to the end, if no style with the same name exists already. Otherwise, the
@@ -641,6 +652,24 @@ impl Index<usize> for StyleList {
 impl IndexMut<usize> for StyleList {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.styles[index]
+    }
+}
+
+/// Represents data that was left over after deduplicating the style list.
+pub struct StyleLeftovers {
+    /// Remaining duplicate styles that would be inaccessible in libass.
+    pub leftover: Vec<Style>,
+
+    /// The mapping of input style indices to output style indices, after deduplicating.
+    pub mapping: Vec<usize>,
+}
+
+impl StyleLeftovers {
+    fn empty(num_styles: usize) -> Self {
+        Self {
+            leftover: vec![],
+            mapping: (0..num_styles).collect(),
+        }
     }
 }
 

@@ -222,7 +222,8 @@ fn update_internal(
         Message::SubtitleFileReadForImport(content) => {
             let opaque = media::subtitle::OpaqueTrack::parse(&content);
 
-            let (style_list, leftover) = subtitle::StyleList::from_vec(opaque.styles());
+            let (style_list, leftovers) = subtitle::StyleList::from_vec(opaque.styles());
+            let subtitle::StyleLeftovers { leftover, mapping } = leftovers;
 
             // Show warning toasts for duplicate styles
             if !leftover.is_empty() {
@@ -240,8 +241,16 @@ fn update_internal(
                 ));
             }
 
+            // We need to remap the style indices libass assigned
+            // to our new ones after deduplicating/potentially reordering
+            // the style list.
+            let mut events = opaque.to_event_track();
+            for event in events.iter_events_mut() {
+                event.style_index = mapping[event.style_index];
+            }
+
             let new_file = subtitle::File {
-                events: opaque.to_event_track(),
+                events,
                 styles: model::Trace::new(style_list),
                 script_info: opaque.script_info(),
                 ..Default::default()
