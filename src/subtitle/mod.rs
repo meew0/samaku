@@ -17,7 +17,7 @@ pub use import::import;
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
 };
-use crate::{model, nde, style};
+use crate::{media, model, nde, style};
 
 pub mod compile;
 mod emit;
@@ -539,7 +539,7 @@ impl StyleList {
     /// same name, only the last one will be retained (matching libass' lookup behaviour).
     /// Returns the created list, together with the styles that were not inserted because they had
     /// duplicate names, and the mapping of style indices (from the original large list,
-    /// to the now smaller list of non-duplicates)
+    /// to the now smaller list of non-duplicates).
     #[must_use]
     pub fn from_vec(styles: Vec<Style>) -> (Self, StyleLeftovers) {
         let capacity = styles.len();
@@ -606,18 +606,31 @@ impl StyleList {
     }
 
     /// Change a style's name.
+    /// If a style with the same name already exists, the name will be deduplicated
+    /// (e.g. "Default" → "Default-1"). In that case, the Method will return `Some(new_name)`.
+    /// If the name was not deduplicated, `None` will be returned.
     ///
     /// # Panics
     /// Panics if the current name of the style to be renamed does not match our reference to it,
     /// because it has been renamed “manually” by setting its `name` field in the meantime.
-    pub fn rename(&mut self, index: usize, new_name: String) {
+    pub fn rename<S: Into<String>>(&mut self, index: usize, new_name: S) -> Option<String> {
+        let original_new_name = new_name.into();
+        let mut new_name = original_new_name.clone();
+        let mut counter = 0;
+        while self.names.contains_key(&new_name) {
+            counter += 1;
+            new_name = format!("{original_new_name}-{counter}");
+        }
+
         let old_name = std::mem::replace(&mut self.styles[index].name, new_name.clone());
         assert_eq!(
             self.names.remove(&old_name),
             Some(index),
             "Style index did not match expected value in `rename` — was a style manually renamed by changing its `name` field?"
         );
-        self.names.insert(new_name, index);
+        self.names.insert(new_name.clone(), index);
+
+        (counter > 0).then_some(new_name)
     }
 
     #[must_use]
@@ -736,7 +749,7 @@ pub struct File {
 }
 
 impl File {
-    /// Parse the given stream of lines into an [`AssFile`] with a list of non-fatal parse warnings.
+    /// Parse the given stream of lines into a [`File`] with a list of non-fatal parse warnings.
     ///
     /// # Errors
     /// Errors when the stream returns an IO error, or when an unrecoverable parse error is encountered.
@@ -748,6 +761,31 @@ impl File {
         input: smol::io::Lines<R>,
     ) -> Result<(File, Vec<parse::Warning>), parse::SubtitleParseError> {
         parse::parse(input).await
+    }
+
+    /// Create a new `File` from the given libass `OpaqueTrack`.
+    /// Returns the `File` and the list of leftover duplicate (and thus unused) styles.
+    #[must_use]
+    pub fn from_opaque(opaque: &media::subtitle::OpaqueTrack) -> (Self, Vec<Style>) {
+        let (style_list, leftovers) = StyleList::from_vec(opaque.styles());
+        let StyleLeftovers { leftover, mapping } = leftovers;
+
+        // We need to remap the style indices libass assigned
+        // to our new ones after deduplicating/potentially reordering
+        // the style list.
+        let mut events = opaque.to_event_track();
+        for event in events.iter_events_mut() {
+            event.style_index = mapping[event.style_index];
+        }
+
+        let new_file = Self {
+            events,
+            styles: model::Trace::new(style_list),
+            script_info: opaque.script_info(),
+            ..Default::default()
+        };
+
+        (new_file, leftover)
     }
 }
 
@@ -923,10 +961,16 @@ pub enum AttachmentType {
 mod tests {
     use assert_matches2::assert_matches;
     use smol::io::AsyncBufReadExt as _;
-
-    use crate::{media, test_utils::test_file};
+    use std::path::Path;
 
     use super::*;
+    use crate::{subtitle, test_utils::test_file};
+
+    fn import(path: &Path) -> (File, Vec<Style>) {
+        let content = smol::block_on(async { subtitle::import(path).await }).unwrap();
+        let opaque = media::subtitle::OpaqueTrack::parse(&content);
+        File::from_opaque(&opaque)
+    }
 
     #[test]
     fn format_times() {
@@ -992,7 +1036,7 @@ mod tests {
         assert_matches!(maybe_index, Some(b_index));
         assert!(style_list[b_index].italic);
 
-        style_list.rename(2, "c".to_owned());
+        style_list.rename(2, "c");
         assert_eq!(style_list[2].name(), "c");
 
         let maybe_index = style_list.find_by_name("c");
@@ -1175,6 +1219,61 @@ mod tests {
         let compiled = events.compile_all(&Extradata::default(), &context);
 
         assert_eq!(compiled.len(), 1);
+    }
+
+    #[test]
+    fn duplicate_style_handling() {
+        // -- import --
+        let path = test_file("test_files/duplicate_styles.ass");
+        let (file, leftover) = import(&path);
+
+        assert_eq!(leftover.len(), 2);
+        assert_eq!(leftover[0].name(), "Default"); // duplicate Default style with the one libass creates by itself
+        assert_eq!(leftover[1].name(), "New style 1");
+        assert_eq!(file.styles.len(), 2);
+
+        assert_eq!(
+            file.events.nth(1).1.style_index,
+            file.events.nth(2).1.style_index
+        );
+
+        // verify that this is the default style
+        let first_event_style = &file.styles[file.events.nth(0).1.style_index];
+        assert_eq!(first_event_style.name(), "Default");
+
+        // should be the later one which is bold
+        let second_event_style = &file.styles[file.events.nth(1).1.style_index];
+        assert!(second_event_style.bold);
+
+        // -- new file --
+        let mut file = File::default();
+
+        let style_1 = Style {
+            name: "Style 1".to_owned(),
+            bold: true,
+            ..Default::default()
+        };
+        let style_2 = Style {
+            name: "Style 2".to_owned(),
+            italic: true,
+            ..Default::default()
+        };
+
+        let (index, leftover) = file.styles.insert(style_1);
+        assert_matches!(leftover, None);
+        assert_eq!(index, 1);
+
+        let (index, leftover) = file.styles.insert(style_2);
+        assert_matches!(leftover, None);
+        assert_eq!(index, 2);
+
+        // creating a duplicate style by renaming should keep both duplicates internally
+        let renamed = file.styles.rename(index, "Style 1");
+        assert_eq!(file.styles.len(), 3);
+
+        // ... but the new style should now have a different name
+        assert_ne!(file.styles[index].name, "Style 1");
+        assert_eq!(file.styles[index].name, renamed.expect("not renamed"));
     }
 
     #[test]

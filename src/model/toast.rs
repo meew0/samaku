@@ -211,6 +211,10 @@ impl<M> List<M> {
         self.push(Toast::progress(Status::Primary, title.into(), body.into()))
     }
 
+    pub fn info<S1: Into<String>, S2: Into<String>>(&mut self, title: S1, body: S2) -> Id {
+        self.push(Toast::message(Status::Primary, title.into(), body.into()))
+    }
+
     /// Remove the toast at `index`. Handles the race condition where two close events
     /// arrive for the same toast gracefully.
     pub fn remove(&mut self, index: usize) {

@@ -221,9 +221,7 @@ fn update_internal(
         }
         Message::SubtitleFileReadForImport(content) => {
             let opaque = media::subtitle::OpaqueTrack::parse(&content);
-
-            let (style_list, leftovers) = subtitle::StyleList::from_vec(opaque.styles());
-            let subtitle::StyleLeftovers { leftover, mapping } = leftovers;
+            let (new_file, leftover) = subtitle::File::from_opaque(&opaque);
 
             // Show warning toasts for duplicate styles
             if !leftover.is_empty() {
@@ -240,21 +238,6 @@ fn update_internal(
                     ),
                 ));
             }
-
-            // We need to remap the style indices libass assigned
-            // to our new ones after deduplicating/potentially reordering
-            // the style list.
-            let mut events = opaque.to_event_track();
-            for event in events.iter_events_mut() {
-                event.style_index = mapping[event.style_index];
-            }
-
-            let new_file = subtitle::File {
-                events,
-                styles: model::Trace::new(style_list),
-                script_info: opaque.script_info(),
-                ..Default::default()
-            };
 
             action::replace_subtitle_file(global_state, new_file);
         }
@@ -414,7 +397,14 @@ fn update_internal(
         }
         Message::SetStyleName(index, name) => {
             let current_name = global_state.subtitles.styles[index].name.clone();
-            global_state.subtitles.styles.rename(index, name);
+            let renamed = global_state.subtitles.styles.rename(index, name);
+
+            if let Some(new_name) = renamed {
+                global_state.toasts.info(
+                    "Duplicate style name",
+                    format!("Style names must be unique. Name was changed to: {new_name}"),
+                );
+            }
 
             undo.put_instant("Set style name", Message::SetStyleName(index, current_name));
         }
