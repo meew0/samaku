@@ -205,6 +205,7 @@ fn update_internal(
             action::load_audio(global_state, path_buf);
         }
         Message::NewSubtitleFile => {
+            global_state.history.clear();
             action::replace_subtitle_file(global_state, subtitle::File::default());
         }
         Message::ImportSubtitleFile => {
@@ -220,6 +221,7 @@ fn update_internal(
             );
         }
         Message::SubtitleFileReadForImport(content) => {
+            global_state.history.clear();
             let opaque = media::subtitle::OpaqueTrack::parse(&content);
             let (new_file, leftover) = subtitle::File::from_opaque(&opaque);
 
@@ -261,6 +263,8 @@ fn update_internal(
             });
         }
         Message::SubtitleFileReadForOpen(file_box) => {
+            global_state.history.clear();
+
             // Load ASS subtitles themselves
             let (ass_file, warnings) = *(file_box.0);
             action::replace_subtitle_file(global_state, ass_file);

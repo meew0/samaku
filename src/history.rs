@@ -50,8 +50,12 @@ impl History {
     #[must_use]
     pub fn new() -> Self {
         History {
-            last: Rc::new(RefCell::new(Node::root())),
+            last: Self::root_node(),
         }
+    }
+
+    fn root_node() -> Rc<RefCell<Node>> {
+        Rc::new(RefCell::new(Node::root()))
     }
 
     fn last(&self) -> Rc<RefCell<Node>> {
@@ -314,6 +318,11 @@ impl History {
     pub fn peek_redo(&self) -> Option<&'static str> {
         let last = self.last.borrow();
         last.next.as_ref().map(|next| next.borrow().name)
+    }
+
+    /// Removes all history nodes.
+    pub fn clear(&mut self) {
+        self.last = Self::root_node();
     }
 }
 
