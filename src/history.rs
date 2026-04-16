@@ -118,6 +118,11 @@ impl History {
             | Message::DeleteEvents(_)
             | Message::DeleteSelectedEvents
             | Message::RestoreEvents(_)
+            | Message::ToggleEventSelection(_)
+            | Message::SelectOnlyEvent(_)
+            | Message::SelectEvents(_)
+            | Message::DeselectEvents(_)
+            | Message::SetEventSelection(_)
             | Message::SetActiveEventText(_)
             | Message::SetActiveEventActor(_)
             | Message::SetActiveEventEffect(_)
@@ -181,9 +186,6 @@ impl History {
             | Message::PlaybackSetPosition(_)
             | Message::TogglePlayback
             | Message::Playing(_)
-            | Message::ToggleEventSelection(_)
-            | Message::SelectOnlyEvent(_)
-            | Message::SelectEvents(_)
             | Message::TrackMotionForNode(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)

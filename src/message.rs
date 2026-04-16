@@ -161,6 +161,8 @@ pub enum Message {
     ToggleEventSelection(subtitle::EventIndex),
     SelectOnlyEvent(subtitle::EventIndex),
     SelectEvents(Vec<subtitle::EventIndex>),
+    DeselectEvents(Vec<subtitle::EventIndex>),
+    SetEventSelection(HashSet<subtitle::EventIndex>),
 
     // Set various properties of the active event.
     SetActiveEventText(String),

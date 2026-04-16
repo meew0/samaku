@@ -725,15 +725,43 @@ fn update_internal(
                 global_state.selected_event_indices.insert(index);
             }
             notify_selected_events(global_state);
+
+            undo.put_incremental(
+                "Toggle event selection",
+                Message::ToggleEventSelection(index),
+            );
         }
         Message::SelectOnlyEvent(index) => {
-            global_state.selected_event_indices.clear();
+            let old = std::mem::take(&mut global_state.selected_event_indices);
             global_state.selected_event_indices.insert(index);
             notify_selected_events(global_state);
+
+            undo.put_instant("Select event", Message::SetEventSelection(old));
         }
         Message::SelectEvents(indices) => {
-            global_state.selected_event_indices.extend(indices);
+            global_state
+                .selected_event_indices
+                .extend(indices.iter().copied());
             notify_selected_events(global_state);
+
+            undo.put_incremental("Select events", Message::DeselectEvents(indices));
+        }
+        Message::DeselectEvents(indices) => {
+            global_state
+                .selected_event_indices
+                .retain(|index| indices.contains(index));
+            notify_selected_events(global_state);
+
+            undo.put_incremental("Deselect events", Message::SelectEvents(indices));
+        }
+        Message::SetEventSelection(new_selected_events) => {
+            let old = replace(
+                &mut global_state.selected_event_indices,
+                new_selected_events,
+            );
+            notify_selected_events(global_state);
+
+            undo.put_instant("Select events", Message::SetEventSelection(old));
         }
         Message::SetActiveEventText(new_text) => {
             if let Some(event) = active_event_mut!(global_state) {
