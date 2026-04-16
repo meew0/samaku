@@ -3,8 +3,9 @@
 //! ones.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::{Add, Index, IndexMut, Range, Sub};
 
 pub use emit::emit;
@@ -594,9 +595,39 @@ impl StyleList {
     /// will have their indices shifted down by 1. The caller must take care to
     /// update references within events, both to assign the default style to events that had the
     /// removed style assigned and to shift indices in events that have styles with greater indices
-    /// assigned.
-    pub fn remove(&mut self, index: usize) {
-        self.styles.remove(index);
+    /// assigned. To assist with this, a `StyleShift` is returned together with the removed style.
+    pub fn remove(&mut self, index: usize) -> (Style, StyleShift) {
+        let style = self.styles.remove(index);
+        self.names.remove(&style.name);
+        let shift = StyleShift::Negative { pivot: index };
+        self.shift_names(&shift);
+        (style, shift)
+    }
+
+    /// Insert a style at the given index, resulting in the returned `StyleShift`.
+    /// This method should primarily be used for styles that were recently deleted.
+    /// In most cases, you would want to use `insert` instead, which gracefully handles
+    /// duplicate names and doesn't result in shifts.
+    ///
+    /// # Panics
+    /// Panics if trying to restore a style with a name that already exists.
+    pub fn restore(&mut self, index: usize, style: Style) -> StyleShift {
+        assert!(
+            !self.names.contains_key(style.name()),
+            "tried to restore duplicate style"
+        );
+        self.styles.insert(index, style);
+        let shift = StyleShift::Positive { pivot: index };
+        self.shift_names(&shift);
+        self.names.insert(self.styles[index].name.clone(), index);
+        shift
+    }
+
+    fn shift_names(&mut self, shift: &StyleShift) {
+        let mut set = HashSet::new();
+        for index in &mut self.names.values_mut() {
+            shift.apply(index, &(), &mut set);
+        }
     }
 
     /// Look up a style by name. Returns the index of the style, if one was found.
@@ -665,6 +696,49 @@ impl Index<usize> for StyleList {
 impl IndexMut<usize> for StyleList {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.styles[index]
+    }
+}
+
+/// Utility for shifting style indices for events when styles are deleted or restored.
+pub enum StyleShift {
+    Negative { pivot: usize },
+    Positive { pivot: usize },
+}
+
+impl StyleShift {
+    /// Applies this `StyleShift` to the given index, shifting it to match the updated style indices.
+    /// If the style with the given index would be deleted, the given `entry` is inserted into the given
+    /// `HashSet`.
+    /// If a style would be created and the given `entry` is already contained
+    /// in the given `HashSet`, the given index is set to the index of the new style.
+    pub fn apply<T>(&self, index: &mut usize, entry: &T, collect: &mut HashSet<T>)
+    where
+        T: Clone + Eq + Hash,
+    {
+        match self {
+            Self::Negative { pivot } => {
+                match (*index).cmp(pivot) {
+                    std::cmp::Ordering::Less => {}
+                    std::cmp::Ordering::Equal => {
+                        // Reset to default style, and collect the entry.
+                        collect.insert(entry.clone());
+                        *index = 0;
+                    }
+                    std::cmp::Ordering::Greater => *index -= 1,
+                }
+            }
+            Self::Positive { pivot } => {
+                match (*index).cmp(pivot) {
+                    std::cmp::Ordering::Less => {}
+                    std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => *index += 1,
+                }
+
+                // Restore entries in collection to the new style
+                if collect.contains(entry) {
+                    *index = *pivot;
+                }
+            }
+        }
     }
 }
 
@@ -1274,6 +1348,100 @@ mod tests {
         // ... but the new style should now have a different name
         assert_ne!(file.styles[index].name, "Style 1");
         assert_eq!(file.styles[index].name, renamed.expect("not renamed"));
+    }
+
+    #[test]
+    #[should_panic(expected = "tried to restore duplicate style")]
+    fn duplicate_style_handling_restore() {
+        let mut list = StyleList::new();
+        list.restore(1, Style::default());
+    }
+
+    #[test]
+    fn style_list_name_mapping() {
+        let mut list = StyleList::new();
+        // "Default" is at index 0 after new()
+
+        let (idx_a, _) = list.insert(Style {
+            name: "a".to_owned(),
+            bold: true,
+            ..Default::default()
+        });
+        let (idx_b, _) = list.insert(Style {
+            name: "b".to_owned(),
+            italic: true,
+            ..Default::default()
+        });
+        let (idx_c, _) = list.insert(Style {
+            name: "c".to_owned(),
+            ..Default::default()
+        });
+
+        assert_eq!(idx_a, 1);
+        assert_eq!(idx_b, 2);
+        assert_eq!(idx_c, 3);
+        assert_eq!(list.find_by_name("a"), Some(1));
+        assert_eq!(list.find_by_name("b"), Some(2));
+        assert_eq!(list.find_by_name("c"), Some(3));
+
+        // Remove "b" at index 2; "a" unchanged, "c" shifts down
+        let (removed, _shift) = list.remove(idx_b);
+        assert_eq!(removed.name, "b");
+
+        assert_eq!(list.find_by_name("Default"), Some(0));
+        assert_eq!(list.find_by_name("a"), Some(1));
+        assert_eq!(list.find_by_name("b"), None);
+        assert_eq!(list.find_by_name("c"), Some(2));
+
+        // Restore "b" at index 2; "c" shifts back up
+        list.restore(2, removed);
+
+        assert_eq!(list.find_by_name("Default"), Some(0));
+        assert_eq!(list.find_by_name("a"), Some(1));
+        assert_eq!(list.find_by_name("b"), Some(2));
+        assert_eq!(list.find_by_name("c"), Some(3));
+    }
+
+    #[test]
+    fn shift_style_indices() {
+        let neg = StyleShift::Negative { pivot: 2 };
+        let mut collect: HashSet<usize> = HashSet::new();
+
+        let mut idx: usize = 0;
+        neg.apply(&mut idx, &0, &mut collect);
+        assert_eq!(idx, 0); // unchanged: 0 < pivot
+
+        let mut idx: usize = 1;
+        neg.apply(&mut idx, &1, &mut collect);
+        assert_eq!(idx, 1); // unchanged: 1 < pivot
+
+        let mut idx: usize = 2;
+        neg.apply(&mut idx, &2, &mut collect);
+        assert_eq!(idx, 0); // reset to default: == pivot
+        assert!(collect.contains(&2)); // entry collected
+
+        let mut idx: usize = 3;
+        neg.apply(&mut idx, &3, &mut collect);
+        assert_eq!(idx, 2); // decremented: 3 > pivot
+
+        // collect now contains {2}
+        let pos = StyleShift::Positive { pivot: 2 };
+
+        let mut idx: usize = 0;
+        pos.apply(&mut idx, &0, &mut collect);
+        assert_eq!(idx, 0); // unchanged: 0 < pivot, not in collect
+
+        let mut idx: usize = 1;
+        pos.apply(&mut idx, &1, &mut collect);
+        assert_eq!(idx, 1); // unchanged: 1 < pivot, not in collect, &mut collect
+
+        let mut idx: usize = 2; // was originally 3, shifted down to 2
+        pos.apply(&mut idx, &3, &mut collect);
+        assert_eq!(idx, 3); // incremented back: 2 >= pivot, 3 not in collect
+
+        let mut idx: usize = 0; // was reset to 0 when its style was deleted
+        pos.apply(&mut idx, &2, &mut collect);
+        assert_eq!(idx, 2); // restored to pivot: entry 2 is in collect
     }
 
     #[test]

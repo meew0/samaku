@@ -1,4 +1,5 @@
 use iced::widget::pane_grid;
+use std::collections::HashSet;
 
 use crate::{media, model, nde, pane, subtitle};
 
@@ -116,6 +117,7 @@ pub enum Message {
 
     CreateStyle,
     DeleteStyle(usize),
+    RestoreStyle(usize, subtitle::Style, HashSet<subtitle::EventIndex>),
 
     // Set various properties of the given style.
     SetStyleName(usize, String),

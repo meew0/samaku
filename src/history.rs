@@ -82,9 +82,10 @@ impl History {
     #[expect(clippy::too_many_lines, reason = "we need to match all messages here")]
     pub fn make_key(&mut self, message: &Message) -> Key {
         match message {
-            // messages that might eventually be recorded in the history (but this is not yet implemented)
+            // messages that might eventually be recorded in the history
             Message::CreateStyle
             | Message::DeleteStyle(_)
+            | Message::RestoreStyle(_, _, _)
             | Message::SetStyleName(_, _)
             | Message::SetStyleFontName(_, _)
             | Message::SetStyleFontSize(_, _)

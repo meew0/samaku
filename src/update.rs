@@ -383,21 +383,34 @@ fn update_internal(
                 name,
                 ..Default::default()
             };
-            global_state.subtitles.styles.insert(new_style);
+            let (index, old_style) = global_state.subtitles.styles.insert(new_style.clone());
+
+            assert!(old_style.is_none(), "Duplicate style was somehow created");
+            undo.put_no_batch("Create style", Message::DeleteStyle(index));
+            undo.override_redo(Message::RestoreStyle(index, new_style, HashSet::new()));
         }
         Message::DeleteStyle(index) => {
-            global_state.subtitles.styles.remove(index);
+            let (style, shift) = global_state.subtitles.styles.remove(index);
 
             // Update style references in events: assign the default style to all events that had
             // the removed style assigned, and decrement style indices of applicable events (with
             // existing style indices > the removed index)
-            for event in global_state.subtitles.events.iter_events_mut() {
-                match event.style_index.cmp(&index) {
-                    std::cmp::Ordering::Less => {}
-                    std::cmp::Ordering::Equal => event.style_index = 0,
-                    std::cmp::Ordering::Greater => event.style_index -= 1,
-                }
-            }
+            let mut collect = HashSet::new();
+            global_state
+                .subtitles
+                .events
+                .shift_styles(&shift, &mut collect);
+
+            undo.put_no_batch("Delete style", Message::RestoreStyle(index, style, collect));
+        }
+        Message::RestoreStyle(index, style, mut collect) => {
+            let shift = global_state.subtitles.styles.restore(index, style);
+            global_state
+                .subtitles
+                .events
+                .shift_styles(&shift, &mut collect);
+
+            undo.put_no_batch("Restore style", Message::DeleteStyle(index));
         }
         Message::SetStyleName(index, name) => {
             let current_name = global_state.subtitles.styles[index].name.clone();

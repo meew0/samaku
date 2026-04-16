@@ -421,6 +421,22 @@ impl EventTrack {
         self.events.iter_mut().flatten()
     }
 
+    /// Shift event styles by the given `StyleShift`.
+    /// Returns the (potentially empty) list of event indices where the style was reset to the default style.
+    /// The `collect` set is emptied to assign the new style index to the contained events,
+    /// or filled to contain the indices of events that were reset to the default style.
+    pub fn shift_styles(
+        &mut self,
+        style_shift: &super::StyleShift,
+        collect: &mut HashSet<EventIndex>,
+    ) {
+        for (index, event) in self.events.iter_mut().enumerate() {
+            if let Some(event) = event {
+                style_shift.apply(&mut event.style_index, &EventIndex(index), collect);
+            }
+        }
+    }
+
     /// Compile subtitles in the given time range to ASS.
     #[must_use]
     pub fn compile_range<'a>(
@@ -726,5 +742,41 @@ mod tests {
         assert_eq!(tree.iter_overlaps(&(1..2)).count(), 1);
         assert_eq!(tree.iter_overlaps(&(2..2)).count(), 0);
         assert_eq!(tree.iter_overlaps(&(2..3)).count(), 0);
+    }
+
+    #[test]
+    fn shift_styles() {
+        use super::super::StyleShift;
+
+        let mut track = EventTrack::new_empty();
+        for style_index in [0, 1, 2, 3] {
+            track.push(Event {
+                style_index,
+                ..Event::default()
+            });
+        }
+
+        // Delete style at index 2: negative shift
+        let shift = StyleShift::Negative { pivot: 2 };
+        let mut collect = HashSet::new();
+        track.shift_styles(&shift, &mut collect);
+
+        assert_eq!(track.nth(0).1.style_index, 0); // 0 < pivot: unchanged
+        assert_eq!(track.nth(1).1.style_index, 1); // 1 < pivot: unchanged
+        assert_eq!(track.nth(2).1.style_index, 0); // == pivot: reset to default
+        assert_eq!(track.nth(3).1.style_index, 2); // 3 > pivot: decremented
+
+        let event_2_idx = track.nth(2).0;
+        assert!(collect.contains(&event_2_idx));
+        assert_eq!(collect.len(), 1);
+
+        // Restore style at index 2: positive shift with the collected set
+        let shift = StyleShift::Positive { pivot: 2 };
+        track.shift_styles(&shift, &mut collect);
+
+        assert_eq!(track.nth(0).1.style_index, 0); // unchanged
+        assert_eq!(track.nth(1).1.style_index, 1); // unchanged
+        assert_eq!(track.nth(2).1.style_index, 2); // restored via collect
+        assert_eq!(track.nth(3).1.style_index, 3); // incremented back
     }
 }
