@@ -434,6 +434,14 @@ impl EventTrack {
         self.events.iter_mut().flatten()
     }
 
+    /// Iterate over all event indices in an arbitrary order.
+    pub fn iter_indices(&self) -> impl Iterator<Item = EventIndex> {
+        self.events
+            .iter()
+            .enumerate()
+            .filter_map(|(index, event)| event.as_ref().map(|_| EventIndex(index)))
+    }
+
     /// Shift event styles by the given `StyleShift`.
     /// Returns the (potentially empty) list of event indices where the style was reset to the default style.
     /// The `collect` set is emptied to assign the new style index to the contained events,

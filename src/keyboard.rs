@@ -23,6 +23,7 @@ pub(crate) fn handle_shortcut(
                 Some(Message::ClosePane)
             }
         }
+        Key::Character("a") => modifiers.control().then_some(Message::SelectAllEvents),
         Key::Character("z") => {
             if modifiers.control() {
                 if modifiers.shift() {
@@ -34,7 +35,7 @@ pub(crate) fn handle_shortcut(
                 None
             }
         }
-        Key::Character("y") => modifiers.control().then(|| Message::Redo),
+        Key::Character("y") => modifiers.control().then_some(Message::Redo),
         Key::Character("v") => Some(Message::SelectVideoFile),
         Key::Character("b") => Some(Message::ImportSubtitleFile),
         Key::Character("n") => Some(Message::SelectAudioFile),

@@ -746,6 +746,18 @@ fn update_internal(
 
             undo.put_instant("Select events", Message::SetEventSelection(old));
         }
+        Message::SelectAllEvents => {
+            let old = replace(
+                &mut global_state.selected_event_indices,
+                HashSet::with_capacity(global_state.subtitles.events.len()),
+            );
+            for event_index in global_state.subtitles.events.iter_indices() {
+                global_state.selected_event_indices.insert(event_index);
+            }
+            notify_selected_events(global_state);
+
+            undo.put_no_batch("Select all events", Message::SetEventSelection(old));
+        }
         Message::MultiEditEventText(new_text) => {
             let old = new_text
                 .apply_accessor(&mut global_state.subtitles.events, |event| &mut event.text);

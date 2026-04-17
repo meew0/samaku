@@ -164,6 +164,7 @@ pub enum Message {
     SelectEvents(Vec<subtitle::EventIndex>),
     DeselectEvents(Vec<subtitle::EventIndex>),
     SetEventSelection(HashSet<subtitle::EventIndex>),
+    SelectAllEvents,
 
     // Set various properties of events.
     MultiEditEventText(action::MultiEdit<Cow<'static, str>>),

@@ -123,6 +123,7 @@ impl History {
             | Message::SelectEvents(_)
             | Message::DeselectEvents(_)
             | Message::SetEventSelection(_)
+            | Message::SelectAllEvents
             | Message::MultiEditEventText(_)
             | Message::MultiEditEventActor(_)
             | Message::MultiEditEventEffect(_)
