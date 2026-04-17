@@ -1,7 +1,8 @@
 use iced::widget::pane_grid;
+use std::borrow::Cow;
 use std::collections::HashSet;
 
-use crate::{media, model, nde, pane, subtitle};
+use crate::{action, media, model, nde, pane, subtitle};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -164,15 +165,15 @@ pub enum Message {
     DeselectEvents(Vec<subtitle::EventIndex>),
     SetEventSelection(HashSet<subtitle::EventIndex>),
 
-    // Set various properties of the active event.
-    SetActiveEventText(String),
-    SetActiveEventActor(String),
-    SetActiveEventEffect(String),
-    SetActiveEventStyleIndex(usize),
-    SetActiveEventLayerIndex(i32),
-    SetActiveEventType(subtitle::EventType),
-    SetActiveEventStartTime(subtitle::StartTime),
-    SetActiveEventDuration(subtitle::Duration),
+    // Set various properties of events.
+    MultiEditEventText(action::MultiEdit<Cow<'static, str>>),
+    MultiEditEventActor(action::MultiEdit<Cow<'static, str>>),
+    MultiEditEventEffect(action::MultiEdit<Cow<'static, str>>),
+    MultiEditEventStyleIndex(action::MultiEdit<usize>),
+    MultiEditEventLayerIndex(action::MultiEdit<i32>),
+    MultiEditEventType(action::MultiEdit<subtitle::EventType>),
+    MultiEditEventStartTime(action::MultiEdit<subtitle::StartTime>),
+    MultiEditEventDuration(action::MultiEdit<subtitle::Duration>),
 
     // Set various properties of a specific event.
     SetEventStartTimeAndDuration(
@@ -183,7 +184,10 @@ pub enum Message {
 
     // Action performed in a subtitle text editor
     // (needs to be handled both globally and locally)
-    TextEditorActionPerformed(pane_grid::Pane, iced::widget::text_editor::Action),
+    TextEditorActionPerformed(
+        pane_grid::Pane,
+        action::MultiEdit<iced::widget::text_editor::Action>,
+    ),
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,

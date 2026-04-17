@@ -2,6 +2,7 @@ use crate::subtitle::{Duration, Event, Extradata, StartTime, compile};
 use crate::{message, nde};
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::mem::replace;
 use std::ops::{Index, IndexMut, Range};
 
 /// A unique index to an event in an `EventTrack`.
@@ -79,6 +80,16 @@ impl EventTrack {
         self.events.get_mut(index.0).and_then(Option::as_mut)
     }
 
+    /// Retrieve multiple events at the same time, panicking if one was not found.
+    #[must_use]
+    pub fn all(&self, indices: &[EventIndex]) -> Vec<&Event<'static>> {
+        let mut result = Vec::with_capacity(indices.len());
+        for index in indices {
+            result.push(&self[*index]);
+        }
+        result
+    }
+
     /// Get the `n`th entry of the track in order.
     ///
     /// # Panics
@@ -116,13 +127,13 @@ impl EventTrack {
         event_index: EventIndex,
         start: StartTime,
         duration: Duration,
-    ) {
+    ) -> (StartTime, Duration) {
         // Find the event so we know what interval to remove.
         let event = self.events[event_index.0].as_mut().unwrap();
 
         if event.start == start && event.duration == duration {
             // nothing to do
-            return;
+            return (event.start, event.duration);
         }
 
         let interval = event.time_range();
@@ -131,13 +142,15 @@ impl EventTrack {
         Self::internal_query_index_remove(&mut self.query_index, interval, event_index);
 
         // Update the event itself
-        event.start = start;
-        event.duration = duration;
+        let old_start = replace(&mut event.start, start);
+        let old_duration = replace(&mut event.duration, duration);
 
         // Re-add the interval
         let new_interval = event.time_range();
         Self::internal_query_index_insert_merge(&mut self.query_index, new_interval, event_index);
         debug_assert!(self.check_invariants());
+
+        (old_start, old_duration)
     }
 
     fn check_invariants(&self) -> bool {

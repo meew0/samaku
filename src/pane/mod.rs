@@ -4,6 +4,7 @@
 )]
 
 pub use iced::widget::pane_grid::Pane;
+use std::collections::HashSet;
 
 use crate::{message, subtitle};
 
@@ -44,15 +45,14 @@ pub trait LocalState {
 
     fn visit(&mut self, _visitor: &mut dyn Visitor) {}
 
-    fn update_active_event_text(&mut self, _active_event: &subtitle::Event) {}
-    fn update_filter_names(&mut self, _extradata: &subtitle::Extradata) {}
-    fn update_style_lists(
+    fn update_selected_events(
         &mut self,
-        _styles: &[subtitle::Style],
-        _copy_styles: bool,
-        _active_event_style_index: Option<usize>,
+        _selected_event_indices: &HashSet<subtitle::EventIndex>,
+        _events: &subtitle::EventTrack,
     ) {
     }
+    fn update_filter_names(&mut self, _extradata: &subtitle::Extradata) {}
+    fn update_style_lists(&mut self, _styles: &[subtitle::Style], _copy_styles: bool) {}
 }
 
 /// Visitor pattern implementation for local state types that potentially need custom pane-specific global update behavior.

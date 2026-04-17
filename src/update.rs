@@ -9,23 +9,6 @@ use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::mem::replace;
 
-macro_rules! active_event {
-    ($global_state:ident) => {
-        $global_state
-            .subtitles
-            .events
-            .active_event(&$global_state.selected_event_indices)
-    };
-}
-macro_rules! active_event_mut {
-    ($global_state:ident) => {
-        $global_state
-            .subtitles
-            .events
-            .active_event_mut(&$global_state.selected_event_indices)
-    };
-}
-
 /// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
 /// whatever processing is required, and updates the global state based on it. This will cause
 /// iced to rerender the application afterwards.
@@ -763,68 +746,89 @@ fn update_internal(
 
             undo.put_instant("Select events", Message::SetEventSelection(old));
         }
-        Message::SetActiveEventText(new_text) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.text = Cow::Owned(new_text);
-                notify_active_event_text(&mut global_state.panes, event, None);
-            }
+        Message::MultiEditEventText(new_text) => {
+            let old = new_text
+                .apply_accessor(&mut global_state.subtitles.events, |event| &mut event.text);
+            notify_selected_events(global_state);
+            undo.put_instant("Set event text", Message::MultiEditEventText(old));
         }
-        Message::SetActiveEventActor(new_actor) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.actor = Cow::Owned(new_actor);
-            }
+        Message::MultiEditEventActor(new_actor) => {
+            let old = new_actor
+                .apply_accessor(&mut global_state.subtitles.events, |event| &mut event.actor);
+            notify_selected_events(global_state);
+            undo.put_instant("Set event actor", Message::MultiEditEventActor(old));
         }
-        Message::SetActiveEventEffect(new_effect) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.effect = Cow::Owned(new_effect);
-            }
+        Message::MultiEditEventEffect(new_effect) => {
+            let old = new_effect.apply_accessor(&mut global_state.subtitles.events, |event| {
+                &mut event.effect
+            });
+            notify_selected_events(global_state);
+            undo.put_instant("Set event effect", Message::MultiEditEventEffect(old));
         }
-        Message::SetActiveEventStartTime(new_start_time) => {
-            if let Some(event_index) =
-                subtitle::EventTrack::active_event_index(&global_state.selected_event_indices)
-            {
-                let event = &global_state.subtitles.events[event_index];
-                global_state.subtitles.events.update_event_times(
-                    event_index,
-                    new_start_time,
-                    event.duration,
-                );
-            }
+        Message::MultiEditEventStartTime(new_start_time) => {
+            let old = new_start_time.apply_function(
+                &mut global_state.subtitles.events,
+                |event_track, event_index, new_start_time| {
+                    let duration = event_track[event_index].duration;
+                    let (old, _) =
+                        event_track.update_event_times(event_index, new_start_time, duration);
+                    old
+                },
+            );
+            notify_selected_events(global_state);
+            undo.put_instant(
+                "Set event start time",
+                Message::MultiEditEventStartTime(old),
+            );
         }
-        Message::SetActiveEventDuration(new_duration) => {
-            if let Some(event_index) =
-                subtitle::EventTrack::active_event_index(&global_state.selected_event_indices)
-            {
-                let event = &global_state.subtitles.events[event_index];
-                global_state.subtitles.events.update_event_times(
-                    event_index,
-                    event.start,
-                    new_duration,
-                );
-            }
+        Message::MultiEditEventDuration(new_duration) => {
+            let old = new_duration.apply_function(
+                &mut global_state.subtitles.events,
+                |event_track, event_index, new_duration| {
+                    let start_time = event_track[event_index].start;
+                    let (_, old) =
+                        event_track.update_event_times(event_index, start_time, new_duration);
+                    old
+                },
+            );
+            notify_selected_events(global_state);
+            undo.put_instant("Set event duration", Message::MultiEditEventDuration(old));
         }
-        Message::SetActiveEventStyleIndex(new_style_index) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.style_index = new_style_index;
-            }
+        Message::MultiEditEventStyleIndex(new_style_index) => {
+            let old = new_style_index.apply_accessor(&mut global_state.subtitles.events, |event| {
+                &mut event.style_index
+            });
+            notify_selected_events(global_state);
+            undo.put_no_batch(
+                "Set event style index",
+                Message::MultiEditEventStyleIndex(old),
+            );
         }
-        Message::SetActiveEventLayerIndex(new_layer_index) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.layer_index = new_layer_index;
-            }
+        Message::MultiEditEventLayerIndex(new_layer_index) => {
+            let old = new_layer_index.apply_accessor(&mut global_state.subtitles.events, |event| {
+                &mut event.layer_index
+            });
+            notify_selected_events(global_state);
+            undo.put_instant(
+                "Set event layer index",
+                Message::MultiEditEventLayerIndex(old),
+            );
         }
-        Message::SetActiveEventType(new_type) => {
-            if let Some(event) = active_event_mut!(global_state) {
-                event.event_type = new_type;
-            }
+        Message::MultiEditEventType(new_type) => {
+            let old = new_type.apply_accessor(&mut global_state.subtitles.events, |event| {
+                &mut event.event_type
+            });
+            notify_selected_events(global_state);
+            undo.put_no_batch("Set event type", Message::MultiEditEventType(old));
         }
         Message::SetEventStartTimeAndDuration(event_index, start, duration) => {
             global_state
                 .subtitles
                 .events
                 .update_event_times(event_index, start, duration);
+            notify_selected_events(global_state);
         }
-        Message::TextEditorActionPerformed(pane, action) => {
+        Message::TextEditorActionPerformed(pane, action_multi_edit) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
                 // Create a visitor that will perform the given action on the text editor pane, if the given pane is a text editor pane
                 struct Visitor {
@@ -837,15 +841,15 @@ fn update_internal(
                         &mut self,
                         text_editor_state: &mut pane::text_editor::State,
                     ) {
-                        let is_edit = self.action.as_ref().unwrap().is_edit();
+                        let new_text = text_editor_state.perform(self.action.take().unwrap());
 
-                        text_editor_state.perform(self.action.take().unwrap());
-
-                        if is_edit {
-                            self.new_text = Some(text_editor_state.text());
+                        if let Some(new_text) = new_text {
+                            self.new_text = Some(new_text);
                         }
                     }
                 }
+
+                let (action, multi_edit) = action_multi_edit.unwrap_value(());
 
                 let mut visitor = Visitor {
                     action: Some(action),
@@ -854,13 +858,19 @@ fn update_internal(
 
                 pane_state.local.visit(&mut visitor);
 
-                // Check if the text has changed, and if it has, update the active event
-                if let Some(new_text) = visitor.new_text
-                    && let Some(event) = active_event_mut!(global_state)
-                {
-                    event.text = Cow::Owned(new_text);
-                    // Notify all other text editors except for the one we just performed the action on
-                    notify_active_event_text(&mut global_state.panes, event, Some(pane));
+                // Check if the text has changed, and if it has, update the affected events.
+                if let Some(new_text) = visitor.new_text {
+                    let ((), new_multi_edit) = multi_edit.unwrap_value(Cow::Owned(new_text));
+                    let old = new_multi_edit
+                        .clone()
+                        .apply_accessor(&mut global_state.subtitles.events, |event| {
+                            &mut event.text
+                        });
+                    undo.put_instant("Edit event text", Message::MultiEditEventText(old));
+                    undo.override_redo(Message::MultiEditEventText(new_multi_edit));
+
+                    // Notify all other text editors
+                    notify_selected_events(global_state);
                 }
             }
         }
@@ -1039,26 +1049,14 @@ fn update_internal(
     iced::Task::none()
 }
 
-/// Notifies all entities (like node editor panes) that keep some internal copy of the
+/// Notifies all entities (like node and text editor panes) that keep some internal copy of the
 /// selected events to update their internal representations.
 pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
-    if let Some(active_event) = active_event!(global_state) {
-        notify_active_event_text(&mut global_state.panes, active_event, None);
-    }
-}
-
-pub(crate) fn notify_active_event_text(
-    panes: &mut iced::widget::pane_grid::State<pane::State>,
-    active_event: &subtitle::Event,
-    except_pane: Option<iced::widget::pane_grid::Pane>,
-) {
-    for (pane, pane_state) in &mut panes.panes {
-        if let Some(except_pane) = except_pane
-            && *pane == except_pane
-        {
-            continue;
-        }
-        pane_state.local.update_active_event_text(active_event);
+    for pane in global_state.panes.panes.values_mut() {
+        pane.local.update_selected_events(
+            &global_state.selected_event_indices,
+            &global_state.subtitles.events,
+        );
     }
 }
 
@@ -1075,14 +1073,9 @@ pub(crate) fn notify_filter_lists(global_state: &mut super::Samaku) {
 /// styles list to update their internal representations. If `copy_styles` is false, only the
 /// selected style will be updated.
 pub(crate) fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
-    let active_event_style_index = active_event!(global_state).map(|event| event.style_index);
-
     for pane in global_state.panes.panes.values_mut() {
-        pane.local.update_style_lists(
-            global_state.subtitles.styles.as_slice(),
-            copy_styles,
-            active_event_style_index,
-        );
+        pane.local
+            .update_style_lists(global_state.subtitles.styles.as_slice(), copy_styles);
     }
 }
 

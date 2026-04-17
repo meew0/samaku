@@ -110,11 +110,18 @@ impl Event<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum EventType {
     #[default]
     Dialogue,
     Comment,
+}
+
+impl EventType {
+    #[must_use]
+    pub fn is_comment(&self) -> bool {
+        matches!(self, EventType::Comment)
+    }
 }
 
 /// The time at which an element starts to be shown, in milliseconds.
@@ -127,6 +134,7 @@ pub enum EventType {
     Ord,
     PartialEq,
     Eq,
+    Hash,
     serde::Serialize,
     serde::Deserialize,
 )]
@@ -215,7 +223,9 @@ impl Sub<StartTime> for StartTime {
 }
 
 /// The duration for which an element is shown, in milliseconds.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Duration(pub i64);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -240,7 +250,7 @@ impl Default for Scale {
 
 /// Element- or style-specific left, right, and vertical margins
 /// in pixels, corresponding to ASS `MarginL` etc.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Margins {
     pub left: i32,
     pub right: i32,

@@ -123,14 +123,14 @@ impl History {
             | Message::SelectEvents(_)
             | Message::DeselectEvents(_)
             | Message::SetEventSelection(_)
-            | Message::SetActiveEventText(_)
-            | Message::SetActiveEventActor(_)
-            | Message::SetActiveEventEffect(_)
-            | Message::SetActiveEventStyleIndex(_)
-            | Message::SetActiveEventLayerIndex(_)
-            | Message::SetActiveEventType(_)
-            | Message::SetActiveEventStartTime(_)
-            | Message::SetActiveEventDuration(_)
+            | Message::MultiEditEventText(_)
+            | Message::MultiEditEventActor(_)
+            | Message::MultiEditEventEffect(_)
+            | Message::MultiEditEventStyleIndex(_)
+            | Message::MultiEditEventLayerIndex(_)
+            | Message::MultiEditEventType(_)
+            | Message::MultiEditEventStartTime(_)
+            | Message::MultiEditEventDuration(_)
             | Message::SetEventStartTimeAndDuration(_, _, _)
             | Message::TextEditorActionPerformed(_, _)
             | Message::CreateEmptyFilter
@@ -667,8 +667,8 @@ mod tests {
         record_no_batch(&mut hist, &Message::CreateStyle, Message::DeleteStyle(0));
         record_no_batch(
             &mut hist,
-            &Message::SetActiveEventText("hello".into()),
-            Message::SetActiveEventText(String::new()),
+            &Message::SetStyleName(0, "hello".into()),
+            Message::SetStyleName(0, String::new()),
         );
 
         // Undo all three
@@ -733,8 +733,8 @@ mod tests {
         // Record a new, different action (action C)
         record_no_batch(
             &mut hist,
-            &Message::SetActiveEventText("new".into()),
-            Message::SetActiveEventText(String::new()),
+            &Message::SetStyleName(0, "new".into()),
+            Message::SetStyleName(0, String::new()),
         );
 
         // Now at node C (the leaf). Undo back to node A so that redo can be tested.
@@ -744,7 +744,7 @@ mod tests {
         let redo = hist.redo();
         assert_eq!(redo.len(), 1);
         assert!(
-            matches!(&redo[0], Message::SetActiveEventText(text) if text == "new"),
+            matches!(&redo[0], Message::SetStyleName(0, text) if text == "new"),
             "redo should return the newly recorded action, not the discarded branch"
         );
 
@@ -755,8 +755,8 @@ mod tests {
         drop(hist.undo()); // undo action 2, now at node 1
         record_no_batch(
             &mut hist,
-            &Message::SetActiveEventText("x".into()),
-            Message::SetActiveEventText(String::new()),
+            &Message::SetStyleName(0, "x".into()),
+            Message::SetStyleName(0, String::new()),
         );
 
         // After redoing the new action, there should be nothing more to redo
@@ -785,15 +785,15 @@ mod tests {
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("original".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "original".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("original".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "original".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
@@ -815,15 +815,15 @@ mod tests {
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("before_a".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "before_a".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("before_b_should_be_ignored".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "before_b_should_be_ignored".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
@@ -831,7 +831,7 @@ mod tests {
         let undo = hist.undo();
         assert_eq!(undo.len(), 1);
         assert!(
-            matches!(&undo[0], Message::SetActiveEventText(text) if text == "before_a"),
+            matches!(&undo[0], Message::SetStyleName(0, text) if text == "before_a"),
             "the first undo message should be retained in Instant mode"
         );
 
@@ -839,15 +839,15 @@ mod tests {
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("original".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "original".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("original".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "original".into()),
             BatchAppendMode::Instant,
             BatchAppendMode::Instant,
         );
@@ -857,7 +857,7 @@ mod tests {
         let redo = hist.redo();
         assert_eq!(redo.len(), 1);
         assert!(
-            matches!(&redo[0], Message::SetActiveEventText(text) if text == "b"),
+            matches!(&redo[0], Message::SetStyleName(0, text) if text == "b"),
             "redo should return the latest message in Instant mode"
         );
 
@@ -865,15 +865,15 @@ mod tests {
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("undo_a".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "undo_a".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("undo_b".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "undo_b".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
@@ -893,36 +893,36 @@ mod tests {
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("undo_a".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "undo_a".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("undo_b".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "undo_b".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
 
         let undo = hist.undo();
         assert_eq!(undo.len(), 2);
-        assert!(matches!(&undo[0], Message::SetActiveEventText(text) if text == "undo_a"));
-        assert!(matches!(&undo[1], Message::SetActiveEventText(text) if text == "undo_b"));
+        assert!(matches!(&undo[0], Message::SetStyleName(0, text) if text == "undo_a"));
+        assert!(matches!(&undo[1], Message::SetStyleName(0, text) if text == "undo_b"));
 
         let mut hist = History::new();
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("a".into()),
-            Message::SetActiveEventText("undo_a".into()),
+            &Message::SetStyleName(0, "a".into()),
+            Message::SetStyleName(0, "undo_a".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
         record_batched(
             &mut hist,
-            &Message::SetActiveEventText("b".into()),
-            Message::SetActiveEventText("undo_b".into()),
+            &Message::SetStyleName(0, "b".into()),
+            Message::SetStyleName(0, "undo_b".into()),
             BatchAppendMode::Incremental,
             BatchAppendMode::Incremental,
         );
@@ -934,8 +934,8 @@ mod tests {
             2,
             "incremental batching accumulates redo messages"
         );
-        assert!(matches!(&redo[0], Message::SetActiveEventText(text) if text == "a"));
-        assert!(matches!(&redo[1], Message::SetActiveEventText(text) if text == "b"));
+        assert!(matches!(&redo[0], Message::SetStyleName(0, text) if text == "a"));
+        assert!(matches!(&redo[1], Message::SetStyleName(0, text) if text == "b"));
 
         let mut hist = History::new();
         record_batched(
@@ -988,8 +988,8 @@ mod tests {
         for idx in 0_u8..3 {
             record_batched(
                 &mut hist,
-                &Message::SetActiveEventText(format!("state_{idx}")),
-                Message::SetActiveEventText(format!("undo_{idx}")),
+                &Message::SetStyleName(0, format!("state_{idx}")),
+                Message::SetStyleName(0, format!("undo_{idx}")),
                 BatchAppendMode::Incremental,
                 BatchAppendMode::Incremental,
             );
@@ -1018,8 +1018,8 @@ mod tests {
         for idx in 0..STEP_COUNT {
             record_no_batch(
                 &mut hist,
-                &Message::SetActiveEventText(format!("state_{idx}")),
-                Message::SetActiveEventText(format!("undo_{idx}")),
+                &Message::SetStyleName(0, format!("state_{idx}")),
+                Message::SetStyleName(0, format!("undo_{idx}")),
             );
         }
 

@@ -53,12 +53,7 @@ impl super::LocalState for State {
         iced::Task::none()
     }
 
-    fn update_style_lists(
-        &mut self,
-        styles: &[subtitle::Style],
-        _copy_styles: bool,
-        _active_event_style_index: Option<usize>,
-    ) {
+    fn update_style_lists(&mut self, styles: &[subtitle::Style], _copy_styles: bool) {
         // A style might have been deleted, which might cause the style selected in a
         // style editor pane to no longer exist. In that case, set it to 0 which will
         // always exist.
