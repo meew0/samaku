@@ -929,43 +929,144 @@ fn update_internal(
             }
         }
         Message::CreateEmptyFilter => {
-            global_state.subtitles.extradata.push_filter(nde::Filter {
+            let filter = nde::Filter {
                 name: String::new(),
                 graph: nde::graph::Graph::identity(),
-            });
+            };
+            let filter_index = global_state.subtitles.extradata.push_filter(filter.clone());
             notify_filter_lists(global_state);
+
+            undo.put_no_batch("Create filter", Message::DeleteFilter(filter_index));
+            undo.override_redo(Message::RestoreFilter(filter_index, filter, vec![]));
+        }
+        Message::AssignFilterToEvents(filter_index, events) => {
+            let mut old = Vec::with_capacity(events.len());
+            for event_index in &events {
+                old.push(
+                    global_state.subtitles.events[*event_index]
+                        .assign_nde_filter(filter_index, &global_state.subtitles.extradata),
+                );
+            }
+
+            undo.put_no_batch(
+                "Assign filter to events",
+                Message::MultiAssignFiltersToEvents(old, events),
+            );
         }
         Message::AssignFilterToSelectedEvents(filter_index) => {
+            let mut old = Vec::with_capacity(global_state.selected_events.len());
             for selected_event_index in &global_state.selected_events {
-                global_state.subtitles.events[selected_event_index]
-                    .assign_nde_filter(filter_index, &global_state.subtitles.extradata);
+                old.push(
+                    global_state.subtitles.events[selected_event_index]
+                        .assign_nde_filter(filter_index, &global_state.subtitles.extradata),
+                );
             }
+
+            undo.put_no_batch(
+                "Assign filter to events",
+                Message::MultiAssignFiltersToEvents(
+                    old,
+                    global_state.selected_events.indices.clone(),
+                ),
+            );
+            undo.override_redo(Message::AssignFilterToEvents(
+                filter_index,
+                global_state.selected_events.indices.clone(),
+            ));
         }
-        Message::UnassignFilterFromSelectedEvents => {
+        Message::UnassignFilterFromEvents(filter_index, events) => {
+            let mut affected_events = HashSet::with_capacity(events.len());
+            for event_index in events {
+                if global_state.subtitles.events[event_index]
+                    .unassign_nde_filter_by_id(filter_index)
+                {
+                    affected_events.insert(event_index);
+                }
+            }
+
+            undo.put_no_batch(
+                "Unassign filter from events",
+                Message::AssignFilterToEvents(filter_index, affected_events),
+            );
+        }
+        Message::UnassignFilterFromSelectedEvents(filter_index) => {
+            let mut affected_events = HashSet::new();
             for selected_event_index in &global_state.selected_events {
-                global_state.subtitles.events[selected_event_index]
-                    .unassign_nde_filter(&global_state.subtitles.extradata);
+                if global_state.subtitles.events[selected_event_index]
+                    .unassign_nde_filter_by_id(filter_index)
+                {
+                    affected_events.insert(selected_event_index);
+                }
             }
+
+            undo.put_no_batch(
+                "Unassign filter from events",
+                Message::AssignFilterToEvents(filter_index, affected_events),
+            );
+            undo.override_redo(Message::UnassignFilterFromEvents(
+                filter_index,
+                global_state.selected_events.indices.clone(),
+            ));
         }
-        Message::SetActiveFilterName(new_name) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                filter.name = new_name;
-                notify_filter_lists(global_state);
+        Message::MultiAssignFiltersToEvents(filters, event_indices) => {
+            for (i, event_index) in event_indices.into_iter().enumerate() {
+                if let Some(filter_id) = filters[i] {
+                    global_state.subtitles.events[event_index]
+                        .assign_nde_filter(filter_id, &global_state.subtitles.extradata);
+                } else {
+                    global_state.subtitles.events[event_index]
+                        .unassign_nde_filter(&global_state.subtitles.extradata);
+                }
             }
+
+            // No undo/redo for now.
+        }
+        Message::SetFilterName(filter_index, new_name) => {
+            let entry = &mut global_state.subtitles.extradata[filter_index];
+            let filter = entry.assert_filter_mut();
+            let old_name = replace(&mut filter.name, new_name);
+            notify_filter_lists(global_state);
+
+            undo.put_instant(
+                "Set filter name",
+                Message::SetFilterName(filter_index, old_name),
+            );
         }
         Message::DeleteFilter(filter_index) => {
             // Unassign filters from events that might have it assigned
-            for event in global_state.subtitles.events.iter_events_mut() {
-                event.extradata_ids.retain(|id| *id != filter_index);
+            let mut assigned_events = vec![];
+            for (index, event) in global_state.subtitles.events.enumerate_events_mut() {
+                if event.unassign_nde_filter_by_id(filter_index) {
+                    assigned_events.push(index);
+                }
             }
 
             // Remove the filter itself
-            global_state.subtitles.extradata.remove(filter_index);
+            let removed = global_state.subtitles.extradata.remove(filter_index);
 
+            if let Some(subtitle::ExtradataEntry::NdeFilter(filter)) = removed {
+                notify_filter_lists(global_state);
+
+                undo.put_no_batch(
+                    "Delete filter",
+                    Message::RestoreFilter(filter_index, filter, assigned_events),
+                );
+            } else {
+                panic!("Tried to remove NDE filter, but instead found: {removed:?}");
+            }
+        }
+        Message::RestoreFilter(filter_index, filter, assigned_events) => {
+            global_state
+                .subtitles
+                .extradata
+                .insert_filter(filter_index, filter);
+            for event_index in assigned_events {
+                global_state.subtitles.events[event_index]
+                    .assign_nde_filter(filter_index, &global_state.subtitles.extradata);
+            }
             notify_filter_lists(global_state);
+
+            undo.put_no_batch("Restore filter", Message::DeleteFilter(filter_index));
         }
         Message::AddNode(node_constructor) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(

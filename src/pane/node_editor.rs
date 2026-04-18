@@ -33,11 +33,16 @@ impl super::LocalState for State {
                 match &global_state
                     .subtitles
                     .extradata
-                    .nde_filter_for_event(active_event)
+                    .nde_filter_and_id_for_event(active_event)
                 {
-                    Some(nde_filter) => {
-                        view_filter(self_pane, global_state, self, active_event, nde_filter)
-                    }
+                    Some((nde_filter_id, nde_filter)) => view_filter(
+                        self_pane,
+                        global_state,
+                        self,
+                        active_event,
+                        *nde_filter_id,
+                        nde_filter,
+                    ),
                     None => view_non_selected(self_pane, self, false),
                 }
             } else if global_state.selected_events.is_empty() {
@@ -235,6 +240,7 @@ fn view_filter<'a>(
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
     active_event: &subtitle::Event<'static>,
+    nde_filter_id: subtitle::ExtradataId,
     nde_filter: &nde::Filter,
 ) -> iced::Element<'a, message::Message> {
     // Before doing much of anything else, we need to run the NDE filter —
@@ -252,7 +258,13 @@ fn view_filter<'a>(
     create_nodes(&mut graph, nde_filter, &nde_result_or_error);
     create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
-    view_graph(pane_state, nde_filter, &nde_result_or_error, graph)
+    view_graph(
+        pane_state,
+        nde_filter_id,
+        nde_filter,
+        &nde_result_or_error,
+        graph,
+    )
 }
 
 fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<'_>> {
@@ -501,6 +513,7 @@ fn create_connections(
 
 fn view_graph<'a>(
     pane_state: &'a State,
+    nde_filter_id: subtitle::ExtradataId,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
     graph: Box<NodeGraph<'a>>,
@@ -509,11 +522,12 @@ fn view_graph<'a>(
         .width(180)
         .height(32);
 
-    let unassign_button = iced::widget::button(iced::widget::text("Unassign"))
-        .on_press(message::Message::UnassignFilterFromSelectedEvents);
+    let unassign_button = iced::widget::button(iced::widget::text("Unassign")).on_press(
+        message::Message::UnassignFilterFromSelectedEvents(nde_filter_id),
+    );
 
     let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
-        .on_input(message::Message::SetActiveFilterName)
+        .on_input(move |name| message::Message::SetFilterName(nde_filter_id, name))
         .padding(5.0)
         .width(iced::Length::Fixed(200.0));
 

@@ -421,6 +421,28 @@ impl EventTrack {
         self.events.iter_mut().flatten()
     }
 
+    /// Iterate over all events immutably in an arbitrary order, together with their indices.
+    pub fn enumerate_events(&self) -> impl Iterator<Item = (EventIndex, &Event<'static>)> {
+        self.events
+            .iter()
+            .enumerate()
+            .filter_map(|(id, maybe_event)| {
+                maybe_event.as_ref().map(|event| (EventIndex(id), event))
+            })
+    }
+
+    /// Iterate over all events mutably in an arbitrary order, together with their indices.
+    pub fn enumerate_events_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (EventIndex, &mut Event<'static>)> {
+        self.events
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(id, maybe_event)| {
+                maybe_event.as_mut().map(|event| (EventIndex(id), event))
+            })
+    }
+
     /// Iterate over all event indices in an arbitrary order.
     pub fn iter_indices(&self) -> impl Iterator<Item = EventIndex> {
         self.events

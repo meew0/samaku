@@ -95,18 +95,43 @@ impl Event<'_> {
         matches!(self.event_type, EventType::Comment)
     }
 
-    /// Unassigns the NDE filter from this event, if one is assigned. Otherwise, nothing will
-    /// happen.
-    pub fn unassign_nde_filter(&mut self, extradata: &Extradata) {
-        self.extradata_ids
-            .retain(|id| !matches!(extradata[*id], ExtradataEntry::NdeFilter(_)));
+    /// Unassigns the NDE filter from this event, if one is assigned, returning its ID.
+    /// Otherwise, nothing will happen and `None` will be returned.
+    ///
+    /// # Panics
+    /// Panics if the event somehow has multiple filters assigned.
+    pub fn unassign_nde_filter(&mut self, extradata: &Extradata) -> Option<ExtradataId> {
+        let mut old_id = None;
+        self.extradata_ids.retain(|id| {
+            if matches!(extradata[*id], ExtradataEntry::NdeFilter(_)) {
+                assert!(old_id.is_none(), "Event has multiple assigned NDE filters");
+                old_id = Some(*id);
+                false
+            } else {
+                true
+            }
+        });
+        old_id
+    }
+
+    /// Unassigns the NDE filter with the given ID from this event, if it is assigned,
+    /// returning `true`. Otherwise, nothing will happen and `false` will be returned.
+    pub fn unassign_nde_filter_by_id(&mut self, id_to_unassign: ExtradataId) -> bool {
+        let len = self.extradata_ids.len();
+        self.extradata_ids.retain(|id| *id != id_to_unassign);
+        self.extradata_ids.len() < len
     }
 
     /// Assign an NDE filter to this event, unassigning the previously assigned filter, if one
-    /// existed.
-    pub fn assign_nde_filter(&mut self, id: ExtradataId, extradata: &Extradata) {
-        self.unassign_nde_filter(extradata);
+    /// existed. In that case, returns the ID of that filter.
+    pub fn assign_nde_filter(
+        &mut self,
+        id: ExtradataId,
+        extradata: &Extradata,
+    ) -> Option<ExtradataId> {
+        let old = self.unassign_nde_filter(extradata);
         self.extradata_ids.push(id);
+        old
     }
 }
 
@@ -933,6 +958,16 @@ impl Extradata {
         self.push(ExtradataEntry::NdeFilter(filter))
     }
 
+    /// Inserts an extradata entry at the given ID.
+    pub fn insert(&mut self, id: ExtradataId, entry: ExtradataEntry) {
+        self.entries.insert(id, entry);
+    }
+
+    /// Inserts a filter at the given ID.
+    pub fn insert_filter(&mut self, id: ExtradataId, filter: nde::Filter) {
+        self.insert(id, ExtradataEntry::NdeFilter(filter));
+    }
+
     /// Remove an entry. The caller must take care to remove references to it from events!
     pub fn remove(&mut self, id: ExtradataId) -> Option<ExtradataEntry> {
         self.entries.remove(&id)
@@ -958,6 +993,21 @@ impl Extradata {
         for extradata_id in &event.extradata_ids {
             if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
                 return Some(filter);
+            }
+        }
+
+        None
+    }
+
+    /// Returns the assigned NDE filter for a given event, if one exists, together with its ID.
+    #[must_use]
+    pub fn nde_filter_and_id_for_event<'a>(
+        &'a self,
+        event: &Event,
+    ) -> Option<(ExtradataId, &'a nde::Filter)> {
+        for extradata_id in &event.extradata_ids {
+            if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
+                return Some((*extradata_id, filter));
             }
         }
 
@@ -1016,6 +1066,36 @@ impl IndexMut<ExtradataId> for Extradata {
 pub enum ExtradataEntry {
     NdeFilter(nde::Filter),
     Opaque { key: String, value: Vec<u8> },
+}
+
+impl ExtradataEntry {
+    /// Asserts that this extradata entry is a filter,
+    /// and returns the contained filter graph.
+    ///
+    /// # Panics
+    /// Panics if this extradata entry is not a filter.
+    #[must_use]
+    pub fn assert_filter(&self) -> &nde::Filter {
+        if let ExtradataEntry::NdeFilter(filter) = self {
+            filter
+        } else {
+            panic!("assert_filter() failed, instead found: {self:?}");
+        }
+    }
+
+    /// Asserts that this extradata entry is a filter,
+    /// and mutably returns the contained filter graph.
+    ///
+    /// # Panics
+    /// Panics if this extradata entry is not a filter.
+    #[must_use]
+    pub fn assert_filter_mut(&mut self) -> &mut nde::Filter {
+        if let ExtradataEntry::NdeFilter(filter) = self {
+            filter
+        } else {
+            panic!("assert_filter() failed, instead found: {self:?}");
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -196,10 +196,21 @@ pub enum Message {
 
     // Create, update, assign, and delete NDE filters.
     CreateEmptyFilter,
+    AssignFilterToEvents(subtitle::ExtradataId, HashSet<subtitle::EventIndex>),
     AssignFilterToSelectedEvents(subtitle::ExtradataId),
-    UnassignFilterFromSelectedEvents,
-    SetActiveFilterName(String),
+    UnassignFilterFromEvents(subtitle::ExtradataId, HashSet<subtitle::EventIndex>),
+    UnassignFilterFromSelectedEvents(subtitle::ExtradataId),
+    MultiAssignFiltersToEvents(
+        Vec<Option<subtitle::ExtradataId>>,
+        HashSet<subtitle::EventIndex>,
+    ),
+    SetFilterName(subtitle::ExtradataId, String),
     DeleteFilter(subtitle::ExtradataId),
+    RestoreFilter(
+        subtitle::ExtradataId,
+        nde::Filter,
+        Vec<subtitle::EventIndex>,
+    ),
 
     // Create and update nodes in the current NDE filter.
     AddNode(nde::node::Constructor),

@@ -135,10 +135,13 @@ impl History {
             | Message::SetEventStartTimeAndDuration(_, _, _)
             | Message::TextEditorActionPerformed(_, _)
             | Message::CreateEmptyFilter
+            | Message::AssignFilterToEvents(_, _)
+            | Message::UnassignFilterFromEvents(_, _)
             | Message::AssignFilterToSelectedEvents(_)
-            | Message::UnassignFilterFromSelectedEvents
-            | Message::SetActiveFilterName(_)
+            | Message::UnassignFilterFromSelectedEvents(_)
+            | Message::SetFilterName(_, _)
             | Message::DeleteFilter(_)
+            | Message::RestoreFilter(_, _, _)
             | Message::AddNode(_)
             | Message::DeleteNodes(_)
             | Message::MoveNode(_, _)
@@ -188,6 +191,7 @@ impl History {
             | Message::TogglePlayback
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
+            | Message::MultiAssignFiltersToEvents(_, _)
             | Message::TrackMotionForNode(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
