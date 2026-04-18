@@ -1104,7 +1104,7 @@ impl Alignment {
 
     /// Convert to a number to be used in the `\an` formatting tag.
     #[must_use]
-    pub fn as_an(&self) -> i32 {
+    pub fn as_an(self) -> i32 {
         match self.vertical {
             VerticalAlignment::Sub => match self.horizontal {
                 HorizontalAlignment::Left => 1,
@@ -1125,7 +1125,7 @@ impl Alignment {
     }
 
     #[must_use]
-    pub fn pack(&self) -> i32 {
+    pub fn pack(self) -> i32 {
         self.vertical as i32 | self.horizontal as i32
     }
 }
@@ -1205,8 +1205,8 @@ pub enum FontWeight {
 
 impl FontWeight {
     #[must_use]
-    pub fn weight(&self) -> u32 {
-        match *self {
+    pub fn weight(self) -> u32 {
+        match self {
             FontWeight::BoldToggle(true) => 700,
             FontWeight::BoldToggle(false) => 400,
             FontWeight::Numeric(weight) => weight,

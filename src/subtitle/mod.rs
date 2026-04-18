@@ -144,7 +144,7 @@ pub enum EventType {
 
 impl EventType {
     #[must_use]
-    pub fn is_comment(&self) -> bool {
+    pub fn is_comment(self) -> bool {
         matches!(self, EventType::Comment)
     }
 }
@@ -173,7 +173,7 @@ impl StartTime {
 
     /// Fixed-width: `hh:mm:ss.mmm`.
     #[must_use]
-    pub fn format_long(&self) -> String {
+    pub fn format_long(self) -> String {
         let (sign, hours, minutes, seconds, millis) = self.split(false);
         format!("{sign}{hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
     }
@@ -181,7 +181,7 @@ impl StartTime {
     /// Compact: `h[:mm]:ss[.m..]` — trims leading hour when 0 and
     /// trims trailing zeros from fractional seconds.
     #[must_use]
-    pub fn format_short(&self) -> String {
+    pub fn format_short(self) -> String {
         let (sign, hours, minutes, seconds, millis) = self.split(false);
 
         let mut result = if hours > 0 {

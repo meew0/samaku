@@ -71,7 +71,7 @@ impl EventTrack {
 
     /// Index into the track given the (opaque) `EventIndex`.
     #[must_use]
-    pub fn get(&mut self, index: EventIndex) -> Option<&Event<'static>> {
+    pub fn get(&self, index: EventIndex) -> Option<&Event<'static>> {
         self.events.get(index.0).and_then(Option::as_ref)
     }
 
@@ -362,7 +362,7 @@ impl EventTrack {
 
     /// Dispatch message to node.
     pub fn update_node(
-        &mut self,
+        &self,
         selected_events: &model::select::EventSelection,
         extradata: &mut Extradata,
         node_index: nde::graph::NodeId,

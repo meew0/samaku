@@ -202,7 +202,7 @@ pub enum SocketType {
 
 impl SocketType {
     #[must_use]
-    pub fn is_event(&self) -> bool {
+    pub fn is_event(self) -> bool {
         matches!(
             self,
             SocketType::IndividualEvent | SocketType::MultipleEvents | SocketType::AnyEvents

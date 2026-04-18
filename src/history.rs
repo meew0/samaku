@@ -80,7 +80,7 @@ impl History {
     /// in the history, and if so, clones it and creates a suitable `Key`.
     /// Otherwise, it will create a key that panics whenever something tries to put an undo message.
     #[expect(clippy::too_many_lines, reason = "we need to match all messages here")]
-    pub fn make_key(&mut self, message: &Message) -> Key {
+    pub fn make_key(&self, message: &Message) -> Key {
         match message {
             // messages that might eventually be recorded in the history
             Message::CreateStyle
@@ -519,18 +519,18 @@ mod tests {
 
     #[test]
     fn make_key() {
-        let mut hist = History::new();
+        let hist = History::new();
         assert!(matches!(
             hist.make_key(&Message::AddEvent),
             Key::Record(_, _)
         ));
 
-        let mut hist = History::new();
+        let hist = History::new();
         assert!(matches!(hist.make_key(&Message::None), Key::Fail));
 
         // The Record variant from make_key begins with an empty undo vec and a
         // one-element redo vec containing the original message.
-        let mut hist = History::new();
+        let hist = History::new();
         if let Key::Record(node, batch_mode) = hist.make_key(&Message::AddEvent) {
             assert!(node.undo.is_empty(), "undo should be empty before put()");
             assert_eq!(
@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn put() {
         // Test undo message being added
-        let mut hist = History::new();
+        let hist = History::new();
         if let Key::Record(ref mut node, ref mut batch_mode) = hist.make_key(&Message::AddEvent) {
             node.undo.push(Message::DeleteSelectedEvents);
             *batch_mode = Some(BatchMode::NoBatching);
@@ -587,7 +587,7 @@ mod tests {
             panic!("expected Key::Record");
         }
 
-        let mut hist = History::new();
+        let hist = History::new();
         let mut key = hist.make_key(&Message::AddEvent);
         key.put_no_batch("test", Message::DeleteSelectedEvents);
         if let Key::Record(node, batch_mode) = key {
@@ -1045,7 +1045,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Tried to overwrite batch mode with a different one")]
     fn put_different_modes() {
-        let mut hist = History::new();
+        let hist = History::new();
         let mut key = hist.make_key(&Message::AddEvent);
         key.put("test", Message::DeleteSelectedEvents, BatchMode::NoBatching);
         // Second put with different mode triggers assert_ne! in Key::put

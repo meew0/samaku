@@ -36,24 +36,24 @@ pub fn deserialize_czb<T: serde::de::DeserializeOwned>(
 ) -> Result<T, DeserializeError> {
     let decoded = data_encoding::BASE64
         .decode(value)
-        .map_err(DeserializeError::Base64DecodeError)?;
+        .map_err(DeserializeError::Base64Decode)?;
     let decompressed =
         miniz_oxide::inflate::decompress_to_vec_with_limit(decoded.as_slice(), 1_000_000)
-            .map_err(DeserializeError::DecompressError)?;
+            .map_err(DeserializeError::Decompress)?;
     ciborium::from_reader::<T, _>(decompressed.as_slice())
-        .map_err(|de_error| DeserializeError::DeserialiseError(format!("{de_error:?}")))
+        .map_err(|de_error| DeserializeError::Deserialise(format!("{de_error:?}")))
 }
 
 #[derive(Error, Debug)]
 pub enum DeserializeError {
     #[error("Failed to decode base64 data for NDE filter: {0}")]
-    Base64DecodeError(data_encoding::DecodeError),
+    Base64Decode(data_encoding::DecodeError),
 
     #[error("Failed to decompress NDE filter: {0}")]
-    DecompressError(miniz_oxide::inflate::DecompressError),
+    Decompress(miniz_oxide::inflate::DecompressError),
 
     #[error("Failed to deserialise NDE filter: {0}")]
-    DeserialiseError(String),
+    Deserialise(String),
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
