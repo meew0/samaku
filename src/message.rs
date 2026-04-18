@@ -163,9 +163,11 @@ pub enum Message {
 
     /// Select the given event if it is not selected, otherwise deselect it.
     ToggleEventSelection(subtitle::EventIndex),
+    GroupSelectEvents(subtitle::EventIndex, subtitle::EventIndex, bool),
     SetEventSelectionSingle(subtitle::EventIndex, bool, Option<subtitle::EventIndex>),
     SelectOnlyEvent(subtitle::EventIndex),
     SetEventSelection(model::select::EventSelection),
+    DeselectEvents(HashSet<subtitle::EventIndex>, Option<subtitle::EventIndex>),
     SelectAllEvents,
 
     // Set various properties of events.

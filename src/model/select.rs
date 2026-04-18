@@ -12,6 +12,14 @@ pub struct EventSelection {
 }
 
 impl EventSelection {
+    #[must_use]
+    pub fn from_indices(indices: HashSet<EventIndex>) -> Self {
+        Self {
+            indices,
+            last: None,
+        }
+    }
+
     /// Returns the “active” event: the most recently selected one,
     /// or if exactly one event is selected, that one.
     /// Otherwise, it returns `None`.
@@ -63,9 +71,36 @@ impl EventSelection {
         (old_state, old_last)
     }
 
-    pub fn select(&mut self, event_index: EventIndex) {
-        self.indices.insert(event_index);
+    /// Selects the given events. Returns what was actually selected
+    /// (`None` if the given event was already selected).
+    pub fn select(&mut self, event_index: EventIndex) -> Option<EventIndex> {
+        let was_inserted = self.indices.insert(event_index);
         self.last = Some(event_index);
+        was_inserted.then_some(event_index)
+    }
+
+    /// Selects the given events.
+    /// Returns a set of events that were actually selected, and the previous last event.
+    pub fn select_all<I: Iterator<Item = EventIndex>>(
+        &mut self,
+        event_indices: I,
+    ) -> (HashSet<EventIndex>, Option<EventIndex>) {
+        let mut selected = if let (_, Some(len)) = event_indices.size_hint() {
+            self.indices.reserve(len);
+            HashSet::with_capacity(len)
+        } else {
+            HashSet::new()
+        };
+
+        let old_last = self.last;
+
+        for event_index in event_indices {
+            if let Some(selected_index) = self.select(event_index) {
+                selected.insert(selected_index);
+            }
+        }
+
+        (selected, old_last)
     }
 
     pub fn select_from(&mut self, other: &Self) {

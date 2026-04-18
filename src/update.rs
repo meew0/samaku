@@ -714,7 +714,7 @@ fn update_internal(
             };
             notify_selected_events(global_state);
 
-            undo.put_instant(
+            undo.put_incremental(
                 "Toggle event selection",
                 Message::SetEventSelectionSingle(index, previously_selected, old_last),
             );
@@ -723,6 +723,39 @@ fn update_internal(
                 !previously_selected,
                 global_state.selected_events.last,
             ));
+        }
+        Message::GroupSelectEvents(index_1, index_2, keep_previous) => {
+            let n_1 = global_state.subtitles.events.position(index_1);
+            let n_2 = global_state.subtitles.events.position(index_2);
+            let (n_first, n_last) = (n_1.min(n_2), n_1.max(n_2));
+            let events_to_select = global_state
+                .subtitles
+                .events
+                .iter_range_in_order(n_first..(n_last + 1));
+
+            if keep_previous {
+                // Select the group in addition to the currently selected ones
+                let (selected, old_last) =
+                    global_state.selected_events.select_all(events_to_select);
+                notify_selected_events(global_state);
+
+                undo.put_instant(
+                    "Select multiple events",
+                    Message::DeselectEvents(selected, old_last),
+                );
+            } else {
+                // Select only the group
+                let mut new_selection =
+                    model::select::EventSelection::from_indices(events_to_select.collect());
+                new_selection.last = Some(index_2);
+                let old_selection = replace(&mut global_state.selected_events, new_selection);
+                notify_selected_events(global_state);
+
+                undo.put_instant(
+                    "Select multiple events",
+                    Message::SetEventSelection(old_selection),
+                );
+            }
         }
         Message::SetEventSelectionSingle(index, state, last) => {
             let (old_state, old_last) = global_state.selected_events.set_single(index, state, last);
@@ -746,11 +779,19 @@ fn update_internal(
 
             undo.put_instant("Select events", Message::SetEventSelection(old));
         }
+        Message::DeselectEvents(to_deselect, old_last) => {
+            global_state
+                .selected_events
+                .deselect_all(to_deselect.into_iter());
+            global_state.selected_events.last = old_last;
+            notify_selected_events(global_state);
+
+            // This message does not need to be undone.
+        }
         Message::SelectAllEvents => {
-            let new_selection = model::select::EventSelection {
-                indices: global_state.subtitles.events.iter_indices().collect(),
-                last: None,
-            };
+            let new_selection = model::select::EventSelection::from_indices(
+                global_state.subtitles.events.iter_indices().collect(),
+            );
             let old_selection = replace(&mut global_state.selected_events, new_selection);
             notify_selected_events(global_state);
 

@@ -119,6 +119,7 @@ impl History {
             | Message::DeleteSelectedEvents
             | Message::RestoreEvents(_, _)
             | Message::ToggleEventSelection(_)
+            | Message::GroupSelectEvents(_, _, _)
             | Message::SetEventSelectionSingle(_, _, _)
             | Message::SelectOnlyEvent(_)
             | Message::SetEventSelection(_)
@@ -186,6 +187,7 @@ impl History {
             | Message::PlaybackSetPosition(_)
             | Message::TogglePlayback
             | Message::Playing(_)
+            | Message::DeselectEvents(_, _)
             | Message::TrackMotionForNode(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)

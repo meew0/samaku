@@ -136,7 +136,12 @@ fn row<'a>(
         (style::SAMAKU_BACKGROUND, style::SAMAKU_TEXT)
     };
 
-    let message = if global_state.modifiers.control() {
+    let message = if global_state.modifiers.shift()
+        && let Some(last) = global_state.selected_events.last
+    {
+        let keep_previous = global_state.modifiers.control();
+        message::Message::GroupSelectEvents(last, event_index, keep_previous)
+    } else if global_state.modifiers.control() {
         message::Message::ToggleEventSelection(event_index)
     } else {
         message::Message::SelectOnlyEvent(event_index)
