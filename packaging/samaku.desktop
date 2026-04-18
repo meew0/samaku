@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=samaku
+Comment=Node-based editor for typesetting of ASS subtitles
+Exec=samaku
+Icon=samaku
+Categories=AudioVideo;Video;
+Terminal=false

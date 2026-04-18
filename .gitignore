@@ -2,5 +2,5 @@
 .vscode/
 build/
 target/
-vapoursynth/__pycache__/
-vscache/
+AppDir/
+packaging/linuxdeploy-*.AppImage
