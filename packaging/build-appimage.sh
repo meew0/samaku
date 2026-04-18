@@ -96,6 +96,10 @@ if [[ -z "${LIBLEANCRYPTO}" ]]; then
 fi
 cp "${LIBLEANCRYPTO}" "${APPDIR}/usr/lib/libleancrypto.so.1"
 
+# Aliases for OpenBLAS
+ln -sf libopenblas.so.0 "${APPDIR}/usr/lib/liblapack.so.3"
+ln -sf libopenblas.so.0 "${APPDIR}/usr/lib/libblas.so.3"
+
 # ---------------------------------------------------------------------------
 # 6. Package the AppDir into an AppImage
 # ---------------------------------------------------------------------------
