@@ -25,13 +25,22 @@ ARCH="${ARCH:-$(uname -m)}"
 LINUXDEPLOY="${SCRIPT_DIR}/linuxdeploy-${ARCH}.AppImage"
 LINUXDEPLOY_URL="https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage"
 
+APPIMAGETOOL="${SCRIPT_DIR}/appimagetool-${ARCH}.AppImage"
+APPIMAGETOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+
 # ---------------------------------------------------------------------------
-# 1. Fetch linuxdeploy if not already cached
+# 1. Fetch tooling if not already cached
 # ---------------------------------------------------------------------------
 if [[ ! -x "${LINUXDEPLOY}" ]]; then
     echo "Downloading linuxdeploy for ${ARCH}…"
     curl -fsSL -o "${LINUXDEPLOY}" "${LINUXDEPLOY_URL}"
     chmod +x "${LINUXDEPLOY}"
+fi
+
+if [[ ! -x "${APPIMAGETOOL}" ]]; then
+    echo "Downloading appimagetool for ${ARCH}…"
+    curl -fsSL -o "${APPIMAGETOOL}" "${APPIMAGETOOL_URL}"
+    chmod +x "${APPIMAGETOOL}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -57,21 +66,42 @@ cp "${SCRIPT_DIR}/samaku.desktop" "${APPDIR}/usr/share/applications/samaku.deskt
 cp "${REPO_ROOT}/src/resources/logo.svg" "${APPDIR}/usr/share/icons/hicolor/scalable/apps/samaku.svg"
 
 # ---------------------------------------------------------------------------
-# 4. Run linuxdeploy to copy shared libraries and produce the AppImage
+# 4. Run linuxdeploy to deploy shared libraries into the AppDir
+#
+# libleancrypto is excluded here because linuxdeploy's bundled patchelf
+# (0.15.0) corrupts its IFUNC resolver tables, causing a segfault at
+# startup. It is copied in unmodified afterwards (step 5) so the AppImage
+# remains fully self-contained.
 # ---------------------------------------------------------------------------
 echo "Running linuxdeploy…"
 cd "${REPO_ROOT}"
 mkdir -p "${REPO_ROOT}/target/appimage"
 
 ARCH="${ARCH}" \
-OUTPUT="${REPO_ROOT}/target/appimage/samaku-${ARCH}.AppImage" \
 NO_STRIP=1 \
 "${LINUXDEPLOY}" --appimage-extract-and-run \
     --appdir "${APPDIR}" \
     --desktop-file "${APPDIR}/usr/share/applications/samaku.desktop" \
     --icon-file "${APPDIR}/usr/share/icons/hicolor/scalable/apps/samaku.svg" \
-    --exclude-library "libleancrypto.so.1" \
-    --output appimage
+    --exclude-library "libleancrypto.so.1"
+# no --output appimage: we call appimagetool ourselves after step 5
+
+# ---------------------------------------------------------------------------
+# 5. Bundle libleancrypto unmodified (bypassing patchelf)
+# ---------------------------------------------------------------------------
+LIBLEANCRYPTO="$(ldconfig -p | grep 'libleancrypto\.so\.1' | awk '{print $NF}')"
+if [[ -z "${LIBLEANCRYPTO}" ]]; then
+    echo "ERROR: libleancrypto.so.1 not found on this system." >&2
+    exit 1
+fi
+cp "${LIBLEANCRYPTO}" "${APPDIR}/usr/lib/libleancrypto.so.1"
+
+# ---------------------------------------------------------------------------
+# 6. Package the AppDir into an AppImage
+# ---------------------------------------------------------------------------
+echo "Packaging AppImage…"
+OUTPUT="${REPO_ROOT}/target/appimage/samaku-${ARCH}.AppImage"
+ARCH="${ARCH}" "${APPIMAGETOOL}" --appimage-extract-and-run "${APPDIR}" "${OUTPUT}"
 
 echo ""
-echo "Done: ${REPO_ROOT}/target/appimage/samaku-${ARCH}.AppImage"
+echo "Done: ${OUTPUT}"
