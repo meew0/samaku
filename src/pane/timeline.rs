@@ -45,7 +45,7 @@ impl super::LocalState for State {
                         index,
                         start: event.start,
                         duration: event.duration,
-                        selected: global_state.selected_event_indices.contains(&index),
+                        selected: global_state.selected_events.contains(index),
                     }
                 })
                 .collect(),

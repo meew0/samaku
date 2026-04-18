@@ -153,17 +153,19 @@ pub enum Message {
     /// Add an empty event to the end of the track.
     AddEvent,
 
-    DeleteEvents(Vec<subtitle::EventIndex>),
+    DeleteEvents(HashSet<subtitle::EventIndex>),
     DeleteSelectedEvents,
 
-    RestoreEvents(Vec<(subtitle::Tombstone, usize, subtitle::Event<'static>)>),
+    RestoreEvents(
+        Vec<(subtitle::Tombstone, usize, subtitle::Event<'static>)>,
+        model::select::EventSelection,
+    ),
 
     /// Select the given event if it is not selected, otherwise deselect it.
     ToggleEventSelection(subtitle::EventIndex),
+    SetEventSelectionSingle(subtitle::EventIndex, bool, Option<subtitle::EventIndex>),
     SelectOnlyEvent(subtitle::EventIndex),
-    SelectEvents(Vec<subtitle::EventIndex>),
-    DeselectEvents(Vec<subtitle::EventIndex>),
-    SetEventSelection(HashSet<subtitle::EventIndex>),
+    SetEventSelection(model::select::EventSelection),
     SelectAllEvents,
 
     // Set various properties of events.

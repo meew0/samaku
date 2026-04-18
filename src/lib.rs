@@ -219,7 +219,6 @@ use rand as _;
 use rand_pcg as _;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use iced::widget::container;
@@ -315,9 +314,8 @@ pub struct Samaku {
     /// yet.
     pub subtitles: subtitle::File,
 
-    /// Indices of currently selected events. May be any length, or empty if no event is currently
-    /// selected.
-    pub selected_event_indices: HashSet<subtitle::EventIndex>,
+    /// The set of events, identified by index, that are currently selected.
+    pub selected_events: model::select::EventSelection,
 
     /// Project properties, that is, data not stored elsewhere that conceptually belongs to a “Samaku project”,
     /// for example, paths to linked media files etc.
@@ -573,7 +571,7 @@ impl Default for Samaku {
             actual_frame: None,
             video_metadata: None,
             subtitles: subtitle::File::default(),
-            selected_event_indices: HashSet::new(),
+            selected_events: model::select::EventSelection::default(),
             project_properties: project::Properties::default(),
             shared: shared_state,
             view: RefCell::new(ViewState {

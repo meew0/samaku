@@ -13,7 +13,7 @@ pub(crate) fn replace_subtitle_file(
     subtitle_file: subtitle::File,
 ) {
     global_state.subtitles = subtitle_file;
-    global_state.selected_event_indices.clear();
+    global_state.selected_events.clear();
 
     notify_selected_events(global_state);
     notify_filter_lists(global_state);

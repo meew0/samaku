@@ -1,5 +1,5 @@
 use crate::subtitle::{Duration, Event, Extradata, StartTime, compile};
-use crate::{message, nde};
+use crate::{message, model, nde};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::mem::replace;
@@ -270,20 +270,18 @@ impl EventTrack {
         new_index
     }
 
-    /// Remove all events whose indices are contained in the given set. Clears the set afterwards
-    /// (since the indices it references are no longer valid); hence, it requires a mutable
-    /// reference to the set.
+    /// Remove all events whose indices are contained in the given set.
     /// Returns a list of tombstones and associated events.
     ///
     /// # Panics
     /// Panics if any of the indices is invalid.
     pub fn remove_from_set(
         &mut self,
-        set: &mut HashSet<EventIndex>,
+        set: &HashSet<EventIndex>,
     ) -> Vec<(Tombstone, usize, Event<'static>)> {
         let mut removed = vec![];
 
-        for event_index in set.iter() {
+        for event_index in set {
             let event = self.events[event_index.0].take().unwrap();
             let interval = event.time_range();
             Self::internal_query_index_remove(&mut self.query_index, interval, *event_index);
@@ -293,7 +291,6 @@ impl EventTrack {
         self.order.retain(|event_index| !set.contains(event_index));
 
         self.count -= set.len();
-        set.clear();
         debug_assert!(self.check_invariants());
 
         removed.sort_by_key(|(_, pos, _)| *pos);
@@ -327,61 +324,51 @@ impl EventTrack {
         new_index
     }
 
-    /// If exactly one event is selected, this method returns the index of that element. Otherwise,
-    /// it returns `None`.
-    ///
-    /// # Panics
-    /// Should not panic in normal operation.
-    #[must_use]
-    pub fn active_event_index(selected_event_indices: &HashSet<EventIndex>) -> Option<EventIndex> {
-        (selected_event_indices.len() == 1).then(|| *selected_event_indices.iter().next().unwrap())
-    }
-
     #[must_use]
     pub fn active_event(
         &self,
-        selected_event_indices: &HashSet<EventIndex>,
+        selected_events: &model::select::EventSelection,
     ) -> Option<&Event<'static>> {
-        Self::active_event_index(selected_event_indices).map(|index| &self[index])
+        selected_events.active().map(|index| &self[index])
     }
 
     #[must_use]
     pub fn active_event_mut(
         &mut self,
-        selected_event_indices: &HashSet<EventIndex>,
+        selected_events: &model::select::EventSelection,
     ) -> Option<&mut Event<'static>> {
-        Self::active_event_index(selected_event_indices).map(|index| &mut self[index])
+        selected_events.active().map(|index| &mut self[index])
     }
 
     #[must_use]
     pub fn active_nde_filter<'a>(
         &self,
-        selected_event_indices: &HashSet<EventIndex>,
+        selected_events: &model::select::EventSelection,
         extradata: &'a Extradata,
     ) -> Option<&'a nde::Filter> {
-        let event = self.active_event(selected_event_indices)?;
+        let event = self.active_event(selected_events)?;
         extradata.nde_filter_for_event(event)
     }
 
     #[must_use]
     pub fn active_nde_filter_mut<'a>(
         &self,
-        selected_event_indices: &HashSet<EventIndex>,
+        selected_events: &model::select::EventSelection,
         extradata: &'a mut Extradata,
     ) -> Option<&'a mut nde::Filter> {
-        let event = self.active_event(selected_event_indices)?;
+        let event = self.active_event(selected_events)?;
         extradata.nde_filter_for_event_mut(event)
     }
 
     /// Dispatch message to node.
     pub fn update_node(
         &mut self,
-        selected_event_indices: &HashSet<EventIndex>,
+        selected_events: &model::select::EventSelection,
         extradata: &mut Extradata,
         node_index: nde::graph::NodeId,
         message: message::Node,
     ) {
-        if let Some(filter) = self.active_nde_filter_mut(selected_event_indices, extradata)
+        if let Some(filter) = self.active_nde_filter_mut(selected_events, extradata)
             && let Some(node) = filter.graph.nodes.get_mut(node_index.0)
         {
             node.node.update(message);
@@ -664,8 +651,8 @@ mod tests {
         let position = track.position(index);
         assert_eq!(position, 1);
 
-        let mut to_remove = HashSet::from([track.nth(1).0, track.nth(2).0]);
-        let removed = track.remove_from_set(&mut to_remove);
+        let to_remove = HashSet::from([track.nth(1).0, track.nth(2).0]);
+        let removed = track.remove_from_set(&to_remove);
         assert_eq!(track.len(), 2);
         assert_eq!(track.nth(0).1.start, StartTime(0));
         assert_eq!(track.nth(1).1.start, StartTime(3000));

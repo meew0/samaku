@@ -4,9 +4,8 @@
 )]
 
 pub use iced::widget::pane_grid::Pane;
-use std::collections::HashSet;
 
-use crate::{message, subtitle};
+use crate::{message, model, subtitle};
 
 pub mod grid;
 pub mod node_editor;
@@ -47,7 +46,7 @@ pub trait LocalState {
 
     fn update_selected_events(
         &mut self,
-        _selected_event_indices: &HashSet<subtitle::EventIndex>,
+        _selected_events: &model::select::EventSelection,
         _events: &subtitle::EventTrack,
     ) {
     }

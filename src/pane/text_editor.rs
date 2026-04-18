@@ -1,8 +1,8 @@
-use crate::{action, message, style, subtitle};
+use crate::{action, message, model, style, subtitle};
 use iced::keyboard::Key;
 use iced::keyboard::key::Named;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -98,10 +98,10 @@ impl super::LocalState for State {
 
     fn update_selected_events(
         &mut self,
-        selected_event_indices: &HashSet<subtitle::EventIndex>,
+        selected_events: &model::select::EventSelection,
         event_track: &subtitle::EventTrack,
     ) {
-        if selected_event_indices.is_empty() {
+        if selected_events.is_empty() {
             self.multi_event = None;
             // Don't bother updating the editor stuff here since the editor will not be displayed anyway.
             // If we're lucky we could reuse it later
@@ -110,8 +110,7 @@ impl super::LocalState for State {
             // clone the list of selected events into a slice.
             // We use Arc since we need to put these in a `Message` later,
             // so it needs to be `Send`.
-            let event_indices: Arc<[subtitle::EventIndex]> =
-                selected_event_indices.iter().copied().collect();
+            let event_indices: Arc<[subtitle::EventIndex]> = selected_events.iter().collect();
             let events = event_track.all(&event_indices);
             let multi_event = if events.len() < 50 {
                 MultiEvent::from_events::<true>(event_indices, &events)

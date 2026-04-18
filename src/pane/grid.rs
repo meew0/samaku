@@ -123,9 +123,13 @@ fn row<'a>(
     // Cut off event text after a bit
     let cutoff = event.text.len().min(250);
 
-    let selected = global_state.selected_event_indices.contains(&event_index);
-    let (background_color, text_color) = if selected {
+    let (background_color, text_color) = if global_state.selected_events.is_last(event_index) {
         (style::SAMAKU_PRIMARY, style::SAMAKU_BACKGROUND)
+    } else if global_state.selected_events.contains(event_index) {
+        (
+            style::SAMAKU_PRIMARY.scale_alpha(0.8),
+            style::SAMAKU_BACKGROUND,
+        )
     } else if parity {
         (style::SAMAKU_BACKGROUND_WEAK, style::SAMAKU_TEXT)
     } else {

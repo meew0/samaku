@@ -4,11 +4,10 @@
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
 )]
 
-use crate::{action, config, message, pane, subtitle};
+use crate::{action, config, message, model, pane};
 use anyhow::Context as _;
 use iced::widget::pane_grid;
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -68,7 +67,7 @@ pub const METADATA_KEY: &str = "Samaku Project Metadata";
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Project<'a> {
     pane_layout: PaneLayout<'a>,
-    selected_event_indices: Cow<'a, HashSet<subtitle::EventIndex>>,
+    selected_events: Cow<'a, model::select::EventSelection>,
     properties: Cow<'a, Properties>,
 }
 
@@ -85,11 +84,11 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
             .context("Failed to deserialize project metadata")?;
         let Project {
             pane_layout,
-            selected_event_indices,
+            selected_events,
             properties,
         } = project;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
-        global_state.selected_event_indices = selected_event_indices.into_owned();
+        global_state.selected_events = selected_events.into_owned();
         global_state.project_properties = properties.into_owned();
         Ok(true)
     } else {
@@ -104,7 +103,7 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
 
     let project = Project {
         pane_layout,
-        selected_event_indices: Cow::Borrowed(&global_state.selected_event_indices),
+        selected_events: Cow::Borrowed(&global_state.selected_events),
         // TODO store video/audio paths to be relative to the subtitle/project file (e.g. using the `pathdiff` crate)
         properties: Cow::Borrowed(&global_state.project_properties),
     };

@@ -24,17 +24,8 @@ impl super::LocalState for State {
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
         let content: iced::Element<message::Message> =
-            if global_state.selected_event_indices.is_empty() {
-                iced::widget::text("No subtitle currently selected.").into()
-            } else if global_state.selected_event_indices.len() > 1 {
-                // Multiple events selected. We can't meaningfully run the filter on multiple events
-                // at once, even if their filters should match, so display the assignment pane
-                // as a fallback so at least a filter can be assigned to multiple events
-                view_non_selected(self_pane, self, true)
-            } else {
+            if let Some(active_event_index) = global_state.selected_events.active() {
                 // Exactly one event selected
-                let active_event_index =
-                    *global_state.selected_event_indices.iter().next().unwrap();
                 let active_event = &global_state.subtitles.events[active_event_index];
 
                 // Check whether the event has an NDE filter assigned. If yes, display the node editor
@@ -49,6 +40,13 @@ impl super::LocalState for State {
                     }
                     None => view_non_selected(self_pane, self, false),
                 }
+            } else if global_state.selected_events.is_empty() {
+                iced::widget::text("No subtitle currently selected.").into()
+            } else {
+                // Multiple events selected. We can't meaningfully run the filter on multiple events
+                // at once, even if their filters should match, so display the assignment pane
+                // as a fallback so at least a filter can be assigned to multiple events
+                view_non_selected(self_pane, self, true)
             };
 
         super::View {

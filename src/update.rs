@@ -662,101 +662,102 @@ fn update_internal(
             let new_index = global_state.subtitles.events.push(new_event.clone());
             let position = global_state.subtitles.events.position(new_index);
 
-            undo.put_no_batch("Add event", Message::DeleteEvents(vec![new_index]));
-            undo.override_redo(Message::RestoreEvents(vec![(
-                subtitle::Tombstone::new(new_index),
-                position,
-                new_event,
-            )]));
+            let mut to_delete = HashSet::new();
+            to_delete.insert(new_index);
+            undo.put_no_batch("Add event", Message::DeleteEvents(to_delete));
+            undo.override_redo(Message::RestoreEvents(
+                vec![(subtitle::Tombstone::new(new_index), position, new_event)],
+                model::select::EventSelection::default(),
+            ));
         }
-        Message::DeleteEvents(event_indices) => {
-            let mut set = HashSet::from_iter(event_indices);
-            let removed = global_state.subtitles.events.remove_from_set(&mut set);
+        Message::DeleteEvents(set) => {
+            let removed = global_state.subtitles.events.remove_from_set(&set);
+            let deselected = global_state
+                .selected_events
+                .deselect_all(set.iter().copied());
+            notify_selected_events(global_state);
 
-            undo.put_no_batch("Delete events", Message::RestoreEvents(removed));
+            undo.put_no_batch("Delete events", Message::RestoreEvents(removed, deselected));
         }
         Message::DeleteSelectedEvents => {
-            let selected: Vec<subtitle::EventIndex> = global_state
-                .selected_event_indices
-                .iter()
-                .copied()
-                .collect();
+            let selection = global_state.selected_events.clear();
             let removed = global_state
                 .subtitles
                 .events
-                .remove_from_set(&mut global_state.selected_event_indices);
-            global_state.selected_event_indices.clear();
+                .remove_from_set(&selection.indices);
+            notify_selected_events(global_state);
 
-            undo.put_no_batch("Delete events", Message::RestoreEvents(removed));
-            undo.put_no_batch("Delete events", Message::SelectEvents(selected.clone()));
+            let selected = selection.indices.clone();
+            undo.put_no_batch("Delete events", Message::RestoreEvents(removed, selection));
             undo.override_redo(Message::DeleteEvents(selected));
         }
-        Message::RestoreEvents(events) => {
-            let new_indices: Vec<subtitle::EventIndex> = events
+        Message::RestoreEvents(events, selection) => {
+            let new_indices: HashSet<subtitle::EventIndex> = events
                 .into_iter()
                 .map(|(tombstone, pos, event)| {
                     global_state.subtitles.events.restore(tombstone, pos, event)
                 })
                 .collect();
+            global_state.selected_events.select_from(&selection);
+            notify_selected_events(global_state);
 
             undo.put_no_batch("Restore events", Message::DeleteEvents(new_indices));
         }
         Message::ToggleEventSelection(index) => {
-            if global_state.selected_event_indices.contains(&index) {
-                global_state.selected_event_indices.remove(&index);
+            let old_last = global_state.selected_events.last;
+            let previously_selected = if global_state.selected_events.contains(index) {
+                global_state.selected_events.deselect(index);
+                true
             } else {
-                global_state.selected_event_indices.insert(index);
-            }
+                global_state.selected_events.select(index);
+                false
+            };
             notify_selected_events(global_state);
 
-            undo.put_incremental(
+            undo.put_instant(
                 "Toggle event selection",
-                Message::ToggleEventSelection(index),
+                Message::SetEventSelectionSingle(index, previously_selected, old_last),
+            );
+            undo.override_redo(Message::SetEventSelectionSingle(
+                index,
+                !previously_selected,
+                global_state.selected_events.last,
+            ));
+        }
+        Message::SetEventSelectionSingle(index, state, last) => {
+            let (old_state, old_last) = global_state.selected_events.set_single(index, state, last);
+            notify_selected_events(global_state);
+
+            undo.put_instant(
+                "Set event selection (single)",
+                Message::SetEventSelectionSingle(index, old_state, old_last),
             );
         }
         Message::SelectOnlyEvent(index) => {
-            let old = std::mem::take(&mut global_state.selected_event_indices);
-            global_state.selected_event_indices.insert(index);
+            let old = global_state.selected_events.clear();
+            global_state.selected_events.select(index);
             notify_selected_events(global_state);
 
             undo.put_instant("Select event", Message::SetEventSelection(old));
         }
-        Message::SelectEvents(indices) => {
-            global_state
-                .selected_event_indices
-                .extend(indices.iter().copied());
-            notify_selected_events(global_state);
-
-            undo.put_incremental("Select events", Message::DeselectEvents(indices));
-        }
-        Message::DeselectEvents(indices) => {
-            global_state
-                .selected_event_indices
-                .retain(|index| indices.contains(index));
-            notify_selected_events(global_state);
-
-            undo.put_incremental("Deselect events", Message::SelectEvents(indices));
-        }
         Message::SetEventSelection(new_selected_events) => {
-            let old = replace(
-                &mut global_state.selected_event_indices,
-                new_selected_events,
-            );
+            let old = replace(&mut global_state.selected_events, new_selected_events);
             notify_selected_events(global_state);
 
             undo.put_instant("Select events", Message::SetEventSelection(old));
         }
         Message::SelectAllEvents => {
-            let old = replace(
-                &mut global_state.selected_event_indices,
-                HashSet::with_capacity(global_state.subtitles.events.len()),
-            );
-            for event_index in global_state.subtitles.events.iter_indices() {
-                global_state.selected_event_indices.insert(event_index);
-            }
+            let new_selection = model::select::EventSelection {
+                indices: global_state.subtitles.events.iter_indices().collect(),
+                last: None,
+            };
+            let old_selection = replace(&mut global_state.selected_events, new_selection);
             notify_selected_events(global_state);
 
-            undo.put_no_batch("Select all events", Message::SetEventSelection(old));
+            undo.put_no_batch(
+                "Select all events",
+                Message::SetEventSelection(old_selection),
+            );
         }
         Message::MultiEditEventText(new_text) => {
             let old = new_text
@@ -894,20 +895,20 @@ fn update_internal(
             notify_filter_lists(global_state);
         }
         Message::AssignFilterToSelectedEvents(filter_index) => {
-            for selected_event_index in &global_state.selected_event_indices {
-                global_state.subtitles.events[*selected_event_index]
+            for selected_event_index in &global_state.selected_events {
+                global_state.subtitles.events[selected_event_index]
                     .assign_nde_filter(filter_index, &global_state.subtitles.extradata);
             }
         }
         Message::UnassignFilterFromSelectedEvents => {
-            for selected_event_index in &global_state.selected_event_indices {
-                global_state.subtitles.events[*selected_event_index]
+            for selected_event_index in &global_state.selected_events {
+                global_state.subtitles.events[selected_event_index]
                     .unassign_nde_filter(&global_state.subtitles.extradata);
             }
         }
         Message::SetActiveFilterName(new_name) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 filter.name = new_name;
@@ -927,7 +928,7 @@ fn update_internal(
         }
         Message::AddNode(node_constructor) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 let visual_node = nde::graph::VisualNode {
@@ -939,7 +940,7 @@ fn update_internal(
         }
         Message::DeleteNodes(node_ids) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 // Create a visitor that will remap selected subtitles on node editor panes.
@@ -965,7 +966,7 @@ fn update_internal(
         }
         Message::MoveNode(node_id, point) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 let node = &mut filter.graph.nodes[node_id.0];
@@ -974,7 +975,7 @@ fn update_internal(
         }
         Message::MoveNodeGroup(node_ids, delta) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 for node_id in node_ids {
@@ -985,7 +986,7 @@ fn update_internal(
         }
         Message::ConnectNodes(previous, next) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 filter.graph.connect(previous, next);
@@ -993,7 +994,7 @@ fn update_internal(
         }
         Message::DisconnectNodes(previous, next) => {
             if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
             ) {
                 let maybe_previous = filter.graph.disconnect(next);
@@ -1011,7 +1012,7 @@ fn update_internal(
         Message::UpdateReticulePosition(index, position) => {
             if let Some(reticules) = &mut global_state.reticules
                 && let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                    &global_state.selected_event_indices,
+                    &global_state.selected_events,
                     &mut global_state.subtitles.extradata,
                 )
                 && let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index.0)
@@ -1028,7 +1029,7 @@ fn update_internal(
                 // The node can't do this itglobal_state, because it does not know the number of
                 // the current frame.
                 global_state.subtitles.events.update_node(
-                    &global_state.selected_event_indices,
+                    &global_state.selected_events,
                     &mut global_state.subtitles.extradata,
                     node_index,
                     message::Node::MotionTrackUpdate(current_frame, initial_region),
@@ -1037,7 +1038,7 @@ fn update_internal(
                 if let Some(event) = global_state
                     .subtitles
                     .events
-                    .active_event(&global_state.selected_event_indices)
+                    .active_event(&global_state.selected_events)
                 {
                     global_state.workers.emit_track_motion_for_node(
                         node_index,
@@ -1050,7 +1051,7 @@ fn update_internal(
         }
         Message::Node(node_index, node_message) => {
             global_state.subtitles.events.update_node(
-                &global_state.selected_event_indices,
+                &global_state.selected_events,
                 &mut global_state.subtitles.extradata,
                 node_index,
                 node_message,
@@ -1066,7 +1067,7 @@ fn update_internal(
 pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
     for pane in global_state.panes.panes.values_mut() {
         pane.local.update_selected_events(
-            &global_state.selected_event_indices,
+            &global_state.selected_events,
             &global_state.subtitles.events,
         );
     }

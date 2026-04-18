@@ -117,11 +117,10 @@ impl History {
             | Message::AddEvent
             | Message::DeleteEvents(_)
             | Message::DeleteSelectedEvents
-            | Message::RestoreEvents(_)
+            | Message::RestoreEvents(_, _)
             | Message::ToggleEventSelection(_)
+            | Message::SetEventSelectionSingle(_, _, _)
             | Message::SelectOnlyEvent(_)
-            | Message::SelectEvents(_)
-            | Message::DeselectEvents(_)
             | Message::SetEventSelection(_)
             | Message::SelectAllEvents
             | Message::MultiEditEventText(_)
