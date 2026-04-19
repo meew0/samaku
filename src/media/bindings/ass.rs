@@ -10,6 +10,12 @@ use std::sync::Mutex;
 
 use libass_sys as libass;
 
+// On Linux/macOS, va_list is __va_list_tag*. On MSVC Windows, va_list is char* (i8).
+#[cfg(not(target_env = "msvc"))]
+type VaList = libass::__va_list_tag;
+#[cfg(target_env = "msvc")]
+type VaList = i8;
+
 use crate::nde::tags::{Alignment, WrapStyle};
 use crate::subtitle;
 
@@ -97,7 +103,7 @@ impl Library {
     unsafe extern "C" fn internal_callback(
         level: i32,
         format: *const i8,
-        va_list: *mut libass::__va_list_tag,
+        va_list: *mut VaList,
         opaque_data: *mut libc::c_void,
     ) {
         let callback_ptr: *mut Callback = opaque_data.cast();
@@ -184,7 +190,7 @@ impl Drop for Library {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[repr(u32)]
+#[repr(i32)]
 pub enum FontProvider {
     None = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_NONE,
     Autodetect = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_AUTODETECT,
@@ -443,7 +449,7 @@ pub(crate) fn style_to_raw(style: &subtitle::Style) -> RawStyle {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[repr(u32)]
+#[repr(i32)]
 pub enum Feature {
     IncompatibleExtensions = libass::ASS_Feature::ASS_FEATURE_INCOMPATIBLE_EXTENSIONS,
     BidiBrackets = libass::ASS_Feature::ASS_FEATURE_BIDI_BRACKETS,
@@ -586,7 +592,7 @@ impl Track {
             (*self.track).WrapStyle = header.wrap_style as i32;
             (*self.track).ScaledBorderAndShadow = i32::from(header.scaled_border_and_shadow);
             (*self.track).Kerning = i32::from(header.kerning);
-            (*self.track).YCbCrMatrix = header.ycbcr_matrix as u32;
+            (*self.track).YCbCrMatrix = header.ycbcr_matrix as i32;
 
             (*self.track).Language = match header.extra_info.get("Language") {
                 Some(language) => malloc_string(language),
@@ -601,7 +607,7 @@ impl Track {
 
     pub fn set_feature(&mut self, feature: Feature, enable: bool) -> Result<(), ()> {
         let err_val =
-            unsafe { libass::ass_track_set_feature(self.track, feature as u32, i32::from(enable)) };
+            unsafe { libass::ass_track_set_feature(self.track, feature as i32, i32::from(enable)) };
 
         if err_val < 0 { Err(()) } else { Ok(()) }
     }
