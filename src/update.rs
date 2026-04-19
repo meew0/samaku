@@ -1044,6 +1044,10 @@ fn update_internal(
                 pane_state.local.visit(&mut visitor);
             }
 
+            // Clear reticules, just like we cleared the node selection,
+            // since the reticules may have referred to a now-invalid node.
+            global_state.reticules = None;
+
             undo.put_no_batch(
                 "Set filter graph",
                 Message::SetFilterGraph(filter_index, old_graph),
@@ -1074,6 +1078,12 @@ fn update_internal(
 
             if let Some(subtitle::ExtradataEntry::NdeFilter(filter)) = removed {
                 notify_filter_lists(global_state);
+
+                if let Some(reticules) = &mut global_state.reticules
+                    && reticules.source_filter_index == filter_index
+                {
+                    global_state.reticules = None;
+                }
 
                 undo.put_no_batch(
                     "Delete filter",
@@ -1122,6 +1132,15 @@ fn update_internal(
 
             // Delete the nodes (what we actually want to do)
             let mapping = filter.graph.delete_nodes(&node_ids);
+
+            // Remap reticules
+            if let Some(reticules) = &mut global_state.reticules
+                && let Some(new_node_index) = &mapping[reticules.source_node_index.0]
+            {
+                reticules.source_node_index = *new_node_index;
+            } else {
+                global_state.reticules = None;
+            }
 
             // Remap selected node IDs on all node panes
             let mut visitor = Visitor(mapping);
@@ -1195,30 +1214,43 @@ fn update_internal(
             global_state.reticules = Some(reticules);
         }
         Message::UpdateReticulePosition(index, position) => {
-            if let Some(reticules) = &mut global_state.reticules
-                && let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                    &global_state.selected_events,
-                    &mut global_state.subtitles.extradata,
-                )
-                && let Some(node) = filter.graph.nodes.get_mut(reticules.source_node_index.0)
-            {
-                node.node.reticule_update(reticules, index, position);
+            if let Some(reticules) = &mut global_state.reticules {
+                let result = global_state
+                    .subtitles
+                    .extradata
+                    .reticule_update(reticules, index, position);
+
+                if let Some(old_position) = global_state.toasts.anyhow(result) {
+                    // TODO: this undo logic is vulnerable to the list of reticules changing in the meantime,
+                    // since reticule setting is not covered by undo/redo.
+                    // This is only a minor concern, the user would have to act in a very specific way
+                    // to observe aberrant behaviour. Nevertheless it's worth noting here in case
+                    // it ever becomes an actual problem.
+                    undo.put_incremental(
+                        "Move reticule",
+                        Message::UpdateReticulePosition(index, old_position),
+                    );
+                }
             }
         }
-        Message::TrackMotionForNode(node_index, initial_region) => {
+        Message::TrackMotionForNode(filter_index, node_index, initial_region) => {
             if let Some(video_metadata) = global_state.video_metadata {
                 let current_frame = global_state.current_frame().unwrap(); // video is loaded
 
                 // Update the node's cached track to put the marker it requested at the
                 // position of the current frame.
-                // The node can't do this itglobal_state, because it does not know the number of
+                // The node can't do this itself, because it does not know the number of
                 // the current frame.
-                global_state.subtitles.events.update_node(
-                    &global_state.selected_events,
-                    &mut global_state.subtitles.extradata,
-                    node_index,
-                    message::Node::MotionTrackUpdate(current_frame, initial_region),
-                );
+                let result = global_state
+                    .subtitles
+                    .extradata
+                    .update_node(
+                        filter_index,
+                        node_index,
+                        message::Node::MotionTrackUpdate(current_frame, initial_region),
+                    )
+                    .context("Failed to dispatch message to node");
+                global_state.toasts.anyhow(result);
 
                 if let Some(event) = global_state
                     .subtitles
@@ -1226,6 +1258,7 @@ fn update_internal(
                     .active_event(&global_state.selected_events)
                 {
                     global_state.workers.emit_track_motion_for_node(
+                        filter_index,
                         node_index,
                         initial_region,
                         current_frame,
@@ -1234,13 +1267,13 @@ fn update_internal(
                 }
             }
         }
-        Message::Node(node_index, node_message) => {
-            global_state.subtitles.events.update_node(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-                node_index,
-                node_message,
-            );
+        Message::Node(filter_index, node_index, node_message) => {
+            let result = global_state
+                .subtitles
+                .extradata
+                .update_node(filter_index, node_index, node_message)
+                .context("Failed to dispatch message to node");
+            global_state.toasts.anyhow(result);
         }
     }
 

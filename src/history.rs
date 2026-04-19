@@ -160,7 +160,7 @@ impl History {
             Message::None
             | Message::Pane(_, _)
             | Message::FocusedPane(_)
-            | Message::Node(_, _)
+            | Message::Node(_, _, _)
             | Message::SplitPane(_)
             | Message::ClosePane
             | Message::FocusPane(_)
@@ -194,7 +194,7 @@ impl History {
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
             | Message::MultiAssignFiltersToEvents(_, _)
-            | Message::TrackMotionForNode(_, _)
+            | Message::TrackMotionForNode(_, _, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
             | Message::VideoIndexed(_, _) => Key::Fail,

@@ -1,6 +1,6 @@
-use crate::{message, model, nde};
-
 use super::{BasicError, LeafInputType, Node, Shell, SocketType, SocketValue};
+use crate::model::reticule;
+use crate::{message, nde, subtitle};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputEvent;
@@ -100,16 +100,21 @@ impl Node for InputPosition {
         Ok(vec![SocketValue::Position(self.value)])
     }
 
-    fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
+    fn content<'a>(
+        &self,
+        filter_index: subtitle::ExtradataId,
+        self_index: nde::graph::NodeId,
+    ) -> iced::Element<'a, message::Message> {
         let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
-            model::reticule::Reticules {
-                list: vec![model::reticule::Reticule {
-                    shape: model::reticule::Shape::Cross,
+            reticule::Reticules::new(
+                vec![reticule::Reticule {
+                    shape: reticule::Shape::Cross,
                     position: self.value,
                     radius: 15.0,
                 }],
-                source_node_index: self_index,
-            },
+                filter_index,
+                self_index,
+            ),
         ));
 
         let column = iced::widget::column![
@@ -126,16 +131,18 @@ impl Node for InputPosition {
 
     fn reticule_update(
         &mut self,
-        reticules: &mut model::reticule::Reticules,
-        index: usize,
+        reticules: &mut reticule::Reticules,
+        index: reticule::Index,
         new_position: nde::tags::Position,
-    ) {
-        if index != 0 {
-            return;
+    ) -> anyhow::Result<nde::tags::Position> {
+        if index.0 != 0 {
+            anyhow::bail!("Reticule index out of range: {index}");
         }
 
-        reticules.list[0].position = new_position;
+        let old_position = std::mem::replace(&mut reticules[index].position, new_position);
         self.value = new_position;
+
+        Ok(old_position)
     }
 
     fn content_size(&self) -> iced::Size {
@@ -161,7 +168,7 @@ pub struct InputRectangle {
 }
 
 impl InputRectangle {
-    fn reticule_update_internal(&self, reticules: &mut [model::reticule::Reticule]) {
+    fn reticule_update_internal(&self, reticules: &mut [reticule::Reticule]) {
         assert!(reticules.len() > 3); // Elide bounds checks
 
         reticules[0].position = nde::tags::Position {
@@ -201,25 +208,29 @@ impl Node for InputRectangle {
         Ok(vec![SocketValue::Rectangle(self.value)])
     }
 
-    fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
+    fn content<'a>(
+        &self,
+        filter_index: subtitle::ExtradataId,
+        self_index: nde::graph::NodeId,
+    ) -> iced::Element<'a, message::Message> {
         let mut reticules = vec![
-            model::reticule::Reticule {
-                shape: model::reticule::Shape::CornerTopLeft,
+            reticule::Reticule {
+                shape: reticule::Shape::CornerTopLeft,
                 position: nde::tags::Position::default(),
                 radius: 15.0,
             },
-            model::reticule::Reticule {
-                shape: model::reticule::Shape::CornerTopRight,
+            reticule::Reticule {
+                shape: reticule::Shape::CornerTopRight,
                 position: nde::tags::Position::default(),
                 radius: 15.0,
             },
-            model::reticule::Reticule {
-                shape: model::reticule::Shape::CornerBottomLeft,
+            reticule::Reticule {
+                shape: reticule::Shape::CornerBottomLeft,
                 position: nde::tags::Position::default(),
                 radius: 15.0,
             },
-            model::reticule::Reticule {
-                shape: model::reticule::Shape::CornerBottomRight,
+            reticule::Reticule {
+                shape: reticule::Shape::CornerBottomRight,
                 position: nde::tags::Position::default(),
                 radius: 15.0,
             },
@@ -228,10 +239,7 @@ impl Node for InputRectangle {
         self.reticule_update_internal(&mut reticules);
 
         let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
-            model::reticule::Reticules {
-                list: reticules,
-                source_node_index: self_index,
-            },
+            reticule::Reticules::new(reticules, filter_index, self_index),
         ));
 
         let column = iced::widget::column![
@@ -251,44 +259,55 @@ impl Node for InputRectangle {
 
     fn reticule_update(
         &mut self,
-        reticules: &mut model::reticule::Reticules,
-        index: usize,
+        reticules: &mut reticule::Reticules,
+        index: reticule::Index,
         new_position: nde::tags::Position,
-    ) {
+    ) -> anyhow::Result<nde::tags::Position> {
         let mut new_value = self.value;
+
+        let (x_mut, y_mut) = match index.0 {
+            0 => {
+                // top left
+                (&mut new_value.x1, &mut new_value.y1)
+            }
+            1 => {
+                // top right
+                (&mut new_value.x2, &mut new_value.y1)
+            }
+            2 => {
+                // bottom left
+                (&mut new_value.x1, &mut new_value.y2)
+            }
+            3 => {
+                // bottom right
+                (&mut new_value.x2, &mut new_value.y2)
+            }
+            _ => {
+                anyhow::bail!("Reticule index out of range: {}", index.0);
+            }
+        };
 
         #[expect(
             clippy::cast_possible_truncation,
             reason = "extremely large values not expected in UI code"
         )]
-        match index {
-            0 => {
-                // top left
-                new_value.x1 = new_position.x as i32;
-                new_value.y1 = new_position.y as i32;
-            }
-            1 => {
-                // top right
-                new_value.x2 = new_position.x as i32;
-                new_value.y1 = new_position.y as i32;
-            }
-            2 => {
-                // bottom left
-                new_value.x1 = new_position.x as i32;
-                new_value.y2 = new_position.y as i32;
-            }
-            3 => {
-                // bottom right
-                new_value.x2 = new_position.x as i32;
-                new_value.y2 = new_position.y as i32;
-            }
-            _ => {}
-        }
+        let old_x = std::mem::replace(x_mut, new_position.x as i32);
+
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "extremely large values not expected in UI code"
+        )]
+        let old_y = std::mem::replace(y_mut, new_position.y as i32);
 
         if new_value.is_positive() {
             self.value = new_value;
             self.reticule_update_internal(&mut reticules.list);
         }
+
+        Ok(nde::tags::Position {
+            x: f64::from(old_x),
+            y: f64::from(old_y),
+        })
     }
 
     fn content_size(&self) -> iced::Size {
@@ -348,10 +367,18 @@ impl Node for InputTags {
         ])
     }
 
-    fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
+    fn content<'a>(
+        &self,
+        filter_index: subtitle::ExtradataId,
+        self_index: nde::graph::NodeId,
+    ) -> iced::Element<'a, message::Message> {
         let input =
             iced::widget::text_input("\\1c&HFF0000&", &self.value).on_input(move |new_text| {
-                message::Message::Node(self_index, message::Node::TextInputChanged(new_text))
+                message::Message::Node(
+                    filter_index,
+                    self_index,
+                    message::Node::TextInputChanged(new_text),
+                )
             });
 
         let column = iced::widget::column![input];
@@ -363,9 +390,12 @@ impl Node for InputTags {
             .into()
     }
 
-    fn update(&mut self, message: message::Node) {
+    fn update(&mut self, message: message::Node) -> anyhow::Result<()> {
         if let message::Node::TextInputChanged(value) = message {
             self.value = value;
+            Ok(())
+        } else {
+            anyhow::bail!("Invalid message type, expected TextInputChanged");
         }
     }
 

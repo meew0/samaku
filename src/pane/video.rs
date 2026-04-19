@@ -122,7 +122,7 @@ struct ReticuleProgram<'a> {
 
 #[derive(Default)]
 struct ReticuleState {
-    dragging: Option<usize>,
+    dragging: Option<model::reticule::Index>,
     drag_offset: iced::Vector,
 }
 
@@ -131,11 +131,15 @@ impl ReticuleProgram<'_> {
         &self,
         mouse_position: iced::Point,
         bounds: iced::Rectangle,
-    ) -> Option<(usize, &model::reticule::Reticule, iced::Point)> {
+    ) -> Option<(
+        model::reticule::Index,
+        &model::reticule::Reticule,
+        iced::Point,
+    )> {
         for (i, reticule) in self.reticules.iter().enumerate().rev() {
             let iced_pos = reticule.iced_position(bounds.size(), self.storage_size);
             if iced_pos.distance(mouse_position) < reticule.radius {
-                return Some((i, reticule, iced_pos));
+                return Some((model::reticule::Index(i), reticule, iced_pos));
             }
         }
 
@@ -158,10 +162,10 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         {
             match mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
-                    if let Some((i, _reticule, iced_pos)) =
+                    if let Some((index, _reticule, iced_pos)) =
                         self.find_hovered_reticule(position, bounds)
                     {
-                        state.dragging = Some(i);
+                        state.dragging = Some(index);
                         state.drag_offset = position - iced_pos;
                         return Some(Action::capture());
                     }
@@ -211,7 +215,7 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
             .map(|(i, _, _)| i);
 
         for (i, reticule) in self.reticules.iter().enumerate() {
-            let hovered = hovered_reticule_index.is_some_and(|hovered_index| i == hovered_index);
+            let hovered = hovered_reticule_index.is_some_and(|hovered_index| i == hovered_index.0);
             let alpha_factor: f32 = if hovered { 0.4 } else { 0.2 };
             let center_point = reticule.iced_position(bounds.size(), self.storage_size);
 

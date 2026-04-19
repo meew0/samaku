@@ -1,5 +1,5 @@
-use crate::subtitle::{Duration, Event, Extradata, StartTime, compile};
-use crate::{message, model, nde};
+use super::{Duration, Event, Extradata, StartTime, compile};
+use crate::{model, nde};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::mem::replace;
@@ -358,21 +358,6 @@ impl EventTrack {
     ) -> Option<&'a mut nde::Filter> {
         let event = self.active_event(selected_events)?;
         extradata.nde_filter_for_event_mut(event)
-    }
-
-    /// Dispatch message to node.
-    pub fn update_node(
-        &self,
-        selected_events: &model::select::EventSelection,
-        extradata: &mut Extradata,
-        node_index: nde::graph::NodeId,
-        message: message::Node,
-    ) {
-        if let Some(filter) = self.active_nde_filter_mut(selected_events, extradata)
-            && let Some(node) = filter.graph.nodes.get_mut(node_index.0)
-        {
-            node.node.update(message);
-        }
     }
 
     /// Iterate over the event indices in the given range, in an undefined order.

@@ -1,12 +1,13 @@
 use std::{sync::Arc, thread};
 
-use crate::{media, message, model, nde};
+use crate::{media, message, model, nde, subtitle};
 
 #[derive(Debug)]
 pub(super) enum MessageIn {
     PlaybackStep,
     LoadVideo(std::path::PathBuf, media::Index),
     TrackMotionForNode(
+        subtitle::ExtradataId,
         nde::graph::NodeId,
         media::motion::Region,
         model::FrameNumber,
@@ -32,7 +33,7 @@ pub(super) fn spawn(
             let mut video_opt: Option<media::Video> = None;
             let mut last_frame = model::FrameNumber(-1);
 
-            let mut node_index = nde::graph::NodeId(0);
+            let mut node_index_opt: Option<(subtitle::ExtradataId, nde::graph::NodeId)> = None;
             let mut tracker_opt: Option<media::motion::Tracker<media::Video>> = None;
 
             loop {
@@ -48,7 +49,9 @@ pub(super) fn spawn(
 
                             match result {
                                 media::motion::TrackResult::Success => {
+                                    let (filter_index, node_index) = node_index_opt.expect("motion tracking succeeded, but missing target node to send result to");
                                     tx_out.send(message::Message::Node(
+                                        filter_index,
                                         node_index,
                                         message::Node::MotionTrackUpdate(
                                             tracker.last_tracked_frame(),
@@ -117,13 +120,14 @@ pub(super) fn spawn(
                             }
                         }
                         MessageIn::TrackMotionForNode(
+                        new_filter_index,
                             new_node_index,
                             initial_region,
                             start_frame,
                             end_frame,
                         ) => {
                             if let Some(ref video) = video_opt {
-                                node_index = new_node_index;
+                                node_index_opt = Some((new_filter_index, new_node_index));
                                 tracker_opt = Some(media::motion::Tracker::new(
                                     video,
                                     media::Video::get_libmv_patch,

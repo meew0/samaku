@@ -235,22 +235,32 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
-    fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
+    fn content<'a>(
+        &self,
+        filter_index: subtitle::ExtradataId,
+        self_index: nde::graph::NodeId,
+    ) -> iced::Element<'a, message::Message> {
         iced::widget::space().into()
     }
 
     /// Called when a message for this node is received.
-    fn update(&mut self, message: message::Node) {}
+    fn update(&mut self, message: message::Node) -> anyhow::Result<()> {
+        anyhow::bail!("Node '{}' does not know how to handle message", self.name());
+    }
 
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.
+    /// For undo purposes, this should return the former position. Also, the logic should be reversible,
+    /// such that if afterwards, `reticule_update` is called again with the previous position, it should
+    /// put the node in the same state as it would have been before.
     fn reticule_update(
         &mut self,
         reticules: &mut model::reticule::Reticules,
-        index: usize,
+        index: model::reticule::Index,
         new_position: nde::tags::Position,
-    ) {
+    ) -> anyhow::Result<nde::tags::Position> {
+        anyhow::bail!("Node '{}' does not provide any reticules", self.name());
     }
 
     /// The node's content size, used for layouting the content.

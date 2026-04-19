@@ -18,7 +18,7 @@ pub use import::import;
 use crate::nde::tags::{
     Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
 };
-use crate::{media, model, nde, style};
+use crate::{media, message, model, nde, style};
 
 pub mod compile;
 mod emit;
@@ -1041,6 +1041,47 @@ impl Extradata {
         };
 
         Some(filter)
+    }
+
+    /// Dispatch message to node.
+    pub fn update_node(
+        &mut self,
+        filter_index: ExtradataId,
+        node_index: nde::graph::NodeId,
+        message: message::Node,
+    ) -> anyhow::Result<()> {
+        let node = self.get_node(filter_index, node_index)?;
+        node.node.update(message)
+    }
+
+    /// Notify a node that a reticule has been moved.
+    pub fn reticule_update(
+        &mut self,
+        reticules: &mut model::reticule::Reticules,
+        reticule_index: model::reticule::Index,
+        position: nde::tags::Position,
+    ) -> anyhow::Result<nde::tags::Position> {
+        let node = self.get_node(reticules.source_filter_index, reticules.source_node_index)?;
+        node.node
+            .reticule_update(reticules, reticule_index, position)
+    }
+
+    fn get_node(
+        &mut self,
+        filter_index: ExtradataId,
+        node_index: nde::graph::NodeId,
+    ) -> anyhow::Result<&mut nde::graph::VisualNode> {
+        let Some(entry) = self.entries.get_mut(&filter_index) else {
+            anyhow::bail!("Extradata entry does not exist at index {}", filter_index.0);
+        };
+        let ExtradataEntry::NdeFilter(filter) = entry else {
+            anyhow::bail!("Extradata at index {} is not an NDE filter", filter_index.0);
+        };
+        let Some(node) = filter.graph.nodes.get_mut(node_index.0) else {
+            anyhow::bail!("Could not find node at index {}", node_index.0);
+        };
+
+        Ok(node)
     }
 }
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::{media, message, model, nde};
+use crate::{media, message, model, nde, subtitle};
+use model::reticule;
 
 use super::{Node, Shell, SocketType, SocketValue};
 
@@ -51,16 +52,21 @@ impl Node for MotionTrack {
         Ok(vec![SocketValue::MultipleEvents(new_events)])
     }
 
-    fn content<'a>(&self, self_index: nde::graph::NodeId) -> iced::Element<'a, message::Message> {
+    fn content<'a>(
+        &self,
+        filter_index: subtitle::ExtradataId,
+        self_index: nde::graph::NodeId,
+    ) -> iced::Element<'a, message::Message> {
         let set_marker_button = iced::widget::button("Set marker").on_press(
-            message::Message::SetReticules(model::reticule::Reticules {
-                list: vec![model::reticule::Reticule {
-                    shape: model::reticule::Shape::Cross,
+            message::Message::SetReticules(reticule::Reticules::new(
+                vec![reticule::Reticule {
+                    shape: reticule::Shape::Cross,
                     position: self.region_center,
                     radius: 15.0,
                 }],
-                source_node_index: self_index,
-            }),
+                filter_index,
+                self_index,
+            )),
         );
 
         let initial_point = media::motion::Point {
@@ -69,7 +75,7 @@ impl Node for MotionTrack {
         };
         let initial_region = media::motion::Region::from_center_and_radius(initial_point, 20.0);
         let track_button = iced::widget::button("Track").on_press(
-            message::Message::TrackMotionForNode(self_index, initial_region),
+            message::Message::TrackMotionForNode(filter_index, self_index, initial_region),
         );
 
         let column = iced::widget::column![
@@ -85,24 +91,29 @@ impl Node for MotionTrack {
             .into()
     }
 
-    fn update(&mut self, message: message::Node) {
+    fn update(&mut self, message: message::Node) -> anyhow::Result<()> {
         if let message::Node::MotionTrackUpdate(relative_frame, region) = message {
             self.track.insert(relative_frame, region);
+            Ok(())
+        } else {
+            anyhow::bail!("Invalid message type, expected MotionTrackUpdate");
         }
     }
 
     fn reticule_update(
         &mut self,
-        reticules: &mut model::reticule::Reticules,
-        index: usize,
+        reticules: &mut reticule::Reticules,
+        index: reticule::Index,
         new_position: nde::tags::Position,
-    ) {
-        if index != 0 {
-            return;
+    ) -> anyhow::Result<nde::tags::Position> {
+        if index.0 != 0 {
+            anyhow::bail!("Reticule index out of range: {index}");
         }
 
-        reticules.list[0].position = new_position;
+        let old_position = std::mem::replace(&mut reticules[index].position, new_position);
         self.region_center = new_position;
+
+        Ok(old_position)
     }
 
     fn content_size(&self) -> iced::Size {

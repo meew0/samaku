@@ -19,7 +19,7 @@ pub enum Message {
 
     /// Message pertaining to a specific node. Will be dispatched to the given node,
     /// if it exists.
-    Node(nde::graph::NodeId, Node),
+    Node(subtitle::ExtradataId, nde::graph::NodeId, Node),
 
     /// The currently pressed keyboard modifiers (control, shift, etc) have changed.
     ModifiersChanged(iced::keyboard::Modifiers),
@@ -237,11 +237,15 @@ pub enum Message {
     // Create and update reticules — the controls visible on top of the video when triggered by
     // certain NDE nodes.
     SetReticules(model::reticule::Reticules),
-    UpdateReticulePosition(usize, nde::tags::Position),
+    UpdateReticulePosition(model::reticule::Index, nde::tags::Position),
 
     /// Tell the video playback worker to start motion tracking and sending the results to the
     /// node with the given ID.
-    TrackMotionForNode(nde::graph::NodeId, media::motion::Region),
+    TrackMotionForNode(
+        subtitle::ExtradataId,
+        nde::graph::NodeId,
+        media::motion::Region,
+    ),
 }
 
 impl Message {

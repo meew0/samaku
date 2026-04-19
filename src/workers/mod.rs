@@ -1,6 +1,6 @@
 use std::{cell::RefCell, thread};
 
-use crate::{media, message, model, nde};
+use crate::{media, message, model, nde, subtitle};
 
 mod cpal_playback;
 mod indexer;
@@ -122,6 +122,7 @@ impl Workers {
 
     pub fn emit_track_motion_for_node(
         &self,
+        filter_index: subtitle::ExtradataId,
         node_index: nde::graph::NodeId,
         initial_region: media::motion::Region,
         start_frame: model::FrameNumber,
@@ -129,6 +130,7 @@ impl Workers {
     ) {
         self.video_decoder
             .dispatch(video_decoder::MessageIn::TrackMotionForNode(
+                filter_index,
                 node_index,
                 initial_region,
                 start_frame,

@@ -259,7 +259,7 @@ fn view_filter<'a>(
 
     // Create `node_editor` nodes with sockets for each of the nodes in the filter,
     // and append them to the content
-    create_nodes(&mut graph, nde_filter, &nde_result_or_error);
+    create_nodes(&mut graph, nde_filter_id, nde_filter, &nde_result_or_error);
     create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
     view_graph(
@@ -328,6 +328,7 @@ fn create_graph(
 
 fn create_nodes(
     graph: &mut NodeGraph,
+    nde_filter_id: subtitle::ExtradataId,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
@@ -387,7 +388,8 @@ fn create_nodes(
         );
         let node_element: iced::Element<'_, message::Message> = iced::widget::column![
             title_bar,
-            iced::widget::container(visual_node.node.content(node_id)).padding([10, 12]),
+            iced::widget::container(visual_node.node.content(nde_filter_id, node_id))
+                .padding([10, 12]),
             iced::widget::container(pin_list).padding([10, 12])
         ]
         .width(200.0)

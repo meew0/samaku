@@ -1,9 +1,48 @@
 use crate::{nde, subtitle};
 
+#[derive(Debug, Clone, Copy)]
+pub struct Index(pub usize);
+
+impl std::fmt::Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Reticules {
     pub list: Vec<Reticule>,
+    pub source_filter_index: subtitle::ExtradataId,
     pub source_node_index: nde::graph::NodeId,
+}
+
+impl Reticules {
+    #[must_use]
+    pub fn new(
+        list: Vec<Reticule>,
+        source_filter_index: subtitle::ExtradataId,
+        source_node_index: nde::graph::NodeId,
+    ) -> Self {
+        Self {
+            list,
+            source_filter_index,
+            source_node_index,
+        }
+    }
+}
+
+impl std::ops::Index<Index> for Reticules {
+    type Output = Reticule;
+
+    fn index(&self, index: Index) -> &Self::Output {
+        &self.list[index.0]
+    }
+}
+
+impl std::ops::IndexMut<Index> for Reticules {
+    fn index_mut(&mut self, index: Index) -> &mut Self::Output {
+        &mut self.list[index.0]
+    }
 }
 
 #[derive(Debug, Clone)]
