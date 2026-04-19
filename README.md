@@ -8,13 +8,18 @@ without redoing the sign entirely. Instead of destructive Lua macros, samaku inc
 non-destructive editing, where a node graph corresponds to a chain of transformations that are instantly, automatically
 rerun when the inputs are changed.
 
-Note that samaku is **extremely incomplete** and **absolutely not ready for production use**. The node editor works in
-principle, but so far the selection of nodes is very limited, with no way to do most of the important tasks in
-typesetting. Also, there will be many bugs and other inconveniences.
+A secondary goal of samaku is to be an extremely high-performance ASS subtitle editor, effortlessly supporting giant
+subtitle files (several hundred megabytes or more, hundreds of thousands of events or more).
 
-I make absolutely no promises that I will continue to develop samaku into a usable tool; in fact, it is pretty likely I
-will eventually lose interest or become too busy with something else, given how ambitious this project is. Maybe it will
-still be useful educationally.
+Note that samaku is currently in a pre-alpha state. It is **very incomplete** and **not yet ready for production use**.
+Most of the foundational work has been done and the app can be used for basic subtitle editing, and the node editor with
+its NDE paradigm works in principle. However, so far the selection of nodes is very limited, with no way to do most of
+the important tasks in typesetting. Also, there will be many bugs and other inconveniences. The app is still lacking
+significant polish in most areas.
+
+I make no promises that I will continue to develop samaku into a usable tool. I tend to work on it in short bursts every
+now and then, with significant latency periods in between. Nevertheless, I am glad if it can be of interest for someone,
+even educationally.
 
 ## Project structure
 
@@ -23,14 +28,18 @@ Technology-wise, samaku uses
 - Rust,
 - [iced](https://github.com/iced-rs/iced) for the UI,
 - [libass](https://github.com/libass/libass) for subtitle rendering,
-- [ffms2](https://github.com/FFMS/ffms2) for audio and video decoding,
-- and [libmv](https://projects.blender.org/blender/libmv) for motion tracking.
+- [ffms2](https://github.com/FFMS/ffms2) + [ffms2-sys](https://crates.io/crates/ffms2-sys) for audio and video decoding,
+- and [libmv](https://projects.blender.org/blender/libmv) + [libmv-capi-sys](https://crates.io/crates/libmv-capi-sys)
+  for motion tracking.
+
+See the [Cargo.toml](https://github.com/meew0/samaku/blob/master/Cargo.toml) for a full list of dependencies.
 
 To understand the project structure, you should have a basic idea of
 how [iced projects are structured in general](https://github.com/iced-rs/iced#overview). The application lives in
-`src/lib.rs`, with the `Samaku` struct containing the state; the messages are defined in `src/message.rs`. For the most
-part, the application consists of a **pane grid**, containing **panes** with their own view and update logic; these live
-in the `pane` module. Apart from that, there are the following modules in `src`:
+`src/lib.rs`, with the `Samaku` struct containing the state; the messages are defined in `src/message.rs`. The global
+update method is in `src/update.rs`. For the most part, the application consists of a **pane grid**, containing **panes
+** with their own view and update logic; these live in the `pane` module. Apart from that, there are the following
+modules in `src`:
 
 - `media/bindings`: Thin but safe bindings around the various media libraries.
 - `media`: More integrated bindings to provide specifically the features samaku needs.
@@ -39,6 +48,7 @@ in the `pane` module. Apart from that, there are the following modules in `src`:
 - `nde/tags`: Code for parsing, manipulating, and emitting ASS override tags. (I intend to eventually extract this
   module into its own crate, for use by others.)
 - `nde`: Other glue code for non-destructive editing.
+- `pane`: Panes of the pane grid (as mentioned above).
 - `resources`: Static resources needed for the UI.
 - `subtitle`: samaku's internal representations of ASS subtitle data.
 - `view`: UI utilities and custom widgets.
@@ -50,26 +60,34 @@ Apart from samaku's own code, there are the following modules in the root folder
 - `tests`: Integration tests, mainly also for ASS tag handling code.
 - `test_files`: Static files used for tests.
 - `libass-sys`: Unsafe FFI bindings for libass.
+- `packaging`: Utilities for packaging samaku for distribution.
 
 ## How to run
 
-Currently only tested on Linux.
+Tested on Linux and Windows.
+
+### Linux
 
 - Install dependencies:
     - [libass](https://github.com/libass/libass) (including headers)
     - [ffms2](https://github.com/FFMS/ffms2) (including headers)
-    - Dependencies for [libmv-capi-sys](https://github.com/meew0/libmv-capi-sys#dependencies-dynamic-vs-static-linking):
-      [GOMP](https://gcc.gnu.org/projects/gomp/), [SuiteSparse](https://people.engr.tamu.edu/davis/suitesparse.html),
-      and
-      [OpenBLAS](https://www.openblas.net/)
 - Run `cargo test` to ensure the dependencies have been installed correctly.
-- Then, start the program using `cargo run`.
+- Then, start the program using `cargo run` (debug mode) or `cargo run --release` (release mode).
+
+It is also possible to build samaku as an AppImage using the `packaging/build-appimage.sh` script.
+
+### Windows
+
+See [WINDOWS_BUILD.md](https://github.com/meew0/samaku/blob/master/WINDOWS_BUILD.md).
+
+### Usage
 
 For actually using samaku, please also take a look at `src/keyboard.rs`, which defines global keyboard shortcuts for
 functionality that is not yet mapped to any buttons or the like in the UI.
 
-## Licence notes
+## License notes
 
-samaku as a whole is licenced under the GPLv3, whose text is available in the `LICENSE-GPL` file in the project root.
+samaku as a whole is licensed under the GPLv3, whose text is available in the `LICENSE-GPL` file in the project root.
 
-I eventually plan to extract parts of the code and make it available under more permissive licences.
+I plan to eventually extract parts of the code (in particular, the ASS override tag processing code) and make it
+available under more permissive licenses.
