@@ -289,6 +289,21 @@ impl Message {
             Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
         }
     }
+
+    /// Returns the internal name of the message variant.
+    pub fn name(&self) -> String {
+        #[expect(
+            clippy::pointer_format,
+            reason = "even if pointer formatting was a problem for samaku, we don't actually use the data part of the result"
+        )]
+        let debug = format!("{self:?}");
+
+        if let Some(pos) = debug.find('(') {
+            debug[..pos].to_owned()
+        } else {
+            debug
+        }
+    }
 }
 
 // Utility functions to create toasts
@@ -327,4 +342,15 @@ pub enum Node {
 
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn name() {
+        let message = Message::Playing(true);
+        assert_eq!(message.name(), "Playing");
+    }
 }

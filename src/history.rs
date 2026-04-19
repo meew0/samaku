@@ -150,7 +150,6 @@ impl History {
             | Message::ConnectNodes(_, _, _)
             | Message::DisconnectNodes(_, _, _)
             | Message::SetNodeConnection(_, _, _)
-            | Message::SetReticules(_)
             | Message::UpdateReticulePosition(_, _) => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
@@ -194,6 +193,7 @@ impl History {
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
             | Message::MultiAssignFiltersToEvents(_, _)
+            | Message::SetReticules(_)
             | Message::TrackMotionForNode(_, _, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
@@ -211,6 +211,10 @@ impl History {
             if node.undo.is_empty() {
                 // No data was put into this node
                 // (almost certainly because undo/redo is NYI for this particular message)
+                println!(
+                    "Missing undo information for node: {:?}",
+                    node.redo.last().unwrap().name()
+                );
                 return;
             }
 
