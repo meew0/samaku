@@ -205,6 +205,7 @@ pub enum Message {
         HashSet<subtitle::EventIndex>,
     ),
     SetFilterName(subtitle::ExtradataId, String),
+    SetFilterGraph(subtitle::ExtradataId, nde::Graph),
     DeleteFilter(subtitle::ExtradataId),
     RestoreFilter(
         subtitle::ExtradataId,
@@ -212,13 +213,26 @@ pub enum Message {
         Vec<subtitle::EventIndex>,
     ),
 
-    // Create and update nodes in the current NDE filter.
-    AddNode(nde::node::Constructor),
-    DeleteNodes(Vec<nde::graph::NodeId>),
-    MoveNode(nde::graph::NodeId, iced::Point),
-    MoveNodeGroup(Vec<nde::graph::NodeId>, iced::Vector),
-    ConnectNodes(nde::graph::PreviousEndpoint, nde::graph::NextEndpoint),
-    DisconnectNodes(nde::graph::PreviousEndpoint, nde::graph::NextEndpoint),
+    // Create and update nodes in the specified NDE filter.
+    AddNode(subtitle::ExtradataId, nde::node::Constructor),
+    DeleteNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
+    MoveNode(subtitle::ExtradataId, nde::graph::NodeId, iced::Point),
+    MoveNodeGroup(subtitle::ExtradataId, Vec<nde::graph::NodeId>, iced::Vector),
+    ConnectNodes(
+        subtitle::ExtradataId,
+        nde::graph::PreviousEndpoint,
+        nde::graph::NextEndpoint,
+    ),
+    DisconnectNodes(
+        subtitle::ExtradataId,
+        nde::graph::PreviousEndpoint,
+        nde::graph::NextEndpoint,
+    ),
+    SetNodeConnection(
+        subtitle::ExtradataId,
+        Option<nde::graph::PreviousEndpoint>,
+        nde::graph::NextEndpoint,
+    ),
 
     // Create and update reticules — the controls visible on top of the video when triggered by
     // certain NDE nodes.

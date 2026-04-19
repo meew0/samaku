@@ -100,6 +100,10 @@ impl super::LocalState for State {
 }
 
 impl State {
+    pub fn clear_selected(&mut self) {
+        self.selected_nodes.clear();
+    }
+
     pub fn remap_selected(&mut self, mapping: &[Option<NodeId>]) {
         self.selected_nodes.retain_mut(|id| {
             if let Some(new_id) = mapping[id.0] {
@@ -251,7 +255,7 @@ fn view_filter<'a>(
     let nde_result_or_error = subtitle::compile::nde(active_event, &nde_filter.graph, &context);
 
     // Create the (empty) node graph
-    let mut graph = create_graph(self_pane, pane_state);
+    let mut graph = create_graph(self_pane, pane_state, nde_filter_id);
 
     // Create `node_editor` nodes with sockets for each of the nodes in the filter,
     // and append them to the content
@@ -267,12 +271,17 @@ fn view_filter<'a>(
     )
 }
 
-fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<'_>> {
+fn create_graph(
+    self_pane: super::Pane,
+    pane_state: &'_ State,
+    nde_filter_id: subtitle::ExtradataId,
+) -> Box<NodeGraph<'_>> {
     let mut graph: NodeGraph = iced_nodegraph::NodeGraph::default();
 
     graph = graph
-        .on_connect(|previous, next| {
+        .on_connect(move |previous, next| {
             message::Message::ConnectNodes(
+                nde_filter_id,
                 nde::graph::PreviousEndpoint {
                     node_index: previous.node_id,
                     socket_index: previous.pin_id.socket_id(),
@@ -283,8 +292,9 @@ fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<
                 },
             )
         })
-        .on_disconnect(|previous, next| {
+        .on_disconnect(move |previous, next| {
             message::Message::DisconnectNodes(
+                nde_filter_id,
                 nde::graph::PreviousEndpoint {
                     node_index: previous.node_id,
                     socket_index: previous.pin_id.socket_id(),
@@ -295,18 +305,20 @@ fn create_graph(self_pane: super::Pane, pane_state: &'_ State) -> Box<NodeGraph<
                 },
             )
         })
-        .on_move(message::Message::MoveNode)
+        .on_move(move |node_id, point| message::Message::MoveNode(nde_filter_id, node_id, point))
         .on_select(move |nodes| {
             message::Message::Pane(self_pane, message::Pane::NodeEditorSelectionChanged(nodes))
         })
-        .on_group_move(message::Message::MoveNodeGroup)
+        .on_group_move(move |node_ids, vector| {
+            message::Message::MoveNodeGroup(nde_filter_id, node_ids, vector)
+        })
         .on_camera_change(move |position, zoom| {
             message::Message::Pane(
                 self_pane,
                 message::Pane::NodeEditorCameraChanged(position, zoom),
             )
         })
-        .on_delete(message::Message::DeleteNodes)
+        .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
@@ -518,7 +530,7 @@ fn view_graph<'a>(
     nde_result_or_error: &Result<NdeResult, NdeError>,
     graph: Box<NodeGraph<'a>>,
 ) -> iced::Element<'a, message::Message> {
-    let menu_bar = iced_aw::menu::MenuBar::new(add_menu())
+    let menu_bar = iced_aw::menu::MenuBar::new(add_menu(nde_filter_id))
         .width(180)
         .height(32);
 
@@ -816,9 +828,13 @@ fn make_pin_row<'a>(
 
 fn menu_item(
     label: &'_ str,
+    nde_filter_id: subtitle::ExtradataId,
     node_constructor: nde::node::Constructor,
 ) -> iced_aw::menu::Item<'_, message::Message, iced::Theme, iced::Renderer> {
-    view::menu::item(label, message::Message::AddNode(node_constructor))
+    view::menu::item(
+        label,
+        message::Message::AddNode(nde_filter_id, node_constructor),
+    )
 }
 
 fn sub_menu<'a>(
@@ -828,24 +844,32 @@ fn sub_menu<'a>(
     view::menu::sub_menu(label, message::Message::None, children)
 }
 
-fn add_menu<'a>() -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
+fn add_menu<'a>(
+    nde_filter_id: subtitle::ExtradataId,
+) -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     vec![iced_aw::menu::Item::with_menu(
         iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
-        iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE))
+        iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE, nde_filter_id))
             .width(iced::Length::Fixed(150.0)),
     )]
 }
 
 fn children_from_shell_tree(
     tree: &'_ ShellMap,
+    nde_filter_id: subtitle::ExtradataId,
 ) -> Vec<iced_aw::menu::Item<'_, message::Message, iced::Theme, iced::Renderer>> {
     let mut children = vec![];
 
     for (name, child) in tree {
         match child {
-            MenuShell::Item(constructor) => children.push(menu_item(name.as_str(), *constructor)),
+            MenuShell::Item(constructor) => {
+                children.push(menu_item(name.as_str(), nde_filter_id, *constructor));
+            }
             MenuShell::SubMenu(sub_tree) => {
-                children.push(sub_menu(name.as_str(), children_from_shell_tree(sub_tree)));
+                children.push(sub_menu(
+                    name.as_str(),
+                    children_from_shell_tree(sub_tree, nde_filter_id),
+                ));
             }
         }
     }

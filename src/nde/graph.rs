@@ -111,12 +111,28 @@ impl Graph {
         );
     }
 
-    pub fn connect(&mut self, previous: PreviousEndpoint, next: NextEndpoint) {
-        self.connections.insert(next, previous);
+    pub fn connect(
+        &mut self,
+        previous: PreviousEndpoint,
+        next: NextEndpoint,
+    ) -> Option<PreviousEndpoint> {
+        self.connections.insert(next, previous)
     }
 
     pub fn disconnect(&mut self, next: NextEndpoint) -> Option<PreviousEndpoint> {
         self.connections.remove(&next)
+    }
+
+    pub fn set_connection(
+        &mut self,
+        previous_endpoint: Option<PreviousEndpoint>,
+        next: NextEndpoint,
+    ) -> Option<PreviousEndpoint> {
+        if let Some(previous) = previous_endpoint {
+            self.connections.insert(next, previous)
+        } else {
+            self.connections.remove(&next)
+        }
     }
 
     pub fn delete_nodes(&mut self, to_delete_slice: &[NodeId]) -> Vec<Option<NodeId>> {

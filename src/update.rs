@@ -1021,6 +1021,34 @@ fn update_internal(
 
             // No undo/redo for now.
         }
+        Message::SetFilterGraph(filter_index, new_graph) => {
+            // Create a visitor that will clear selected nodes on node editor panes,
+            // so there are no invalid node references in case the node indices have changed.
+            struct Visitor;
+            impl pane::Visitor for Visitor {
+                fn visit_node_editor(&mut self, node_editor_state: &mut pane::node_editor::State) {
+                    node_editor_state.clear_selected();
+                }
+            }
+
+            let old_graph = replace(
+                &mut global_state.subtitles.extradata[filter_index]
+                    .assert_filter_mut()
+                    .graph,
+                new_graph,
+            );
+
+            // Remap selected node IDs on all node panes
+            let mut visitor = Visitor;
+            for (_, pane_state) in global_state.panes.iter_mut() {
+                pane_state.local.visit(&mut visitor);
+            }
+
+            undo.put_no_batch(
+                "Set filter graph",
+                Message::SetFilterGraph(filter_index, old_graph),
+            );
+        }
         Message::SetFilterName(filter_index, new_name) => {
             let entry = &mut global_state.subtitles.extradata[filter_index];
             let filter = entry.assert_filter_mut();
@@ -1068,85 +1096,100 @@ fn update_internal(
 
             undo.put_no_batch("Restore filter", Message::DeleteFilter(filter_index));
         }
-        Message::AddNode(node_constructor) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                let visual_node = nde::graph::VisualNode {
-                    node: node_constructor(),
-                    position: iced::Point::new(0.0, 0.0),
-                };
-                filter.graph.nodes.push(visual_node);
-            }
+        Message::AddNode(filter_id, node_constructor) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let old_graph = filter.graph.clone();
+
+            let visual_node = nde::graph::VisualNode {
+                node: node_constructor(),
+                position: iced::Point::new(0.0, 0.0),
+            };
+            filter.graph.nodes.push(visual_node);
+
+            undo.put_no_batch("Add node", Message::SetFilterGraph(filter_id, old_graph));
         }
-        Message::DeleteNodes(node_ids) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                // Create a visitor that will remap selected subtitles on node editor panes.
-                struct Visitor(Vec<Option<nde::graph::NodeId>>);
-                impl pane::Visitor for Visitor {
-                    fn visit_node_editor(
-                        &mut self,
-                        node_editor_state: &mut pane::node_editor::State,
-                    ) {
-                        node_editor_state.remap_selected(&self.0);
-                    }
-                }
-
-                // Delete the nodes (what we actually want to do)
-                let mapping = filter.graph.delete_nodes(&node_ids);
-
-                // Remap selected node IDs on all node panes
-                let mut visitor = Visitor(mapping);
-                for (_, pane_state) in global_state.panes.iter_mut() {
-                    pane_state.local.visit(&mut visitor);
+        Message::DeleteNodes(filter_id, node_ids) => {
+            // Create a visitor that will remap selected nodes on node editor panes.
+            struct Visitor(Vec<Option<nde::graph::NodeId>>);
+            impl pane::Visitor for Visitor {
+                fn visit_node_editor(&mut self, node_editor_state: &mut pane::node_editor::State) {
+                    node_editor_state.remap_selected(&self.0);
                 }
             }
+
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let old_graph = filter.graph.clone();
+
+            // Delete the nodes (what we actually want to do)
+            let mapping = filter.graph.delete_nodes(&node_ids);
+
+            // Remap selected node IDs on all node panes
+            let mut visitor = Visitor(mapping);
+            for (_, pane_state) in global_state.panes.iter_mut() {
+                pane_state.local.visit(&mut visitor);
+            }
+
+            // TODO: make this and `AddNodes` incremental at some point rather than replacing the entire filter.
+            // This will be a bit annoying since node IDs have to be remapped in a complex way.
+            undo.put_no_batch(
+                "Delete nodes",
+                Message::SetFilterGraph(filter_id, old_graph),
+            );
         }
-        Message::MoveNode(node_id, point) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
+        Message::MoveNode(filter_id, node_id, point) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let node = &mut filter.graph.nodes[node_id.0];
+            let old_point = replace(&mut node.position, point);
+
+            undo.put_instant(
+                "Move node",
+                Message::MoveNode(filter_id, node_id, old_point),
+            );
+        }
+        Message::MoveNodeGroup(filter_id, node_ids, delta) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            for node_id in &node_ids {
                 let node = &mut filter.graph.nodes[node_id.0];
-                node.position = point;
+                node.position += delta;
             }
+
+            undo.put_incremental(
+                "Move nodes",
+                Message::MoveNodeGroup(filter_id, node_ids, -delta),
+            );
         }
-        Message::MoveNodeGroup(node_ids, delta) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                for node_id in node_ids {
-                    let node = &mut filter.graph.nodes[node_id.0];
-                    node.position += delta;
-                }
-            }
+        Message::ConnectNodes(filter_id, previous, next) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let previous = filter.graph.connect(previous, next);
+
+            undo.put_no_batch(
+                "Connect nodes",
+                Message::SetNodeConnection(filter_id, previous, next),
+            );
         }
-        Message::ConnectNodes(previous, next) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                filter.graph.connect(previous, next);
+        Message::DisconnectNodes(filter_id, previous, next) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let maybe_previous = filter.graph.disconnect(next);
+            if let Some(true_previous) = maybe_previous
+                && true_previous.node_index != previous.node_index
+                && true_previous.socket_index != previous.socket_index
+            {
+                println!("warning: previous {previous:?} != true_previous {true_previous:?}");
             }
+
+            undo.put_no_batch(
+                "Disconnect nodes",
+                Message::SetNodeConnection(filter_id, maybe_previous, next),
+            );
         }
-        Message::DisconnectNodes(previous, next) => {
-            if let Some(filter) = global_state.subtitles.events.active_nde_filter_mut(
-                &global_state.selected_events,
-                &mut global_state.subtitles.extradata,
-            ) {
-                let maybe_previous = filter.graph.disconnect(next);
-                if let Some(true_previous) = maybe_previous
-                    && true_previous.node_index != previous.node_index
-                    && true_previous.socket_index != previous.socket_index
-                {
-                    println!("warning: previous {previous:?} != true_previous {true_previous:?}");
-                }
-            }
+        Message::SetNodeConnection(filter_id, previous, next) => {
+            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+            let maybe_previous = filter.graph.set_connection(previous, next);
+
+            undo.put_no_batch(
+                "Set node connection state",
+                Message::SetNodeConnection(filter_id, maybe_previous, next),
+            );
         }
         Message::SetReticules(reticules) => {
             global_state.reticules = Some(reticules);
