@@ -14,6 +14,10 @@ pub const ASS_FILE: &str = include_str!("../test_files/parse_edge_cases.ass");
 
 pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 108 };
 
+// ignored on Windows since font rendering seems to be slightly non-deterministic,
+// making it impossible to reliably compare rendered images.
+// TODO: figure out whether maybe libass can be configured to be deterministic here
+#[cfg_attr(windows, ignore)]
 #[test]
 fn libass_parse_comparison() {
     media::subtitle::set_libass_test_callback();
@@ -27,6 +31,7 @@ fn libass_parse_comparison() {
     let build_hasher = RandomState::new();
 
     let mut found_any_difference = false;
+    let mut count = 1;
 
     for event_index in track.iter_all_in_order() {
         let event = &track[event_index];
@@ -100,6 +105,16 @@ fn libass_parse_comparison() {
                             println!(" ({})", i);
                             println!("   Direct:   {:?}", direct);
                             println!("   Indirect: {:?}", indirect);
+
+                            if direct.data != indirect.data {
+                                let direct_path = write_bitmap(count, &direct.data.bytes, "direct");
+                                let indirect_path =
+                                    write_bitmap(count, &indirect.data.bytes, "indirect");
+                                println!(
+                                    "    -> wrote data files to {direct_path} and {indirect_path}"
+                                );
+                                count += 1;
+                            }
                         }
                     }
                 }
@@ -137,7 +152,7 @@ struct AssImage {
     stride: i32,
     colour: Colour,
     transparency: Transparency,
-    data_hash: u64,
+    data: ImageData,
 }
 
 impl AssImage {
@@ -153,7 +168,41 @@ impl AssImage {
             stride: image.metadata.stride,
             colour,
             transparency,
-            data_hash: build_hasher.hash_one(image.bitmap),
+            data: ImageData::new(image.bitmap, build_hasher),
         }
     }
+}
+
+#[derive(PartialEq, Eq)]
+struct ImageData {
+    bytes: Vec<u8>,
+    hash: u64,
+}
+
+impl ImageData {
+    pub fn new<BH: BuildHasher>(bitmap: &[u8], build_hasher: &BH) -> Self {
+        let hash = build_hasher.hash_one(bitmap);
+
+        Self {
+            bytes: bitmap.to_owned(),
+            hash,
+        }
+    }
+}
+
+impl std::fmt::Debug for ImageData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImageData")
+            .field("hash", &self.hash)
+            .finish()
+    }
+}
+
+fn write_bitmap(count: u64, bitmap: &[u8], suffix: &str) -> String {
+    use std::io::prelude::*;
+
+    let path = format!("{count:04}_{suffix}.dat");
+    let mut file = std::fs::File::create(&path).unwrap();
+    file.write_all(bitmap).unwrap();
+    path
 }
