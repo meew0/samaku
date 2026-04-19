@@ -189,14 +189,23 @@ impl Drop for Library {
     }
 }
 
+#[cfg(target_env = "msvc")]
+type EnumType = i32;
+
+#[cfg(not(target_env = "msvc"))]
+type EnumType = u32;
+
 #[derive(Debug, Clone, Copy)]
-#[repr(i32)]
+#[cfg_attr(
+    not(target_env = "msvc"),
+    expect(clippy::cast_possible_wrap, reason = "64 bit only")
+)]
 pub enum FontProvider {
-    None = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_NONE,
-    Autodetect = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_AUTODETECT,
-    CoreText = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_CORETEXT,
-    Fontconfig = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_FONTCONFIG,
-    DirectWrite = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_DIRECTWRITE,
+    None = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_NONE as isize,
+    Autodetect = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_AUTODETECT as isize,
+    CoreText = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_CORETEXT as isize,
+    Fontconfig = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_FONTCONFIG as isize,
+    DirectWrite = libass::ASS_DefaultFontProvider::ASS_FONTPROVIDER_DIRECTWRITE as isize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -449,12 +458,15 @@ pub(crate) fn style_to_raw(style: &subtitle::Style) -> RawStyle {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[repr(i32)]
+#[cfg_attr(
+    not(target_env = "msvc"),
+    expect(clippy::cast_possible_wrap, reason = "64 bit only")
+)]
 pub enum Feature {
-    IncompatibleExtensions = libass::ASS_Feature::ASS_FEATURE_INCOMPATIBLE_EXTENSIONS,
-    BidiBrackets = libass::ASS_Feature::ASS_FEATURE_BIDI_BRACKETS,
-    WholeTextLayout = libass::ASS_Feature::ASS_FEATURE_WHOLE_TEXT_LAYOUT,
-    WrapUnicode = libass::ASS_Feature::ASS_FEATURE_WRAP_UNICODE,
+    IncompatibleExtensions = libass::ASS_Feature::ASS_FEATURE_INCOMPATIBLE_EXTENSIONS as isize,
+    BidiBrackets = libass::ASS_Feature::ASS_FEATURE_BIDI_BRACKETS as isize,
+    WholeTextLayout = libass::ASS_Feature::ASS_FEATURE_WHOLE_TEXT_LAYOUT as isize,
+    WrapUnicode = libass::ASS_Feature::ASS_FEATURE_WRAP_UNICODE as isize,
 }
 
 #[derive(Debug)]
@@ -592,7 +604,7 @@ impl Track {
             (*self.track).WrapStyle = header.wrap_style as i32;
             (*self.track).ScaledBorderAndShadow = i32::from(header.scaled_border_and_shadow);
             (*self.track).Kerning = i32::from(header.kerning);
-            (*self.track).YCbCrMatrix = header.ycbcr_matrix as i32;
+            (*self.track).YCbCrMatrix = header.ycbcr_matrix as EnumType;
 
             (*self.track).Language = match header.extra_info.get("Language") {
                 Some(language) => malloc_string(language),
@@ -606,8 +618,9 @@ impl Track {
     }
 
     pub fn set_feature(&mut self, feature: Feature, enable: bool) -> Result<(), ()> {
-        let err_val =
-            unsafe { libass::ass_track_set_feature(self.track, feature as i32, i32::from(enable)) };
+        let err_val = unsafe {
+            libass::ass_track_set_feature(self.track, feature as EnumType, i32::from(enable))
+        };
 
         if err_val < 0 { Err(()) } else { Ok(()) }
     }
