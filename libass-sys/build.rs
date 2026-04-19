@@ -4,9 +4,26 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rustc-link-lib=ass");
     println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-env-changed=LIBASS_INCLUDE_DIR");
+    println!("cargo:rerun-if-env-changed=LIBASS_LIB_DIR");
 
-    let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
+    let mut builder = bindgen::Builder::default().header("wrapper.h");
+
+    if let Ok(include_dir) = env::var("LIBASS_INCLUDE_DIR") {
+        builder = builder.clang_arg(format!("-I{}", include_dir));
+    }
+
+    // On MSVC Windows, tell clang the target so va_list is defined as char* (not __va_list_tag*)
+    #[cfg(all(target_os = "windows", target_env = "msvc"))]
+    {
+        builder = builder.clang_arg("--target=x86_64-pc-windows-msvc");
+    }
+
+    if let Ok(lib_dir) = env::var("LIBASS_LIB_DIR") {
+        println!("cargo:rustc-link-search=native={}", lib_dir);
+    }
+
+    let bindings = builder
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .layout_tests(false)
         .opaque_type("ass_library")
