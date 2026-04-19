@@ -186,11 +186,9 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
                         );
                     }
                 }
-                mouse::Event::ButtonReleased(mouse::Button::Left) => {
-                    if state.dragging.is_some() {
-                        state.dragging = None;
-                        return Some(Action::capture());
-                    }
+                mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging.is_some() => {
+                    state.dragging = None;
+                    return Some(Action::capture());
                 }
                 _ => {}
             }

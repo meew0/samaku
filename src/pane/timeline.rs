@@ -299,10 +299,10 @@ impl canvas::Program<message::Message> for CanvasData {
                             }
                         }
                     }
-                    mouse::Event::WheelScrolled { delta } => {
-                        if cursor.position_in(bounds).is_some() {
-                            return Some(self.calculate_zoom(bounds, cursor, delta));
-                        }
+                    mouse::Event::WheelScrolled { delta }
+                        if cursor.position_in(bounds).is_some() =>
+                    {
+                        return Some(self.calculate_zoom(bounds, cursor, delta));
                     }
 
                     _ => {}
