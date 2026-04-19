@@ -65,10 +65,6 @@ pub(crate) struct Library {
     callback: Mutex<Option<Box<Callback>>>,
 }
 
-unsafe impl Send for Library {}
-
-unsafe impl Sync for Library {}
-
 impl Library {
     pub(crate) fn init() -> Option<Library> {
         let library = unsafe { libass::ass_library_init() };

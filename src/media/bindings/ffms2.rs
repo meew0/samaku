@@ -23,6 +23,9 @@ pub(crate) struct Index {
     error: InternalError,
 }
 
+// TODO: there are data races in ffmpeg when running the tests in ThreadSanitizer mode
+// $ RUSTFLAGS="-Z sanitizer=thread" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu -- --test-threads=8
+// Might be caused by these unsafe impls. Remains to be seen whether there are any consequences.
 unsafe impl Send for Index {}
 
 impl Index {

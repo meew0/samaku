@@ -1,14 +1,15 @@
-use std::sync::LazyLock;
-
 pub use ass::Image;
+use std::cell::RefCell;
 
 use crate::nde::tags::Colour;
 use crate::{model, resources, subtitle, view};
 
 use super::bindings::ass;
 
-/// The global libass instance.
-static LIBRARY: LazyLock<ass::Library> = LazyLock::new(library_init);
+thread_local! {
+    /// The global libass instance.
+    static LIBRARY: RefCell<ass::Library> = RefCell::new(library_init());
+}
 
 fn library_init() -> ass::Library {
     let library = ass::Library::init().expect("ASS library initialisation failed");
@@ -23,7 +24,7 @@ fn library_init() -> ass::Library {
 /// Set the global libass message callback. The provided closure will be called on every log message
 /// produced by libass.
 pub fn set_libass_callback<F: FnMut(i32, String) + 'static>(callback: F) {
-    LIBRARY.set_message_callback(callback);
+    LIBRARY.with_borrow(|library| library.set_message_callback(callback));
 }
 
 /// Set the global libass message callback to one that prints all messages level 5 and below to
@@ -50,8 +51,11 @@ impl OpaqueTrack {
     ///
     /// # Panics
     /// Panics if libass fails to parse the data.
+    #[must_use]
     pub fn parse(data: &String) -> OpaqueTrack {
-        let track = LIBRARY.read_memory(data.as_bytes(), None).unwrap();
+        let track = LIBRARY
+            .with_borrow(|library| library.read_memory(data.as_bytes(), None))
+            .unwrap();
         OpaqueTrack { internal: track }
     }
 
@@ -68,7 +72,9 @@ impl OpaqueTrack {
     where
         'c: 'a,
     {
-        let mut track = LIBRARY.new_track().expect("failed to construct new track");
+        let mut track = LIBRARY
+            .with_borrow(ass::Library::new_track)
+            .expect("failed to construct new track");
 
         track.set_header(metadata);
 
@@ -136,7 +142,7 @@ impl Renderer {
     /// # Panics
     /// Panics if libass fails to create a new renderer.
     pub fn new() -> Renderer {
-        let mut renderer = LIBRARY.renderer_init().unwrap();
+        let mut renderer = LIBRARY.with_borrow(ass::Library::renderer_init).unwrap();
         renderer_set_fonts_default(&mut renderer);
         Renderer { internal: renderer }
     }
