@@ -2523,7 +2523,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmv-capi-sys"
 version = "0.1.0"
-source = "git+https://github.com/meew0/libmv-capi-sys.git?rev=3b84aced2b32ece031ce564a19f6c8ab200e2ac4#3b84aced2b32ece031ce564a19f6c8ab200e2ac4"
+source = "git+https://github.com/meew0/libmv-capi-sys.git?rev=5e3f8230986290d4d4f36fb1c85315494e799b3c#5e3f8230986290d4d4f36fb1c85315494e799b3c"
 dependencies = [
  "bindgen 0.68.1",
  "cc",
