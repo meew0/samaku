@@ -214,6 +214,8 @@ mod tests {
 
     #[test]
     fn subtitle_from_mkv() -> anyhow::Result<()> {
+        media::subtitle::set_libass_test_callback();
+
         let file = &File::open(crate::test_utils::test_file("test_files/cube_sub_ass.mkv"))?;
         let ass_data = read_first_subtitle_track_to_ass(file)?;
 

@@ -1172,6 +1172,7 @@ mod tests {
     use crate::{subtitle, test_utils::test_file};
 
     fn import(path: &Path) -> (File, Vec<Style>) {
+        media::subtitle::set_libass_test_callback();
         let content = smol::block_on(async { subtitle::import(path).await }).unwrap();
         let opaque = media::subtitle::OpaqueTrack::parse(&content);
         File::from_opaque(&opaque)
