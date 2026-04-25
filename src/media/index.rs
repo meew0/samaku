@@ -29,7 +29,9 @@ impl Indexer {
         Self { inner }
     }
 
-    pub fn set_progress_callback<F: FnMut(i64, i64) -> model::CancellationState + 'static>(
+    pub fn set_progress_callback<
+        F: FnMut(i64, i64) -> model::CancellationState + Send + 'static,
+    >(
         &mut self,
         callback: F,
     ) {

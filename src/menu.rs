@@ -36,10 +36,10 @@ pub fn edit<'a>(
 
 fn undo_redo_item<'a>(
     name: &'static str,
-    content: Option<&'static str>,
+    content_option: Option<&'static str>,
     message: message::Message,
 ) -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
-    match content {
+    match content_option {
         Some(content) => {
             if content.is_empty() {
                 view::menu::intricate_item(name, Some(message))

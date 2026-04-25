@@ -72,16 +72,16 @@ impl Workers {
     #[must_use]
     pub fn spawn_all(shared_state: &crate::SharedState) -> Self {
         let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
-        let sender = GlobalSender(sender);
+        let global_sender = GlobalSender(sender);
 
         Self {
-            video_decoder: video_decoder::spawn(sender.clone(), shared_state),
-            indexer: indexer::spawn(sender.clone(), shared_state),
-            cpal_playback: cpal_playback::spawn(sender.clone(), shared_state),
-            _log_toasts: log_toasts::spawn(sender.clone(), shared_state),
-            progress_listener: progress_listener::spawn(sender.clone(), shared_state),
+            video_decoder: video_decoder::spawn(global_sender.clone(), shared_state),
+            indexer: indexer::spawn(global_sender.clone(), shared_state),
+            cpal_playback: cpal_playback::spawn(global_sender.clone(), shared_state),
+            _log_toasts: log_toasts::spawn(global_sender.clone(), shared_state),
+            progress_listener: progress_listener::spawn(global_sender.clone(), shared_state),
 
-            _sender: sender,
+            _sender: global_sender,
             receiver: RefCell::new(Some(receiver)),
         }
     }

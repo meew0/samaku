@@ -136,7 +136,7 @@ fn emit_aegi_metadata<W: Write>(
 #[expect(clippy::similar_names, reason = "For scale_x/y_percent")]
 fn emit_styles<W: Write>(writer: &mut W, styles: &[Style]) -> Result<(), Error> {
     // Ensure there is always at least one style to write
-    let styles = if styles.is_empty() {
+    let styles_cow = if styles.is_empty() {
         Cow::Owned(vec![Style::default()])
     } else {
         Cow::Borrowed(styles)
@@ -145,7 +145,7 @@ fn emit_styles<W: Write>(writer: &mut W, styles: &[Style]) -> Result<(), Error> 
     write!(writer, "[V4+ Styles]{NEWLINE}")?;
     write!(writer, "{STYLE_FORMAT}{NEWLINE}")?;
 
-    for style in &*styles {
+    for style in &*styles_cow {
         let safe_name = style.name.replace(',', ";");
         let safe_font_name = style.font_name.replace(',', ";");
 
@@ -319,8 +319,8 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
     for (id, entry) in &extradata.entries {
         write!(writer, "Data: {},", id.0)?;
 
-        match entry {
-            ExtradataEntry::NdeFilter(filter) => {
+        match *entry {
+            ExtradataEntry::NdeFilter(ref filter) => {
                 let serialised =
                     match project::serialize_czb(filter, config::NDE_FILTER_COMPRESSION_LEVEL) {
                         Ok(serialised) => serialised,
@@ -333,7 +333,7 @@ fn emit_extradata<W: Write>(writer: &mut W, extradata: &Extradata) -> Result<(),
 
                 write!(writer, "_samaku_nde_filter,e1{serialised}")?;
             }
-            ExtradataEntry::Opaque { key, value } => {
+            ExtradataEntry::Opaque { ref key, ref value } => {
                 emit_aegi_inline_string(writer, key)?;
 
                 // The value can be specified using inline or UU encoding. Aegisub uses inline

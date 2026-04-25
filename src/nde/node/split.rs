@@ -20,10 +20,13 @@ impl Node for SplitFrameByFrame {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(inputs.len() > 1); // Elide bounds checks
+        assert!(
+            inputs.len() > 1,
+            "the correct number of inputs should be present"
+        ); // Elide bounds checks
 
-        super::retrieve!(inputs[0], SocketValue::IndividualEvent(event));
-        super::retrieve!(inputs[1], SocketValue::FrameRate(frame_rate));
+        super::retrieve!(inputs[0], &SocketValue::IndividualEvent(ref event));
+        super::retrieve!(inputs[1], &SocketValue::FrameRate(ref frame_rate));
 
         let mut res: Vec<nde::Event> = vec![];
         let mut frame = frame_rate.ms_to_frame(event.start.0);

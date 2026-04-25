@@ -30,7 +30,7 @@ impl super::LocalState for State {
 
                 // Check whether the event has an NDE filter assigned. If yes, display the node editor
                 // to edit that filter, otherwise, display the assignment pane
-                match &global_state
+                match global_state
                     .subtitles
                     .extradata
                     .nde_filter_and_id_for_event(active_event)
@@ -40,7 +40,7 @@ impl super::LocalState for State {
                         global_state,
                         self,
                         active_event,
-                        *nde_filter_id,
+                        nde_filter_id,
                         nde_filter,
                     ),
                     None => view_non_selected(self_pane, self, false),
@@ -395,11 +395,11 @@ fn create_nodes(
         .width(200.0)
         .into();
 
-        let node_border_colour = match &nde_result_or_error {
-            Ok(nde_result) => match nde_result.intermediates.get(node_index) {
-                Some(NodeState::Inactive) => style::SAMAKU_INACTIVE,
-                Some(NodeState::Active(_)) => style::SAMAKU_PRIMARY,
-                Some(NodeState::Error(_)) => style::SAMAKU_DESTRUCTIVE,
+        let node_border_colour = match *nde_result_or_error {
+            Ok(ref nde_result) => match nde_result.intermediates.get(node_index) {
+                Some(&NodeState::Inactive) => style::SAMAKU_INACTIVE,
+                Some(&NodeState::Active(_)) => style::SAMAKU_PRIMARY,
+                Some(&NodeState::Error(_)) => style::SAMAKU_DESTRUCTIVE,
                 None => panic!("intermediate node not found"),
             },
             Err(_) => {
@@ -422,9 +422,9 @@ fn create_out_sockets<'a>(
     // with the other. But first, we need to check the preconditions,
     // like whether the compilation was successful and whether the current node
     // is even active
-    match &nde_result_or_error {
-        Ok(nde_result) => match &nde_result.intermediates[node_id.0] {
-            NodeState::Active(socket_values) => {
+    match *nde_result_or_error {
+        Ok(ref nde_result) => match &nde_result.intermediates[node_id.0] {
+            &NodeState::Active(ref socket_values) => {
                 let mut merged: Vec<nde::node::SocketType> = vec![];
                 for (i, predicted) in node.predicted_outputs().iter().enumerate() {
                     match socket_values
@@ -471,8 +471,8 @@ fn create_in_sockets<'a>(
     // For the inputs, we use the same general logic as before,
     // but instead of checking the node's sockets directly,
     // we need to check the nodes connecting into it
-    match &nde_result_or_error {
-        Ok(nde_result) => {
+    match *nde_result_or_error {
+        Ok(ref nde_result) => {
             // Note that here we don't check the active node's state,
             // because we can still make a judgment about its input types
             // even if it is inactive or errored.
@@ -485,7 +485,7 @@ fn create_in_sockets<'a>(
             for (previous, next_socket_index) in nde_filter.graph.iter_previous(node_id) {
                 // Check whether the previous node is active
                 // (otherwise, ignore it)
-                if let NodeState::Active(previous_socket_values) =
+                if let &NodeState::Active(ref previous_socket_values) =
                     &nde_result.intermediates[previous.node_index.0]
                 {
                     // Check whether the previous node has returned
@@ -510,7 +510,7 @@ fn create_connections(
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
-    let color = match nde_result_or_error {
+    let color = match *nde_result_or_error {
         Ok(_) => style::SAMAKU_PRIMARY,
         Err(_) => style::SAMAKU_DESTRUCTIVE,
     };
@@ -530,7 +530,7 @@ fn view_graph<'a>(
     nde_filter_id: subtitle::ExtradataId,
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
-    graph: Box<NodeGraph<'a>>,
+    graph_box: Box<NodeGraph<'a>>,
 ) -> iced::Element<'a, message::Message> {
     let menu_bar = iced_aw::menu::MenuBar::new(add_menu(nde_filter_id))
         .width(180)
@@ -560,7 +560,7 @@ fn view_graph<'a>(
     )
     .padding(5.0);
 
-    let graph: NodeGraph = *graph;
+    let graph: NodeGraph = *graph_box;
     iced::widget::column![graph, view::separator(), bottom_bar].into()
 }
 
@@ -620,8 +620,8 @@ fn view_error<'a>(
     pane_state: &'a State,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) -> iced::Element<'a, message::Message> {
-    let error_state = match nde_result_or_error {
-        Ok(result) => {
+    let error_state = match *nde_result_or_error {
+        Ok(ref result) => {
             let num_selected_nodes = pane_state.selected_nodes.len();
             if num_selected_nodes == 1 {
                 format_error(result, pane_state.selected_nodes.first().unwrap().0, None)
@@ -675,20 +675,20 @@ fn view_error<'a>(
 fn format_error(
     result: &NdeResult,
     error_index: usize,
-    error_count: Option<usize>,
+    error_count_option: Option<usize>,
 ) -> GraphErrorState {
     let first_error = result
         .intermediates
         .get(error_index)
         .expect("no node state present at error index");
-    if let NodeState::Error(error) = first_error {
+    if let NodeState::Error(ref error) = *first_error {
         let first_message = error.to_string();
         let causes = error
             .chain()
             .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join("\nReason: ");
-        let message = if let Some(error_count) = error_count
+        let message = if let Some(error_count) = error_count_option
             && error_count > 1
         {
             let remaining_error_count = error_count - 1;
@@ -793,11 +793,13 @@ fn make_pin_row<'a>(
     in_socket: Option<nde::node::SocketType>,
     out_socket: Option<nde::node::SocketType>,
 ) -> iced::Element<'a, message::Message> {
-    let in_pin = in_socket.map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
-    let out_pin = out_socket.map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
+    let in_pin_option =
+        in_socket.and_then(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
+    let out_pin_option =
+        out_socket.and_then(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
 
-    if let Some(in_pin) = in_pin {
-        if let Some(out_pin) = out_pin {
+    if let Some(in_pin) = in_pin_option {
+        if let Some(out_pin) = out_pin_option {
             // Both pins present
             iced::widget::row![
                 iced::widget::container(in_pin)
@@ -816,7 +818,7 @@ fn make_pin_row<'a>(
                 .into()
         }
     } else {
-        if let Some(out_pin) = out_pin {
+        if let Some(out_pin) = out_pin_option {
             // Only out pin
             iced::widget::container(out_pin)
                 .width(iced::Length::Fill)
@@ -863,11 +865,11 @@ fn children_from_shell_tree(
     let mut children = vec![];
 
     for (name, child) in tree {
-        match child {
-            MenuShell::Item(constructor) => {
+        match *child {
+            MenuShell::Item(ref constructor) => {
                 children.push(menu_item(name.as_str(), nde_filter_id, *constructor));
             }
-            MenuShell::SubMenu(sub_tree) => {
+            MenuShell::SubMenu(ref sub_tree) => {
                 children.push(sub_menu(
                     name.as_str(),
                     children_from_shell_tree(sub_tree, nde_filter_id),
@@ -924,15 +926,15 @@ fn collect_internal_recursive(
     path: &[&str],
     constructor: nde::node::Constructor,
 ) -> Result<(), CollectError> {
-    assert!(!path.is_empty());
+    assert!(!path.is_empty(), "menu path must not be empty");
 
     let first_path_element = path[0];
 
     if path.len() == 1 {
         // Only the last element remains, which must be inserted as an item.
         match menu.get(first_path_element) {
-            Some(MenuShell::Item(_)) => return Err(CollectError::DuplicateItem),
-            Some(MenuShell::SubMenu(_)) => return Err(CollectError::ItemOverSubMenu),
+            Some(&MenuShell::Item(_)) => return Err(CollectError::DuplicateItem),
+            Some(&MenuShell::SubMenu(_)) => return Err(CollectError::ItemOverSubMenu),
             None => {
                 menu.insert(first_path_element.to_owned(), MenuShell::Item(constructor));
             }
@@ -942,14 +944,16 @@ fn collect_internal_recursive(
     } else {
         // Insert the first element as a sub menu.
         let sub_menu = match menu.get_mut(first_path_element) {
-            Some(MenuShell::Item(_)) => return Err(CollectError::SubMenuOverItem),
-            Some(MenuShell::SubMenu(sub_menu)) => sub_menu,
+            Some(&mut MenuShell::Item(_)) => return Err(CollectError::SubMenuOverItem),
+            Some(&mut MenuShell::SubMenu(ref mut sub_menu)) => sub_menu,
             None => {
                 menu.insert(
                     first_path_element.to_owned(),
                     MenuShell::SubMenu(BTreeMap::new()),
                 );
-                let Some(MenuShell::SubMenu(sub_menu)) = menu.get_mut(first_path_element) else {
+                let Some(&mut MenuShell::SubMenu(ref mut sub_menu)) =
+                    menu.get_mut(first_path_element)
+                else {
                     panic!();
                 };
                 sub_menu

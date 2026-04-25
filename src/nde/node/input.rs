@@ -20,7 +20,7 @@ impl Node for InputEvent {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        let SocketValue::SourceEvent(source_event) = inputs[0] else {
+        let &SocketValue::SourceEvent(source_event) = inputs[0] else {
             return Err(BasicError::MismatchedTypes.into());
         };
 
@@ -65,7 +65,7 @@ impl Node for InputFrameRate {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        super::retrieve!(inputs[0], SocketValue::FrameRate(frame_rate));
+        super::retrieve!(inputs[0], &SocketValue::FrameRate(ref frame_rate));
         Ok(vec![SocketValue::FrameRate(*frame_rate)])
     }
 }
@@ -169,7 +169,11 @@ pub struct InputRectangle {
 
 impl InputRectangle {
     fn reticule_update_internal(&self, reticules: &mut [reticule::Reticule]) {
-        assert!(reticules.len() > 3); // Elide bounds checks
+        assert_eq!(
+            reticules.len(),
+            4,
+            "the required number of reticules should be present"
+        ); // Elide bounds checks
 
         reticules[0].position = nde::tags::Position {
             x: f64::from(self.value.x1),
@@ -353,10 +357,15 @@ impl Node for InputTags {
             anyhow::bail!("Input tags contain brackets");
         }
 
+        // Turns "a" into "{a}"
         let block = format!("{{{}}}", self.value);
         let (global, spans) = nde::tags::parse_raw(&block);
 
-        assert_eq!(spans.len(), 2);
+        assert_eq!(
+            spans.len(),
+            2,
+            "since the input is guaranteed to contain no brackets, there should be exactly 2 spans"
+        );
         let nde::Span::Tags(local, _) = spans.into_iter().nth(1).unwrap() else {
             panic!("span should be `Tags`")
         };

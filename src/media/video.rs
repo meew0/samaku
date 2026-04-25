@@ -7,7 +7,7 @@ use crate::{model, subtitle};
 use super::bindings::ffms2;
 use super::index;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Metadata {
     pub frame_rate: FrameRate,
     pub width: i32,
@@ -33,16 +33,16 @@ impl Video {
 
     /// Load the video from the given file using FFMS2.
     pub fn load<P: AsRef<Path>>(filename: P, index: index::Index) -> anyhow::Result<Video> {
-        let mut index = index.into_inner();
+        let mut ffms_index = index.into_inner();
 
-        let first_video_track = index
+        let first_video_track = ffms_index
             .first_track_of_type(ffms2::TrackType::Video)
             .context("finding first video track")?;
 
         let mut source = ffms2::VideoSource::new(
             filename.as_ref(),
             first_video_track,
-            &index,
+            &ffms_index,
             -1,
             ffms2::SeekMode::Normal,
         )
@@ -199,8 +199,14 @@ impl Video {
             .clamp(0.0, f64::from(height - top_within_frame))
             .ceil() as u32;
 
-        assert!(left_within_frame + true_width <= width);
-        assert!(top_within_frame + true_height <= height);
+        assert!(
+            left_within_frame + true_width <= width,
+            "right side of clamped patch request should fit within horizontal bounds"
+        );
+        assert!(
+            top_within_frame + true_height <= height,
+            "bottom side of clamped patch request should fit within vertical bounds"
+        );
 
         let mut out = vec![0.0_f32; true_width as usize * true_height as usize];
 

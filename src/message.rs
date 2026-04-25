@@ -292,12 +292,15 @@ impl Message {
 
     /// Returns the internal name of the message variant.
     pub fn name(&self) -> String {
+        // We simply debug-print the variant and extract the first part before the parenthesis.
+        // Technically this is invalid since Rust makes no guarantees about enum debug formatting.
+        // But we don't use this method for important purposes anyway, only for displaying errors,
+        // and we have a test that it does roughly what is expected, so it should be fine.
         let debug = format!("{self:?}");
 
-        if let Some(pos) = debug.find('(') {
-            debug[..pos].to_owned()
-        } else {
-            debug
+        match debug.split_once('(') {
+            Some((slice, _)) => slice.to_owned(),
+            None => debug,
         }
     }
 }

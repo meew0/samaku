@@ -78,7 +78,7 @@ impl OpaqueTrack {
 
         track.set_header(metadata);
 
-        assert_eq!(track.events().len(), 0); // No events should exist yet
+        assert_eq!(track.events().len(), 0, "no events should exist yet");
         for (read_index, event) in events.enumerate() {
             track.alloc_event();
             *track.events_mut().last_mut().unwrap() =
@@ -86,7 +86,11 @@ impl OpaqueTrack {
         }
 
         track.resize_styles(styles.len());
-        assert_eq!(track.styles().len(), styles.len());
+        assert_eq!(
+            track.styles().len(),
+            styles.len(),
+            "there should be space for all styles"
+        );
         for (raw_style, style) in track.styles_mut().iter_mut().zip(styles) {
             *raw_style = ass::style_to_raw(style);
         }

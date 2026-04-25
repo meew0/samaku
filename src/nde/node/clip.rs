@@ -20,9 +20,12 @@ impl Node for ClipRectangle {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(inputs.len() > 1); // Elide bounds checks
+        assert!(
+            inputs.len() > 1,
+            "the required number of inputs should be present"
+        ); // Elide bounds checks
 
-        super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));
+        super::retrieve!(inputs[1], &SocketValue::Rectangle(ref rectangle));
 
         let socket_value = inputs[0].map_events(|event| {
             let mut new_event = event.clone();

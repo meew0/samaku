@@ -359,7 +359,7 @@ impl From<i32> for JustifyMode {
 
 impl std::fmt::Display for JustifyMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match *self {
             Self::Auto => write!(f, "Auto"),
             Self::Left => write!(f, "Left"),
             Self::Center => write!(f, "Center"),
@@ -395,7 +395,7 @@ impl From<i32> for BorderStyle {
 
 impl std::fmt::Display for BorderStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match *self {
             Self::Default => write!(f, "Outline & shadow"),
             Self::OpaqueBox => write!(f, "Opaque box"),
             Self::Background => write!(f, "Background"),
@@ -681,22 +681,22 @@ impl StyleList {
     /// because it has been renamed “manually” by setting its `name` field in the meantime.
     pub fn rename<S: Into<String>>(&mut self, index: usize, new_name: S) -> Option<String> {
         let original_new_name = new_name.into();
-        let mut new_name = original_new_name.clone();
+        let mut modified_new_name = original_new_name.clone();
         let mut counter = 0;
-        while self.names.contains_key(&new_name) {
+        while self.names.contains_key(&modified_new_name) {
             counter += 1;
-            new_name = format!("{original_new_name}-{counter}");
+            modified_new_name = format!("{original_new_name}-{counter}");
         }
 
-        let old_name = std::mem::replace(&mut self.styles[index].name, new_name.clone());
+        let old_name = std::mem::replace(&mut self.styles[index].name, modified_new_name.clone());
         assert_eq!(
             self.names.remove(&old_name),
             Some(index),
             "Style index did not match expected value in `rename` — was a style manually renamed by changing its `name` field?"
         );
-        self.names.insert(new_name.clone(), index);
+        self.names.insert(modified_new_name.clone(), index);
 
-        (counter > 0).then_some(new_name)
+        (counter > 0).then_some(modified_new_name)
     }
 
     #[must_use]
@@ -750,9 +750,9 @@ impl StyleShift {
     where
         T: Clone + Eq + Hash,
     {
-        match self {
+        match *self {
             Self::Negative { pivot } => {
-                match (*index).cmp(pivot) {
+                match (*index).cmp(&pivot) {
                     std::cmp::Ordering::Less => {}
                     std::cmp::Ordering::Equal => {
                         // Reset to default style, and collect the entry.
@@ -763,14 +763,14 @@ impl StyleShift {
                 }
             }
             Self::Positive { pivot } => {
-                match (*index).cmp(pivot) {
+                match (*index).cmp(&pivot) {
                     std::cmp::Ordering::Less => {}
                     std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => *index += 1,
                 }
 
                 // Restore entries in collection to the new style
                 if collect.contains(entry) {
-                    *index = *pivot;
+                    *index = pivot;
                 }
             }
         }
@@ -981,8 +981,8 @@ impl Extradata {
         )]
         self.entries
             .iter()
-            .filter_map(|(index, entry)| match entry {
-                ExtradataEntry::NdeFilter(filter) => Some((*index, filter)),
+            .filter_map(|(index, entry)| match *entry {
+                ExtradataEntry::NdeFilter(ref filter) => Some((*index, filter)),
                 _ => None,
             })
     }
@@ -991,7 +991,7 @@ impl Extradata {
     #[must_use]
     pub fn nde_filter_for_event<'a>(&'a self, event: &Event) -> Option<&'a nde::Filter> {
         for extradata_id in &event.extradata_ids {
-            if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
+            if let &ExtradataEntry::NdeFilter(ref filter) = &self[*extradata_id] {
                 return Some(filter);
             }
         }
@@ -1006,7 +1006,7 @@ impl Extradata {
         event: &Event,
     ) -> Option<(ExtradataId, &'a nde::Filter)> {
         for extradata_id in &event.extradata_ids {
-            if let ExtradataEntry::NdeFilter(filter) = &self[*extradata_id] {
+            if let &ExtradataEntry::NdeFilter(ref filter) = &self[*extradata_id] {
                 return Some((*extradata_id, filter));
             }
         }
@@ -1028,7 +1028,7 @@ impl Extradata {
         // that the mutable reference is unique.
         let mut maybe_filter_id: Option<ExtradataId> = None;
         for extradata_id in &event.extradata_ids {
-            if let ExtradataEntry::NdeFilter(_) = &self[*extradata_id] {
+            if let &ExtradataEntry::NdeFilter(_) = &self[*extradata_id] {
                 maybe_filter_id = Some(*extradata_id);
                 break;
             }
@@ -1036,7 +1036,7 @@ impl Extradata {
 
         let filter_id = maybe_filter_id?;
 
-        let ExtradataEntry::NdeFilter(filter) = &mut self[filter_id] else {
+        let &mut ExtradataEntry::NdeFilter(ref mut filter) = &mut self[filter_id] else {
             panic!();
         };
 
@@ -1074,7 +1074,7 @@ impl Extradata {
         let Some(entry) = self.entries.get_mut(&filter_index) else {
             anyhow::bail!("Extradata entry does not exist at index {}", filter_index.0);
         };
-        let ExtradataEntry::NdeFilter(filter) = entry else {
+        let &mut ExtradataEntry::NdeFilter(ref mut filter) = entry else {
             anyhow::bail!("Extradata at index {} is not an NDE filter", filter_index.0);
         };
         let Some(node) = filter.graph.nodes.get_mut(node_index.0) else {
@@ -1117,7 +1117,7 @@ impl ExtradataEntry {
     /// Panics if this extradata entry is not a filter.
     #[must_use]
     pub fn assert_filter(&self) -> &nde::Filter {
-        if let ExtradataEntry::NdeFilter(filter) = self {
+        if let ExtradataEntry::NdeFilter(ref filter) = *self {
             filter
         } else {
             panic!("assert_filter() failed, instead found: {self:?}");
@@ -1131,7 +1131,7 @@ impl ExtradataEntry {
     /// Panics if this extradata entry is not a filter.
     #[must_use]
     pub fn assert_filter_mut(&mut self) -> &mut nde::Filter {
-        if let ExtradataEntry::NdeFilter(filter) = self {
+        if let ExtradataEntry::NdeFilter(ref mut filter) = *self {
             filter
         } else {
             panic!("assert_filter() failed, instead found: {self:?}");
@@ -1311,8 +1311,8 @@ mod tests {
         let e0 = &parsed.extradata.entries[&ExtradataId(0)];
         let e1 = &parsed.extradata.entries[&ExtradataId(1)];
 
-        assert_matches!(e0, ExtradataEntry::Opaque { key: k0, value: v0 });
-        assert_matches!(e1, ExtradataEntry::Opaque { key: k1, value: v1 });
+        assert_matches!(e0, &ExtradataEntry::Opaque { key: ref k0, value: ref v0 });
+        assert_matches!(e1, &ExtradataEntry::Opaque { key: ref k1, value: ref v1 });
 
         assert_eq!(k0, "short");
         assert_eq!(v0, SHORT_VALUE);

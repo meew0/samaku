@@ -20,13 +20,16 @@ impl Node for SetPosition {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(inputs.len() > 1); // Elide bounds checks
+        assert!(
+            inputs.len() > 1,
+            "the required number of inputs should be present"
+        ); // Elide bounds checks
 
-        if let SocketValue::Position(position) = inputs[1] {
+        if let &SocketValue::Position(position) = inputs[1] {
             let socket_value = inputs[0].map_events(|event| {
                 let mut new_event = event.clone();
                 new_event.global_tags.position =
-                    Some(nde::tags::PositionOrMove::Position(*position));
+                    Some(nde::tags::PositionOrMove::Position(position));
                 new_event
             })?;
             Ok(vec![socket_value])

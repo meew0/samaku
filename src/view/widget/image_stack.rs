@@ -91,50 +91,62 @@ where
     }
 }
 
+fn get_base_size<Renderer, Handle>(
+    renderer: &Renderer,
+    images: &[StackedImage<Handle>],
+    image_size_override: Option<Size<u32>>,
+) -> Size<f32>
+where
+    Renderer: image::Renderer<Handle = Handle>,
+{
+    let Size {
+        width: first_image_width,
+        height: first_image_height,
+    } = image_size_override.unwrap_or_else(|| {
+        renderer
+            .measure_image(&images[0].handle)
+            .unwrap_or(Size::new(0, 0)) // default to zero size if image size is not yet available
+    });
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "precision loss acceptable for rendering"
+    )]
+    Size::new(first_image_width as f32, first_image_height as f32)
+}
+
 /// Computes the layout of an [`ImageStack`].
 pub(super) fn layout<Renderer, Handle>(
     renderer: &Renderer,
     limits: &layout::Limits,
     images: &[StackedImage<Handle>],
-    width: Length,
-    height: Length,
+    widget_width: Length,
+    widget_height: Length,
     content_fit: ContentFit,
     image_size_override: Option<Size<u32>>,
 ) -> layout::Node
 where
     Renderer: image::Renderer<Handle = Handle>,
 {
-    // The raw w/h of the first image, or the override, if specified
-    let image_size = {
-        let Size { width, height } = image_size_override.unwrap_or_else(|| {
-            renderer
-                .measure_image(&images[0].handle)
-                .unwrap_or(Size::new(0, 0)) // default to zero size if image size is not yet available
-        });
-
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "precision loss acceptable for rendering"
-        )]
-        Size::new(width as f32, height as f32)
-    };
+    let base_size = get_base_size(renderer, images, image_size_override);
 
     // The size to be available to the widget prior to `Shrink`ing
-    let raw_size = limits
-        .width(width)
-        .height(height)
-        .resolve(width, height, image_size);
+    let raw_size = limits.width(widget_width).height(widget_height).resolve(
+        widget_width,
+        widget_height,
+        base_size,
+    );
 
     // The uncropped size of the image when fit to the bounds above
-    let full_size = content_fit.fit(image_size, raw_size);
+    let full_size = content_fit.fit(base_size, raw_size);
 
     // Shrink the widget to fit the resized image, if requested
     let final_size = Size {
-        width: match width {
+        width: match widget_width {
             Length::Shrink => f32::min(raw_size.width, full_size.width),
             _ => raw_size.width,
         },
-        height: match height {
+        height: match widget_height {
             Length::Shrink => f32::min(raw_size.height, full_size.height),
             _ => raw_size.height,
         },
@@ -155,27 +167,18 @@ pub(super) fn draw<Renderer, Handle>(
     Handle: Clone,
 {
     // Find out maximum size (assuming the first image covers the entire area)
-    let Size { width, height } = image_size_override.unwrap_or_else(|| {
-        renderer
-            .measure_image(&images[0].handle)
-            .unwrap_or(Size::new(0, 0))
-    });
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "precision loss acceptable for rendering"
-    )]
-    let overall_size = Size::new(width as f32, height as f32);
+    let base_size = get_base_size(renderer, images, image_size_override);
 
-    let bounds = layout.bounds();
-    let overall_adjusted_fit = content_fit.fit(overall_size, bounds.size());
+    let layout_bounds = layout.bounds();
+    let overall_adjusted_fit = content_fit.fit(base_size, layout_bounds.size());
 
     let center_offset = Vector::new(
-        (bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
-        (bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
+        (layout_bounds.width - overall_adjusted_fit.width).max(0.0) / 2.0,
+        (layout_bounds.height - overall_adjusted_fit.height).max(0.0) / 2.0,
     );
 
-    let x_scale = overall_adjusted_fit.width / overall_size.width;
-    let y_scale = overall_adjusted_fit.height / overall_size.height;
+    let x_scale = overall_adjusted_fit.width / base_size.width;
+    let y_scale = overall_adjusted_fit.height / base_size.height;
 
     // Preprocess images
     let to_draw: Vec<(&StackedImage<Handle>, Rectangle)> = images
@@ -187,7 +190,11 @@ pub(super) fn draw<Renderer, Handle>(
                 .load_image(&image.handle)
                 .expect("image failed to load");
 
-            if let Some(Size { width, height }) = renderer.measure_image(&image.handle) {
+            if let Some(Size {
+                width: image_width,
+                height: image_height,
+            }) = renderer.measure_image(&image.handle)
+            {
                 #[expect(
                     clippy::cast_precision_loss,
                     reason = "precision loss acceptable for rendering"
@@ -200,9 +207,9 @@ pub(super) fn draw<Renderer, Handle>(
                     reason = "precision loss acceptable for rendering"
                 )]
                 let drawing_bounds = Rectangle {
-                    width: width as f32 * x_scale,
-                    height: height as f32 * y_scale,
-                    ..bounds
+                    width: image_width as f32 * x_scale,
+                    height: image_height as f32 * y_scale,
+                    ..layout_bounds
                 };
 
                 let sum_bounds = drawing_bounds + center_offset + pos_offset;
@@ -213,22 +220,24 @@ pub(super) fn draw<Renderer, Handle>(
             }
         })
         .collect();
-    let render = |renderer: &mut Renderer| {
-        for (image, bounds) in to_draw {
+    let render = |inner_renderer: &mut Renderer| {
+        for (stacked_image, draw_bounds) in to_draw {
             let image = image::Image {
-                handle: image.handle.clone(),
+                handle: stacked_image.handle.clone(),
                 filter_method: image::FilterMethod::Linear,
                 rotation: iced::Radians(0.0),
                 opacity: 1.0,
                 snap: false,
                 border_radius: iced::border::radius(0),
             };
-            renderer.draw_image(image, bounds, Rectangle::INFINITE);
+            inner_renderer.draw_image(image, draw_bounds, Rectangle::INFINITE);
         }
     };
 
-    if overall_adjusted_fit.width > bounds.width || overall_adjusted_fit.height > bounds.height {
-        renderer.with_layer(bounds, render);
+    if overall_adjusted_fit.width > layout_bounds.width
+        || overall_adjusted_fit.height > layout_bounds.height
+    {
+        renderer.with_layer(layout_bounds, render);
     } else {
         render(renderer);
     }
@@ -286,15 +295,22 @@ where
         let bounds = layout.bounds();
 
         let state = tree.state.downcast_ref::<Program::State>();
-        renderer.with_layer(bounds, |renderer| {
-            renderer.with_translation(Vector::new(bounds.x, bounds.y), |renderer| {
-                let draw_result =
-                    self.program
-                        .draw(state, renderer, theme, layout.bounds(), cursor);
-                for geometry in draw_result {
-                    renderer.draw_geometry(geometry);
-                }
-            });
+        renderer.with_layer(bounds, |layer_renderer| {
+            layer_renderer.with_translation(
+                Vector::new(bounds.x, bounds.y),
+                |translated_layer_renderer| {
+                    let draw_result = self.program.draw(
+                        state,
+                        translated_layer_renderer,
+                        theme,
+                        layout.bounds(),
+                        cursor,
+                    );
+                    for geometry in draw_result {
+                        translated_layer_renderer.draw_geometry(geometry);
+                    }
+                },
+            );
         });
     }
 
@@ -322,12 +338,12 @@ where
 
         let state = tree.state.downcast_mut::<Program::State>();
 
-        let action = self.program.update(state, event, bounds, cursor);
+        let action_option = self.program.update(state, event, bounds, cursor);
 
-        if let Some(action) = action {
-            let (message, redraw_request, status) = action.into_inner();
+        if let Some(action) = action_option {
+            let (message_option, redraw_request, status) = action.into_inner();
 
-            if let Some(message) = message {
+            if let Some(message) = message_option {
                 shell.publish(message);
             }
 

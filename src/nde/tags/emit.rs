@@ -21,8 +21,8 @@ pub fn emit(global: &super::Global, spans: &[Span]) -> String {
     maybe_write_block(&mut compiled_text, compiled_tags.as_str());
 
     for element in spans {
-        match element {
-            Span::Tags(tags, text) => {
+        match *element {
+            Span::Tags(ref tags, ref text) => {
                 compiled_tags.clear();
                 tags.emit(&mut compiled_tags)
                     .expect("emitting tags into a String should not fail");
@@ -30,12 +30,12 @@ pub fn emit(global: &super::Global, spans: &[Span]) -> String {
                 push_escaped(&mut compiled_text, text);
             }
             Span::Reset => compiled_text.push_str("{\\r}"),
-            Span::ResetToStyle(style_name) => {
+            Span::ResetToStyle(ref style_name) => {
                 compiled_text.push_str("{\\r");
                 compiled_text.push_str(style_name);
                 compiled_text.push('}');
             }
-            Span::Drawing(tags, drawing) => {
+            Span::Drawing(ref tags, ref drawing) => {
                 compiled_tags.clear();
                 tags.emit(&mut compiled_tags)
                     .expect("emitting tags into a String should not fail");

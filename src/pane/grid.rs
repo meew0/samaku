@@ -122,6 +122,9 @@ fn row<'a>(
 
     // Cut off event text after a bit
     let cutoff = event.text.len().min(250);
+    let safe_cutoff = event.text.floor_char_boundary(cutoff);
+    #[expect(clippy::string_slice, reason = "safe because of floor_char_boundary")]
+    let event_text_slice = &event.text[..safe_cutoff];
 
     let (background_color, text_color) = if global_state.selected_events.is_last(event_index) {
         (style::SAMAKU_PRIMARY, style::SAMAKU_BACKGROUND)
@@ -151,7 +154,7 @@ fn row<'a>(
         iced::widget::row![
             iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
             iced::widget::text(event.end().format_long()).width(iced::Length::Fixed(150.0)),
-            iced::widget::text(&event.text[0..cutoff])
+            iced::widget::text(event_text_slice)
         ]
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center),

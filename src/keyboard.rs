@@ -52,8 +52,8 @@ pub(crate) fn handle_shortcut(
 }
 
 pub(crate) fn handle_modifiers(keyboard_event: &Event) -> Option<Message> {
-    match keyboard_event {
-        Event::ModifiersChanged(modifiers) => Some(Message::ModifiersChanged(*modifiers)),
+    match *keyboard_event {
+        Event::ModifiersChanged(modifiers) => Some(Message::ModifiersChanged(modifiers)),
         _ => None,
     }
 }

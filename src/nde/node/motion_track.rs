@@ -29,10 +29,13 @@ impl Node for MotionTrack {
     }
 
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(inputs.len() > 1); // Elide bounds checks
+        assert!(
+            inputs.len() > 1,
+            "the required number of inputs should be present"
+        ); // Elide bounds checks
 
-        super::retrieve!(inputs[0], SocketValue::MultipleEvents(events));
-        super::retrieve!(inputs[1], SocketValue::FrameRate(frame_rate));
+        super::retrieve!(inputs[0], &SocketValue::MultipleEvents(ref events));
+        super::retrieve!(inputs[1], &SocketValue::FrameRate(ref frame_rate));
 
         let mut new_events: Vec<nde::Event> = vec![];
 

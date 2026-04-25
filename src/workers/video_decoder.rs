@@ -108,7 +108,7 @@ pub(super) fn spawn(
                             // Load new video
                             match media::Video::load(path_buf, index) {
                                 Ok(video) => {
-                                    let metadata_box = Box::new(video.metadata);
+                                    let metadata_box = Box::new(video.metadata.clone());
                                     tx_out.send(message::Message::VideoLoaded(metadata_box));
                                     tracker_opt = None;
                                     video_opt = Some(video);

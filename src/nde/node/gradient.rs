@@ -26,10 +26,13 @@ impl Node for Gradient {
     fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
         const RESOLUTION: i32 = 5;
 
-        assert!(inputs.len() > 2); // Elide bounds checks
+        assert!(
+            inputs.len() > 2,
+            "the required number of inputs should be present"
+        ); // Elide bounds checks
 
-        super::retrieve!(inputs[1], SocketValue::Rectangle(rectangle));
-        super::retrieve!(inputs[2], SocketValue::LocalTags(target_tags));
+        super::retrieve!(inputs[1], &SocketValue::Rectangle(ref rectangle));
+        super::retrieve!(inputs[2], &SocketValue::LocalTags(ref target_tags));
 
         if rectangle.x2 < rectangle.x1 || rectangle.y2 < rectangle.y1 {
             anyhow::bail!("Input rectangle is inverted");
@@ -52,11 +55,10 @@ impl Node for Gradient {
 
                 let power = f64::from(x - rectangle.x1) / f64::from(width);
                 for span in &mut new_event.text {
-                    match span {
-                        nde::Span::Tags(local, _) | nde::Span::Drawing(local, _) => {
-                            local.interpolate(target_tags, power);
-                        }
-                        _ => {}
+                    if let &mut (nde::Span::Tags(ref mut local, _)
+                    | nde::Span::Drawing(ref mut local, _)) = span
+                    {
+                        local.interpolate(target_tags, power);
                     }
                 }
                 events.push(new_event);

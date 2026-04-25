@@ -99,7 +99,11 @@ impl<'a> MonochromeImage<'a> {
             usize::try_from(width).expect("MonochromeImage width should not be negative");
         let usize_height =
             usize::try_from(height).expect("MonochromeImage height should not be negative");
-        assert_eq!(data.len(), usize_width * usize_height);
+        assert_eq!(
+            data.len(),
+            usize_width * usize_height,
+            "the data array should have the correct size"
+        );
         Self {
             data,
             width,
@@ -210,7 +214,7 @@ pub(crate) fn track_region(
     region1: &Region,
     predicted_region2: &Region,
 ) -> Option<Region> {
-    let image1_mask_ptr = match &options.image1_mask {
+    let image1_mask_ptr = match options.image1_mask.as_ref() {
         Some(mask) => mask.as_slice().as_ptr(),
         None => std::ptr::null(),
     };

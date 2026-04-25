@@ -68,20 +68,21 @@ fn update_internal(
             global_state.modifiers = modifiers;
         }
         Message::SplitPane(axis) => {
-            if let Some(pane) = global_state.focus {
-                let result = global_state
-                    .panes
-                    .split(axis, pane, pane::State::unassigned());
+            if let Some(focused_pane) = global_state.focus {
+                let result =
+                    global_state
+                        .panes
+                        .split(axis, focused_pane, pane::State::unassigned());
 
-                if let Some((pane, _)) = result {
-                    global_state.focus = Some(pane);
+                if let Some((new_pane, _)) = result {
+                    global_state.focus = Some(new_pane);
                 }
             }
         }
         Message::ClosePane => {
-            if let Some(pane) = global_state.focus
-                && global_state.panes.get(pane).is_some()
-                && let Some((_, sibling)) = global_state.panes.close(pane)
+            if let Some(focused_pane) = global_state.focus
+                && global_state.panes.get(focused_pane).is_some()
+                && let Some((_, sibling)) = global_state.panes.close(focused_pane)
             {
                 global_state.focus = Some(sibling);
             }
@@ -142,7 +143,9 @@ fn update_internal(
             let tasks: Vec<iced::Task<Message>> = messages
                 .into_iter()
                 .rev()
-                .map(|message| update_direct(global_state, message, &mut history::Key::Dummy))
+                .map(|rewind_message| {
+                    update_direct(global_state, rewind_message, &mut history::Key::Dummy)
+                })
                 .collect();
             return iced::Task::batch(tasks);
         }
@@ -151,7 +154,9 @@ fn update_internal(
             // Redo messages need to be processed in forward order
             let tasks: Vec<iced::Task<Message>> = messages
                 .into_iter()
-                .map(|message| update_direct(global_state, message, &mut history::Key::Dummy))
+                .map(|replay_message| {
+                    update_direct(global_state, replay_message, &mut history::Key::Dummy)
+                })
                 .collect();
             return iced::Task::batch(tasks);
         }
@@ -167,8 +172,8 @@ fn update_internal(
             global_state.project_properties.video_path = Some(path_buf.clone());
             action::index_video_and_load(global_state, path_buf);
         }
-        Message::VideoIndexed(path_buf, index) => {
-            let model::NeverClone(index) = index;
+        Message::VideoIndexed(path_buf, index_never_clone) => {
+            let model::NeverClone(index) = index_never_clone;
             action::load_video(global_state, path_buf, index);
         }
         Message::VideoLoaded(metadata) => {
@@ -321,7 +326,7 @@ fn update_internal(
             global_state.workers.emit_playback_step();
         }
         Message::PlaybackAdvanceFrames(delta_frames) => {
-            if let Some(video_metadata) = &global_state.video_metadata {
+            if let Some(ref video_metadata) = global_state.video_metadata {
                 global_state
                     .shared
                     .playback_position
@@ -819,8 +824,8 @@ fn update_internal(
             notify_selected_events(global_state);
             undo.put_instant("Set event effect", Message::MultiEditEventEffect(old));
         }
-        Message::MultiEditEventStartTime(new_start_time) => {
-            let old = new_start_time.apply_function(
+        Message::MultiEditEventStartTime(edit) => {
+            let old = edit.apply_function(
                 &mut global_state.subtitles.events,
                 |event_track, event_index, new_start_time| {
                     let duration = event_track[event_index].duration;
@@ -835,8 +840,8 @@ fn update_internal(
                 Message::MultiEditEventStartTime(old),
             );
         }
-        Message::MultiEditEventDuration(new_duration) => {
-            let old = new_duration.apply_function(
+        Message::MultiEditEventDuration(edit) => {
+            let old = edit.apply_function(
                 &mut global_state.subtitles.events,
                 |event_track, event_index, new_duration| {
                     let start_time = event_track[event_index].start;
@@ -895,9 +900,10 @@ fn update_internal(
                         &mut self,
                         text_editor_state: &mut pane::text_editor::State,
                     ) {
-                        let new_text = text_editor_state.perform(self.action.take().unwrap());
+                        let new_text_option =
+                            text_editor_state.perform(self.action.take().unwrap());
 
-                        if let Some(new_text) = new_text {
+                        if let Some(new_text) = new_text_option {
                             self.new_text = Some(new_text);
                         }
                     }
@@ -1079,7 +1085,7 @@ fn update_internal(
             if let Some(subtitle::ExtradataEntry::NdeFilter(filter)) = removed {
                 notify_filter_lists(global_state);
 
-                if let Some(reticules) = &mut global_state.reticules
+                if let Some(ref mut reticules) = global_state.reticules
                     && reticules.source_filter_index == filter_index
                 {
                     global_state.reticules = None;
@@ -1134,8 +1140,8 @@ fn update_internal(
             let mapping = filter.graph.delete_nodes(&node_ids);
 
             // Remap reticules
-            if let Some(reticules) = &mut global_state.reticules
-                && let Some(new_node_index) = &mapping[reticules.source_node_index.0]
+            if let Some(ref mut reticules) = global_state.reticules
+                && let Some(ref new_node_index) = mapping[reticules.source_node_index.0]
             {
                 reticules.source_node_index = *new_node_index;
             } else {
@@ -1179,11 +1185,11 @@ fn update_internal(
         }
         Message::ConnectNodes(filter_id, previous, next) => {
             let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
-            let previous = filter.graph.connect(previous, next);
+            let old_previous = filter.graph.connect(previous, next);
 
             undo.put_no_batch(
                 "Connect nodes",
-                Message::SetNodeConnection(filter_id, previous, next),
+                Message::SetNodeConnection(filter_id, old_previous, next),
             );
         }
         Message::DisconnectNodes(filter_id, previous, next) => {
@@ -1214,7 +1220,7 @@ fn update_internal(
             global_state.reticules = Some(reticules);
         }
         Message::UpdateReticulePosition(index, position) => {
-            if let Some(reticules) = &mut global_state.reticules {
+            if let Some(ref mut reticules) = global_state.reticules {
                 let result = global_state
                     .subtitles
                     .extradata
@@ -1234,7 +1240,7 @@ fn update_internal(
             }
         }
         Message::TrackMotionForNode(filter_index, node_index, initial_region) => {
-            if let Some(video_metadata) = global_state.video_metadata {
+            if let Some(video_metadata) = global_state.video_metadata.as_ref() {
                 let current_frame = global_state.current_frame().unwrap(); // video is loaded
 
                 // Update the node's cached track to put the marker it requested at the

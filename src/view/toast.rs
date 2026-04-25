@@ -86,7 +86,7 @@ where
                 iced::widget::text(format!("({}x) {}", toast.count, toast.title))
             };
 
-            let body_area: Element<'a, Message> = match &toast.content {
+            let body_area: Element<'a, Message> = match toast.content {
                 toast::Content::Message => {
                     iced::widget::container(iced::widget::text(toast.body.as_str()))
                         .width(Length::Fill)
@@ -98,7 +98,7 @@ where
                 toast::Content::Progress { progress } => iced::widget::container(
                     iced::widget::column![
                         iced::widget::text(toast.body.as_str()),
-                        iced::widget::progress_bar(0.0..=1.0, *progress),
+                        iced::widget::progress_bar(0.0..=1.0, progress),
                     ]
                     .spacing(4),
                 )
@@ -108,8 +108,8 @@ where
                 .into(),
 
                 toast::Content::Confirm {
-                    confirm_label,
-                    deny_label,
+                    ref confirm_label,
+                    ref deny_label,
                     ..
                 } => iced::widget::container(
                     iced::widget::column![
@@ -256,12 +256,12 @@ impl<Message> Widget<Message, Theme, Renderer> for Manager<'_, Message> {
         operation: &mut dyn Operation,
     ) {
         operation.container(None, layout.bounds());
-        operation.traverse(&mut |operation| {
+        operation.traverse(&mut |inner_operation| {
             self.content.as_widget_mut().operate(
                 &mut state.children[0],
                 layout,
                 renderer,
-                operation,
+                inner_operation,
             );
         });
     }
@@ -387,29 +387,35 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
     ) {
         let viewport = layout.bounds();
 
-        for ((child, state), layout) in self
+        for ((child, state), inner_layout) in self
             .elements
             .iter()
             .zip(self.state.iter())
             .zip(layout.children())
         {
-            child
-                .as_widget()
-                .draw(state, renderer, theme, style, layout, cursor, &viewport);
+            child.as_widget().draw(
+                state,
+                renderer,
+                theme,
+                style,
+                inner_layout,
+                cursor,
+                &viewport,
+            );
         }
     }
 
     fn operate(&mut self, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
         operation.container(None, layout.bounds());
-        operation.traverse(&mut |operation| {
+        operation.traverse(&mut |inner_operation| {
             self.elements
                 .iter_mut()
                 .zip(self.state.iter_mut())
                 .zip(layout.children())
-                .for_each(|((child, state), layout)| {
+                .for_each(|((child, state), inner_layout)| {
                     child
                         .as_widget_mut()
-                        .operate(state, layout, renderer, operation);
+                        .operate(state, inner_layout, renderer, inner_operation);
                 });
         });
     }
@@ -423,7 +429,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
     ) {
-        if let Event::Window(window::Event::RedrawRequested(now)) = &event {
+        if let Event::Window(window::Event::RedrawRequested(now)) = *event {
             let mut next_redraw: Option<window::RedrawRequest> = None;
 
             self.instants
@@ -443,7 +449,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
                         // While frozen (e.g. a progress toast that hasn't finished), keep
                         // resetting the instant so the full timeout begins only once unfrozen.
                         if self.frozen.get(toast_index).copied().unwrap_or(false) {
-                            *instant = *now;
+                            *instant = now;
                             return;
                         }
 
@@ -461,7 +467,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
                             shell.publish((self.on_close)(toast_index));
                             next_redraw = Some(window::RedrawRequest::NextFrame);
                         } else {
-                            let redraw_at = window::RedrawRequest::At(*now + remaining);
+                            let redraw_at = window::RedrawRequest::At(now + remaining);
                             next_redraw = next_redraw
                                 .map(|redraw| redraw.min(redraw_at))
                                 .or(Some(redraw_at));
@@ -476,7 +482,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
 
         let viewport = layout.bounds();
 
-        for (((child, state), layout), instant) in self
+        for (((child, state), inner_layout), instant) in self
             .elements
             .iter_mut()
             .zip(self.state.iter_mut())
@@ -489,7 +495,7 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
             child.as_widget_mut().update(
                 state,
                 event,
-                layout,
+                inner_layout,
                 cursor,
                 renderer,
                 clipboard,
@@ -515,11 +521,11 @@ impl<Message> overlay::Overlay<Message, Theme, Renderer> for Overlay<'_, '_, Mes
             .iter()
             .zip(self.state.iter())
             .zip(layout.children())
-            .map(|((child, state), layout)| {
+            .map(|((child, state), inner_layout)| {
                 child
                     .as_widget()
-                    .mouse_interaction(state, layout, cursor, &self.viewport, renderer)
-                    .max(if cursor.is_over(layout.bounds()) {
+                    .mouse_interaction(state, inner_layout, cursor, &self.viewport, renderer)
+                    .max(if cursor.is_over(inner_layout.bounds()) {
                         mouse::Interaction::Idle
                     } else {
                         mouse::Interaction::default()

@@ -68,7 +68,7 @@ impl Drop for Index {
     }
 }
 
-pub type ProgressCallback = Box<dyn FnMut(i64, i64) -> model::CancellationState>;
+pub type ProgressCallback = Box<dyn FnMut(i64, i64) -> model::CancellationState + Send>;
 
 pub(crate) struct Indexer {
     indexer: *mut ffms2::FFMS_Indexer,
@@ -101,7 +101,7 @@ impl Indexer {
         }
     }
     pub(crate) fn set_progress_callback<
-        F: FnMut(i64, i64) -> model::CancellationState + 'static,
+        F: FnMut(i64, i64) -> model::CancellationState + Send + 'static,
     >(
         &mut self,
         callback: F,
@@ -223,11 +223,11 @@ impl AudioSource {
         } else {
             let properties = match Self::get_audio_properties(audio_source) {
                 Ok(properties) => properties,
-                Err(error) => {
+                Err(inner_error) => {
                     return Err(FfmsError {
                         main_type: ErrorType::Bindings,
                         subtype: ErrorType::Unsupported,
-                        message: format!("error while reading audio properties: {error}"),
+                        message: format!("error while reading audio properties: {inner_error}"),
                     });
                 }
             };
@@ -324,23 +324,26 @@ impl AudioSource {
             });
         }
 
-        let start_frame: i64 = start_frame.try_into().map_err(|_| FfmsError {
+        let start_frame_i64: i64 = start_frame.try_into().map_err(|try_into_error| FfmsError {
             main_type: ErrorType::Bindings,
             subtype: ErrorType::InvalidArgument,
-            message: "start_frame overflow".to_owned(),
+            message: format!("start_frame overflow: {try_into_error:?}"),
         })?;
-        let count_frames: i64 = count_frames.try_into().map_err(|_| FfmsError {
-            main_type: ErrorType::Bindings,
-            subtype: ErrorType::InvalidArgument,
-            message: "count_frames overflow".to_owned(),
-        })?;
+        let count_frames_i64: i64 =
+            count_frames
+                .try_into()
+                .map_err(|try_into_error| FfmsError {
+                    main_type: ErrorType::Bindings,
+                    subtype: ErrorType::InvalidArgument,
+                    message: format!("count_frames overflow: {try_into_error:?}"),
+                })?;
 
         let err = unsafe {
             ffms2::FFMS_GetAudio(
                 self.audio_source,
                 buffer.as_mut_ptr().cast::<u8>().cast(),
-                start_frame,
-                count_frames,
+                start_frame_i64,
+                count_frames_i64,
                 self.error.as_mut_ptr(),
             )
         };
@@ -395,7 +398,7 @@ unsafe impl Send for VideoSource {}
 impl VideoSource {
     pub(crate) fn new<P: AsRef<std::path::Path>>(
         filename: P,
-        track: i32,
+        track_num: i32,
         index: &Index,
         threads: i32,
         seek_mode: SeekMode,
@@ -406,7 +409,7 @@ impl VideoSource {
         let video_source = unsafe {
             ffms2::FFMS_CreateVideoSource(
                 source.as_ptr(),
-                track,
+                track_num,
                 index.index,
                 threads,
                 seek_mode as i32,
@@ -870,6 +873,8 @@ struct InternalError {
     error_info: ffms2::FFMS_ErrorInfo,
     buffer: Pin<Box<[u8; InternalError::BUFFER_SIZE as usize]>>,
 }
+
+unsafe impl Send for InternalError {}
 
 impl InternalError {
     const BUFFER_SIZE: u16 = 1024;

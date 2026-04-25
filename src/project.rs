@@ -119,11 +119,11 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
 
 /// Perform after-load tasks such as opening linked audio and video files.
 pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Message> {
-    if let Some(video_path) = &global_state.project_properties.video_path {
+    if let Some(ref video_path) = global_state.project_properties.video_path {
         action::index_video_and_load(global_state, video_path.clone());
     }
 
-    if let Some(audio_path) = &global_state.project_properties.audio_path {
+    if let Some(ref audio_path) = global_state.project_properties.audio_path {
         action::load_audio(global_state, audio_path.clone());
     }
 
@@ -147,16 +147,20 @@ impl<'a> PaneLayout<'a> {
         pane_grid_state: &'a pane_grid::State<pane::State>,
         node: &pane_grid::Node,
     ) -> Self {
-        match node {
+        match *node {
             pane_grid::Node::Split {
-                axis, ratio, a, b, ..
+                axis,
+                ratio,
+                ref a,
+                ref b,
+                ..
             } => Self::Split {
-                axis: *axis,
-                ratio: *ratio,
+                axis,
+                ratio,
                 a: Box::new(PaneLayout::from_pane_grid(pane_grid_state, a)),
                 b: Box::new(PaneLayout::from_pane_grid(pane_grid_state, b)),
             },
-            pane_grid::Node::Pane(pane) => Self::Pane(PaneCow::Borrowed(
+            pane_grid::Node::Pane(ref pane) => Self::Pane(PaneCow::Borrowed(
                 pane_grid_state
                     .panes
                     .get(pane)
@@ -175,7 +179,7 @@ impl<'a> PaneLayout<'a> {
             },
             PaneLayout::Pane(cow) => pane_grid::Configuration::Pane(match cow {
                 PaneCow::Borrowed(_) => {
-                    panic!("tried to convert borrowed PaneCow in to_configuration")
+                    panic!("tried to convert borrowed PaneCow into Configuration")
                 }
                 PaneCow::Owned(state) => state,
             }),
@@ -200,9 +204,13 @@ impl serde::Serialize for PaneCow<'_> {
     where
         S: serde::Serializer,
     {
-        match self {
+        #[expect(
+            clippy::match_same_arms,
+            reason = "cannot merge these arms here since state is bound inconsistently"
+        )]
+        match *self {
             PaneCow::Borrowed(state) => state.serialize(serializer),
-            PaneCow::Owned(state) => state.serialize(serializer),
+            PaneCow::Owned(ref state) => state.serialize(serializer),
         }
     }
 }

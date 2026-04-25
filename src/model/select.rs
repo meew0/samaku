@@ -65,6 +65,9 @@ impl EventSelection {
             self.indices.remove(&event_index);
         } else if !self.indices.contains(&event_index) && state {
             self.indices.insert(event_index);
+        } else {
+            // The current selection state is already equal to the desired state.
+            // Nothing to do.
         }
         self.last = last;
 
@@ -137,10 +140,10 @@ impl EventSelection {
         }
 
         // Only return a new `last` event if the current one was actually deselected
-        let new_last = if let Some(old_last) = old_last
-            && deselected.contains(&old_last)
+        let new_last = if let Some(old_last_index) = old_last
+            && deselected.contains(&old_last_index)
         {
-            Some(old_last)
+            Some(old_last_index)
         } else {
             None
         };

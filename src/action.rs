@@ -30,8 +30,8 @@ pub(crate) fn index_video_and_load(global_state: &mut crate::Samaku, path_buf: P
     let progress_sender = global_state.workers.progress_sender();
     let progress_sender_done = global_state.workers.progress_sender();
 
-    let indexer = media::Video::create_indexer(&path_buf);
-    if let Some(mut indexer) = global_state.toasts.anyhow(indexer) {
+    let indexer_result = media::Video::create_indexer(&path_buf);
+    if let Some(mut indexer) = global_state.toasts.anyhow(indexer_result) {
         indexer.set_progress_callback(move |current, total| {
             #[expect(clippy::cast_precision_loss, reason = "unavoidable in this case")]
             let fraction = (current as f32) / (total as f32);

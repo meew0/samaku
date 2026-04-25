@@ -24,12 +24,14 @@ impl super::LocalState for State {
             position: self.position,
             frame_rate: global_state
                 .video_metadata
+                .as_ref()
                 .map(|video_metadata| video_metadata.frame_rate),
             video_bounds: VideoBounds {
                 start: video_start,
                 end: video_start
                     + global_state
                         .video_metadata
+                        .as_ref()
                         .map_or(subtitle::Duration(0), |video_metadata| {
                             video_metadata.duration
                         }),
@@ -216,9 +218,9 @@ impl ViewState {
         &self,
         mouse_position: iced::Point,
     ) -> Option<(EventDragAction, EventReference)> {
-        for (bounds, drag_action, event_reference) in &self.subtitle_areas {
+        for &(ref bounds, drag_action, ref event_reference) in &self.subtitle_areas {
             if bounds.contains(mouse_position) {
-                return Some((*drag_action, event_reference.clone()));
+                return Some((drag_action, event_reference.clone()));
             }
         }
         None
@@ -242,9 +244,9 @@ impl canvas::Program<message::Message> for CanvasData {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<message::Message>> {
-        match event {
-            canvas::Event::Mouse(mouse_event) => {
-                match mouse_event {
+        match *event {
+            canvas::Event::Mouse(ref mouse_event) => {
+                match *mouse_event {
                     mouse::Event::ButtonPressed(mouse::Button::Left) => {
                         state.drag_start = cursor.position_in(bounds);
                         if let Some(mouse_position) = state.drag_start {
@@ -310,8 +312,8 @@ impl canvas::Program<message::Message> for CanvasData {
 
                 return Some(Action::capture());
             }
-            canvas::Event::Keyboard(keyboard_event) => match keyboard_event {
-                keyboard::Event::ModifiersChanged(modifiers) => {
+            canvas::Event::Keyboard(ref keyboard_event) => match *keyboard_event {
+                keyboard::Event::ModifiersChanged(ref modifiers) => {
                     state.control_held = modifiers.contains(Modifiers::CTRL);
                 }
                 _ => {}
@@ -399,11 +401,11 @@ impl CanvasData {
         &self,
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
-        delta: &mouse::ScrollDelta,
+        delta: mouse::ScrollDelta,
     ) -> Action<message::Message> {
         let y = match delta {
-            mouse::ScrollDelta::Lines { y, .. } => *y,
-            mouse::ScrollDelta::Pixels { y, .. } => *y / 100.0, // TODO is this reasonable?
+            mouse::ScrollDelta::Lines { y, .. } => y,
+            mouse::ScrollDelta::Pixels { y, .. } => y / 100.0, // TODO is this reasonable?
         };
 
         let modifier_factor = 1.2_f32.powf(y);
@@ -801,74 +803,10 @@ fn draw_one_subtitle(
 
     let path = if true_width > 2.0 * pt_x {
         // If we have enough space, draw a full “dumbbell” with a connecting rectangle in the middle
-        let pt_y = (SUBTITLE_FULL_HEIGHT - SUBTITLE_CENTER_HEIGHT) / 2.0;
-
-        let triangle_width = SUBTITLE_FULL_HEIGHT * HALF_SQRT_3;
-        let triangle_size = iced::Size::new(triangle_width, SUBTITLE_FULL_HEIGHT);
-        view_state.subtitle_areas.push((
-            iced::Rectangle::new(base_point, triangle_size),
-            EventDragAction::Left,
-            event.clone(),
-        ));
-        view_state.subtitle_areas.push((
-            iced::Rectangle::new(
-                base_point + iced::Vector::new(triangle_width, 0.0),
-                iced::Size::new(
-                    2.0_f32.mul_add(-triangle_width, true_width),
-                    SUBTITLE_FULL_HEIGHT,
-                ),
-            ),
-            EventDragAction::Center,
-            event.clone(),
-        ));
-        view_state.subtitle_areas.push((
-            iced::Rectangle::new(
-                base_point + iced::Vector::new(true_width - triangle_width, 0.0),
-                triangle_size,
-            ),
-            EventDragAction::Right,
-            event.clone(),
-        ));
-
-        canvas::Path::new(|builder| {
-            builder.move_to(base_point);
-            builder.line_to(base_point + iced::Vector::new(pt_x, pt_y));
-            builder.line_to(base_point + iced::Vector::new(true_width - pt_x, pt_y));
-            builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
-            builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
-            builder.line_to(
-                base_point + iced::Vector::new(true_width - pt_x, SUBTITLE_FULL_HEIGHT - pt_y),
-            );
-            builder.line_to(base_point + iced::Vector::new(pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
-            builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
-            builder.close();
-        })
+        draw_subtitle_wide(event, view_state, true_width, pt_x, base_point)
     } else {
         // If there's not enough space, draw a “squeezed dumbbell”, like a spindle
-        let pt_x = true_width / 2.0;
-        let pt_y = pt_x * TAN_15_DEG;
-
-        let triangle_size = iced::Size::new(pt_x, SUBTITLE_FULL_HEIGHT);
-        view_state.subtitle_areas.push((
-            iced::Rectangle::new(base_point, triangle_size),
-            EventDragAction::Left,
-            event.clone(),
-        ));
-        view_state.subtitle_areas.push((
-            iced::Rectangle::new(base_point + iced::Vector::new(pt_x, 0.0), triangle_size),
-            EventDragAction::Right,
-            event.clone(),
-        ));
-
-        canvas::Path::new(|builder| {
-            builder.move_to(base_point);
-            builder.line_to(base_point + iced::Vector::new(pt_x, pt_y));
-            builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
-            builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
-            builder.line_to(base_point + iced::Vector::new(pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
-            builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
-            builder.close();
-        })
+        draw_subtitle_squeezed(event, view_state, true_width, base_point)
     };
 
     frame.fill(&path, style::SAMAKU_BACKGROUND_WEAK);
@@ -888,13 +826,101 @@ fn draw_one_subtitle(
     );
 }
 
+fn draw_subtitle_wide(
+    event: &EventReference,
+    view_state: &mut ViewState,
+    true_width: f32,
+    pt_x: f32,
+    base_point: iced::Point,
+) -> canvas::Path {
+    // If we have enough space, draw a full “dumbbell” with a connecting rectangle in the middle
+    let pt_y = (SUBTITLE_FULL_HEIGHT - SUBTITLE_CENTER_HEIGHT) / 2.0;
+
+    let triangle_width = SUBTITLE_FULL_HEIGHT * HALF_SQRT_3;
+    let triangle_size = iced::Size::new(triangle_width, SUBTITLE_FULL_HEIGHT);
+    view_state.subtitle_areas.push((
+        iced::Rectangle::new(base_point, triangle_size),
+        EventDragAction::Left,
+        event.clone(),
+    ));
+    view_state.subtitle_areas.push((
+        iced::Rectangle::new(
+            base_point + iced::Vector::new(triangle_width, 0.0),
+            iced::Size::new(
+                2.0_f32.mul_add(-triangle_width, true_width),
+                SUBTITLE_FULL_HEIGHT,
+            ),
+        ),
+        EventDragAction::Center,
+        event.clone(),
+    ));
+    view_state.subtitle_areas.push((
+        iced::Rectangle::new(
+            base_point + iced::Vector::new(true_width - triangle_width, 0.0),
+            triangle_size,
+        ),
+        EventDragAction::Right,
+        event.clone(),
+    ));
+
+    canvas::Path::new(|builder| {
+        builder.move_to(base_point);
+        builder.line_to(base_point + iced::Vector::new(pt_x, pt_y));
+        builder.line_to(base_point + iced::Vector::new(true_width - pt_x, pt_y));
+        builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
+        builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
+        builder.line_to(
+            base_point + iced::Vector::new(true_width - pt_x, SUBTITLE_FULL_HEIGHT - pt_y),
+        );
+        builder.line_to(base_point + iced::Vector::new(pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
+        builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
+        builder.close();
+    })
+}
+
+fn draw_subtitle_squeezed(
+    event: &EventReference,
+    view_state: &mut ViewState,
+    true_width: f32,
+    base_point: iced::Point,
+) -> canvas::Path {
+    // If there's not enough space, draw a “squeezed dumbbell”, like a spindle
+    let squeezed_pt_x = true_width / 2.0;
+    let pt_y = squeezed_pt_x * TAN_15_DEG;
+
+    let triangle_size = iced::Size::new(squeezed_pt_x, SUBTITLE_FULL_HEIGHT);
+    view_state.subtitle_areas.push((
+        iced::Rectangle::new(base_point, triangle_size),
+        EventDragAction::Left,
+        event.clone(),
+    ));
+    view_state.subtitle_areas.push((
+        iced::Rectangle::new(
+            base_point + iced::Vector::new(squeezed_pt_x, 0.0),
+            triangle_size,
+        ),
+        EventDragAction::Right,
+        event.clone(),
+    ));
+
+    canvas::Path::new(|builder| {
+        builder.move_to(base_point);
+        builder.line_to(base_point + iced::Vector::new(squeezed_pt_x, pt_y));
+        builder.line_to(base_point + iced::Vector::new(true_width, 0.0));
+        builder.line_to(base_point + iced::Vector::new(true_width, SUBTITLE_FULL_HEIGHT));
+        builder.line_to(base_point + iced::Vector::new(squeezed_pt_x, SUBTITLE_FULL_HEIGHT - pt_y));
+        builder.line_to(base_point + iced::Vector::new(0.0, SUBTITLE_FULL_HEIGHT));
+        builder.close();
+    })
+}
+
 fn top_bar<'a>(
     _pane_state: &'a State,
     global_state: &'a crate::Samaku,
 ) -> iced::Element<'a, message::Message> {
     let play_button = iced::widget::button("Play").on_press(message::Message::TogglePlayback);
 
-    let frame_number_text = if let Some(metadata) = global_state.video_metadata {
+    let frame_number_text = if let Some(metadata) = global_state.video_metadata.as_ref() {
         let frame_number = global_state
             .shared
             .playback_position

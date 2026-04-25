@@ -22,9 +22,9 @@ impl super::LocalState for State {
         _self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let scroll = match &global_state.actual_frame {
+        let scroll = match global_state.actual_frame {
             None => empty!(),
-            Some((num_frame, handle)) => match &global_state.video_metadata {
+            Some((num_frame, ref handle)) => match global_state.video_metadata.as_ref() {
                 None => empty!(),
                 Some(video_metadata) => {
                     let storage_size = subtitle::Resolution {
@@ -41,7 +41,7 @@ impl super::LocalState for State {
                     } else {
                         let instant = std::time::Instant::now();
                         let context = global_state.compile_context();
-                        let current_frame_time = video_metadata.frame_rate.frame_to_ms(*num_frame);
+                        let current_frame_time = video_metadata.frame_rate.frame_to_ms(num_frame);
                         let compiled = global_state.subtitles.events.compile_range(
                             &global_state.subtitles.extradata,
                             &context,
@@ -63,7 +63,7 @@ impl super::LocalState for State {
                             view_state.subtitle_renderer.render_subtitles_onto_base(
                                 &ass,
                                 handle.clone(),
-                                *num_frame,
+                                num_frame,
                                 video_metadata.frame_rate,
                                 storage_size, // TODO use the actual frame size here (maybe with responsive?)
                                 storage_size,
@@ -83,7 +83,7 @@ impl super::LocalState for State {
                     };
 
                     let reticules: &[model::reticule::Reticule] =
-                        if let Some(reticules) = &global_state.reticules {
+                        if let Some(ref reticules) = global_state.reticules {
                             reticules.list.as_slice()
                         } else {
                             &[]
@@ -158,9 +158,9 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         cursor: mouse::Cursor,
     ) -> Option<Action<message::Message>> {
         if let Some(position) = cursor.position_in(bounds)
-            && let canvas::Event::Mouse(mouse_event) = event
+            && let canvas::Event::Mouse(ref mouse_event) = *event
         {
-            match mouse_event {
+            match *mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     if let Some((index, _reticule, iced_pos)) =
                         self.find_hovered_reticule(position, bounds)

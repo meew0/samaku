@@ -95,6 +95,10 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
                 state = ParseState::Fonts;
             } else {
                 state = ParseState::Unknown;
+                #[expect(
+                    clippy::string_slice,
+                    reason = "safe because we previously verified that the first character '[' and the last character ']' are 1 byte each"
+                )]
                 header.push_str(&line[1..(line.len() - 1)]);
             }
 
@@ -387,7 +391,13 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), SubtitlePars
         && let Some((new_extradata_ids, after)) = parse_extradata_references(text)
     {
         extradata_ids = new_extradata_ids;
-        text = &text[after..];
+
+        #[expect(
+            clippy::string_slice,
+            reason = "safe because we know parse_extradata_references will always return an index at a character boundary"
+        )]
+        let tail = &text[after..];
+        text = tail;
     }
 
     let new_event = Event {
@@ -573,7 +583,7 @@ fn attachment_add_data(line: &str, attachment: &mut Attachment) {
 
 fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
     let mut res = vec![];
-    let mut match_start: Option<usize> = None;
+    let mut match_start_option: Option<usize> = None;
 
     for (i, char) in text.char_indices() {
         if i == 0 {
@@ -586,11 +596,20 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
 
         match char {
             '=' => {
-                if let Some(match_start) = match_start.take() {
+                if let Some(match_start) = match_start_option.take() {
+                    // If we already have a match start set (i.e. this is not the first '=' in the line),
+                    // parse and append it.
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both match_start and i come from char_indices"
+                    )]
                     res.push(ExtradataId(text[match_start..i].parse::<u32>().unwrap()));
                 } else if i != 1 {
                     // Double `=` are not allowed
                     return None;
+                } else {
+                    // It must be the first '=' in the line. Ignore it, the match start will be set
+                    // by the number that follows.
                 }
             }
             '0'..='9' => {
@@ -599,11 +618,17 @@ fn parse_extradata_references(text: &str) -> Option<(Vec<ExtradataId>, usize)> {
                     return None;
                 }
 
-                match_start.get_or_insert(i);
+                match_start_option.get_or_insert(i);
             }
             '}' => {
-                return if let Some(match_start) = match_start.take() {
+                return if let Some(match_start) = match_start_option.take() {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both match_start and i come from char_indices"
+                    )]
                     res.push(ExtradataId(text[match_start..i].parse::<u32>().unwrap()));
+
+                    // Returning `i + 1` is valid here because we know the character at `i` is '}', so 1 byte.
                     Some((res, i + 1))
                 } else {
                     // Empty block
@@ -655,14 +680,9 @@ fn next_split_bool(split: &mut std::str::SplitN<char>) -> Result<bool, SubtitleP
 
 /// Parse a generic key/value line of the form `Key: Value`.
 fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
-    let Some(colon_pos) = line.find(':') else {
-        // ignore lines without a colon
-        return None;
-    };
-
-    let key = &line[0..colon_pos];
-    let value = line[(colon_pos + 1)..].trim_start();
-    Some((key, value))
+    // ignore lines without a colon
+    line.split_once(':')
+        .map(|(key, value)| (key, value.trim_start()))
 }
 
 static TIMECODE_REGEX: LazyLock<Regex> =
@@ -714,11 +734,18 @@ fn aegi_inline_string_decode(input: &str) -> String {
 
         if tag.len() == 3 {
             // Tag is done
-            let represented_byte = u8::from_str_radix(&tag[1..], 16).unwrap_or(0);
+            #[expect(
+                clippy::string_slice,
+                reason = "safe because the tag is guaranteed to only contain ascii chars"
+            )]
+            let tag_tail = &tag[1..];
+            let represented_byte = u8::from_str_radix(tag_tail, 16).unwrap_or(0);
             output.push(represented_byte as char);
             tag.clear();
         } else if tag.is_empty() {
             output.push(char);
+        } else {
+            // The tag is still being filled, so we don't need to change the output.
         }
     }
 
@@ -788,7 +815,7 @@ pub mod tests {
             AttachmentType::Graphic
         );
 
-        let (_, event5) = &ass_file.events.nth(5);
+        let (_, event5) = ass_file.events.nth(5);
         assert_eq!(event5.style_index, 0);
         assert_matches!(
             ass_file.extradata.nde_filter_for_event(event5),
@@ -940,7 +967,7 @@ pub mod tests {
         assert_eq!(extradata.next_id, ExtradataId(3));
 
         let entry = &extradata[ExtradataId(2)];
-        assert_matches!(entry, ExtradataEntry::Opaque { key, value });
+        assert_matches!(entry, &ExtradataEntry::Opaque { ref key, ref value });
         assert_eq!(key, "_aegi_perspective_ambient_plane");
         assert_eq!(
             value,
@@ -975,8 +1002,8 @@ pub mod tests {
     fn warning() {
         let (file, warnings) = parse_blocking(&test_file("test_files/parse_warnings.ass"));
         assert_eq!(warnings.len(), 2);
-        assert_matches!(&warnings[0], Warning::StyleOnLine(14, _));
-        assert_matches!(&warnings[1], Warning::UnmatchedStyle(_));
+        assert_matches!(&warnings[0], &Warning::StyleOnLine(14, _));
+        assert_matches!(&warnings[1], &Warning::UnmatchedStyle(_));
         assert_eq!(file.styles.len(), 1); // There should still be a style...
         assert_eq!(file.styles[0].name, "Default"); // ...but it should be the default one
     }

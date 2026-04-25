@@ -544,7 +544,11 @@ impl Track {
                 for _ in 0..num_to_alloc {
                     libass::ass_alloc_style(self.track);
                 }
-                assert_eq!((*self.track).n_styles, i32_count);
+                assert_eq!(
+                    (*self.track).n_styles,
+                    i32_count,
+                    "the number of styles allocated by libass should be equal to the number we wanted"
+                );
             }
             (*self.track).n_styles = i32_count;
         }

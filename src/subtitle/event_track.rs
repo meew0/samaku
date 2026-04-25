@@ -105,8 +105,8 @@ impl EventTrack {
     /// Should not panic in normal use, only if the invariants of `EventTrack` are somehow violated.
     #[must_use]
     pub fn get_nth(&self, n: usize) -> Option<(EventIndex, &Event<'static>)> {
-        let index = self.order.get_index(n).copied();
-        index.map(|index| (index, self.events[index.0].as_ref().unwrap()))
+        let index_option = self.order.get_index(n).copied();
+        index_option.map(|index| (index, self.events[index.0].as_ref().unwrap()))
     }
 
     /// Get the position of the event given by its index.
@@ -148,38 +148,48 @@ impl EventTrack {
         // Re-add the interval
         let new_interval = event.time_range();
         Self::internal_query_index_insert_merge(&mut self.query_index, new_interval, event_index);
-        debug_assert!(self.check_invariants());
+        debug_assert!(self.check_invariants(), "invariants should be upheld");
 
         (old_start, old_duration)
     }
 
     fn check_invariants(&self) -> bool {
-        debug_assert_eq!(self.count, self.order.len());
         debug_assert_eq!(
             self.count,
-            self.events.iter().filter(|x| x.is_some()).count()
+            self.order.len(),
+            "count field matches length of ordering"
+        );
+        debug_assert_eq!(
+            self.count,
+            self.events.iter().filter(|x| x.is_some()).count(),
+            "count field matches number of existing events"
         );
         debug_assert_eq!(
             self.count,
             self.query_index
                 .iter()
                 .map(|(_, leaf)| leaf.count())
-                .sum::<usize>()
+                .sum::<usize>(),
+            "count field matches number of interval tree leaves"
         );
 
         for (i, event) in self
             .events
             .iter()
             .enumerate()
-            .filter(|(_, maybe_event)| maybe_event.is_some())
+            .filter(|&(_, maybe_event)| maybe_event.is_some())
         {
             let event_index = EventIndex(i);
-            debug_assert!(self.order.contains(&event_index));
+            debug_assert!(
+                self.order.contains(&event_index),
+                "event {event_index:?} should be contained in the order field"
+            );
             debug_assert!(
                 self.query_index
                     .get(&event.as_ref().unwrap().time_range())
                     .unwrap()
-                    .contains(event_index)
+                    .contains(event_index),
+                "event {event_index:?} should be contained in the query index"
             );
         }
 
@@ -236,8 +246,11 @@ impl EventTrack {
     /// Should not panic in normal use, only if the invariants of `EventTrack` are somehow violated.
     pub fn push(&mut self, event: Event<'static>) -> EventIndex {
         let new_index = self.internal_insert(event);
-        assert!(self.order.insert(new_index));
-        debug_assert!(self.check_invariants());
+        assert!(
+            self.order.insert(new_index),
+            "ordering should not have contained event {new_index:?} before"
+        );
+        debug_assert!(self.check_invariants(), "invariants should be upheld");
         new_index
     }
 
@@ -251,9 +264,12 @@ impl EventTrack {
 
         // Find the current position of the given event and move the new event there
         let pos = self.order.get_index_of(&index).unwrap();
-        assert!(self.order.shift_insert(pos, new_index));
+        assert!(
+            self.order.shift_insert(pos, new_index),
+            "ordering should not have contained event {new_index:?} before"
+        );
 
-        debug_assert!(self.check_invariants());
+        debug_assert!(self.check_invariants(), "invariants should be upheld");
         new_index
     }
 
@@ -291,9 +307,9 @@ impl EventTrack {
         self.order.retain(|event_index| !set.contains(event_index));
 
         self.count -= set.len();
-        debug_assert!(self.check_invariants());
+        debug_assert!(self.check_invariants(), "invariants should be upheld");
 
-        removed.sort_by_key(|(_, pos, _)| *pos);
+        removed.sort_by_key(|&(_, pos, _)| pos);
         removed
     }
 
@@ -315,12 +331,18 @@ impl EventTrack {
             event.time_range(),
             new_index,
         );
-        assert!(self.events[new_index.0].is_none());
-        assert!(self.order.shift_insert(pos, new_index));
+        assert!(
+            self.events[new_index.0].is_none(),
+            "there should not be an event at position {new_index:?}"
+        );
+        assert!(
+            self.order.shift_insert(pos, new_index),
+            "the ordering should not have contained event {new_index:?}"
+        );
         self.events[new_index.0] = Some(event);
         self.count += 1;
 
-        debug_assert!(self.check_invariants());
+        debug_assert!(self.check_invariants(), "invariants should be upheld");
         new_index
     }
 
@@ -445,9 +467,9 @@ impl EventTrack {
         style_shift: &super::StyleShift,
         collect: &mut HashSet<EventIndex>,
     ) {
-        for (index, event) in self.events.iter_mut().enumerate() {
-            if let Some(event) = event {
-                style_shift.apply(&mut event.style_index, &EventIndex(index), collect);
+        for (i, event_option) in self.events.iter_mut().enumerate() {
+            if let &mut Some(ref mut event) = event_option {
+                style_shift.apply(&mut event.style_index, &EventIndex(i), collect);
             }
         }
     }
@@ -500,8 +522,8 @@ impl EventTrack {
             // and the trivial one otherwise
             match extradata.nde_filter_for_event(event) {
                 Some(filter) => match compile::nde(event, &filter.graph, context) {
-                    Ok(mut nde_result) => match &mut nde_result.events {
-                        Some(events) => compiled.append(events),
+                    Ok(mut nde_result) => match nde_result.events {
+                        Some(ref mut events) => compiled.append(events),
                         None => println!("No output from NDE filter"),
                     },
                     Err(error) => {
@@ -568,16 +590,16 @@ enum Leaf {
 
 impl Leaf {
     fn count(&self) -> usize {
-        match self {
+        match *self {
             Leaf::Single(_) => 1,
-            Leaf::Multiple(vec) => vec.len(),
+            Leaf::Multiple(ref vec) => vec.len(),
         }
     }
 
     fn contains(&self, index: EventIndex) -> bool {
-        match self {
-            Leaf::Single(other) => *other == index,
-            Leaf::Multiple(vec) => vec.contains(&index),
+        match *self {
+            Leaf::Single(other) => other == index,
+            Leaf::Multiple(ref vec) => vec.contains(&index),
         }
     }
 }
@@ -594,9 +616,9 @@ impl<'a, I: Iterator<Item = &'a Leaf>> Iterator for LeafIterator<'a, I> {
         if let Some(event_index) = self.inner.as_mut().and_then(Iterator::next) {
             Some(*event_index)
         } else if let Some(next_leaf) = self.outer.next() {
-            match next_leaf {
-                Leaf::Single(event_index) => Some(*event_index),
-                Leaf::Multiple(vec) => {
+            match *next_leaf {
+                Leaf::Single(event_index) => Some(event_index),
+                Leaf::Multiple(ref vec) => {
                     let mut iter = vec.iter();
                     let item = *iter.next().unwrap();
                     self.inner = Some(iter);

@@ -66,26 +66,25 @@ fn write_ass_line_from_matroska_frame<W: Write>(
     let content = str::from_utf8(&decoded)
         .map_err(|err| LoadError::FrameDecodeFailed(err, frame.timestamp))?;
 
-    let (_index, tail) = content
+    let (_index, tail_1) = content
         .split_once(',')
         .ok_or(LoadError::InvalidSubtitleFormat(frame.timestamp))?;
-    let (layer, tail) = tail
+    let (layer, tail_2) = tail_1
         .split_once(',')
         .ok_or(LoadError::InvalidSubtitleFormat(frame.timestamp))?;
 
     write!(writer, "Dialogue: {layer},").map_err(LoadError::FormatError)?;
 
-    let start_time: i64 = frame
-        .timestamp
-        .try_into()
-        .map_err(|_| LoadError::TimingOverflow(frame.timestamp))?;
+    let start_time: i64 = frame.timestamp.try_into().map_err(|internal_error| {
+        LoadError::TimingOverflow(frame.timestamp, Some(internal_error))
+    })?;
     let end_time = duration
         .try_into()
-        .map_err(|_| LoadError::TimingOverflow(frame.timestamp))
-        .and_then(|duration: i64| {
-            duration
+        .map_err(|internal_error| LoadError::TimingOverflow(frame.timestamp, Some(internal_error)))
+        .and_then(|duration_signed: i64| {
+            duration_signed
                 .checked_add(start_time)
-                .ok_or(LoadError::TimingOverflow(frame.timestamp))
+                .ok_or(LoadError::TimingOverflow(frame.timestamp, None))
         })?;
 
     subtitle::emit_timecode(writer, subtitle::StartTime(start_time))
@@ -93,7 +92,7 @@ fn write_ass_line_from_matroska_frame<W: Write>(
     writer.write_char(',').map_err(LoadError::FormatError)?;
     subtitle::emit_timecode(writer, subtitle::StartTime(end_time))
         .map_err(LoadError::FormatError)?;
-    write!(writer, ",{tail}\r\n").map_err(LoadError::FormatError)?;
+    write!(writer, ",{tail_2}\r\n").map_err(LoadError::FormatError)?;
 
     Ok(())
 }
@@ -108,8 +107,10 @@ struct DecodeFnSet {
 const SCOPE_BLOCK: u64 = 1;
 const SCOPE_PRIVATE: u64 = 2;
 
-fn find_decode_fns(content_encodings: Option<&[ContentEncoding]>) -> anyhow::Result<DecodeFnSet> {
-    match content_encodings {
+fn find_decode_fns(
+    content_encodings_option: Option<&[ContentEncoding]>,
+) -> anyhow::Result<DecodeFnSet> {
+    match content_encodings_option {
         None => Ok(DecodeFnSet {
             block: decode_identity,
             private: decode_identity,
@@ -122,11 +123,11 @@ fn find_decode_fns(content_encodings: Option<&[ContentEncoding]>) -> anyhow::Res
 
             let content_encoding = &content_encodings[0];
             let encoding_value = content_encoding.encoding();
-            let decode_fn = match encoding_value {
+            let decode_fn = match *encoding_value {
                 ContentEncodingValue::Unknown | ContentEncodingValue::Encryption(_) => {
                     anyhow::bail!("Invalid content encoding value: {encoding_value:?}");
                 }
-                ContentEncodingValue::Compression(compression) => {
+                ContentEncodingValue::Compression(ref compression) => {
                     if compression.algo() != ContentCompAlgo::Zlib {
                         anyhow::bail!(
                             "Unsupported compression algorithm: {:?}",
@@ -203,8 +204,8 @@ pub(crate) enum LoadError {
     #[error("Subtitle frame missing duration at {0} ms")]
     MissingDuration(u64),
 
-    #[error("Subtitle timing overflow at {0} ms")]
-    TimingOverflow(u64),
+    #[error("Subtitle timing overflow at {0} ms ({1:?})")]
+    TimingOverflow(u64, Option<std::num::TryFromIntError>),
 }
 
 #[cfg(test)]

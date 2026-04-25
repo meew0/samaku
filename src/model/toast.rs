@@ -16,7 +16,7 @@ impl Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        match *self {
             Status::Primary => "Primary",
             Status::Secondary => "Secondary",
             Status::Success => "Success",
@@ -47,16 +47,18 @@ pub enum Content<Message> {
 impl<M: PartialEq> PartialEq for Content<M> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Message, Self::Message) | (Self::Progress { .. }, Self::Progress { .. }) => true,
+            (&Self::Message, &Self::Message) | (&Self::Progress { .. }, &Self::Progress { .. }) => {
+                true
+            }
             (
-                Self::Confirm {
-                    confirm_label: cl1,
-                    deny_label: dl1,
+                &Self::Confirm {
+                    confirm_label: ref cl1,
+                    deny_label: ref dl1,
                     ..
                 },
-                Self::Confirm {
-                    confirm_label: cl2,
-                    deny_label: dl2,
+                &Self::Confirm {
+                    confirm_label: ref cl2,
+                    deny_label: ref dl2,
                     ..
                 },
             ) => cl1 == cl2 && dl1 == dl2,

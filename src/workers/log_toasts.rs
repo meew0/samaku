@@ -22,14 +22,14 @@ pub(super) fn spawn(
                     Ok(message) => {
                         // Remove uninformative pointer value from the start of some libass
                         // messages
-                        let message = match message {
+                        let modified_message = match message {
                             MessageIn::Libass(level, string) => {
                                 if string.starts_with("[0x") {
-                                    if let Some(pos) = string.find("]: ") {
-                                        MessageIn::Libass(level, string[(pos + 3)..].to_string())
-                                    } else {
-                                        MessageIn::Libass(level, string)
-                                    }
+                                    let modified_string = match string.split_once("]: ") {
+                                        Some((_, modified_string)) => modified_string.to_owned(),
+                                        None => string,
+                                    };
+                                    MessageIn::Libass(level, modified_string)
                                 } else {
                                     MessageIn::Libass(level, string)
                                 }
@@ -38,9 +38,9 @@ pub(super) fn spawn(
 
                         // Skip already seen messages, to avoid flooding the screen with messages
                         // that are generated over and over
-                        if !seen.contains(&message) {
-                            seen.insert(message.clone());
-                            match message {
+                        if !seen.contains(&modified_message) {
+                            seen.insert(modified_message.clone());
+                            match modified_message {
                                 MessageIn::Libass(level, string) => {
                                     let status_and_title = match level {
                                         0 | 1 => {

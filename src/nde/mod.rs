@@ -42,14 +42,14 @@ impl Event {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
-            let new_span = match element {
-                Span::Tags(tags, text) => {
+            let new_span = match *element {
+                Span::Tags(ref tags, ref text) => {
                     let new_tags = self.clone_and_maybe_override_or_clear(tags, i);
                     Span::Tags(new_tags, text.clone())
                 }
                 Span::Reset => Span::Reset,
-                Span::ResetToStyle(style_name) => Span::ResetToStyle(style_name.clone()),
-                Span::Drawing(tags, drawing) => {
+                Span::ResetToStyle(ref style_name) => Span::ResetToStyle(style_name.clone()),
+                Span::Drawing(ref tags, ref drawing) => {
                     let new_tags = self.clone_and_maybe_override_or_clear(tags, i);
                     Span::Drawing(new_tags, drawing.clone())
                 }
@@ -126,9 +126,13 @@ impl Span {
     /// Returns `true` if this span has no content (`content_is_empty` returns true) **and** the
     /// local tags are also empty. Returns `false` for `Reset` or `ResetToStyle`.
     fn is_empty(&self) -> bool {
-        match self {
-            Self::Tags(local, text) if text.is_empty() && *local == tags::Local::empty() => false,
-            Self::Drawing(local, drawing)
+        match *self {
+            Self::Tags(ref local, ref text)
+                if text.is_empty() && *local == tags::Local::empty() =>
+            {
+                false
+            }
+            Self::Drawing(ref local, ref drawing)
                 if drawing.is_empty() && *local == tags::Local::empty() =>
             {
                 true
@@ -141,9 +145,9 @@ impl Span {
     /// or either of the `Reset` variants) and `false` otherwise (`Tags`/`Drawing` with non-empty
     /// text/drawing).
     fn content_is_empty(&self) -> bool {
-        match self {
-            Self::Tags(_, text) if !text.is_empty() => false,
-            Self::Drawing(_, drawing) if !drawing.is_empty() => false,
+        match *self {
+            Self::Tags(_, ref text) if !text.is_empty() => false,
+            Self::Drawing(_, ref drawing) if !drawing.is_empty() => false,
             _ => true,
         }
     }

@@ -62,7 +62,7 @@ pub fn nde<'a, 'b>(
 
         // Pass inputs to leaf nodes
         for (i, desired_input) in desired_inputs.iter().enumerate() {
-            if let nde::node::SocketType::LeafInput(desired_leaf_input) = desired_input {
+            if let &nde::node::SocketType::LeafInput(desired_leaf_input) = desired_input {
                 match desired_leaf_input {
                     nde::node::LeafInputType::Event => {
                         inputs[i] = &source_event_value;
@@ -77,7 +77,7 @@ pub fn nde<'a, 'b>(
         // Find connections that would theoretically supply inputs to the current node,
         // check whether those nodes are active, and if they are, supply the inputs
         for (previous, next_socket_index) in filter.iter_previous(node_index) {
-            if let NodeState::Active(prev_cache) = &intermediates[previous.node_index.0] {
+            if let &NodeState::Active(ref prev_cache) = &intermediates[previous.node_index.0] {
                 inputs[next_socket_index.0] = &prev_cache[previous.socket_index.0];
             }
         }
@@ -98,7 +98,7 @@ pub fn nde<'a, 'b>(
 
     // Get the “output” of the output node
     match &mut intermediates[0] {
-        NodeState::Active(output_node_outputs) => {
+        &mut NodeState::Active(ref mut output_node_outputs) => {
             let first_output = output_node_outputs.swap_remove(0);
 
             match first_output {
@@ -177,13 +177,13 @@ mod tests {
         let result = nde(&event, &filter, &context).expect("there should be no error");
 
         for node_state in &result.intermediates {
-            assert_matches!(node_state, NodeState::Active { .. });
+            assert_matches!(node_state, &NodeState::Active { .. });
         }
 
-        if let NodeState::Active(socket_values) = &result.intermediates[1] {
+        if let &NodeState::Active(ref socket_values) = &result.intermediates[1] {
             assert_matches!(
                 &socket_values[0],
-                nde::node::SocketValue::IndividualEvent { .. }
+                &nde::node::SocketValue::IndividualEvent { .. }
             );
         }
 

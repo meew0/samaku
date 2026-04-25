@@ -81,7 +81,7 @@ impl History {
     /// Otherwise, it will create a key that panics whenever something tries to put an undo message.
     #[expect(clippy::too_many_lines, reason = "we need to match all messages here")]
     pub fn make_key(&self, message: &Message) -> Key {
-        match message {
+        match *message {
             // messages that might eventually be recorded in the history
             Message::CreateStyle
             | Message::DeleteStyle(_)
@@ -207,7 +207,7 @@ impl History {
     /// Panics if the key does not follow the leaf node, i.e. if the history has changed between `make_key` and `record`.
     /// Also panics if there is no batch mode specified even though messages have been appended.
     pub fn record(&mut self, key: Key) {
-        if let Key::Record(mut node, batch_mode) = key {
+        if let Key::Record(mut node, batch_mode_option) = key {
             if node.undo.is_empty() {
                 // No data was put into this node
                 // (almost certainly because undo/redo is NYI for this particular message)
@@ -218,7 +218,7 @@ impl History {
                 return;
             }
 
-            let batch_mode = batch_mode
+            let batch_mode = batch_mode_option
                 .expect("A batch mode should be specified if messages have been appended");
 
             let prev = node.prev.as_ref().expect("tried to record unlinked node");
@@ -255,7 +255,10 @@ impl History {
 
                 match undo_append_mode {
                     BatchAppendMode::Instant => {
-                        assert!(!self.last.borrow().undo.is_empty());
+                        assert!(
+                            !self.last.borrow().undo.is_empty(),
+                            "currently present undo list should not be empty"
+                        );
                         // No-op. Since the last node already contains the message
                         // needed to undo both the previous and the current message,
                         // we don't need to do anything.
@@ -294,7 +297,7 @@ impl History {
 
     pub fn undo(&mut self) -> Vec<Message> {
         let last = self.last.borrow();
-        if let Some(prev) = &last.prev {
+        if let &Some(ref prev) = &last.prev {
             let undo_messages = last.undo.clone();
             let new_last = Rc::clone(prev);
             drop(last);
@@ -317,7 +320,7 @@ impl History {
 
     pub fn redo(&mut self) -> Vec<Message> {
         let last = self.last.borrow();
-        if let Some(next) = &last.next {
+        if let &Some(ref next) = &last.next {
             let redo_messages = next.borrow().redo.clone();
             let new_last = Rc::clone(next);
             drop(last);
@@ -368,18 +371,18 @@ impl Key {
     /// Panics if trying to record something into a `Fail` key.
     /// Also panics if a batch mode is specified that differs from an earlier one.
     pub fn put(&mut self, name: &'static str, message: Message, batch_mode: BatchMode) {
-        match self {
-            Key::Record(node, old_batch_mode) => {
+        match *self {
+            Key::Record(ref mut node, ref mut old_batch_mode_option) => {
                 node.name = name;
                 node.undo.push(message);
-                if let Some(old_batch_mode) = old_batch_mode {
+                if let &mut Some(ref mut old_batch_mode) = old_batch_mode_option {
                     assert_eq!(
                         *old_batch_mode, batch_mode,
                         "Tried to overwrite batch mode with a different one"
                     );
                     *old_batch_mode = batch_mode;
                 } else {
-                    *old_batch_mode = Some(batch_mode);
+                    *old_batch_mode_option = Some(batch_mode);
                 }
             }
             Key::Fail => {
@@ -426,8 +429,8 @@ impl Key {
     /// # Panics
     /// Panics if trying to record something into a `Fail` key.
     pub fn override_redo(&mut self, redo_message: Message) {
-        match self {
-            Key::Record(node, _) => {
+        match *self {
+            Key::Record(ref mut node, _) => {
                 node.redo.clear();
                 node.redo.push(redo_message);
             }

@@ -69,18 +69,18 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let content: iced::Element<message::Message> = if let Some(multi_event) = &self.multi_event
-        {
-            let first_line = active_first_line(global_state, self, multi_event);
-            let second_line = active_second_line(multi_event);
-            let main_text = active_main_text(self, multi_event, self_pane);
+        let content: iced::Element<message::Message> =
+            if let Some(ref multi_event) = self.multi_event {
+                let first_line = active_first_line(global_state, self, multi_event);
+                let second_line = active_second_line(multi_event);
+                let main_text = active_main_text(self, multi_event, self_pane);
 
-            iced::widget::column![first_line, second_line, main_text]
-                .spacing(5.0)
-                .into()
-        } else {
-            iced::widget::text("No subtitle line currently selected.").into()
-        };
+                iced::widget::column![first_line, second_line, main_text]
+                    .spacing(5.0)
+                    .into()
+            } else {
+                iced::widget::text("No subtitle line currently selected.").into()
+            };
 
         super::View {
             title: iced::widget::text("Text editor").into(),

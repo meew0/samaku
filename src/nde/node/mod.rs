@@ -62,7 +62,7 @@ pub enum SocketValue<'a> {
 impl SocketValue<'_> {
     #[must_use]
     pub fn as_type(&self) -> Option<SocketType> {
-        match self {
+        match *self {
             SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
             SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
             SocketValue::LocalTags(_) => Some(SocketType::LocalTags),
@@ -78,7 +78,7 @@ impl SocketValue<'_> {
 
     #[must_use]
     pub fn identifier(&self) -> &'static str {
-        match self {
+        match *self {
             SocketValue::None => "None",
             SocketValue::IndividualEvent(_) => "IndividualEvent",
             SocketValue::MultipleEvents(_) => "MultipleEvents",
@@ -101,14 +101,14 @@ impl SocketValue<'_> {
     where
         F: Fn(&super::Event) -> super::Event,
     {
-        match self {
-            SocketValue::IndividualEvent(event) => {
+        match *self {
+            SocketValue::IndividualEvent(ref event) => {
                 Ok(SocketValue::IndividualEvent(Box::new(func(event.as_ref()))))
             }
-            SocketValue::MultipleEvents(events) => Ok(SocketValue::MultipleEvents(
+            SocketValue::MultipleEvents(ref events) => Ok(SocketValue::MultipleEvents(
                 events.iter().map(func).collect(),
             )),
-            other => type_error(other, "event(s)"),
+            ref other => type_error(other, "event(s)"),
         }
     }
 
@@ -121,10 +121,10 @@ impl SocketValue<'_> {
     where
         F: Fn(&super::Event) -> T,
     {
-        match self {
-            SocketValue::IndividualEvent(event) => Ok(vec![func(event.as_ref())]),
-            SocketValue::MultipleEvents(events) => Ok(events.iter().map(func).collect()),
-            other => type_error(other, "event(s)"),
+        match *self {
+            SocketValue::IndividualEvent(ref event) => Ok(vec![func(event.as_ref())]),
+            SocketValue::MultipleEvents(ref events) => Ok(events.iter().map(func).collect()),
+            ref other => type_error(other, "event(s)"),
         }
     }
 
@@ -137,14 +137,14 @@ impl SocketValue<'_> {
     where
         F: FnMut(&super::Event),
     {
-        match self {
-            SocketValue::IndividualEvent(event) => func(event.as_ref()),
-            SocketValue::MultipleEvents(events) => {
+        match *self {
+            SocketValue::IndividualEvent(ref event) => func(event.as_ref()),
+            SocketValue::MultipleEvents(ref events) => {
                 for event in events {
                     func(event);
                 }
             }
-            other => return type_error(other, "event(s)"),
+            ref other => return type_error(other, "event(s)"),
         }
         Ok(())
     }
@@ -158,11 +158,9 @@ pub fn type_error<T>(other: &SocketValue, expected: &'static str) -> anyhow::Res
     } else {
         // slightly hacky
         let reason = if let Some(stripped) = expected.strip_prefix("SocketValue::") {
-            let first_parenthesis = stripped.find('(');
-            let sub = if let Some(first_parenthesis) = first_parenthesis {
-                &stripped[..first_parenthesis]
-            } else {
-                stripped
+            let sub = match stripped.split_once('(') {
+                Some((sub, _)) => sub,
+                None => stripped,
             };
             anyhow::anyhow!("expected {sub}, got {}", other.identifier())
         } else {

@@ -16,6 +16,16 @@ pub struct Long;
 
 impl std::fmt::Display for Long {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}-{}", CARGO_VERSION, &GIT_HASH[0..9])
+        let rev = if GIT_HASH.is_ascii() {
+            #[expect(
+                clippy::string_slice,
+                reason = "safe because we assure the string is ASCII only"
+            )]
+            let rev = &GIT_HASH[0..9];
+            rev
+        } else {
+            "unknown"
+        };
+        write!(formatter, "{CARGO_VERSION}-{rev}")
     }
 }

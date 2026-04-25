@@ -56,7 +56,7 @@
 #![warn(clippy::doc_include_without_cfg)]
 #![warn(clippy::doc_link_code)]
 #![warn(clippy::doc_paragraphs_missing_punctuation)]
-#![allow(clippy::else_if_without_else, reason = "add in the future")]
+#![warn(clippy::else_if_without_else)]
 #![warn(clippy::empty_drop)]
 #![warn(clippy::empty_enum_variants_with_brackets)]
 #![warn(clippy::empty_structs_with_brackets)]
@@ -98,11 +98,11 @@
 #![warn(clippy::literal_string_with_formatting_args)]
 // #![warn(clippy::little_endian_bytes)]
 #![warn(clippy::lossy_float_literal)]
-#![allow(clippy::map_err_ignore, reason = "add in the future")]
+#![warn(clippy::map_err_ignore)]
 #![warn(clippy::map_with_unused_argument_over_ranges)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::min_ident_chars)]
-#![allow(clippy::missing_assert_message, reason = "add in the future")]
+#![warn(clippy::missing_assert_message)]
 #![warn(clippy::missing_asserts_for_indexing)]
 // #![warn(clippy::missing_const_for_fn)]
 #![allow(
@@ -129,7 +129,7 @@
 #![warn(clippy::needless_type_cast)]
 #![warn(clippy::negative_feature_names)]
 // #![warn(clippy::non_ascii_literal)]
-#![allow(clippy::non_send_fields_in_send_ty, reason = "add in the future")]
+#![warn(clippy::non_send_fields_in_send_ty)]
 #![warn(clippy::non_zero_suggestions)]
 #![warn(clippy::nonstandard_macro_braces)]
 // #![warn(clippy::option_if_let_else)]
@@ -142,7 +142,7 @@
 )]
 #![warn(clippy::path_buf_push_overwrite)]
 #![warn(clippy::pathbuf_init_then_push)]
-#![allow(clippy::pattern_type_mismatch, reason = "add in the future")]
+#![warn(clippy::pattern_type_mismatch)]
 #![allow(
     clippy::pointer_format,
     reason = "we have no reason to keep addresses private"
@@ -165,7 +165,7 @@
 #![warn(clippy::read_zero_byte_vec)]
 #![warn(clippy::redundant_clone)]
 // #![warn(clippy::redundant_feature_names)]
-#![allow(clippy::redundant_pub_crate, reason = "add in the future")]
+#![allow(clippy::redundant_pub_crate, reason = "conflicts with unreachable_pub")]
 #![warn(clippy::redundant_test_prefix)]
 #![warn(clippy::redundant_type_annotations)]
 // #![warn(clippy::ref_patterns)]
@@ -179,9 +179,9 @@
 // #![warn(clippy::semicolon_outside_block)]
 // #![warn(clippy::separated_literal_suffix)]
 #![warn(clippy::set_contains_or_insert)]
-#![allow(clippy::shadow_reuse, reason = "add in the future")]
-#![allow(clippy::shadow_same, reason = "add in the future")]
-#![allow(clippy::shadow_unrelated, reason = "add in the future")]
+#![warn(clippy::shadow_reuse)]
+#![warn(clippy::shadow_same)]
+#![warn(clippy::shadow_unrelated)]
 #![warn(clippy::significant_drop_in_scrutinee)]
 #![warn(clippy::significant_drop_tightening)]
 // #![warn(clippy::single_call_fn)]
@@ -193,7 +193,7 @@
 #![warn(clippy::string_add)]
 #![warn(clippy::string_lit_as_bytes)]
 #![warn(clippy::string_lit_chars_any)]
-#![allow(clippy::string_slice, reason = "add in the future")]
+#![warn(clippy::string_slice)]
 #![warn(clippy::suboptimal_flops)]
 #![warn(clippy::suspicious_operation_groupings)]
 #![warn(clippy::suspicious_xor_used_as_pow)]
@@ -318,6 +318,10 @@
     reason = "not so useful in application code where results are widely used for error handling without usually being able to delineate specific circumstances"
 )]
 #![allow(
+    clippy::needless_borrowed_reference,
+    reason = "conflicts with clippy::pattern_type_mismatch, and the more explicit style seems preferable"
+)]
+#![allow(
     clippy::struct_field_names,
     reason = "https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359"
 )]
@@ -327,14 +331,21 @@
     test,
     allow(
         clippy::cognitive_complexity,
-        reason = "it doesn't really matter if test functions are complex"
+        reason = "we want few large test functions, rather than many small ones, in samaku, and these will be complex"
+    )
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::shadow_unrelated,
+        reason = "we want few large test functions, rather than many small ones, in samaku, so we need shadowing"
     )
 )]
 #![cfg_attr(
     test,
     allow(
         clippy::too_many_lines,
-        reason = "it doesn't really matter if test functions are complex"
+        reason = "we want few large test functions, rather than many small ones, in samaku, and these will be long"
     )
 )]
 
@@ -513,7 +524,7 @@ pub struct ViewState {
 impl Samaku {
     /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
     pub fn frame_rate(&self) -> media::FrameRate {
-        if let Some(video_metadata) = self.video_metadata {
+        if let Some(video_metadata) = self.video_metadata.as_ref() {
             video_metadata.frame_rate
         } else {
             media::FrameRate {
@@ -535,7 +546,7 @@ impl Samaku {
     pub fn current_frame(&self) -> Option<model::FrameNumber> {
         match self.actual_frame {
             Some((frame, _)) => Some(frame),
-            None => self.video_metadata.map(|metadata| {
+            None => self.video_metadata.as_ref().map(|metadata| {
                 self.shared
                     .playback_position
                     .current_frame(metadata.frame_rate)

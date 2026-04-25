@@ -15,6 +15,10 @@ pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
 }
 
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "not easy to decouple this state machine-like function"
+)]
 pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
     let mut spans: Vec<Span> = vec![];
     let mut last_local = Box::new(Local::empty());
@@ -30,14 +34,14 @@ pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
     'outer: while !slice.is_empty() {
         if maybe_block_start {
             maybe_block_start = false;
-            if let Some(block_end) = slice.find('}') {
+            if let Some((tag_block_slice, tail)) = slice.split_once('}') {
                 // We found a tag block.
                 // We first need to parse it, to find out whether we must end the current drawing
-                let tag_block = parse_tag_block(&slice[1..block_end], &mut global);
+                let tag_block = parse_tag_block(tag_block_slice, &mut global);
                 let TagBlock {
                     reset,
                     new_local,
-                    new_drawing_scale,
+                    new_drawing_scale: new_drawing_scale_option,
                     end_previous_drawing,
                 } = tag_block;
 
@@ -65,8 +69,8 @@ pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
                 }
 
                 // Check whether we need to set a new scale, or create a new drawing
-                if let Some(new_drawing_scale) = new_drawing_scale {
-                    match &mut drawing {
+                if let Some(new_drawing_scale) = new_drawing_scale_option {
+                    match drawing.as_mut() {
                         Some(existing_drawing) => {
                             existing_drawing.scale = new_drawing_scale;
 
@@ -83,10 +87,15 @@ pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
                     }
                 }
 
-                slice = &slice[(block_end + 1)..];
+                slice = tail;
             } else {
                 span_text.push('{');
-                slice = &slice[1..];
+                #[expect(
+                    clippy::string_slice,
+                    reason = "safe because `maybe_block_start` implies that the next character is `{`, which has length 1"
+                )]
+                let tail = &slice[1..];
+                slice = tail;
             }
         } else {
             let mut last_byte_index = 0;
@@ -126,7 +135,12 @@ pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
             }
 
             if maybe_block_start {
-                slice = &slice[last_byte_index..];
+                #[expect(
+                    clippy::string_slice,
+                    reason = "safe because `last_byte_index` was obtained from `char_indices()`"
+                )]
+                let tail = &slice[last_byte_index..];
+                slice = tail;
             } else {
                 // We're done with the entire line
                 break 'outer;
@@ -164,6 +178,10 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
             },
             Comment => match next_char {
                 '\\' => {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both `tag_start_bytes` and `byte_index` were obtained from `char_indices`"
+                    )]
                     parse_tag(&block[tag_start_bytes..byte_index], global, &mut tag_block);
                     TagStart
                 }
@@ -180,6 +198,10 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
             },
             Tag => match next_char {
                 '\\' => {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both `tag_start_bytes` and `byte_index` were obtained from `char_indices`"
+                    )]
                     parse_tag(&block[tag_start_bytes..byte_index], global, &mut tag_block);
                     TagStart
                 }
@@ -195,6 +217,10 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
         }
     }
 
+    #[expect(
+        clippy::string_slice,
+        reason = "safe because `tag_start_bytes` was obtained from `char_indices`"
+    )]
     parse_tag(&block[tag_start_bytes..], global, &mut tag_block);
 
     tag_block
@@ -221,10 +247,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         return false;
     }
 
-    let paren_pos = tag.find('(');
-
     // Contains the name and potentially the first argument
-    let first_part = &tag[0..paren_pos.unwrap_or(tag.len())];
+    let (first_part, second_part_option) = match tag.split_once('(') {
+        Some((first_part, second_part)) => (first_part, Some(second_part)),
+        None => (tag, None),
+    };
 
     let mut twa = TagWithArguments {
         first_part,
@@ -233,8 +260,8 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         tag_found: false,
     };
 
-    if let Some(paren_pos) = paren_pos {
-        parse_paren_args(&tag[(paren_pos + 1)..], &mut twa);
+    if let Some(paren_args) = second_part_option {
+        parse_paren_args(paren_args, &mut twa);
     }
 
     let local = &mut block.new_local;
@@ -638,9 +665,15 @@ fn maybe_both_dimensions(option: Option<f64>) -> Maybe2D {
 }
 
 fn lstrip(str: &str) -> &str {
-    &str[str
+    let first_real_character_pos = str
         .find(|char| char != ' ' && char != '\\')
-        .unwrap_or(str.len())..]
+        .unwrap_or(str.len());
+    #[expect(
+        clippy::string_slice,
+        reason = "safe because we got the position from `find` or `len`"
+    )]
+    let tail = &str[first_real_character_pos..];
+    tail
 }
 
 fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
@@ -660,6 +693,10 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
                 // Skip spaces, like above
                 ' ' | '\t' => Before,
                 ',' => {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both `arg_start_bytes` and `byte_index` come from `char_indices`"
+                    )]
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
                     arg_start_bytes = byte_index + 1; // Ignore the comma itself
                     Before
@@ -682,6 +719,10 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
             },
             GenericArgument => match next_char {
                 ',' => {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because both `arg_start_bytes` and `byte_index` come from `char_indices`"
+                    )]
                     twa.push_argument(&paren_args[arg_start_bytes..byte_index]);
                     arg_start_bytes = byte_index + 1; // Ignore the comma itself
                     Before
@@ -709,6 +750,10 @@ fn parse_paren_args<'a>(paren_args: &'a str, twa: &mut TagWithArguments<'a>) {
     let end = arg_end_bytes.unwrap_or(paren_args.len());
 
     // Don't include closing parenthesis
+    #[expect(
+        clippy::string_slice,
+        reason = "safe because both `arg_start_bytes` and `end` come from `char_indices`"
+    )]
     twa.push_argument(&paren_args[arg_start_bytes..end]);
 }
 
@@ -731,7 +776,13 @@ struct TagWithArguments<'a> {
 impl<'a> TagWithArguments<'a> {
     fn push_argument(&mut self, arg_str: &'a str) {
         if let Some(last_non_space) = arg_str.rfind(|char| char != ' ' && char != '\t') {
-            self.arguments.push(&arg_str[0..=last_non_space]);
+            // Find the start byte of the first character after `last_non_space`
+            let boundary = arg_str.ceil_char_boundary(last_non_space + 1);
+            #[expect(
+                clippy::string_slice,
+                reason = "safe because we used ceil_char_boundary"
+            )]
+            self.arguments.push(&arg_str[0..boundary]);
         }
     }
 
@@ -745,10 +796,10 @@ impl<'a> TagWithArguments<'a> {
             "tried to call tag(), but the tag has already been found"
         );
 
-        if self.first_part.starts_with(tag_name) {
+        if let Some(argument) = self.first_part.strip_prefix(tag_name) {
             self.tag_found = true;
             if !COMPLEX {
-                self.push_argument(&self.first_part[tag_name.len()..]);
+                self.push_argument(argument);
             }
             true
         } else {
@@ -758,7 +809,10 @@ impl<'a> TagWithArguments<'a> {
 
     fn float_arg(&self, index: usize) -> Option<f64> {
         self.arguments.get(index).map(|arg_str| {
-            assert!(!arg_str.is_empty());
+            assert!(
+                !arg_str.is_empty(),
+                "the argument at {index} should not be empty"
+            );
             // We need fast_float2 here rather than Rust's standard library because of `parse_partial`,
             // which more closely matches libass' behavior
             fast_float2::parse_partial::<f64, _>(trim_start_ctype_isspace(arg_str))
@@ -774,7 +828,10 @@ impl<'a> TagWithArguments<'a> {
     fn string_arg(&self, index: usize) -> Option<&'a str> {
         match self.arguments.get(index) {
             Some(slice) => {
-                assert!(!slice.is_empty());
+                assert!(
+                    !slice.is_empty(),
+                    "the argument at {index} should not be empty"
+                );
                 Some(*slice)
             }
             None => None,
@@ -807,7 +864,12 @@ impl<'a> TagWithArguments<'a> {
         self.string_arg(index).map(|arg| {
             arg.find(|char| char != '&' && char != 'H')
                 .map_or(0, |first_value_char| {
-                    parse_prefix_i32(&arg[first_value_char..], 16)
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "safe because the index comes from find"
+                    )]
+                    let value_str = &arg[first_value_char..];
+                    parse_prefix_i32(value_str, 16)
                 })
         })
     }
@@ -825,19 +887,35 @@ impl<'a> TagWithArguments<'a> {
 /// from the beginning of `str`, and returns 0 if parsing fails entirely.
 /// Also handles i32 overflows gracefully by first parsing as i64.
 fn parse_prefix_i32(str: &str, radix: u32) -> i32 {
-    let str = trim_start_ctype_isspace(str);
+    let trimmed = trim_start_ctype_isspace(str);
 
-    let (slice, sign) = match str.chars().next() {
+    let (slice, sign) = match trimmed.chars().next() {
         Some('+') => {
-            (&str[1..], 1) // consume sign
+            #[expect(
+                clippy::string_slice,
+                reason = "safe because '+' is guaranteed to be length 1"
+            )]
+            let tail = &trimmed[1..]; // consume sign
+            (tail, 1)
         }
-        Some('-') => (&str[1..], -1),
-        Some(_) => (str, 1),
+        Some('-') => {
+            #[expect(
+                clippy::string_slice,
+                reason = "safe because '-' is guaranteed to be length 1"
+            )]
+            let tail = &trimmed[1..]; // consume sign
+            (tail, -1)
+        }
+        Some(_) => (trimmed, 1),
         None => return 0,
     };
     let num_end = slice
         .find(|char: char| !char.is_digit(radix))
         .unwrap_or(slice.len());
+    #[expect(
+        clippy::string_slice,
+        reason = "safe because num_end comes from find or len"
+    )]
     let maybe_parsed = i64::from_str_radix(&slice[0..num_end], radix)
         .ok()
         .map(|num| num * sign);
@@ -879,7 +957,6 @@ where
         };
         global.rectangle_clip = Some(rect_clip(rect));
     } else if global.vector_clip.is_none() {
-        // Vector clips do not override their predecessors
         let scale: i32 = match twa.nargs() {
             2 => twa.int_arg(0).unwrap(),
             1 => 1,
@@ -893,6 +970,10 @@ where
         };
 
         global.vector_clip = Some(vector_clip(drawing));
+    } else {
+        // Vector clips do not override their predecessors,
+        // so if we found a vector clip but one already exists,
+        // there is nothing to be done.
     }
 
     // As specifying a clip overrides all previous clips, it will also override clip animations.
@@ -905,10 +986,10 @@ fn end_span(
     spans: &mut Vec<Span>,
     span_text: String,
     last_local: Box<Local>,
-    drawing: Option<Drawing>,
+    drawing_option: Option<Drawing>,
     end_drawing: bool,
 ) -> Option<Drawing> {
-    if let Some(mut drawing) = drawing {
+    if let Some(mut drawing) = drawing_option {
         if end_drawing {
             drawing.commands = span_text;
             spans.push(Span::Drawing(*last_local, drawing));
@@ -1060,7 +1141,7 @@ mod tests {
         let (global, spans) = raw(text);
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 1);
-        assert_matches!(&spans[0], Span::Tags(local, span_text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref span_text));
         assert_eq!(local, &Local::empty());
         assert_eq!(span_text, text);
     }
@@ -1070,10 +1151,10 @@ mod tests {
         let (global, spans) = raw("before{\\i1}after");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 2);
-        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "before");
-        assert_matches!(&spans[1], Span::Tags(local, text));
+        assert_matches!(&spans[1], &Span::Tags(ref local, ref text));
         assert_eq!(
             *local,
             Local {
@@ -1092,10 +1173,10 @@ mod tests {
             }
         );
         assert_eq!(spans.len(), 2);
-        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "");
-        assert_matches!(&spans[1], Span::Tags(local, text));
+        assert_matches!(&spans[1], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "text");
     }
@@ -1105,31 +1186,31 @@ mod tests {
         let (global, spans) = raw("a{\\rA\\r}b{\\rB}{\\r}c");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 7);
-        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "a");
-        assert_matches!(&spans[1], Span::Reset);
-        assert_matches!(&spans[2], Span::Tags(local, text));
+        assert_matches!(&spans[1], &Span::Reset);
+        assert_matches!(&spans[2], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "b");
-        assert_matches!(&spans[3], Span::ResetToStyle(style_name));
+        assert_matches!(&spans[3], &Span::ResetToStyle(ref style_name));
         assert_eq!(style_name, "B");
-        assert_matches!(&spans[4], Span::Tags(local, text));
+        assert_matches!(&spans[4], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "");
-        assert_matches!(&spans[5], Span::Reset);
-        assert_matches!(&spans[6], Span::Tags(local, text));
+        assert_matches!(&spans[5], &Span::Reset);
+        assert_matches!(&spans[6], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "c");
 
         let (global, spans) = raw("a{\\fsp10\\r\\fax20}b");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 3);
-        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "a");
-        assert_matches!(&spans[1], Span::Reset);
-        assert_matches!(&spans[2], Span::Tags(local, text));
+        assert_matches!(&spans[1], &Span::Reset);
+        assert_matches!(&spans[2], &Span::Tags(ref local, ref text));
         assert_eq!(local.letter_spacing, Resettable::Keep);
         assert_eq!(local.text_shear.x, Resettable::Override(20.0));
         assert_eq!(text, "b");
@@ -1140,10 +1221,19 @@ mod tests {
         let (global, spans) = raw("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 4);
-        assert_matches!(&spans[0], Span::Tags(local, text));
+        assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "a");
-        assert_matches!(&spans[1], Span::Drawing(local, Drawing { scale, commands }));
+        assert_matches!(
+            &spans[1],
+            &Span::Drawing(
+                ref local,
+                Drawing {
+                    ref scale,
+                    ref commands,
+                },
+            )
+        );
         assert_eq!(
             *local,
             Local {
@@ -1157,11 +1247,20 @@ mod tests {
         );
         assert_eq!(*scale, 2);
         assert_eq!(commands, "b");
-        assert_matches!(&spans[2], Span::Drawing(local, Drawing { scale, commands }));
+        assert_matches!(
+            &spans[2],
+            &Span::Drawing(
+                ref local,
+                Drawing {
+                    ref scale,
+                    ref commands,
+                },
+            )
+        );
         assert_eq!(*local, Local::empty());
         assert_eq!(*scale, 1);
         assert_eq!(commands, "c");
-        assert_matches!(&spans[3], Span::Tags(local, text));
+        assert_matches!(&spans[3], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "d");
     }
@@ -1642,7 +1741,7 @@ mod tests {
             &test_single_global("t(\\clip(1,2,3,4))").animations[0]
                 .modifiers
                 .clip,
-            Some(Clip::Contained(_))
+            &Some(Clip::Contained(_))
         );
 
         let mut global = Global::empty();
@@ -1655,10 +1754,10 @@ mod tests {
         let local = test_single_local("t(1,2,3,\\fsp10\\t(4,5,6\\xshad20)");
         assert_eq!(local.animations.len(), 2);
 
-        assert_matches!(&local.animations[0], Animation { modifiers, .. });
+        assert_matches!(&local.animations[0], &Animation { ref modifiers, .. });
         assert_eq!(modifiers.letter_spacing, Resettable::Override(10.0));
 
-        assert_matches!(&local.animations[1], Animation { modifiers, .. });
+        assert_matches!(&local.animations[1], &Animation { ref modifiers, .. });
         assert_eq!(modifiers.shadow.x, Resettable::Override(20.0));
     }
 
@@ -1960,19 +2059,19 @@ mod tests {
         let simplified = simplify(spans);
 
         assert_eq!(simplified.len(), 13);
-        assert_matches!(&simplified[0], Tags(_, _));
-        assert_matches!(&simplified[1], Tags(_, _));
-        assert_matches!(&simplified[2], Drawing(_, _));
-        assert_matches!(&simplified[3], Drawing(_, _));
-        assert_matches!(&simplified[4], ResetToStyle(_));
-        assert_matches!(&simplified[5], Tags(_, _));
-        assert_matches!(&simplified[6], Reset);
-        assert_matches!(&simplified[7], Tags(_, _));
-        assert_matches!(&simplified[8], Tags(_, _));
-        assert_matches!(&simplified[9], Tags(_, _));
-        assert_matches!(&simplified[10], Drawing(_, _));
-        assert_matches!(&simplified[11], Drawing(_, _));
-        assert_matches!(&simplified[12], Tags(_, _));
+        assert_matches!(&simplified[0], &Tags(_, _));
+        assert_matches!(&simplified[1], &Tags(_, _));
+        assert_matches!(&simplified[2], &Drawing(_, _));
+        assert_matches!(&simplified[3], &Drawing(_, _));
+        assert_matches!(&simplified[4], &ResetToStyle(_));
+        assert_matches!(&simplified[5], &Tags(_, _));
+        assert_matches!(&simplified[6], &Reset);
+        assert_matches!(&simplified[7], &Tags(_, _));
+        assert_matches!(&simplified[8], &Tags(_, _));
+        assert_matches!(&simplified[9], &Tags(_, _));
+        assert_matches!(&simplified[10], &Drawing(_, _));
+        assert_matches!(&simplified[11], &Drawing(_, _));
+        assert_matches!(&simplified[12], &Tags(_, _));
     }
 
     #[test]
@@ -1980,5 +2079,30 @@ mod tests {
         assert_eq!(lstrip("  abc "), "abc ");
         assert_eq!(lstrip("abc"), "abc");
         assert_eq!(lstrip(""), "");
+    }
+
+    #[test]
+    fn push_argument() {
+        let mut twa = TagWithArguments {
+            first_part: "",
+            arguments: vec![],
+            has_backslash_arg: false,
+            tag_found: false,
+        };
+
+        twa.push_argument("asdasd");
+        assert_eq!(twa.arguments.len(), 1);
+        assert_eq!(twa.arguments[0], "asdasd");
+
+        twa.push_argument("   ");
+        assert_eq!(twa.arguments.len(), 1);
+
+        twa.push_argument("jjj ");
+        assert_eq!(twa.arguments.len(), 2);
+        assert_eq!(twa.arguments[1], "jjj");
+
+        twa.push_argument("äööä");
+        assert_eq!(twa.arguments.len(), 3);
+        assert_eq!(twa.arguments[2], "äööä");
     }
 }

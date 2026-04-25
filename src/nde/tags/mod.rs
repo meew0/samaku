@@ -98,7 +98,7 @@ where
     T: Clone,
 {
     fn override_from(&mut self, other: &Self) {
-        if let Some(other_value) = other {
+        if let Some(ref other_value) = *other {
             self.replace(other_value.clone());
         }
     }
@@ -115,7 +115,7 @@ where
     T: Clone,
 {
     fn override_from(&mut self, other: &Self) {
-        match other {
+        match *other {
             Self::Keep => {}
             _ => {
                 drop(std::mem::replace(self, other.clone()));
@@ -124,7 +124,7 @@ where
     }
 
     fn clear_from(&mut self, other: &Self) {
-        match other {
+        match *other {
             Self::Keep => {}
             _ => {
                 drop(std::mem::replace(self, Self::Keep));
@@ -711,9 +711,9 @@ impl emit::Tag for PositionOrMove {
     where
         W: std::fmt::Write,
     {
-        match self {
-            Self::Position(position) => emit::complex_tag(sink, "pos", Some(position)),
-            Self::Move(move_value) => emit::complex_tag(sink, "move", Some(move_value)),
+        match *self {
+            Self::Position(ref position) => emit::complex_tag(sink, "pos", Some(position)),
+            Self::Move(ref move_value) => emit::complex_tag(sink, "move", Some(move_value)),
         }
     }
 }
@@ -1455,7 +1455,7 @@ impl Karaoke {
         use KaraokeOnset::*;
 
         let old_effect = self.effect.replace((effect, duration));
-        let old_duration = old_effect.map(|(_, duration)| duration);
+        let old_duration = old_effect.map(|(_, old_duration)| old_duration);
 
         // Add previous duration to onset
         self.onset = match self.onset {
@@ -1500,7 +1500,7 @@ impl Karaoke {
             // Only overwrite the effect type, and only if both `self` and `other` have an effect
             // set.
             if let Some((other_effect, _)) = other.effect
-                && let Some((self_effect, _)) = &mut self.effect
+                && let &mut Some((ref mut self_effect, _)) = &mut self.effect
             {
                 *self_effect = other_effect;
             }
@@ -1591,9 +1591,9 @@ impl emit::Tag for Fade {
     where
         W: std::fmt::Write,
     {
-        match self {
-            Self::Simple(simple) => emit::complex_tag(sink, "fad", Some(simple)),
-            Self::Complex(complex) => emit::complex_tag(sink, "fade", Some(complex)),
+        match *self {
+            Self::Simple(ref simple) => emit::complex_tag(sink, "fad", Some(simple)),
+            Self::Complex(ref complex) => emit::complex_tag(sink, "fade", Some(complex)),
         }
     }
 }
@@ -1685,9 +1685,9 @@ impl<T: emit::Value> emit::Tag for Clip<T> {
     where
         W: std::fmt::Write,
     {
-        match self {
-            Clip::Contained(structure) => emit::complex_tag(sink, "clip", Some(structure)),
-            Clip::Inverse(structure) => emit::complex_tag(sink, "iclip", Some(structure)),
+        match *self {
+            Clip::Contained(ref structure) => emit::complex_tag(sink, "clip", Some(structure)),
+            Clip::Inverse(ref structure) => emit::complex_tag(sink, "iclip", Some(structure)),
         }
     }
 }
