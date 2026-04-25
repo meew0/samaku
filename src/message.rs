@@ -292,10 +292,6 @@ impl Message {
 
     /// Returns the internal name of the message variant.
     pub fn name(&self) -> String {
-        #[expect(
-            clippy::pointer_format,
-            reason = "even if pointer formatting was a problem for samaku, we don't actually use the data part of the result"
-        )]
         let debug = format!("{self:?}");
 
         if let Some(pos) = debug.find('(') {

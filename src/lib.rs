@@ -1,12 +1,35 @@
+// samaku's codebase makes heavy use of optional lints to enforce a “standard” code style.
+// The aim is to warn for *all* lints, however in practice, some lints conflict with each other
+// and in some cases the cost is too large for the benefit. In borderline cases, the lints are
+// explicitly specified with `allow` together with a reason to explain why we chose not to
+// warn for this particular lint. But in cases where it is mostly obvious why we would not want
+// a particular lint, the lint is not specified at all.
+// Some lints are unstable but desirable once they are stabilized; these are commented out
+// for now.
+//
+// --- clippy lint groups ---
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
+//
+// --- clippy individual restriction/nursery lints ---
+// #![warn(clippy::absolute_paths)]
+// #![warn(clippy::alloc_instead_of_core)]
 #![warn(clippy::allow_attributes)]
 #![warn(clippy::allow_attributes_without_reason)]
-// #![warn(clippy::arbitrary_source_item_ordering)] // potentially add in the future
-// #![warn(clippy::arithmetic_side_effects)] // potentially add in the future
+#![allow(
+    clippy::arbitrary_source_item_ordering,
+    reason = "potentially warn in the future; currently unclear which ordering should be used exactly in which cases"
+)]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "potentially warn in the future; explicit side effect checking makes arithmetic code much less clean, and I'm not sure yet whether it would be worth the slight correctness/safety benefit"
+)]
+// #![warn(clippy::as_conversions)]
 #![warn(clippy::as_pointer_underscore)]
+#![warn(clippy::as_ptr_cast_mut)]
 #![warn(clippy::as_underscore)]
 #![warn(clippy::assertions_on_result_states)]
+// #![warn(clippy::big_endian_bytes)]
 #![warn(clippy::branches_sharing_code)]
 #![warn(clippy::cargo_common_metadata)]
 #![warn(clippy::cfg_not_test)]
@@ -16,134 +39,255 @@
 #![warn(clippy::cognitive_complexity)]
 #![warn(clippy::collection_is_never_read)]
 #![warn(clippy::create_dir)]
-#![warn(clippy::dbg_macro)]
+#![allow(
+    clippy::dbg_macro,
+    reason = "while samaku is in pre-alpha state, it's fine to have debug print statements scattered over the code"
+)]
 #![warn(clippy::debug_assert_with_mut_call)]
 #![warn(clippy::decimal_literal_representation)]
+#![allow(
+    clippy::default_numeric_fallback,
+    reason = "useful but far too many false positives"
+)]
 #![warn(clippy::default_union_representation)]
 #![warn(clippy::deref_by_slicing)]
 #![warn(clippy::derive_partial_eq_without_eq)]
+// #![warn(clippy::disallowed_script_idents)]
 #![warn(clippy::doc_include_without_cfg)]
 #![warn(clippy::doc_link_code)]
 #![warn(clippy::doc_paragraphs_missing_punctuation)]
+#![allow(clippy::else_if_without_else, reason = "add in the future")]
 #![warn(clippy::empty_drop)]
 #![warn(clippy::empty_enum_variants_with_brackets)]
-#![warn(clippy::empty_line_after_doc_comments)]
-#![warn(clippy::empty_line_after_outer_attr)]
 #![warn(clippy::empty_structs_with_brackets)]
-#![warn(clippy::error_impl_error)]
 #![warn(clippy::equatable_if_let)]
+#![warn(clippy::error_impl_error)]
+// #![warn(clippy::exhaustive_enums)]
+// #![warn(clippy::exhaustive_structs)]
+#![warn(clippy::exit)]
+// #![warn(clippy::expect_used)]
 #![warn(clippy::fallible_impl_from)]
 #![warn(clippy::field_scoped_visibility_modifiers)]
 #![warn(clippy::filetype_is_file)]
+// #![warn(clippy::float_arithmetic)]
 #![warn(clippy::float_cmp_const)]
 #![warn(clippy::fn_to_numeric_cast_any)]
-#![warn(clippy::format_push_string)]
+#![warn(clippy::future_not_send)]
 #![warn(clippy::get_unwrap)]
 #![warn(clippy::host_endian_bytes)]
 #![warn(clippy::if_then_some_else_none)]
-#![warn(clippy::ignored_unit_patterns)]
 #![warn(clippy::impl_trait_in_params)]
-#![warn(clippy::implied_bounds_in_impls)]
+// #![warn(clippy::implicit_return)]
 #![warn(clippy::imprecise_flops)]
+// #![warn(clippy::indexing_slicing)]
 #![warn(clippy::infinite_loop)]
+// #![warn(clippy::inline_asm_x86_att_syntax)]
+// #![warn(clippy::inline_asm_x86_intel_syntax)]
+// #![warn(clippy::integer_division)]
+// #![warn(clippy::integer_division_remainder_used)]
 #![warn(clippy::iter_on_empty_collections)]
 #![warn(clippy::iter_on_single_items)]
+#![allow(
+    clippy::iter_over_hash_type,
+    reason = "potentially warn in the future; might require some refactoring"
+)]
 #![warn(clippy::iter_with_drain)]
 #![warn(clippy::large_stack_frames)]
+#![warn(clippy::let_underscore_must_use)]
 #![warn(clippy::let_underscore_untyped)]
 #![warn(clippy::literal_string_with_formatting_args)]
+// #![warn(clippy::little_endian_bytes)]
 #![warn(clippy::lossy_float_literal)]
-#![warn(clippy::manual_clamp)]
+#![allow(clippy::map_err_ignore, reason = "add in the future")]
 #![warn(clippy::map_with_unused_argument_over_ranges)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::min_ident_chars)]
+#![allow(clippy::missing_assert_message, reason = "add in the future")]
 #![warn(clippy::missing_asserts_for_indexing)]
+// #![warn(clippy::missing_const_for_fn)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    reason = "potentially warn in the future (together with `missing_docs`); it would be nice if all of the code was documented, but that requires a lot of effort"
+)]
+// #![warn(clippy::missing_inline_in_public_items)]
+// #![warn(clippy::missing_trait_methods)]
 #![warn(clippy::mixed_read_write_in_expression)]
+// #![warn(clippy::mod_module_files)]
+#![warn(clippy::module_name_repetitions)]
+// #![warn(clippy::module_arithmetic)]
+#![allow(
+    clippy::multiple_crate_versions,
+    reason = "potentially warn in the future; needs careful balancing of dependency versions"
+)]
 #![warn(clippy::multiple_inherent_impl)]
+// #![warn(clippy::multiple_unsafe_ops_per_block)]
+#![warn(clippy::mutex_atomic)]
+#![warn(clippy::mutex_integer)]
 #![warn(clippy::needless_collect)]
 #![warn(clippy::needless_pass_by_ref_mut)]
 #![warn(clippy::needless_raw_strings)]
+#![warn(clippy::needless_type_cast)]
 #![warn(clippy::negative_feature_names)]
+// #![warn(clippy::non_ascii_literal)]
+#![allow(clippy::non_send_fields_in_send_ty, reason = "add in the future")]
 #![warn(clippy::non_zero_suggestions)]
 #![warn(clippy::nonstandard_macro_braces)]
+// #![warn(clippy::option_if_let_else)]
 #![warn(clippy::or_fun_call)]
+// #![warn(clippy::panic)]
+// #![warn(clippy::panic_in_result_fn)]
+#![allow(
+    clippy::partial_pub_fields,
+    reason = "potentially warn in the future; requires some refactoring"
+)]
 #![warn(clippy::path_buf_push_overwrite)]
 #![warn(clippy::pathbuf_init_then_push)]
-#![warn(clippy::pointer_format)]
+#![allow(clippy::pattern_type_mismatch, reason = "add in the future")]
+#![allow(
+    clippy::pointer_format,
+    reason = "we have no reason to keep addresses private"
+)]
 #![warn(clippy::precedence_bits)]
+#![allow(
+    clippy::print_stderr,
+    reason = "while samaku is in pre-alpha state, it's fine to have debug print statements scattered over the code"
+)]
+#![allow(
+    clippy::print_stdout,
+    reason = "while samaku is in pre-alpha state, it's fine to have debug print statements scattered over the code"
+)]
+// #![warn(clippy::pub_use)]
+// #![warn(clippy::pub_with_shorthand)]
 #![warn(clippy::pub_without_shorthand)]
+// #![warn(clippy::question_mark_used)]
 #![warn(clippy::rc_buffer)]
 #![warn(clippy::rc_mutex)]
-#![warn(clippy::readonly_write_lock)]
+#![warn(clippy::read_zero_byte_vec)]
 #![warn(clippy::redundant_clone)]
+// #![warn(clippy::redundant_feature_names)]
+#![allow(clippy::redundant_pub_crate, reason = "add in the future")]
 #![warn(clippy::redundant_test_prefix)]
 #![warn(clippy::redundant_type_annotations)]
+// #![warn(clippy::ref_patterns)]
 #![warn(clippy::renamed_function_params)]
 #![warn(clippy::rest_pat_in_fully_bound_structs)]
 #![warn(clippy::return_and_then)]
 #![warn(clippy::same_name_method)]
+#![warn(clippy::search_is_some)]
 #![warn(clippy::self_named_module_files)]
 #![warn(clippy::semicolon_inside_block)]
+// #![warn(clippy::semicolon_outside_block)]
+// #![warn(clippy::separated_literal_suffix)]
 #![warn(clippy::set_contains_or_insert)]
+#![allow(clippy::shadow_reuse, reason = "add in the future")]
+#![allow(clippy::shadow_same, reason = "add in the future")]
+#![allow(clippy::shadow_unrelated, reason = "add in the future")]
 #![warn(clippy::significant_drop_in_scrutinee)]
 #![warn(clippy::significant_drop_tightening)]
+// #![warn(clippy::single_call_fn)]
+// #![warn(clippy::single_char_lifetime_names)]
 #![warn(clippy::single_option_map)]
+// #![warn(clippy::std_instead_of_alloc)]
+// #![warn(clippy::std_instead_of_core)]
 #![warn(clippy::str_to_string)]
+#![warn(clippy::string_add)]
+#![warn(clippy::string_lit_as_bytes)]
 #![warn(clippy::string_lit_chars_any)]
+#![allow(clippy::string_slice, reason = "add in the future")]
 #![warn(clippy::suboptimal_flops)]
 #![warn(clippy::suspicious_operation_groupings)]
 #![warn(clippy::suspicious_xor_used_as_pow)]
 #![warn(clippy::tests_outside_test_module)]
+#![allow(clippy::todo, reason = "allowed while samaku is in pre-alpha")]
 #![warn(clippy::too_long_first_doc_paragraph)]
+#![warn(clippy::trailing_empty_array)]
 #![warn(clippy::trait_duplication_in_bounds)]
+#![warn(clippy::transmute_undefined_repr)]
 #![warn(clippy::trivial_regex)]
 #![warn(clippy::try_err)]
 #![warn(clippy::tuple_array_conversions)]
 #![warn(clippy::type_repetition_in_bounds)]
+#![allow(
+    clippy::undocumented_unsafe_blocks,
+    reason = "potentially warn in the future; most of our unsafe code is FFI-related and it is hard to properly document the safety of that"
+)]
+#![allow(clippy::unimplemented, reason = "allowed while samaku is in pre-alpha")]
 #![warn(clippy::uninhabited_references)]
+#![warn(clippy::unnecessary_safety_comment)]
+#![warn(clippy::unnecessary_safety_doc)]
+#![warn(clippy::unnecessary_self_imports)]
 #![warn(clippy::unnecessary_struct_initialization)]
 #![warn(clippy::unneeded_field_pattern)]
+// #![warn(clippy::unreachable)]
 #![warn(clippy::unseparated_literal_suffix)]
 #![warn(clippy::unused_peekable)]
 #![warn(clippy::unused_result_ok)]
 #![warn(clippy::unused_rounding)]
 #![warn(clippy::unused_trait_names)]
-// #![warn(clippy::unwrap_used)] // potentially add in the future
+// #![warn(clippy::unwrap_in_result)]
+#![allow(
+    clippy::unwrap_used,
+    reason = "potentially warn in the future; requires some refactoring, but would improve error message in unexpected cases"
+)]
+// #![warn(clippy::use_debug)]
+// #![warn(clippy::use_self)] // we would ideally want the opposite of this
 #![warn(clippy::useless_let_if_seq)]
 #![warn(clippy::verbose_file_reads)]
+#![warn(clippy::volatile_composites)]
 #![warn(clippy::while_float)]
 #![warn(clippy::wildcard_dependencies)]
+#![allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "potentially warn in the future; a bit too noisy right now"
+)]
+//
+// --- builtin lints ---
+// Note: some obvious ones (primarily lints applying to past editions of Rust) are skipped.
 #![warn(absolute_paths_not_starting_with_crate)]
 #![warn(ambiguous_negative_literals)]
 #![warn(closure_returning_async_block)]
 #![warn(deref_into_dyn_supertrait)]
+#![allow(
+    elided_lifetimes_in_paths,
+    reason = "potentially warn in the future; too noisy for now"
+)]
 #![warn(explicit_outlives_requirements)]
 // #![warn(fuzzy_provenance_casts)] // add once stable
 #![warn(if_let_rescope)]
 #![warn(impl_trait_overcaptures)]
 #![warn(impl_trait_redundant_captures)]
-#![warn(keyword_idents)]
 #![warn(let_underscore_drop)]
 // #![warn(lossy_provenance_casts)] // add once stable
 #![warn(macro_use_extern_crate)]
 #![warn(meta_variable_misuse)]
 #![warn(missing_abi)]
-// #![warn(missing_docs)] // potentially add in the future
+#![allow(
+    missing_docs,
+    reason = "potentially warn in the future; it would be nice if all of the code was documented, but that requires a lot of effort"
+)]
 #![warn(missing_unsafe_on_extern)]
 // #![warn(multiple_supertrait_upcastable)] // add once stable
 // #![warn(must_not_suspend)] // add once stable
 // #![warn(non_exhaustive_omitted_patterns)] // add once stable
 #![warn(redundant_imports)]
 #![warn(redundant_lifetimes)]
+// #![warn(resolving_to_items_shadowing_supertrait_items)] // add once stable
+// #![warn(shadowing_supertrait_items)] // add once stable
 #![warn(single_use_lifetimes)]
-// #![warn(supertrait_item_shadowing_definition)] // add once stable
-// #![warn(supertrait_item_shadowing_usage)] // add once stable
 #![warn(trivial_casts)]
 #![warn(trivial_numeric_casts)]
 #![warn(unit_bindings)]
+#![allow(
+    unnameable_types,
+    reason = "potentially warn in the future; to be determined how much work this requires"
+)]
 // #![warn(unqualified_local_imports)] // add once stable
 #![warn(unreachable_pub)]
 #![warn(unsafe_attr_outside_unsafe)]
+#![allow(
+    unsafe_code,
+    reason = "samaku is not unsafe-free; we need unsafe to interface with C code, and also, it's fine to use unsafe in limited cases where we can prove that rustc is unnecessarily restrictive"
+)]
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(unused_crate_dependencies)]
 #![warn(unused_extern_crates)]
@@ -151,6 +295,16 @@
 #![warn(unused_lifetimes)]
 #![warn(unused_macro_rules)]
 #![warn(unused_qualifications)]
+#![allow(
+    unused_results,
+    reason = "too sensitive; `must_use` detection is enough"
+)]
+#![allow(
+    variant_size_differences,
+    reason = "potentially useful, but the 3x rule is far too sensitive and cannot be configured"
+)]
+//
+// --- warn-/deny-by-default lints that we want to allow ---
 #![allow(
     clippy::doc_markdown,
     reason = "false positives on any kind of camel case-looking words"
@@ -167,6 +321,8 @@
     clippy::struct_field_names,
     reason = "https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359"
 )]
+//
+// --- these lints we only want to allow in test code ---
 #![cfg_attr(
     test,
     allow(
