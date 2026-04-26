@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use crate::nde::graph::{NodeId, SocketId};
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
-use crate::{message, nde, style, subtitle, view};
+use crate::{message, model, nde, style, subtitle, view};
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
@@ -83,6 +83,19 @@ impl super::LocalState for State {
 
     fn visit(&mut self, visitor: &mut dyn super::Visitor) {
         visitor.visit_node_editor(self);
+    }
+
+    fn update_selected_events(
+        &mut self,
+        _selected_events: &model::select::EventSelection,
+        _events: &subtitle::EventTrack,
+    ) {
+        // Always unset the node selection if the event selection changed, since we can't easily tell
+        // whether the displayed filter is the same.
+        // This does not currently affect the selection that is visible on `iced_nodegraph`,
+        // since setting that is buggy (see `create_graph`)
+        // TODO: if this ends up being annoying, we might have to check that anyway.
+        self.selected_nodes.clear();
     }
 
     fn update_filter_names(&mut self, extradata: &subtitle::Extradata) {
@@ -325,6 +338,7 @@ fn create_graph(
             )
         })
         .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
+        //.selection(dbg!(&pane_state.selected_nodes)) // TODO: this method is buggy (if this line is left in, no nodes can be selected at all)
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
