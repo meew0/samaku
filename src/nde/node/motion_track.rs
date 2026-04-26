@@ -1,14 +1,16 @@
-use std::collections::HashMap;
-
-use crate::{media, message, model, nde, subtitle};
+use crate::{media, message, model, nde, style, subtitle, view};
+use iced::Rectangle;
+use iced::mouse::Cursor;
+use iced::widget::canvas;
 use model::reticule;
+use std::collections::BTreeMap;
 
 use super::{Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
     pub region_center: nde::tags::Position,
-    pub track: HashMap<model::FrameNumber, media::motion::Region>,
+    pub track: BTreeMap<model::FrameNumber, media::motion::Region>,
 }
 
 #[typetag::serde]
@@ -114,6 +116,67 @@ impl Node for MotionTrack {
         Ok(old_position)
     }
 
+    fn draw_reticule_base_layer(
+        &self,
+        canvas_frame: &mut canvas::Frame,
+        bounds: Rectangle,
+        storage_size: subtitle::Resolution,
+        current_frame: Option<model::FrameNumber>,
+        _cursor: Cursor,
+    ) {
+        if !self.track.is_empty() {
+            let (first_frame, _) = self.track.first_key_value().unwrap();
+            let (last_frame, _) = self.track.last_key_value().unwrap();
+
+            for (frame_number, region) in &self.track {
+                let iced_point = view::frame_coordinates_to_iced(
+                    region.center.x,
+                    region.center.y,
+                    bounds.size(),
+                    storage_size,
+                );
+
+                #[expect(
+                    clippy::cast_sign_loss,
+                    reason = "frame numbers should not be negative"
+                )]
+                let (red, green, blue) = colorous::VIRIDIS
+                    .eval_rational(
+                        (frame_number.0 - first_frame.0) as usize,
+                        (last_frame.0 - first_frame.0) as usize + 1_usize,
+                    )
+                    .as_tuple();
+                let iced_color = iced::Color::from_rgb8(red, green, blue);
+
+                let circle = canvas::Path::circle(iced_point, 3.0_f32);
+
+                if current_frame == Some(*frame_number) {
+                    // Highlight the current frame with another yellow-orange border.
+                    canvas_frame.stroke(
+                        &circle,
+                        canvas::Stroke::default()
+                            .with_color(iced::Color::WHITE)
+                            .with_width(9.0_f32),
+                    );
+                    canvas_frame.stroke(
+                        &circle,
+                        canvas::Stroke::default()
+                            .with_color(style::SAMAKU_PRIMARY)
+                            .with_width(6.0_f32),
+                    );
+                }
+
+                canvas_frame.stroke(
+                    &circle,
+                    canvas::Stroke::default()
+                        .with_color(iced::Color::WHITE)
+                        .with_width(3.0_f32),
+                );
+                canvas_frame.fill(&circle, iced_color);
+            }
+        }
+    }
+
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 150.0)
     }
@@ -127,7 +190,7 @@ inventory::submit! {
                 x: 100.0,
                 y: 100.0,
             },
-            track: HashMap::new(),
+            track: BTreeMap::new(),
         })
     )
 }

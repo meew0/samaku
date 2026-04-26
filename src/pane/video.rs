@@ -1,7 +1,7 @@
 use iced::mouse;
 use iced::widget::{Action, canvas};
 
-use crate::{media, message, model, style, subtitle, view};
+use crate::{media, message, model, nde, style, subtitle, view};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct State;
@@ -82,16 +82,24 @@ impl super::LocalState for State {
                         stack
                     };
 
-                    let reticules: &[model::reticule::Reticule] =
-                        if let Some(ref reticules) = global_state.reticules {
-                            reticules.list.as_slice()
-                        } else {
-                            &[]
-                        };
+                    let (reticule_list, node) = if let Some(ref reticules) = global_state.reticules
+                    {
+                        let node = global_state
+                            .subtitles
+                            .extradata
+                            .get_node(reticules.source_filter_index, reticules.source_node_index)
+                            .ok();
+                        (reticules.list.as_slice(), node)
+                    } else {
+                        let list: &[model::reticule::Reticule] = &[];
+                        (list, None)
+                    };
 
                     let program = ReticuleProgram {
-                        reticules,
+                        reticules: reticule_list,
+                        node,
                         storage_size,
+                        current_frame: global_state.current_frame(),
                     };
                     iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
                 }
@@ -117,7 +125,9 @@ inventory::submit! {
 
 struct ReticuleProgram<'a> {
     reticules: &'a [model::reticule::Reticule],
+    node: Option<&'a nde::graph::VisualNode>,
     storage_size: subtitle::Resolution,
+    current_frame: Option<model::FrameNumber>,
 }
 
 #[derive(Default)]
@@ -207,6 +217,16 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
 
+        if let Some(visual_node) = self.node {
+            visual_node.node.draw_reticule_base_layer(
+                &mut frame,
+                bounds,
+                self.storage_size,
+                self.current_frame,
+                cursor,
+            );
+        }
+
         let hovered_reticule_index = cursor
             .position_in(bounds)
             .and_then(|mouse_position| self.find_hovered_reticule(mouse_position, bounds))
@@ -214,90 +234,8 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
 
         for (i, reticule) in self.reticules.iter().enumerate() {
             let hovered = hovered_reticule_index.is_some_and(|hovered_index| i == hovered_index.0);
-            let alpha_factor: f32 = if hovered { 0.4 } else { 0.2 };
             let center_point = reticule.iced_position(bounds.size(), self.storage_size);
-
-            match reticule.shape {
-                model::reticule::Shape::Cross => {
-                    let rect_top_left = center_point
-                        - iced::Vector::new(reticule.radius * 0.5, reticule.radius * 0.5);
-                    let rect_size = iced::Size::new(reticule.radius, reticule.radius);
-                    frame.fill_rectangle(
-                        rect_top_left,
-                        rect_size,
-                        style::SAMAKU_TEXT.scale_alpha(alpha_factor),
-                    );
-
-                    frame.stroke_rectangle(
-                        rect_top_left,
-                        rect_size,
-                        canvas::Stroke::default()
-                            .with_color(style::SAMAKU_BACKGROUND)
-                            .with_width(1.0),
-                    );
-
-                    let thin_path = canvas::Path::new(|path| {
-                        path.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
-                        path.line_to(center_point + iced::Vector::new(reticule.radius, 0.0));
-                        path.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
-                        path.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
-                    });
-
-                    frame.stroke(
-                        &thin_path,
-                        canvas::Stroke::default()
-                            .with_color(style::SAMAKU_BACKGROUND)
-                            .with_width(2.0),
-                    );
-
-                    frame.stroke(
-                        &thin_path,
-                        canvas::Stroke::default()
-                            .with_color(style::SAMAKU_PRIMARY)
-                            .with_width(1.0),
-                    );
-                }
-                model::reticule::Shape::CornerTopLeft => {
-                    corner(
-                        &mut frame,
-                        center_point,
-                        reticule.radius,
-                        1.0,
-                        1.0,
-                        alpha_factor,
-                    );
-                }
-                model::reticule::Shape::CornerTopRight => {
-                    corner(
-                        &mut frame,
-                        center_point,
-                        reticule.radius,
-                        -1.0,
-                        1.0,
-                        alpha_factor,
-                    );
-                }
-                model::reticule::Shape::CornerBottomLeft => {
-                    corner(
-                        &mut frame,
-                        center_point,
-                        reticule.radius,
-                        1.0,
-                        -1.0,
-                        alpha_factor,
-                    );
-                }
-                model::reticule::Shape::CornerBottomRight => {
-                    corner(
-                        &mut frame,
-                        center_point,
-                        reticule.radius,
-                        -1.0,
-                        -1.0,
-                        alpha_factor,
-                    );
-                }
-            }
+            draw_reticule(&mut frame, center_point, reticule, hovered);
         }
 
         vec![frame.into_geometry()]
@@ -323,7 +261,91 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
     }
 }
 
-fn corner(
+fn draw_reticule(
+    frame: &mut canvas::Frame,
+    center_point: iced::Point,
+    reticule: &model::reticule::Reticule,
+    hovered: bool,
+) {
+    let alpha_factor: f32 = if hovered { 0.4 } else { 0.2 };
+
+    match reticule.shape {
+        model::reticule::Shape::Cross => {
+            let rect_top_left =
+                center_point - iced::Vector::new(reticule.radius * 0.5, reticule.radius * 0.5);
+            let rect_size = iced::Size::new(reticule.radius, reticule.radius);
+            frame.fill_rectangle(
+                rect_top_left,
+                rect_size,
+                style::SAMAKU_TEXT.scale_alpha(alpha_factor),
+            );
+
+            frame.stroke_rectangle(
+                rect_top_left,
+                rect_size,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_BACKGROUND)
+                    .with_width(1.0),
+            );
+
+            let thin_path = canvas::Path::new(|path| {
+                path.move_to(center_point + iced::Vector::new(-reticule.radius, 0.0));
+                path.line_to(center_point + iced::Vector::new(reticule.radius, 0.0));
+                path.move_to(center_point + iced::Vector::new(0.0, -reticule.radius));
+                path.line_to(center_point + iced::Vector::new(0.0, reticule.radius));
+            });
+
+            frame.stroke(
+                &thin_path,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_BACKGROUND)
+                    .with_width(2.0),
+            );
+
+            frame.stroke(
+                &thin_path,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_PRIMARY)
+                    .with_width(1.0),
+            );
+        }
+        model::reticule::Shape::CornerTopLeft => {
+            draw_corner_reticule(frame, center_point, reticule.radius, 1.0, 1.0, alpha_factor);
+        }
+        model::reticule::Shape::CornerTopRight => {
+            draw_corner_reticule(
+                frame,
+                center_point,
+                reticule.radius,
+                -1.0,
+                1.0,
+                alpha_factor,
+            );
+        }
+        model::reticule::Shape::CornerBottomLeft => {
+            draw_corner_reticule(
+                frame,
+                center_point,
+                reticule.radius,
+                1.0,
+                -1.0,
+                alpha_factor,
+            );
+        }
+        model::reticule::Shape::CornerBottomRight => {
+            draw_corner_reticule(
+                frame,
+                center_point,
+                reticule.radius,
+                -1.0,
+                -1.0,
+                alpha_factor,
+            );
+        }
+    }
+}
+
+fn draw_corner_reticule(
     frame: &mut canvas::Frame,
     center_point: iced::Point,
     radius: f32,

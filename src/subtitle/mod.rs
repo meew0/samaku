@@ -1050,7 +1050,7 @@ impl Extradata {
         node_index: nde::graph::NodeId,
         message: message::Node,
     ) -> anyhow::Result<()> {
-        let node = self.get_node(filter_index, node_index)?;
+        let node = self.get_node_mut(filter_index, node_index)?;
         node.node.update(message)
     }
 
@@ -1061,12 +1061,30 @@ impl Extradata {
         reticule_index: model::reticule::Index,
         position: nde::tags::Position,
     ) -> anyhow::Result<nde::tags::Position> {
-        let node = self.get_node(reticules.source_filter_index, reticules.source_node_index)?;
+        let node = self.get_node_mut(reticules.source_filter_index, reticules.source_node_index)?;
         node.node
             .reticule_update(reticules, reticule_index, position)
     }
 
-    fn get_node(
+    pub fn get_node(
+        &self,
+        filter_index: ExtradataId,
+        node_index: nde::graph::NodeId,
+    ) -> anyhow::Result<&nde::graph::VisualNode> {
+        let Some(entry) = self.entries.get(&filter_index) else {
+            anyhow::bail!("Extradata entry does not exist at index {}", filter_index.0);
+        };
+        let &ExtradataEntry::NdeFilter(ref filter) = entry else {
+            anyhow::bail!("Extradata at index {} is not an NDE filter", filter_index.0);
+        };
+        let Some(node) = filter.graph.nodes.get(node_index.0) else {
+            anyhow::bail!("Could not find node at index {}", node_index.0);
+        };
+
+        Ok(node)
+    }
+
+    pub fn get_node_mut(
         &mut self,
         filter_index: ExtradataId,
         node_index: nde::graph::NodeId,

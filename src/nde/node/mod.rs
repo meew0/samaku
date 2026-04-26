@@ -268,6 +268,18 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
         anyhow::bail!("Node '{}' does not provide any reticules", self.name());
     }
 
+    /// This method is called before any reticule is drawn.
+    /// The node can draw something as a base layer to be shown below the reticules.
+    fn draw_reticule_base_layer(
+        &self,
+        canvas_frame: &mut iced::widget::canvas::Frame,
+        bounds: iced::Rectangle,
+        storage_size: subtitle::Resolution,
+        current_frame: Option<model::FrameNumber>,
+        cursor: iced::mouse::Cursor,
+    ) {
+    }
+
     /// The node's content size, used for layouting the content.
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 75.0)

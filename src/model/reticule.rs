@@ -1,4 +1,4 @@
-use crate::{nde, subtitle};
+use crate::{nde, subtitle, view};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Index(pub usize);
@@ -59,14 +59,7 @@ impl Reticule {
         size: iced::Size,
         storage_size: subtitle::Resolution,
     ) -> iced::Point {
-        let x: f64 = self.position.x * f64::from(size.width) / f64::from(storage_size.x);
-        let y: f64 = self.position.y * f64::from(size.height) / f64::from(storage_size.y);
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "extreme precision not needed in UI-adjacent code"
-        )]
-        let point = iced::Point::new(x as f32, y as f32);
-        point
+        view::frame_coordinates_to_iced(self.position.x, self.position.y, size, storage_size)
     }
 
     #[must_use]

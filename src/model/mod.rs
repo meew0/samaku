@@ -6,7 +6,9 @@ pub mod select;
 pub mod toast;
 
 /// Identifies a video frame by number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct FrameNumber(pub i32);
 
 /// A difference in counted video frames.
