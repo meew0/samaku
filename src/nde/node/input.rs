@@ -102,31 +102,27 @@ impl Node for InputPosition {
 
     fn content<'a>(
         &self,
-        filter_index: subtitle::ExtradataId,
-        self_index: nde::graph::NodeId,
+        _filter_index: subtitle::ExtradataId,
+        _self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
-            reticule::Reticules::new(
-                vec![reticule::Reticule {
-                    shape: reticule::Shape::Cross,
-                    position: self.value,
-                    radius: 15.0,
-                }],
-                filter_index,
-                self_index,
-            ),
-        ));
-
-        let column = iced::widget::column![
-            iced::widget::text(format!("x: {:.1}, y: {:.1}", self.value.x, self.value.y)),
-            button
-        ];
+        let column = iced::widget::column![iced::widget::text(format!(
+            "x: {:.1}, y: {:.1}",
+            self.value.x, self.value.y
+        ))];
 
         column
             .spacing(4.0)
             .width(iced::Length::Fill)
             .align_x(iced::Alignment::Center)
             .into()
+    }
+
+    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+        vec![reticule::Reticule {
+            shape: reticule::Shape::Cross,
+            position: self.value,
+            radius: 15.0,
+        }]
     }
 
     fn reticule_update(
@@ -214,10 +210,23 @@ impl Node for InputRectangle {
 
     fn content<'a>(
         &self,
-        filter_index: subtitle::ExtradataId,
-        self_index: nde::graph::NodeId,
+        _filter_index: subtitle::ExtradataId,
+        _self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        let mut reticules = vec![
+        let column = iced::widget::column![iced::widget::text(format!(
+            "({:.1}, {:.1}; {:.1}, {:.1})",
+            self.value.x1, self.value.y1, self.value.x2, self.value.y2,
+        )),];
+
+        column
+            .spacing(4.0)
+            .width(iced::Length::Fill)
+            .align_x(iced::Alignment::Center)
+            .into()
+    }
+
+    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+        let mut reticule_list = vec![
             reticule::Reticule {
                 shape: reticule::Shape::CornerTopLeft,
                 position: nde::tags::Position::default(),
@@ -240,25 +249,8 @@ impl Node for InputRectangle {
             },
         ];
 
-        self.reticule_update_internal(&mut reticules);
-
-        let button = iced::widget::button("Set").on_press(message::Message::SetReticules(
-            reticule::Reticules::new(reticules, filter_index, self_index),
-        ));
-
-        let column = iced::widget::column![
-            iced::widget::text(format!(
-                "({:.1}, {:.1}; {:.1}, {:.1})",
-                self.value.x1, self.value.y1, self.value.x2, self.value.y2,
-            )),
-            button
-        ];
-
-        column
-            .spacing(4.0)
-            .width(iced::Length::Fill)
-            .align_x(iced::Alignment::Center)
-            .into()
+        self.reticule_update_internal(&mut reticule_list);
+        reticule_list
     }
 
     fn reticule_update(

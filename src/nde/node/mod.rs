@@ -246,6 +246,13 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
         anyhow::bail!("Node '{}' does not know how to handle message", self.name());
     }
 
+    /// This method is called if only this node is selected. If desired, the node can return `Some`
+    /// reticules in order to activate them, such that they are displayed above the video. If they
+    /// are moved, `reticule_update` will later be called.
+    fn reticule_activate(&mut self) -> Vec<model::reticule::Reticule> {
+        vec![]
+    }
+
     /// Called when a reticule claiming to originate from this node is moved. The node takes care
     /// of actually updating the data — it can introduce complex logic here to link some reticules
     /// to others etc.

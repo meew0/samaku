@@ -64,6 +64,13 @@ fn update_internal(
     )]
     match message {
         Message::None => {}
+        Message::Batch(messages) => {
+            let tasks: Vec<iced::Task<Message>> = messages
+                .into_iter()
+                .map(|batch_message| update(global_state, batch_message))
+                .collect();
+            return iced::Task::batch(tasks);
+        }
         Message::ModifiersChanged(modifiers) => {
             global_state.modifiers = modifiers;
         }
@@ -1216,8 +1223,25 @@ fn update_internal(
                 Message::SetNodeConnection(filter_id, maybe_previous, next),
             );
         }
-        Message::SetReticules(reticules) => {
-            global_state.reticules = Some(reticules);
+        Message::ActivateNodes(filter_id, nodes) => {
+            if nodes.len() == 1 {
+                let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
+                let node_id = nodes[0];
+                let node = &mut filter.graph.nodes[node_id.0];
+                let reticule_list = node.node.reticule_activate();
+
+                global_state.reticules = if reticule_list.is_empty() {
+                    None
+                } else {
+                    Some(model::reticule::Reticules {
+                        list: reticule_list,
+                        source_filter_index: filter_id,
+                        source_node_index: node_id,
+                    })
+                }
+            } else {
+                global_state.reticules = None;
+            }
         }
         Message::UpdateReticulePosition(index, position) => {
             if let Some(ref mut reticules) = global_state.reticules {

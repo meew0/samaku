@@ -157,6 +157,7 @@ impl History {
             }
             // messages that will never need to be recorded in the history
             Message::None
+            | Message::Batch(_)
             | Message::Pane(_, _)
             | Message::FocusedPane(_)
             | Message::Node(_, _, _)
@@ -193,7 +194,7 @@ impl History {
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
             | Message::MultiAssignFiltersToEvents(_, _)
-            | Message::SetReticules(_)
+            | Message::ActivateNodes(_, _)
             | Message::TrackMotionForNode(_, _, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)

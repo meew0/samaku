@@ -60,18 +60,6 @@ impl Node for MotionTrack {
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        let set_marker_button = iced::widget::button("Set marker").on_press(
-            message::Message::SetReticules(reticule::Reticules::new(
-                vec![reticule::Reticule {
-                    shape: reticule::Shape::Cross,
-                    position: self.region_center,
-                    radius: 15.0,
-                }],
-                filter_index,
-                self_index,
-            )),
-        );
-
         let initial_point = media::motion::Point {
             x: self.region_center.x,
             y: self.region_center.y,
@@ -83,7 +71,6 @@ impl Node for MotionTrack {
 
         let column = iced::widget::column![
             iced::widget::text(format!("{} frame(s) tracked", self.track.len())),
-            set_marker_button,
             track_button,
         ];
 
@@ -101,6 +88,14 @@ impl Node for MotionTrack {
         } else {
             anyhow::bail!("Invalid message type, expected MotionTrackUpdate");
         }
+    }
+
+    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+        vec![reticule::Reticule {
+            shape: reticule::Shape::Cross,
+            position: self.region_center,
+            radius: 15.0,
+        }]
     }
 
     fn reticule_update(

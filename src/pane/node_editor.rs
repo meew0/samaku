@@ -307,7 +307,13 @@ fn create_graph(
         })
         .on_move(move |node_id, point| message::Message::MoveNode(nde_filter_id, node_id, point))
         .on_select(move |nodes| {
-            message::Message::Pane(self_pane, message::Pane::NodeEditorSelectionChanged(nodes))
+            message::Message::Batch(vec![
+                message::Message::Pane(
+                    self_pane,
+                    message::Pane::NodeEditorSelectionChanged(nodes.clone()),
+                ),
+                message::Message::ActivateNodes(nde_filter_id, nodes),
+            ])
         })
         .on_group_move(move |node_ids, vector| {
             message::Message::MoveNodeGroup(nde_filter_id, node_ids, vector)

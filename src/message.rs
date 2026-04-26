@@ -11,6 +11,11 @@ pub enum Message {
     /// but don't want anything to happen.
     None,
 
+    /// Run multiple messages in sequence.
+    /// This should primarily be used for running a pane message and a global message
+    /// from the same event.
+    Batch(Vec<Message>),
+
     /// Message pertaining to a specific pane (PaneState)
     /// Will be dispatched to the given pane (`Pane`) or the focused one (`FocusedPane`).
     /// For example changing video display settings, or scrolling the timeline.
@@ -236,7 +241,7 @@ pub enum Message {
 
     // Create and update reticules — the controls visible on top of the video when triggered by
     // certain NDE nodes.
-    SetReticules(model::reticule::Reticules),
+    ActivateNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
     UpdateReticulePosition(model::reticule::Index, nde::tags::Position),
 
     /// Tell the video playback worker to start motion tracking and sending the results to the
