@@ -825,7 +825,8 @@ fn make_pin_row<'a>(
                 .align_x(iced::alignment::Horizontal::Right)
                 .into()
         } else {
-            unreachable!();
+            // Neither in nor out pin
+            iced::widget::container("").width(iced::Length::Fill).into()
         }
     }
 }
