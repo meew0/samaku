@@ -32,7 +32,7 @@ smol = "2.0"
 # Media libraries
 ffms2-sys = "0.3"
 libass-sys = { version = "0.1.0", path = "libass-sys" }
-libmv-capi-sys = "0.1"
+libmv-capi-sys = "0.1.1"
 matroska-demuxer = "0.7"
 cpal = "0.17"
 
