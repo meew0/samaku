@@ -1,6 +1,12 @@
 use crate::nde::Span;
 
-use super::{Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency, Drawing, Fade, FontSize, FontSizeDelta, FontWeight, Global, GlobalAnimatable, HorizontalAlignment, KaraokeEffect, Local, LocalAnimatable, Maybe2D, Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle, Resettable, SimpleFade, Transparency, VerticalAlignment, WrapStyle};
+use super::{
+    Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade,
+    DecimalTransparency, Drawing, Fade, FontSize, FontSizeDelta, FontWeight, Global,
+    GlobalAnimatable, HorizontalAlignment, KaraokeEffect, Local, LocalAnimatable, Maybe2D,
+    Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle, Resettable, SimpleFade,
+    Transparency, VerticalAlignment, WrapStyle,
+};
 
 #[must_use]
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
@@ -218,6 +224,8 @@ fn parse_tag_block(block: &str, global: &mut Global) -> TagBlock {
     )]
     parse_tag(&block[tag_start_bytes..], global, &mut tag_block);
 
+    tag_block.new_local.compact_animations();
+
     tag_block
 }
 
@@ -263,31 +271,42 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
 
     if twa.tag::<false>("xbord") {
         local.border.x = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.border.x);
     } else if twa.tag::<false>("ybord") {
         local.border.y = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.border.y);
     } else if twa.tag::<false>("xshad") {
         local.shadow.x = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.shadow.x);
     } else if twa.tag::<false>("yshad") {
         local.shadow.y = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.shadow.x);
     } else if twa.tag::<false>("fax") {
         local.text_shear.x = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.text_shear.x);
     } else if twa.tag::<false>("fay") {
         local.text_shear.y = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.text_shear.y);
     } else if twa.tag::<true>("iclip") {
         parse_clip(global, &twa, Clip::Inverse, Clip::Inverse);
     } else if twa.tag::<false>("blur") {
         local.gaussian_blur = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.gaussian_blur);
     } else if twa.tag::<false>("fscx") {
         local.font_scale.x = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.font_scale.x);
     } else if twa.tag::<false>("fscy") {
         local.font_scale.y = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.font_scale.y);
     } else if twa.tag::<false>("fsc") {
         local.font_scale = Maybe2D {
             x: Resettable::Reset,
             y: Resettable::Reset,
-        }
+        };
+        local.clear_animated_property(|la| &mut la.font_scale);
     } else if twa.tag::<false>("fsp") {
         local.letter_spacing = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.letter_spacing);
     } else if twa.tag::<false>("fs") {
         local.font_size = match twa.float_arg(0) {
             Some(parsed) => {
@@ -311,9 +330,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                 }
             }
             None => FontSize::Reset(FontSizeDelta::ZERO),
-        }
+        };
+        local.clear_animated_property(|la| &mut la.font_size);
     } else if twa.tag::<false>("bord") {
         local.border = maybe_both_dimensions(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.border);
     } else if twa.tag::<true>("move") {
         if global.position.is_none() && (twa.nargs() == 4 || twa.nargs() == 6) {
             let timing = (twa.nargs() == 6).then(|| {
@@ -347,10 +368,13 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         }
     } else if twa.tag::<false>("frx") {
         local.text_rotation.x = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.text_rotation.x);
     } else if twa.tag::<false>("fry") {
         local.text_rotation.y = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.text_rotation.y);
     } else if twa.tag::<false>("frz") || twa.tag::<false>("fr") {
         local.text_rotation.z = resettable(twa.float_arg(0));
+        local.clear_animated_property(|la| &mut la.text_rotation.z);
     } else if twa.tag::<false>("fn") {
         local.font_name = resettable(twa.string_arg(0).map(|name| lstrip(name).to_owned()));
     } else if twa.tag::<false>("alpha") {
@@ -359,6 +383,10 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         local.secondary_transparency = resettable_transparency;
         local.border_transparency = resettable_transparency;
         local.shadow_transparency = resettable_transparency;
+        local.clear_animated_property(|la| &mut la.primary_transparency);
+        local.clear_animated_property(|la| &mut la.secondary_transparency);
+        local.clear_animated_property(|la| &mut la.border_transparency);
+        local.clear_animated_property(|la| &mut la.shadow_transparency);
     } else if twa.tag::<false>("an") {
         // Don't set the alignment more than once
         if global.alignment.is_keep() {
@@ -546,20 +574,28 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         parse_clip(global, &twa, Clip::Contained, Clip::Contained);
     } else if twa.tag::<false>("c") || twa.tag::<false>("1c") {
         local.primary_colour = resettable(twa.colour_arg(0));
+        local.clear_animated_property(|la| &mut la.primary_colour);
     } else if twa.tag::<false>("2c") {
         local.secondary_colour = resettable(twa.colour_arg(0));
+        local.clear_animated_property(|la| &mut la.secondary_colour);
     } else if twa.tag::<false>("3c") {
         local.border_colour = resettable(twa.colour_arg(0));
+        local.clear_animated_property(|la| &mut la.border_colour);
     } else if twa.tag::<false>("4c") {
         local.shadow_colour = resettable(twa.colour_arg(0));
+        local.clear_animated_property(|la| &mut la.shadow_colour);
     } else if twa.tag::<false>("1a") {
         local.primary_transparency = resettable(twa.transparency_arg(0));
+        local.clear_animated_property(|la| &mut la.primary_transparency);
     } else if twa.tag::<false>("2a") {
         local.secondary_transparency = resettable(twa.transparency_arg(0));
+        local.clear_animated_property(|la| &mut la.secondary_transparency);
     } else if twa.tag::<false>("3a") {
         local.border_transparency = resettable(twa.transparency_arg(0));
+        local.clear_animated_property(|la| &mut la.border_transparency);
     } else if twa.tag::<false>("4a") {
         local.shadow_transparency = resettable(twa.transparency_arg(0));
+        local.clear_animated_property(|la| &mut la.primary_transparency);
     } else if twa.tag::<false>("r") {
         // Clear previous overrides in this block, but keep the drawing baseline offset,
         // which is not reset by `\r`
@@ -574,16 +610,17 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         };
     } else if twa.tag::<false>("be") {
         local.soften = resettable(twa.int_arg(0));
+        local.clear_animated_property(|la| &mut la.soften);
     } else if twa.tag::<false>("b") {
-        use Resettable::*;
         local.font_weight = match twa.int_arg(0) {
-            Some(0) => Override(FontWeight::BoldToggle(false)),
-            Some(1) => Override(FontWeight::BoldToggle(true)),
+            Some(0) => Resettable::Override(FontWeight::BoldToggle(false)),
+            Some(1) => Resettable::Override(FontWeight::BoldToggle(true)),
             Some(weight) if weight >= 100 => {
-                Override(FontWeight::Numeric(weight.try_into().unwrap()))
+                Resettable::Override(FontWeight::Numeric(weight.try_into().unwrap()))
             }
-            Some(_) | None => Reset,
-        }
+            Some(_) | None => Resettable::Reset,
+        };
+        local.clear_animated_property(|la| &mut la.gaussian_blur);
     } else if twa.tag::<false>("i") {
         local.italic = resettable(twa.bool_arg(0));
     } else if twa.tag::<false>("kt") {
@@ -610,6 +647,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         let maybe_val = resettable(twa.float_arg(0).map(|val| val.max(0.0)));
         local.shadow.x = maybe_val;
         local.shadow.y = maybe_val;
+        local.clear_animated_property(|la| &mut la.shadow);
     } else if twa.tag::<false>("s") {
         local.strike_out = resettable(twa.bool_arg(0));
     } else if twa.tag::<false>("u") {
@@ -1769,6 +1807,36 @@ mod tests {
 
         assert_matches!(global.vector_clip, Some(_));
         assert_matches!(block.new_local.font_name, Resettable::Override(_));
+    }
+
+    #[test]
+    fn animation_overridden() {
+        let mut global = Global::empty();
+        let block = parse_tag_block(
+            "\\1c&HFF0000&\\t(\\1c&H00FFFF&)\\t(\\xshad100\\1c&H00FF00&)\\1c&H0000FF&",
+            &mut global,
+        );
+
+        // the extraneous animation should have been removed
+        assert_eq!(block.new_local.animations.len(), 1);
+
+        assert_matches!(
+            block.new_local.primary_colour,
+            Resettable::Override(Colour {
+                red: 255,
+                green: 0,
+                blue: 0
+            })
+        );
+
+        assert_matches!(
+            block.new_local.animations[0].modifiers.primary_colour,
+            Resettable::Keep
+        );
+        assert_matches!(
+            block.new_local.animations[0].modifiers.shadow.x,
+            Resettable::Override(_)
+        );
     }
 
     #[test]

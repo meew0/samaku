@@ -499,6 +499,27 @@ impl Local {
             .lerp(other.drawing_baseline_offset, power);
     }
 
+    /// Clears the given property from the animations contained in this tag block.
+    /// This operation is necessary because if an override tag is specified after
+    /// a `\t` animation block, it overrides the animation and causes the property
+    /// to become static again.
+    pub fn clear_animated_property<T>(&mut self, accessor: fn(&mut LocalAnimatable) -> &mut T)
+    where
+        T: Default,
+    {
+        for animation in &mut self.animations {
+            let property_ref = accessor(&mut animation.modifiers);
+            *property_ref = Default::default();
+        }
+    }
+
+    /// Removes empty animations.
+    pub fn compact_animations(&mut self) {
+        let empty = LocalAnimatable::empty();
+        self.animations
+            .retain(|animation| animation.modifiers != empty);
+    }
+
     /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
     ///
     /// # Errors
