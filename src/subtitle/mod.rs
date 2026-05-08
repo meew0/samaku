@@ -253,6 +253,13 @@ impl Sub<StartTime> for StartTime {
 )]
 pub struct Duration(pub i64);
 
+impl Into<nde::tags::Milliseconds> for Duration {
+    fn into(self) -> nde::tags::Milliseconds {
+        let ms = nde::tags::Milliseconds(self.0 as i32);
+        ms
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Angle(pub f64);
 

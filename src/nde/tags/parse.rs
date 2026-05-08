@@ -1,11 +1,6 @@
 use crate::nde::Span;
 
-use super::{
-    Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, Drawing,
-    Fade, FontSize, FontSizeDelta, FontWeight, Global, GlobalAnimatable, HorizontalAlignment,
-    KaraokeEffect, Local, LocalAnimatable, Maybe2D, Milliseconds, Move, MoveTiming, Position,
-    PositionOrMove, Rectangle, Resettable, SimpleFade, Transparency, VerticalAlignment, WrapStyle,
-};
+use super::{Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency, Drawing, Fade, FontSize, FontSizeDelta, FontWeight, Global, GlobalAnimatable, HorizontalAlignment, KaraokeEffect, Local, LocalAnimatable, Maybe2D, Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle, Resettable, SimpleFade, Transparency, VerticalAlignment, WrapStyle};
 
 #[must_use]
 pub fn parse(text: &str) -> (Box<Global>, Vec<Span>) {
@@ -471,9 +466,9 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                 7 => {
                     // fade
                     Some(Fade::Complex(ComplexFade {
-                        transparency_before: twa.int_arg(0).unwrap(),
-                        transparency_main: twa.int_arg(1).unwrap(),
-                        transparency_after: twa.int_arg(2).unwrap(),
+                        transparency_before: DecimalTransparency(twa.int_arg(0).unwrap()),
+                        transparency_main: DecimalTransparency(twa.int_arg(1).unwrap()),
+                        transparency_after: DecimalTransparency(twa.int_arg(2).unwrap()),
                         fade_in_start: Milliseconds(twa.int_arg(3).unwrap()),
                         fade_in_end: Milliseconds(twa.int_arg(4).unwrap()),
                         fade_out_start: Milliseconds(twa.int_arg(5).unwrap()),
@@ -1456,9 +1451,9 @@ mod tests {
         assert_eq!(
             global.fade,
             Some(Fade::Complex(ComplexFade {
-                transparency_before: 0,
-                transparency_main: 255,
-                transparency_after: 0,
+                transparency_before: DecimalTransparency(0),
+                transparency_main: DecimalTransparency(255),
+                transparency_after: DecimalTransparency(0),
                 fade_in_start: Milliseconds(0),
                 fade_in_end: Milliseconds(1000),
                 fade_out_start: Milliseconds(2000),

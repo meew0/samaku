@@ -1,9 +1,11 @@
 use std::{fmt::Debug, ops::Add};
 
+pub use bake::bake;
 pub use emit::emit;
 pub use parse::parse;
 pub use parse::raw as parse_raw;
 
+mod bake;
 mod emit;
 mod lerp;
 mod parse;
@@ -632,7 +634,7 @@ impl emit::Value for LocalAnimatable {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Milliseconds(i32);
+pub struct Milliseconds(pub i32);
 
 macro_rules! emit_value_newtype {
     () => {
@@ -650,7 +652,7 @@ impl emit::Value for Milliseconds {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Centiseconds(f64);
+pub struct Centiseconds(pub f64);
 
 impl Add for Centiseconds {
     type Output = Self;
@@ -1021,6 +1023,22 @@ impl emit::Value for Transparency {
     {
         write!(sink, "&H{:X}&", self.0)
     }
+}
+
+/// A subtitle transparency value in the context of a complex fade.
+/// Subtly different from `Transparency`, since it is emitted into a decimal value,
+/// not a hexadecimal one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecimalTransparency(pub i32);
+
+impl From<DecimalTransparency> for Transparency {
+    fn from(value: DecimalTransparency) -> Self {
+        Self(value.0)
+    }
+}
+
+impl emit::Value for DecimalTransparency {
+    emit_value_newtype!();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1626,16 +1644,16 @@ impl emit::Value for SimpleFade {
 /// Between those times, it will transition linearly between
 /// the respective transparency values.
 ///
-/// Note that the transparency values have type `i32`
-/// instead of the usual `u8`. They will be truncated to size `u8`,
-/// but only *after* interpolation, which means that specifying
-/// far larger values than 255 (or far smaller ones than 0)
-/// will produce a fun wrapping effect.
+/// Note that the transparency values have type `i32` (newtyped as
+/// `DecimalTransparency`) instead of the usual `u8`. They will be
+/// truncated to size `u8`, but only *after* interpolation, which
+/// means that specifying far larger values than 255 (or far smaller
+/// ones than 0) will produce a fun wrapping effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComplexFade {
-    pub transparency_before: i32,
-    pub transparency_main: i32,
-    pub transparency_after: i32,
+    pub transparency_before: DecimalTransparency,
+    pub transparency_main: DecimalTransparency,
+    pub transparency_after: DecimalTransparency,
     pub fade_in_start: Milliseconds,
     pub fade_in_end: Milliseconds,
     pub fade_out_start: Milliseconds,
@@ -1999,9 +2017,9 @@ mod tests {
             })),
             origin: Some(Position { x: 3.0, y: 4.0 }),
             fade: Some(Fade::Complex(ComplexFade {
-                transparency_before: 0,
-                transparency_main: 100,
-                transparency_after: 200,
+                transparency_before: DecimalTransparency(0),
+                transparency_main: DecimalTransparency(100),
+                transparency_after: DecimalTransparency(200),
                 fade_in_start: Milliseconds(300),
                 fade_in_end: Milliseconds(400),
                 fade_out_start: Milliseconds(500),
