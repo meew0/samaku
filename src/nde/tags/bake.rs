@@ -280,21 +280,113 @@ fn bake_local(
     accu: &mut RenderContext,
     local: &mut Local,
 ) {
+    // First, we make a copy of the original render context, so we can compare the
+    // changes that were made by the local tags.
     let original_accu = accu.clone();
 
+    // Then, we apply the static resettable-style override tags to the render context,
+    // updating all property values that are supposed to be changed.
+    // This does not yet handle animations.
     apply_all_resettables(style, accu, local);
 
+    // Now, we apply all animations in order.
     animate(time, style, accu, &local.animations);
 
+    // Finally, we take the difference between the changed render context and the
+    // original one, and convert this difference into new override tags.
     compact_all(style, accu, &original_accu, local);
 }
 
 fn apply_all_resettables(style: &StyleContext, accu: &mut RenderContext, local: &Local) {
-    apply_resettable(
-        &mut accu.primary_transparency,
-        local.primary_transparency,
-        style.original_style.primary_transparency,
+    macro_rules! apply_single {
+        ($property:ident) => {
+            apply_single!($property, &style.new_style.$property);
+        };
+        ($property:ident, $style_value:expr) => {
+            apply_resettable(&mut accu.$property, &local.$property, $style_value);
+        };
+    }
+
+    macro_rules! apply_2d {
+        ($property:ident, $default:expr) => {
+            apply_2d!($property, $default, $default);
+        };
+        ($property:ident, $default_x:expr, $default_y:expr) => {
+            apply_resettable(&mut accu.$property.x, &local.$property.x, $default_x);
+            apply_resettable(&mut accu.$property.y, &local.$property.y, $default_y);
+        };
+    }
+
+    apply_single!(italic);
+    apply_single!(font_weight, &FontWeight::BoldToggle(style.new_style.bold));
+    apply_single!(underline);
+    apply_single!(strike_out);
+
+    apply_2d!(border, &style.new_style.border_width);
+    apply_2d!(shadow, &style.new_style.shadow_distance);
+
+    apply_single!(soften, &0);
+    apply_single!(gaussian_blur, &0.0);
+
+    apply_single!(font_name);
+    animate_font_size(
+        &mut accu.font_size,
+        local.font_size,
+        style.new_style.font_size,
+        1.0,
     );
+    apply_2d!(
+        font_scale,
+        &style.new_style.scale.x,
+        &style.new_style.scale.y
+    );
+    apply_single!(letter_spacing, &style.new_style.spacing);
+
+    apply_2d!(text_shear, &0.0);
+    apply_2d!(text_rotation, &0.0);
+    apply_resettable(
+        &mut accu.text_rotation.z,
+        &local.text_rotation.z,
+        &style.new_style.angle.0,
+    );
+
+    apply_single!(font_encoding, &style.new_style.encoding);
+
+    apply_single!(primary_colour);
+    apply_single!(secondary_colour);
+    apply_single!(border_colour);
+    apply_single!(shadow_colour);
+
+    apply_single!(primary_transparency);
+    apply_single!(secondary_transparency);
+    apply_single!(border_transparency);
+    apply_single!(shadow_transparency);
+
+    if let Some(drawing_baseline_offset) = local.drawing_baseline_offset {
+        accu.drawing_baseline_offset = drawing_baseline_offset;
+    }
+}
+
+/// Determine the value that a tag will have after applying the given `Resettable`
+/// in its context.
+fn apply_resettable<T>(
+    original_value: &mut T,
+    target_value: &Resettable<T>,
+    current_style_value: &T,
+) where
+    T: Clone + PartialEq,
+{
+    match *target_value {
+        Resettable::Keep => {
+            // Do not change the previous value.
+        }
+        Resettable::Reset => {
+            // Values are always reset to the current style, not to the original style.
+            // So `{\rNewStyle\b1\b}` would reset the style to the bold value of `NewStyle`.
+            *original_value = current_style_value.clone();
+        }
+        Resettable::Override(ref override_value) => *original_value = override_value.clone(),
+    }
 }
 
 fn animate(
@@ -435,7 +527,7 @@ fn compact_all(
 ) {
     macro_rules! compact {
         ($property:ident) => {
-            compact!($property, &style.new_style.$property);
+            compact!($property, &style.original_style.$property);
         };
         ($property:ident, $style_value:expr) => {
             local.$property = compact(&accu.$property, &original_accu.$property, $style_value);
@@ -453,12 +545,15 @@ fn compact_all(
     }
 
     compact!(italic);
-    compact!(font_weight, &FontWeight::BoldToggle(style.new_style.bold));
+    compact!(
+        font_weight,
+        &FontWeight::BoldToggle(style.original_style.bold)
+    );
     compact!(underline);
     compact!(strike_out);
 
-    compact_2d!(border, &style.new_style.border_width);
-    compact_2d!(shadow, &style.new_style.shadow_distance);
+    compact_2d!(border, &style.original_style.border_width);
+    compact_2d!(shadow, &style.original_style.shadow_distance);
 
     compact!(soften, &0);
     // libass always resets this to 0 instead of the blur specified in the style.
@@ -470,15 +565,15 @@ fn compact_all(
     local.font_size = compact_font_size(
         accu.font_size,
         original_accu.font_size,
-        style.new_style.font_size,
+        style.original_style.font_size,
     );
 
     compact_2d!(
         font_scale,
-        &style.new_style.scale.x,
-        &style.new_style.scale.y
+        &style.original_style.scale.x,
+        &style.original_style.scale.y
     );
-    compact!(letter_spacing, &style.new_style.spacing);
+    compact!(letter_spacing, &style.original_style.spacing);
 
     compact_2d!(text_shear, &0.0);
     compact_2d!(text_rotation, &0.0);
@@ -487,10 +582,10 @@ fn compact_all(
     local.text_rotation.z = compact(
         &accu.text_rotation.z,
         &original_accu.text_rotation.z,
-        &style.new_style.angle.0,
+        &style.original_style.angle.0,
     );
 
-    compact!(font_encoding, &style.new_style.encoding);
+    compact!(font_encoding, &style.original_style.encoding);
 
     // Apply karaoke effect (by changing the primary to the secondary colour if necessary)
     let (colour, original_colour) = if accu.use_secondary {
@@ -499,7 +594,11 @@ fn compact_all(
         (accu.primary_colour, original_accu.primary_colour)
     };
 
-    local.primary_colour = compact(&colour, &original_colour, &style.new_style.primary_colour);
+    local.primary_colour = compact(
+        &colour,
+        &original_colour,
+        &style.original_style.primary_colour,
+    );
     compact!(border_colour);
     compact!(shadow_colour);
 
@@ -515,21 +614,6 @@ fn compact_all(
     local.drawing_baseline_offset = new_drawing_baseline_offset;
 
     local.animations.clear();
-}
-
-fn compact_font_size(value: f64, previous_value: f64, current_style_value: f64) -> FontSize {
-    #[expect(
-        clippy::float_cmp,
-        reason = "exact comparisons necessary to only omit the override tag when it would be exactly the same"
-    )]
-    let font_size = if value == previous_value {
-        FontSize::KEEP
-    } else if value == current_style_value {
-        FontSize::Reset(FontSizeDelta::ZERO)
-    } else {
-        FontSize::Set(value)
-    };
-    font_size
 }
 
 // Transparency needs special handling since the fade needs to be applied in each case.
@@ -556,26 +640,26 @@ fn compact_transparency(
     local.primary_transparency = compact(
         &primary_transparency,
         &original_transparency,
-        &style.new_style.primary_transparency,
+        &style.original_style.primary_transparency,
     );
     let mut border_transparency = accu.border_transparency;
     apply_fade(&mut border_transparency, accu.fade_value);
     local.border_transparency = compact(
         &border_transparency,
         &original_accu.border_transparency,
-        &style.new_style.border_transparency,
+        &style.original_style.border_transparency,
     );
     let mut shadow_transparency = accu.shadow_transparency;
     apply_fade(&mut shadow_transparency, accu.fade_value);
     local.shadow_transparency = compact(
         &shadow_transparency,
         &original_accu.shadow_transparency,
-        &style.new_style.shadow_transparency,
+        &style.original_style.shadow_transparency,
     );
 }
 
 /// Finds a compact `Resettable` representation of the given value in its context.
-fn compact<T>(value: &T, previous_value: &T, current_style_value: &T) -> Resettable<T>
+fn compact<T>(value: &T, previous_value: &T, original_style_value: &T) -> Resettable<T>
 where
     T: Clone + PartialEq,
 {
@@ -583,13 +667,31 @@ where
         // We just set the value to whatever we had previously,
         // so we can ignore it.
         Resettable::Keep
-    } else if value == current_style_value {
-        // Similar idea, but we can reset it to the current style.
+    } else if value == original_style_value {
+        // Similar idea, but we can reset it to the original style.
+        // Note that the result of baking should be an event that ONLY depends on the original style
+        // and does not require any style lookup logic to further process. So we cannot depend
+        // on the current style value and can only ever reset to the original style value.
         Resettable::Reset
     } else {
         // True override
         Resettable::Override(value.clone())
     }
+}
+
+fn compact_font_size(value: f64, previous_value: f64, original_style_value: f64) -> FontSize {
+    #[expect(
+        clippy::float_cmp,
+        reason = "exact comparisons necessary to only omit the override tag when it would be exactly the same"
+    )]
+    let font_size = if value == previous_value {
+        FontSize::KEEP
+    } else if value == original_style_value {
+        FontSize::Reset(FontSizeDelta::ZERO)
+    } else {
+        FontSize::Set(value)
+    };
+    font_size
 }
 
 fn calculate_power(
@@ -610,27 +712,6 @@ fn calculate_power(
         (numerator / denominator).powf(acceleration)
     }
 }
-
-/// Determine the value that a tag will have after applying the given `Resettable`
-/// in its context.
-fn apply_resettable<T>(original_value: &mut T, target_value: Resettable<T>, current_style_value: T)
-where
-    T: Clone + Eq,
-{
-    match target_value {
-        Resettable::Keep => {
-            // Do not change the previous value.
-        }
-        Resettable::Reset => {
-            // Values are always reset to the current style, not to the original style.
-            // So `{\rNewStyle\b1\b}` would reset the style to the bold value of `NewStyle`.
-            *original_value = current_style_value;
-        }
-        Resettable::Override(override_value) => *original_value = override_value,
-    }
-}
-
-fn bake_local_animations() {}
 
 fn bake_global_animations() {
     // TODO
@@ -776,6 +857,62 @@ mod tests {
             bake_fade(time_context, Fade::Complex(complex_fade)),
             Transparency(200)
         );
+    }
+
+    #[test]
+    fn local() {
+        let animated_tags = LocalAnimatable {
+            letter_spacing: Resettable::Override(3.0),
+            ..LocalAnimatable::default()
+        };
+
+        let tags = Local {
+            italic: Resettable::Override(true),
+            letter_spacing: Resettable::Override(2.0),
+            border_transparency: Resettable::Reset,
+            animations: vec![Animation {
+                modifiers: animated_tags,
+                acceleration: 1.0,
+                interval: None,
+            }],
+            ..Local::empty()
+        };
+
+        let mut style = empty_style_context();
+        style.original_style.border_transparency = Transparency(100);
+        style.new_style.border_transparency = Transparency(50);
+        let mut accu = RenderContext::default();
+        accu.reset(&style.original_style);
+
+        let mut time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(1000),
+        };
+
+        let mut new_accu = accu.clone();
+        let mut new_local = tags.clone();
+        bake_local(time, &style, &mut new_accu, &mut new_local);
+        assert_matches!(new_local.italic, Resettable::Override(true));
+        assert_matches!(new_local.underline, Resettable::Keep);
+        assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
+        assert_float_absolute_eq!(fsp, 2.0, 0.01);
+        // We cannot depend on the new style in the bake result.
+        // So this must result in an override, not in a reset.
+        assert_matches!(
+            new_local.border_transparency,
+            Resettable::Override(Transparency(50))
+        );
+        assert!(new_local.animations.is_empty());
+
+        let mut new_accu = accu.clone();
+        let mut new_local = tags;
+        new_local.border_transparency = Resettable::Override(Transparency(100));
+        time.now = subtitle::StartTime(2500);
+        bake_local(time, &style, &mut new_accu, &mut new_local);
+        assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
+        assert_float_absolute_eq!(fsp, 2.5, 0.01);
+        assert_matches!(new_local.border_transparency, Resettable::Reset);
     }
 
     #[test]
