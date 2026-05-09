@@ -3,7 +3,11 @@
     reason = "this module needs to convert lots of types back and forth to exactly match libass' behavior"
 )]
 
-use super::*;
+use super::{
+    lerp, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade, FontEncoding,
+    FontSize, FontSizeDelta, FontWeight, Global, Local, Milliseconds, Resettable, SimpleFade,
+    Transparency,
+};
 use crate::nde::Span;
 use crate::subtitle;
 
@@ -85,7 +89,7 @@ impl RenderContext {
         self.strike_out = style.strike_out;
 
         self.font_size = style.font_size;
-        self.font_name = style.font_name.clone();
+        self.font_name.clone_from(&style.font_name);
 
         self.border.x = style.border_width;
         self.border.y = style.border_width;
@@ -110,16 +114,16 @@ impl Default for RenderContext {
             font_weight: FontWeight::BoldToggle(false),
             underline: false,
             strike_out: false,
-            border: Default::default(),
-            shadow: Default::default(),
+            border: Float2D::default(),
+            shadow: Float2D::default(),
             soften: 0,
             gaussian_blur: 0.0,
-            font_name: "".to_string(),
+            font_name: String::new(),
             font_size: 0.0,
-            font_scale: Default::default(),
+            font_scale: Float2D::default(),
             letter_spacing: 0.0,
-            text_rotation: Default::default(),
-            text_shear: Default::default(),
+            text_rotation: Float3D::default(),
+            text_shear: Float2D::default(),
             font_encoding: FontEncoding(0),
             primary_colour: Colour::BLACK,
             secondary_colour: Colour::BLACK,
@@ -159,16 +163,16 @@ struct Float3D {
 /// - Effects are not handled
 pub fn bake(
     time: TimeContext,
-    style: StyleContext,
+    style: &StyleContext,
     global_tags: &Global,
     overrides: &Local,
-    text: Vec<Span>,
+    spans: Vec<Span>,
 ) {
     let fade = global_tags
         .fade
         .map_or(Transparency(0), |fade| bake_fade(time, fade));
 
-    for span in text {
+    for span in spans {
         match span {
             Span::Tags(local, text) => {}
             Span::Reset => {}

@@ -254,9 +254,10 @@ impl Sub<StartTime> for StartTime {
 )]
 pub struct Duration(pub i64);
 
-impl Into<nde::tags::Milliseconds> for Duration {
-    fn into(self) -> nde::tags::Milliseconds {
-        let ms = nde::tags::Milliseconds(self.0 as i32);
+impl From<Duration> for nde::tags::Milliseconds {
+    fn from(value: Duration) -> Self {
+        #[expect(clippy::cast_possible_truncation, reason = "matches libass behavior")]
+        let ms = Self(value.0 as i32);
         ms
     }
 }
@@ -439,10 +440,6 @@ pub enum YCbCrMatrix {
 }
 
 #[derive(Debug, Clone)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "needed to represent libass' styles in this case"
-)]
 pub struct Style {
     /// The style's name. Do not modify this value directly; instead, use `StyleList::rename`!
     pub name: String,
