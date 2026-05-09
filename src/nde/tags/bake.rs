@@ -4,9 +4,9 @@
 )]
 
 use super::{
-    lerp, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade, FontEncoding,
-    FontSize, FontSizeDelta, FontWeight, Global, Local, Milliseconds, Resettable, SimpleFade,
-    Transparency,
+    lerp::Lerp, Animation, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade,
+    FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Local, LocalAnimatable, Milliseconds,
+    Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -284,7 +284,7 @@ fn bake_local(
 
     apply_all_resettables(style, accu, local);
 
-    animate(time, style, accu, local);
+    animate(time, style, accu, &local.animations);
 
     compact_all(style, accu, &original_accu, local);
 }
@@ -297,17 +297,134 @@ fn apply_all_resettables(style: &StyleContext, accu: &mut RenderContext, local: 
     );
 }
 
-fn animate(time: TimeContext, style: &StyleContext, accu: &mut RenderContext, local: &Local) {
-    for animation in &local.animations {
+fn animate(
+    time: TimeContext,
+    style: &StyleContext,
+    accu: &mut RenderContext,
+    animations: &[Animation<LocalAnimatable>],
+) {
+    for animation in animations {
         let power = calculate_power(time, animation.acceleration, animation.interval);
 
-        animate_single(
-            &mut accu.primary_transparency,
-            animation.modifiers.primary_transparency,
-            style.new_style.primary_transparency,
+        macro_rules! animate_single {
+            ($property:ident) => {
+                animate_single!($property, style.new_style.$property);
+            };
+            ($property:ident, $style_value:expr) => {
+                animate_single(
+                    &mut accu.$property,
+                    animation.modifiers.$property,
+                    $style_value,
+                    power,
+                );
+            };
+        }
+
+        macro_rules! animate_2d {
+            ($property:ident, $default:expr) => {
+                animate_2d!($property, $default, $default);
+            };
+            ($property:ident, $default_x:expr, $default_y:expr) => {
+                animate_single(
+                    &mut accu.$property.x,
+                    animation.modifiers.$property.x,
+                    $default_x,
+                    power,
+                );
+                animate_single(
+                    &mut accu.$property.y,
+                    animation.modifiers.$property.y,
+                    $default_y,
+                    power,
+                );
+            };
+        }
+
+        animate_2d!(border, style.new_style.border_width);
+        animate_2d!(shadow, style.new_style.shadow_distance);
+
+        animate_single!(soften, 0);
+        animate_single!(gaussian_blur, 0.0);
+
+        animate_font_size(
+            &mut accu.font_size,
+            animation.modifiers.font_size,
+            style.new_style.font_size,
             power,
         );
+        animate_2d!(font_scale, style.new_style.scale.x, style.new_style.scale.y);
+        animate_single!(letter_spacing, style.new_style.spacing);
+
+        animate_2d!(text_shear, 0.0);
+        animate_2d!(text_rotation, 0.0);
+        animate_single(
+            &mut accu.text_rotation.z,
+            animation.modifiers.text_rotation.z,
+            style.new_style.angle.0,
+            power,
+        );
+
+        animate_single!(primary_colour);
+        animate_single!(secondary_colour);
+        animate_single!(border_colour);
+        animate_single!(shadow_colour);
+
+        animate_single!(primary_transparency);
+        animate_single!(secondary_transparency);
+        animate_single!(border_transparency);
+        animate_single!(shadow_transparency);
     }
+}
+
+/// Similar to `apply_resettable`, but animated.
+fn animate_single<T>(
+    original_value: &mut T,
+    target_value: Resettable<T>,
+    current_style_value: T,
+    power: f64,
+) where
+    T: Lerp<Output = T> + Copy,
+{
+    match target_value {
+        Resettable::Keep => {}
+        Resettable::Reset => *original_value = current_style_value,
+        Resettable::Override(override_value) => {
+            *original_value = original_value.lerp(override_value, power);
+        }
+    }
+}
+
+fn animate_font_size(
+    original_value: &mut f64,
+    target_value: FontSize,
+    current_style_value: f64,
+    power: f64,
+) {
+    match target_value {
+        FontSize::Delta(delta) => {
+            *original_value =
+                apply_font_size_delta(*original_value, delta, current_style_value, power);
+        }
+        FontSize::Reset(delta) => {
+            *original_value =
+                apply_font_size_delta(current_style_value, delta, current_style_value, power);
+        }
+        FontSize::Set(font_size) => {
+            let val = original_value.lerp(font_size, power);
+            *original_value = if val <= 0.0 { current_style_value } else { val }
+        }
+    }
+}
+
+fn apply_font_size_delta(
+    original_value: f64,
+    delta: FontSizeDelta,
+    current_style_value: f64,
+    power: f64,
+) -> f64 {
+    // +10 corresponds to a doubling of font size.
+    let val = original_value * (1.0 + power * delta.0 / 10.0);
+    if val <= 0.0 { current_style_value } else { val }
 }
 
 fn compact_all(
@@ -344,6 +461,7 @@ fn compact_all(
     compact_2d!(shadow, &style.new_style.shadow_distance);
 
     compact!(soften, &0);
+    // libass always resets this to 0 instead of the blur specified in the style.
     compact!(gaussian_blur, &0.0);
 
     compact!(font_name);
@@ -487,8 +605,9 @@ fn calculate_power(
     } else if now >= t2 {
         1.0_f64
     } else {
-        let base = f64::from((now.cast_unsigned() - t1.cast_unsigned()).cast_signed());
-        base.powf(acceleration)
+        let numerator = f64::from((now.cast_unsigned() - t1.cast_unsigned()).cast_signed());
+        let denominator = f64::from(t2.cast_unsigned() - t1.cast_unsigned());
+        (numerator / denominator).powf(acceleration)
     }
 }
 
@@ -511,24 +630,6 @@ where
     }
 }
 
-/// Similar to `apply_resettable`, but animated.
-fn animate_single<T>(
-    original_value: &mut T,
-    target_value: Resettable<T>,
-    current_style_value: T,
-    power: f64,
-) where
-    T: lerp::Lerp<Output = T> + Copy,
-{
-    match target_value {
-        Resettable::Keep => {}
-        Resettable::Reset => *original_value = current_style_value,
-        Resettable::Override(override_value) => {
-            *original_value = original_value.lerp(override_value, power);
-        }
-    }
-}
-
 fn bake_local_animations() {}
 
 fn bake_global_animations() {
@@ -542,6 +643,8 @@ fn bake_karaoke() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nde::tags::Maybe3D;
+    use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
     fn empty_style_context() -> StyleContext {
@@ -673,6 +776,75 @@ mod tests {
             bake_fade(time_context, Fade::Complex(complex_fade)),
             Transparency(200)
         );
+    }
+
+    #[test]
+    fn animation() {
+        let mut time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(0),
+        };
+
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 0.0, 0.01);
+        time.now = subtitle::StartTime(1000);
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 0.0, 0.01);
+        time.now = subtitle::StartTime(2000);
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 0.33, 0.01);
+        time.now = subtitle::StartTime(3000);
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 0.67, 0.01);
+        assert_float_absolute_eq!(calculate_power(time, 2.0, None), 0.44, 0.01);
+        time.now = subtitle::StartTime(4000);
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 1.0, 0.01);
+        time.now = subtitle::StartTime(5000);
+        assert_float_absolute_eq!(calculate_power(time, 1.0, None), 1.0, 0.01);
+
+        let mut style = empty_style_context();
+        style.new_style.angle = subtitle::Angle(100.0);
+        let mut accu = RenderContext::default();
+        accu.reset(&style.original_style);
+        accu.text_rotation.x = 50.0;
+        accu.text_rotation.y = 70.0;
+        accu.text_rotation.z = 90.0;
+
+        let tags = LocalAnimatable {
+            text_rotation: Maybe3D {
+                x: Resettable::Keep,
+                y: Resettable::Override(60.0),
+                z: Resettable::Reset,
+            },
+            ..LocalAnimatable::default()
+        };
+
+        let animations = &[Animation {
+            modifiers: tags,
+            acceleration: 1.0,
+            interval: Some(AnimationInterval {
+                start: Milliseconds(500),
+                end: Milliseconds(1000),
+            }),
+        }];
+
+        time.now = subtitle::StartTime(1500);
+        let mut new_accu = accu.clone();
+        animate(time, &style, &mut new_accu, animations);
+        assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.y, 70.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
+
+        time.now = subtitle::StartTime(1750);
+        let mut new_accu = accu.clone();
+        animate(time, &style, &mut new_accu, animations);
+        assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.y, 65.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
+
+        time.now = subtitle::StartTime(2000);
+        let mut new_accu = accu.clone();
+        animate(time, &style, &mut new_accu, animations);
+        assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.y, 60.0, 0.01);
+        assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
     }
 
     #[test]

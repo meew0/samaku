@@ -311,7 +311,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         local.font_size = match twa.float_arg(0) {
             Some(parsed) => {
                 let str_arg = twa.string_arg(0).unwrap();
-                // Only the first character is checked — `\fs+10` increases the font size by 10,
+                // Only the first character is checked — `\fs+10` doubles the font size,
                 // whereas `\fs +10` sets it to 10.
                 match str_arg.chars().next().unwrap() {
                     '+' | '-' => FontSize::Delta(FontSizeDelta(parsed)),
