@@ -4,8 +4,8 @@
 )]
 
 use super::{
-    lerp::Lerp, Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, DecimalTransparency,
-    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
+    lerp::Lerp, Animation, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade,
+    FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
     Local, LocalAnimatable, Milliseconds, Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
@@ -24,10 +24,97 @@ impl TimeContext {
     }
 }
 
-pub struct StyleContext {
-    pub original_style: subtitle::Style,
-    pub new_style: subtitle::Style,
-    pub style_lookup: Box<dyn Fn(&str) -> subtitle::Style>,
+#[derive(Debug, Clone, Copy)]
+pub struct StyleContext<'a> {
+    pub original_style: &'a subtitle::Style,
+    pub new_style: &'a subtitle::Style,
+}
+
+/// Bakes styles and animations into the given event.
+///
+/// In a nutshell, this method applies the animations and style overrides present in the given event data.
+/// as they would appear at the given time.
+///
+/// Limitations:
+/// - Karaoke sweeps are not handled (`\K` / `\kf` tags; `KaraokeEffect::FillSweep`)
+/// - The `\ko` / `KaraokeEffect:BorderInstant` karaoke effect is also not handled
+/// - Effects (as in, marquee etc.) are not handled
+pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
+    time: TimeContext,
+    event_style: &'a subtitle::Style,
+    style_lookup: &'a F,
+    global_tags: &Global,
+    global_overrides_option: Option<&Local>,
+    spans: &mut [Span],
+) {
+    let style_context = StyleContext {
+        original_style: event_style,
+        new_style: event_style,
+    };
+
+    let mut accu = RenderContext::default();
+    accu.reset(event_style);
+
+    // Apply local overrides
+    if let Some(global_overrides) = global_overrides_option {
+        accu.apply_all_resettables(style_context, global_overrides);
+        accu.animate(time, style_context, &global_overrides.animations);
+    }
+
+    let fade = global_tags
+        .fade
+        .map_or(Transparency(0), |fade| bake_fade(time, fade));
+
+    let karaoke = bake_karaoke(spans);
+
+    for (i, span) in spans.iter_mut().enumerate() {
+        accu.apply_karaoke(time, karaoke[i]);
+
+        match *span {
+            Span::Tags(ref mut local, ref text) => {
+                // Clear global overrides from local tags, since they have already been
+                // applied to the accumulator.
+                if let Some(global_overrides) = global_overrides_option {
+                    local.clear_from(global_overrides);
+                }
+            }
+            Span::Reset => {}
+            Span::ResetToStyle(ref style_name) => {}
+            Span::Drawing(ref mut local, ref drawing) => {
+                if let Some(global_overrides) = global_overrides_option {
+                    local.clear_from(global_overrides);
+                }
+            }
+        }
+    }
+}
+
+fn bake_local(time: TimeContext, style: StyleContext, accu: &mut RenderContext, local: &mut Local) {
+    // First, we make a copy of the original render context, so we can compare the
+    // changes that were made by the local tags.
+    let original_accu = accu.clone();
+
+    // Then, we apply the static resettable-style override tags to the render context,
+    // updating all property values that are supposed to be changed.
+    // This does not yet handle animations.
+    accu.apply_all_resettables(style, local);
+
+    // Now, we apply all animations in order.
+    accu.animate(time, style, &local.animations);
+
+    // Finally, we take the difference between the changed render context and the
+    // original one, and convert this difference into new override tags.
+    accu.compact_all(local, &original_accu, style);
+}
+
+fn bake_reset(style: StyleContext, accu: &mut RenderContext) -> Local {
+    // This method is similar to `bake_local`, except we reset the render context
+    // to `new_style`.
+    let original_accu = accu.clone();
+    accu.reset(style.new_style);
+    let mut local = Local::empty();
+    accu.compact_all(&mut local, &original_accu, style);
+    local
 }
 
 /// Accumulates style info/overrides over time.
@@ -67,9 +154,9 @@ struct RenderContext {
 
     drawing_baseline_offset: f64,
 
-    /// Since we do not support `\ko`, karaoke can be implemented by simply
-    /// changing from the primary to secondary colour at some point in the
-    /// event.
+    /// Since we do not support `\kf` and `\ko`, karaoke can be implemented
+    /// by simply changing from the primary to secondary colour at some point
+    /// in the event.
     use_secondary: bool,
 
     fade_value: Transparency,
@@ -104,6 +191,313 @@ impl RenderContext {
         self.text_rotation.y = 0.0;
         self.text_rotation.z = style.angle.0;
         self.font_encoding = style.encoding;
+    }
+
+    fn apply_all_resettables(&mut self, style: StyleContext, local: &Local) {
+        macro_rules! apply_single {
+            ($property:ident) => {
+                apply_single!($property, &style.new_style.$property);
+            };
+            ($property:ident, $style_value:expr) => {
+                apply_resettable(&mut self.$property, &local.$property, $style_value);
+            };
+        }
+
+        macro_rules! apply_2d {
+            ($property:ident, $default:expr) => {
+                apply_2d!($property, $default, $default);
+            };
+            ($property:ident, $default_x:expr, $default_y:expr) => {
+                apply_resettable(&mut self.$property.x, &local.$property.x, $default_x);
+                apply_resettable(&mut self.$property.y, &local.$property.y, $default_y);
+            };
+        }
+
+        apply_single!(italic);
+        apply_single!(font_weight, &FontWeight::BoldToggle(style.new_style.bold));
+        apply_single!(underline);
+        apply_single!(strike_out);
+
+        apply_2d!(border, &style.new_style.border_width);
+        apply_2d!(shadow, &style.new_style.shadow_distance);
+
+        apply_single!(soften, &0);
+        apply_single!(gaussian_blur, &0.0);
+
+        apply_single!(font_name);
+        animate_font_size(
+            &mut self.font_size,
+            local.font_size,
+            style.new_style.font_size,
+            1.0,
+        );
+        apply_2d!(
+            font_scale,
+            &style.new_style.scale.x,
+            &style.new_style.scale.y
+        );
+        apply_single!(letter_spacing, &style.new_style.spacing);
+
+        apply_2d!(text_shear, &0.0);
+        apply_2d!(text_rotation, &0.0);
+        apply_resettable(
+            &mut self.text_rotation.z,
+            &local.text_rotation.z,
+            &style.new_style.angle.0,
+        );
+
+        apply_single!(font_encoding, &style.new_style.encoding);
+
+        apply_single!(primary_colour);
+        apply_single!(secondary_colour);
+        apply_single!(border_colour);
+        apply_single!(shadow_colour);
+
+        apply_single!(primary_transparency);
+        apply_single!(secondary_transparency);
+        apply_single!(border_transparency);
+        apply_single!(shadow_transparency);
+
+        if let Some(drawing_baseline_offset) = local.drawing_baseline_offset {
+            self.drawing_baseline_offset = drawing_baseline_offset;
+        }
+    }
+
+    fn animate(
+        &mut self,
+        time: TimeContext,
+        style: StyleContext,
+        animations: &[Animation<LocalAnimatable>],
+    ) {
+        for animation in animations {
+            let power = calculate_power(time, animation.acceleration, animation.interval);
+
+            macro_rules! animate_single {
+                ($property:ident) => {
+                    animate_single!($property, style.new_style.$property);
+                };
+                ($property:ident, $style_value:expr) => {
+                    animate_single(
+                        &mut self.$property,
+                        animation.modifiers.$property,
+                        $style_value,
+                        power,
+                    );
+                };
+            }
+
+            macro_rules! animate_2d {
+                ($property:ident, $default:expr) => {
+                    animate_2d!($property, $default, $default);
+                };
+                ($property:ident, $default_x:expr, $default_y:expr) => {
+                    animate_single(
+                        &mut self.$property.x,
+                        animation.modifiers.$property.x,
+                        $default_x,
+                        power,
+                    );
+                    animate_single(
+                        &mut self.$property.y,
+                        animation.modifiers.$property.y,
+                        $default_y,
+                        power,
+                    );
+                };
+            }
+
+            animate_2d!(border, style.new_style.border_width);
+            animate_2d!(shadow, style.new_style.shadow_distance);
+
+            animate_single!(soften, 0);
+            animate_single!(gaussian_blur, 0.0);
+
+            animate_font_size(
+                &mut self.font_size,
+                animation.modifiers.font_size,
+                style.new_style.font_size,
+                power,
+            );
+            animate_2d!(font_scale, style.new_style.scale.x, style.new_style.scale.y);
+            animate_single!(letter_spacing, style.new_style.spacing);
+
+            animate_2d!(text_shear, 0.0);
+            animate_2d!(text_rotation, 0.0);
+            animate_single(
+                &mut self.text_rotation.z,
+                animation.modifiers.text_rotation.z,
+                style.new_style.angle.0,
+                power,
+            );
+
+            animate_single!(primary_colour);
+            animate_single!(secondary_colour);
+            animate_single!(border_colour);
+            animate_single!(shadow_colour);
+
+            animate_single!(primary_transparency);
+            animate_single!(secondary_transparency);
+            animate_single!(border_transparency);
+            animate_single!(shadow_transparency);
+        }
+    }
+
+    fn compact_all(&self, local: &mut Local, original_accu: &RenderContext, style: StyleContext) {
+        macro_rules! compact {
+            ($property:ident) => {
+                compact!($property, &style.original_style.$property);
+            };
+            ($property:ident, $style_value:expr) => {
+                local.$property = compact(&self.$property, &original_accu.$property, $style_value);
+            };
+        }
+
+        macro_rules! compact_2d {
+            ($property:ident, $default:expr) => {
+                compact_2d!($property, $default, $default);
+            };
+            ($property:ident, $default_x:expr, $default_y:expr) => {
+                local.$property.x =
+                    compact(&self.$property.x, &original_accu.$property.x, $default_x);
+                local.$property.y =
+                    compact(&self.$property.y, &original_accu.$property.y, $default_y);
+            };
+        }
+
+        compact!(italic);
+        compact!(
+            font_weight,
+            &FontWeight::BoldToggle(style.original_style.bold)
+        );
+        compact!(underline);
+        compact!(strike_out);
+
+        compact_2d!(border, &style.original_style.border_width);
+        compact_2d!(shadow, &style.original_style.shadow_distance);
+
+        compact!(soften, &0);
+        // libass always resets this to 0 instead of the blur specified in the style.
+        compact!(gaussian_blur, &0.0);
+
+        compact!(font_name);
+
+        // font size needs to be handled on its own, not using `compact`.
+        local.font_size = compact_font_size(
+            self.font_size,
+            original_accu.font_size,
+            style.original_style.font_size,
+        );
+
+        compact_2d!(
+            font_scale,
+            &style.original_style.scale.x,
+            &style.original_style.scale.y
+        );
+        compact!(letter_spacing, &style.original_style.spacing);
+
+        compact_2d!(text_shear, &0.0);
+        compact_2d!(text_rotation, &0.0);
+
+        // frz needs to be handled separately
+        local.text_rotation.z = compact(
+            &self.text_rotation.z,
+            &original_accu.text_rotation.z,
+            &style.original_style.angle.0,
+        );
+
+        compact!(font_encoding, &style.original_style.encoding);
+
+        // Apply karaoke effect (by changing the primary to the secondary colour if necessary)
+        let (colour, original_colour) = if self.use_secondary {
+            (self.secondary_colour, original_accu.secondary_colour)
+        } else {
+            (self.primary_colour, original_accu.primary_colour)
+        };
+
+        local.primary_colour = compact(
+            &colour,
+            &original_colour,
+            &style.original_style.primary_colour,
+        );
+        compact!(border_colour);
+        compact!(shadow_colour);
+
+        self.compact_transparency(local, original_accu, style);
+
+        #[expect(
+            clippy::float_cmp,
+            reason = "exact comparisons necessary to only omit the override tag when it would be exactly the same"
+        )]
+        let new_drawing_baseline_offset = (self.drawing_baseline_offset
+            != original_accu.drawing_baseline_offset)
+            .then_some(self.drawing_baseline_offset);
+        local.drawing_baseline_offset = new_drawing_baseline_offset;
+
+        local.animations.clear();
+    }
+
+    // Transparency needs special handling since the fade needs to be applied in each case.
+    fn compact_transparency(
+        &self,
+        local: &mut Local,
+        original_accu: &RenderContext,
+        style: StyleContext,
+    ) {
+        let (transparency, original_transparency) = if self.use_secondary {
+            (
+                self.secondary_transparency,
+                original_accu.secondary_transparency,
+            )
+        } else {
+            (
+                self.primary_transparency,
+                original_accu.primary_transparency,
+            )
+        };
+
+        let mut primary_transparency = transparency;
+        apply_fade(&mut primary_transparency, self.fade_value);
+        local.primary_transparency = compact(
+            &primary_transparency,
+            &original_transparency,
+            &style.original_style.primary_transparency,
+        );
+        let mut border_transparency = self.border_transparency;
+        apply_fade(&mut border_transparency, self.fade_value);
+        local.border_transparency = compact(
+            &border_transparency,
+            &original_accu.border_transparency,
+            &style.original_style.border_transparency,
+        );
+        let mut shadow_transparency = self.shadow_transparency;
+        apply_fade(&mut shadow_transparency, self.fade_value);
+        local.shadow_transparency = compact(
+            &shadow_transparency,
+            &original_accu.shadow_transparency,
+            &style.original_style.shadow_transparency,
+        );
+    }
+
+    fn apply_karaoke(
+        &mut self,
+        time: TimeContext,
+        effect_data: (subtitle::Duration, Option<KaraokeEffect>),
+    ) {
+        let (duration, effect) = effect_data;
+        match effect {
+            None => self.use_secondary = false,
+            Some(KaraokeEffect::FillInstant) => {
+                self.use_secondary = time.relative() < duration;
+            }
+            _ => {
+                // Not yet supported
+                // TODO: we might be able to support at least `\ko` by inserting karaoke
+                // override tags into the output: `a{\kt214748364.7\ko0}b` guarantees
+                // the `ko` effect for the `b` syllable. Maybe a similar technique could
+                // even work for `\kt`.
+                self.use_secondary = false;
+            }
+        }
     }
 }
 
@@ -153,128 +547,6 @@ struct Float3D {
     pub z: f64,
 }
 
-/// Bakes styles and animations into the given event.
-///
-/// In a nutshell, this method applies the animations and style overrides present in the given event data.
-/// as they would appear at the given time.
-///
-/// Limitations:
-/// - Karaoke sweeps are not handled (`\K` / `\kf` tags; `KaraokeEffect::FillSweep`)
-/// - Effects are not handled
-pub fn bake(
-    time: TimeContext,
-    style: &StyleContext,
-    global_tags: &Global,
-    overrides: &Local,
-    spans: Vec<Span>,
-) {
-    let fade = global_tags
-        .fade
-        .map_or(Transparency(0), |fade| bake_fade(time, fade));
-
-    for span in spans {
-        match span {
-            Span::Tags(local, text) => {}
-            Span::Reset => {}
-            Span::ResetToStyle(style_index) => {}
-            Span::Drawing(local, drawing) => {}
-        }
-    }
-}
-
-fn bake_local(
-    time: TimeContext,
-    style: &StyleContext,
-    accu: &mut RenderContext,
-    local: &mut Local,
-) {
-    // First, we make a copy of the original render context, so we can compare the
-    // changes that were made by the local tags.
-    let original_accu = accu.clone();
-
-    // Then, we apply the static resettable-style override tags to the render context,
-    // updating all property values that are supposed to be changed.
-    // This does not yet handle animations.
-    apply_all_resettables(style, accu, local);
-
-    // Now, we apply all animations in order.
-    animate(time, style, accu, &local.animations);
-
-    // Finally, we take the difference between the changed render context and the
-    // original one, and convert this difference into new override tags.
-    compact_all(style, accu, &original_accu, local);
-}
-
-fn apply_all_resettables(style: &StyleContext, accu: &mut RenderContext, local: &Local) {
-    macro_rules! apply_single {
-        ($property:ident) => {
-            apply_single!($property, &style.new_style.$property);
-        };
-        ($property:ident, $style_value:expr) => {
-            apply_resettable(&mut accu.$property, &local.$property, $style_value);
-        };
-    }
-
-    macro_rules! apply_2d {
-        ($property:ident, $default:expr) => {
-            apply_2d!($property, $default, $default);
-        };
-        ($property:ident, $default_x:expr, $default_y:expr) => {
-            apply_resettable(&mut accu.$property.x, &local.$property.x, $default_x);
-            apply_resettable(&mut accu.$property.y, &local.$property.y, $default_y);
-        };
-    }
-
-    apply_single!(italic);
-    apply_single!(font_weight, &FontWeight::BoldToggle(style.new_style.bold));
-    apply_single!(underline);
-    apply_single!(strike_out);
-
-    apply_2d!(border, &style.new_style.border_width);
-    apply_2d!(shadow, &style.new_style.shadow_distance);
-
-    apply_single!(soften, &0);
-    apply_single!(gaussian_blur, &0.0);
-
-    apply_single!(font_name);
-    animate_font_size(
-        &mut accu.font_size,
-        local.font_size,
-        style.new_style.font_size,
-        1.0,
-    );
-    apply_2d!(
-        font_scale,
-        &style.new_style.scale.x,
-        &style.new_style.scale.y
-    );
-    apply_single!(letter_spacing, &style.new_style.spacing);
-
-    apply_2d!(text_shear, &0.0);
-    apply_2d!(text_rotation, &0.0);
-    apply_resettable(
-        &mut accu.text_rotation.z,
-        &local.text_rotation.z,
-        &style.new_style.angle.0,
-    );
-
-    apply_single!(font_encoding, &style.new_style.encoding);
-
-    apply_single!(primary_colour);
-    apply_single!(secondary_colour);
-    apply_single!(border_colour);
-    apply_single!(shadow_colour);
-
-    apply_single!(primary_transparency);
-    apply_single!(secondary_transparency);
-    apply_single!(border_transparency);
-    apply_single!(shadow_transparency);
-
-    if let Some(drawing_baseline_offset) = local.drawing_baseline_offset {
-        accu.drawing_baseline_offset = drawing_baseline_offset;
-    }
-}
-
 /// Determine the value that a tag will have after applying the given `Resettable`
 /// in its context.
 fn apply_resettable<T>(
@@ -294,85 +566,6 @@ fn apply_resettable<T>(
             *original_value = current_style_value.clone();
         }
         Resettable::Override(ref override_value) => *original_value = override_value.clone(),
-    }
-}
-
-fn animate(
-    time: TimeContext,
-    style: &StyleContext,
-    accu: &mut RenderContext,
-    animations: &[Animation<LocalAnimatable>],
-) {
-    for animation in animations {
-        let power = calculate_power(time, animation.acceleration, animation.interval);
-
-        macro_rules! animate_single {
-            ($property:ident) => {
-                animate_single!($property, style.new_style.$property);
-            };
-            ($property:ident, $style_value:expr) => {
-                animate_single(
-                    &mut accu.$property,
-                    animation.modifiers.$property,
-                    $style_value,
-                    power,
-                );
-            };
-        }
-
-        macro_rules! animate_2d {
-            ($property:ident, $default:expr) => {
-                animate_2d!($property, $default, $default);
-            };
-            ($property:ident, $default_x:expr, $default_y:expr) => {
-                animate_single(
-                    &mut accu.$property.x,
-                    animation.modifiers.$property.x,
-                    $default_x,
-                    power,
-                );
-                animate_single(
-                    &mut accu.$property.y,
-                    animation.modifiers.$property.y,
-                    $default_y,
-                    power,
-                );
-            };
-        }
-
-        animate_2d!(border, style.new_style.border_width);
-        animate_2d!(shadow, style.new_style.shadow_distance);
-
-        animate_single!(soften, 0);
-        animate_single!(gaussian_blur, 0.0);
-
-        animate_font_size(
-            &mut accu.font_size,
-            animation.modifiers.font_size,
-            style.new_style.font_size,
-            power,
-        );
-        animate_2d!(font_scale, style.new_style.scale.x, style.new_style.scale.y);
-        animate_single!(letter_spacing, style.new_style.spacing);
-
-        animate_2d!(text_shear, 0.0);
-        animate_2d!(text_rotation, 0.0);
-        animate_single(
-            &mut accu.text_rotation.z,
-            animation.modifiers.text_rotation.z,
-            style.new_style.angle.0,
-            power,
-        );
-
-        animate_single!(primary_colour);
-        animate_single!(secondary_colour);
-        animate_single!(border_colour);
-        animate_single!(shadow_colour);
-
-        animate_single!(primary_transparency);
-        animate_single!(secondary_transparency);
-        animate_single!(border_transparency);
-        animate_single!(shadow_transparency);
     }
 }
 
@@ -425,145 +618,6 @@ fn apply_font_size_delta(
     // +10 corresponds to a doubling of font size.
     let val = original_value * (1.0 + power * delta.0 / 10.0);
     if val <= 0.0 { current_style_value } else { val }
-}
-
-fn compact_all(
-    style: &StyleContext,
-    accu: &RenderContext,
-    original_accu: &RenderContext,
-    local: &mut Local,
-) {
-    macro_rules! compact {
-        ($property:ident) => {
-            compact!($property, &style.original_style.$property);
-        };
-        ($property:ident, $style_value:expr) => {
-            local.$property = compact(&accu.$property, &original_accu.$property, $style_value);
-        };
-    }
-
-    macro_rules! compact_2d {
-        ($property:ident, $default:expr) => {
-            compact_2d!($property, $default, $default);
-        };
-        ($property:ident, $default_x:expr, $default_y:expr) => {
-            local.$property.x = compact(&accu.$property.x, &original_accu.$property.x, $default_x);
-            local.$property.y = compact(&accu.$property.y, &original_accu.$property.y, $default_y);
-        };
-    }
-
-    compact!(italic);
-    compact!(
-        font_weight,
-        &FontWeight::BoldToggle(style.original_style.bold)
-    );
-    compact!(underline);
-    compact!(strike_out);
-
-    compact_2d!(border, &style.original_style.border_width);
-    compact_2d!(shadow, &style.original_style.shadow_distance);
-
-    compact!(soften, &0);
-    // libass always resets this to 0 instead of the blur specified in the style.
-    compact!(gaussian_blur, &0.0);
-
-    compact!(font_name);
-
-    // font size needs to be handled on its own, not using `compact`.
-    local.font_size = compact_font_size(
-        accu.font_size,
-        original_accu.font_size,
-        style.original_style.font_size,
-    );
-
-    compact_2d!(
-        font_scale,
-        &style.original_style.scale.x,
-        &style.original_style.scale.y
-    );
-    compact!(letter_spacing, &style.original_style.spacing);
-
-    compact_2d!(text_shear, &0.0);
-    compact_2d!(text_rotation, &0.0);
-
-    // frz needs to be handled separately
-    local.text_rotation.z = compact(
-        &accu.text_rotation.z,
-        &original_accu.text_rotation.z,
-        &style.original_style.angle.0,
-    );
-
-    compact!(font_encoding, &style.original_style.encoding);
-
-    // Apply karaoke effect (by changing the primary to the secondary colour if necessary)
-    let (colour, original_colour) = if accu.use_secondary {
-        (accu.secondary_colour, original_accu.secondary_colour)
-    } else {
-        (accu.primary_colour, original_accu.primary_colour)
-    };
-
-    local.primary_colour = compact(
-        &colour,
-        &original_colour,
-        &style.original_style.primary_colour,
-    );
-    compact!(border_colour);
-    compact!(shadow_colour);
-
-    compact_transparency(style, accu, original_accu, local);
-
-    #[expect(
-        clippy::float_cmp,
-        reason = "exact comparisons necessary to only omit the override tag when it would be exactly the same"
-    )]
-    let new_drawing_baseline_offset = (accu.drawing_baseline_offset
-        != original_accu.drawing_baseline_offset)
-        .then_some(accu.drawing_baseline_offset);
-    local.drawing_baseline_offset = new_drawing_baseline_offset;
-
-    local.animations.clear();
-}
-
-// Transparency needs special handling since the fade needs to be applied in each case.
-fn compact_transparency(
-    style: &StyleContext,
-    accu: &RenderContext,
-    original_accu: &RenderContext,
-    local: &mut Local,
-) {
-    let (transparency, original_transparency) = if accu.use_secondary {
-        (
-            accu.secondary_transparency,
-            original_accu.secondary_transparency,
-        )
-    } else {
-        (
-            accu.primary_transparency,
-            original_accu.primary_transparency,
-        )
-    };
-
-    let mut primary_transparency = transparency;
-    apply_fade(&mut primary_transparency, accu.fade_value);
-    local.primary_transparency = compact(
-        &primary_transparency,
-        &original_transparency,
-        &style.original_style.primary_transparency,
-    );
-    let mut border_transparency = accu.border_transparency;
-    apply_fade(&mut border_transparency, accu.fade_value);
-    local.border_transparency = compact(
-        &border_transparency,
-        &original_accu.border_transparency,
-        &style.original_style.border_transparency,
-    );
-    let mut shadow_transparency = accu.shadow_transparency;
-    apply_fade(&mut shadow_transparency, accu.fade_value);
-    local.shadow_transparency = compact(
-        &shadow_transparency,
-        &original_accu.shadow_transparency,
-        &style.original_style.shadow_transparency,
-    );
 }
 
 /// Finds a compact `Resettable` representation of the given value in its context.
@@ -756,10 +810,6 @@ fn bake_karaoke(spans: &[Span]) -> Vec<(subtitle::Duration, Option<KaraokeEffect
         .collect()
 }
 
-fn convert_ktime(centis: Centiseconds) -> subtitle::Duration {
-    subtitle::Duration(i64::from(ass_dtoi32(centis.0 * 10.0)))
-}
-
 fn ass_dtoi32(val: f64) -> i32 {
     if val.is_nan() || val <= f64::from(i32::MIN) || val >= f64::from(i32::MAX) + 1.0 {
         i32::MIN
@@ -871,17 +921,9 @@ fn bake_move() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{parse, Karaoke, Maybe3D};
+    use crate::nde::tags::{parse, Centiseconds, Karaoke, Maybe3D};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
-
-    fn empty_style_context() -> StyleContext {
-        StyleContext {
-            original_style: subtitle::Style::default(),
-            new_style: subtitle::Style::default(),
-            style_lookup: Box::new(|_| panic!("called style_lookup on an empty style context")),
-        }
-    }
 
     #[test]
     fn local() {
@@ -902,11 +944,20 @@ mod tests {
             ..Local::empty()
         };
 
-        let mut style = empty_style_context();
-        style.original_style.border_transparency = Transparency(100);
-        style.new_style.border_transparency = Transparency(50);
+        let original_style = subtitle::Style {
+            border_transparency: Transparency(100),
+            ..subtitle::Style::default()
+        };
+        let new_style = subtitle::Style {
+            border_transparency: Transparency(50),
+            ..subtitle::Style::default()
+        };
+        let style = StyleContext {
+            original_style: &original_style,
+            new_style: &new_style,
+        };
         let mut accu = RenderContext::default();
-        accu.reset(&style.original_style);
+        accu.reset(style.original_style);
 
         let mut time = TimeContext {
             start: subtitle::StartTime(1000),
@@ -916,7 +967,7 @@ mod tests {
 
         let mut new_accu = accu.clone();
         let mut new_local = tags.clone();
-        bake_local(time, &style, &mut new_accu, &mut new_local);
+        bake_local(time, style, &mut new_accu, &mut new_local);
         assert_matches!(new_local.italic, Resettable::Override(true));
         assert_matches!(new_local.underline, Resettable::Keep);
         assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
@@ -933,7 +984,7 @@ mod tests {
         let mut new_local = tags;
         new_local.border_transparency = Resettable::Override(Transparency(100));
         time.now = subtitle::StartTime(2500);
-        bake_local(time, &style, &mut new_accu, &mut new_local);
+        bake_local(time, style, &mut new_accu, &mut new_local);
         assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
         assert_float_absolute_eq!(fsp, 2.5, 0.01);
         assert_matches!(new_local.border_transparency, Resettable::Reset);
@@ -960,10 +1011,17 @@ mod tests {
         time.now = subtitle::StartTime(5000);
         assert_float_absolute_eq!(calculate_power(time, 1.0, None), 1.0, 0.01);
 
-        let mut style = empty_style_context();
-        style.new_style.angle = subtitle::Angle(100.0);
+        let original_style = subtitle::Style::default();
+        let new_style = subtitle::Style {
+            angle: subtitle::Angle(100.0),
+            ..subtitle::Style::default()
+        };
+        let style = StyleContext {
+            original_style: &original_style,
+            new_style: &new_style,
+        };
         let mut accu = RenderContext::default();
-        accu.reset(&style.original_style);
+        accu.reset(style.original_style);
         accu.text_rotation.x = 50.0;
         accu.text_rotation.y = 70.0;
         accu.text_rotation.z = 90.0;
@@ -988,21 +1046,21 @@ mod tests {
 
         time.now = subtitle::StartTime(1500);
         let mut new_accu = accu.clone();
-        animate(time, &style, &mut new_accu, animations);
+        new_accu.animate(time, style, animations);
         assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.y, 70.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
 
         time.now = subtitle::StartTime(1750);
         let mut new_accu = accu.clone();
-        animate(time, &style, &mut new_accu, animations);
+        new_accu.animate(time, style, animations);
         assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.y, 65.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
 
         time.now = subtitle::StartTime(2000);
         let mut new_accu = accu.clone();
-        animate(time, &style, &mut new_accu, animations);
+        new_accu.animate(time, style, animations);
         assert_float_absolute_eq!(new_accu.text_rotation.x, 50.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.y, 60.0, 0.01);
         assert_float_absolute_eq!(new_accu.text_rotation.z, 100.0, 0.01);
@@ -1010,10 +1068,15 @@ mod tests {
 
     #[test]
     fn compact() {
-        let style_context = empty_style_context();
+        let original_style = subtitle::Style::default();
+        let new_style = subtitle::Style::default();
+        let style_context = StyleContext {
+            original_style: &original_style,
+            new_style: &new_style,
+        };
 
         let mut accu = RenderContext::default();
-        accu.reset(&style_context.original_style);
+        accu.reset(style_context.original_style);
         accu.strike_out = true;
 
         let mut new_accu = accu.clone();
@@ -1022,7 +1085,7 @@ mod tests {
 
         let mut local = Local::empty();
 
-        compact_all(&style_context, &new_accu, &accu, &mut local);
+        new_accu.compact_all(&mut local, &accu, style_context);
 
         assert_matches!(local.underline, Resettable::Keep);
         assert_matches!(local.strike_out, Resettable::Reset);
@@ -1264,7 +1327,13 @@ mod tests {
 
     #[test]
     fn compact_fade() {
-        let style_context = empty_style_context();
+        let original_style = subtitle::Style::default();
+        let new_style = subtitle::Style::default();
+        let style_context = StyleContext {
+            original_style: &original_style,
+            new_style: &new_style,
+        };
+
         let accu = RenderContext {
             fade_value: Transparency(200),
             ..RenderContext::default()
@@ -1274,7 +1343,7 @@ mod tests {
         new_accu.primary_transparency = Transparency(100);
         let mut local = Local::empty();
 
-        compact_all(&style_context, &new_accu, &accu, &mut local);
+        new_accu.compact_all(&mut local, &accu, style_context);
 
         assert_matches!(
             local.primary_transparency,

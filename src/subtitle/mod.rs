@@ -250,7 +250,17 @@ impl Sub<StartTime> for StartTime {
 
 /// The duration for which an element is shown, in milliseconds.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub struct Duration(pub i64);
 
