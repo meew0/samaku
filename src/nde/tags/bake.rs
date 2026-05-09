@@ -2,11 +2,10 @@
     clippy::cast_possible_truncation,
     reason = "this module needs to convert lots of types back and forth to exactly match libass' behavior"
 )]
-#![allow(dead_code, reason = "for now")]
 
 use super::{
     lerp::Lerp, Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, DecimalTransparency,
-    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeOnset,
+    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
     Local, LocalAnimatable, Milliseconds, Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
@@ -622,10 +621,15 @@ fn calculate_power(
     }
 }
 
-/// Convert spans potentially containing karaoke elements into a vec
-/// specifying the time `b`, as an offset from the event start time,
-/// before which the span with the corresponding index
-/// should have the secondary colour. After time `b`, it shows primary.
+/// Convert spans potentially containing karaoke elements into a vec of
+/// `(transition_time, effect)` pairs, one per span.
+///
+/// `transition_time` is a millisecond offset from event start: before this time the span
+/// shows in secondary colour; at or after it the span shows in primary.
+///
+/// `effect` is `None` until the first `\k`/`\kf`/`\ko` tag is encountered, then carries
+/// the most recently seen effect type forward (including across `\kt`-only spans, because
+/// `\kt` alone does not update `effect_type` in libass).
 ///
 /// ## How libass represents karaoke timing
 ///
@@ -661,14 +665,14 @@ fn calculate_power(
 /// ## Mapping to our span model
 ///
 /// Because state resets after each glyph, our `Karaoke` struct encodes per-span:
-/// - `NoDelay`          → `effect_skip_timing = 0`,          `reset_effect = false`
+/// - `NoDelay`          → `effect_skip_timing = 0`,            `reset_effect = false`
 /// - `RelativeDelay(d)` → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = false`
 /// - `Absolute(d)`      → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = true`
 ///
 /// A span with `effect_timing == 0` shares its run with the previous boundary glyph,
 /// so the returned baked value is the same as the previous span's — the span
 /// "appears" to transition at the same time even though the timeline advances by `skip`.
-fn bake_karaoke(spans: &[Span]) -> Vec<subtitle::Duration> {
+fn bake_karaoke(spans: &[Span]) -> Vec<(subtitle::Duration, Option<KaraokeEffect>)> {
     // Running karaoke timeline position in milliseconds. Corresponds to `timing` in
     // `ass_process_karaoke_effects` (there it's `int32_t`, but we use `i64` to avoid
     // worrying about overflow in intermediate calculations).
@@ -679,11 +683,11 @@ fn bake_karaoke(spans: &[Span]) -> Vec<subtitle::Duration> {
     // share its transition time.
     let mut last_baked = subtitle::Duration(0);
 
-    // Whether any explicit karaoke effect type (\k, \kf, \ko) has been encountered.
-    // Corresponds to whether the accumulated `effect_type` in
-    // `ass_process_karaoke_effects` is `EF_NONE` or not. \kt alone does not set
-    // `effect_type`, so it never flips this flag on its own.
-    let mut seen_effect = false;
+    // The most recently seen karaoke effect type. Corresponds to the accumulated
+    // `effect_type` in `ass_process_karaoke_effects`. None = EF_NONE (no karaoke yet).
+    // \kt alone (effect = None) does not update this, matching libass behaviour where
+    // \kt leaves the glyph's effect_type at EF_NONE so the accumulated value is kept.
+    let mut active_effect_type: Option<KaraokeEffect> = None;
 
     spans
         .iter()
@@ -692,23 +696,19 @@ fn bake_karaoke(spans: &[Span]) -> Vec<subtitle::Duration> {
                 Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
                 // \r does not touch karaoke state; treat as a zero-duration no-op.
                 Span::Reset | Span::ResetToStyle(_) => {
-                    return if seen_effect {
-                        last_baked
-                    } else {
-                        subtitle::Duration(0)
-                    };
+                    return (last_baked, active_effect_type);
                 }
             };
 
-            // \k / \kf / \ko set effect_type on the glyph; \kt alone leaves it EF_NONE.
-            // `seen_effect` tracks whether the accumulated effect_type is EF_NONE or not.
-            if karaoke.effect.is_some() {
-                seen_effect = true;
+            // \k / \kf / \ko set effect_type on the glyph; \kt alone leaves it EF_NONE
+            // and therefore does not update active_effect_type.
+            if let Some((et, _)) = karaoke.effect {
+                active_effect_type = Some(et);
             }
 
-            // Until the first karaoke tag the span always renders in primary colour.
-            if !seen_effect {
-                return subtitle::Duration(0);
+            // Until the first \k/\kf/\ko tag the span always renders in primary colour.
+            if active_effect_type.is_none() {
+                return (subtitle::Duration(0), None);
             }
 
             // Translate our onset to libass's `effect_skip_timing` and `reset_effect`.
@@ -751,7 +751,7 @@ fn bake_karaoke(spans: &[Span]) -> Vec<subtitle::Duration> {
             if duration != 0 {
                 last_baked = subtitle::Duration(tm_start);
             }
-            last_baked
+            (last_baked, active_effect_type)
         })
         .collect()
 }
@@ -871,7 +871,7 @@ fn bake_move() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{parse, Karaoke, KaraokeEffect, Maybe3D};
+    use crate::nde::tags::{parse, Karaoke, Maybe3D};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
@@ -1096,17 +1096,47 @@ mod tests {
 
         let baked = bake_karaoke(&spans);
 
-        assert_eq!(baked[0], subtitle::Duration(0));
-        assert_eq!(baked[1], subtitle::Duration(0));
-        assert_eq!(baked[2], subtitle::Duration(200));
-        assert_eq!(baked[3], subtitle::Duration(200));
-        assert_eq!(baked[4], subtitle::Duration(900));
-        assert_eq!(baked[5], subtitle::Duration(1400));
-        assert_eq!(baked[6], subtitle::Duration(1400));
-        assert_eq!(baked[7], subtitle::Duration(2000));
-        assert_eq!(baked[8], subtitle::Duration(2000));
-        assert_eq!(baked[9], subtitle::Duration(2500));
-        assert_eq!(baked[10], subtitle::Duration(2000));
+        assert_eq!(baked[0], (subtitle::Duration(0), None));
+        assert_eq!(
+            baked[1],
+            (subtitle::Duration(0), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[2],
+            (subtitle::Duration(200), Some(KaraokeEffect::BorderInstant))
+        );
+        assert_eq!(
+            baked[3],
+            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[4],
+            (subtitle::Duration(900), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[5],
+            (subtitle::Duration(1400), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[6],
+            (subtitle::Duration(1400), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[7],
+            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[8],
+            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[9],
+            (subtitle::Duration(2500), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[10],
+            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+        );
     }
 
     #[test]
