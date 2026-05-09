@@ -376,9 +376,9 @@ fn compact_all(
 
     // Apply karaoke effect (by changing the primary to the secondary colour if necessary)
     let (colour, original_colour) = if accu.use_secondary {
-        (accu.primary_colour, original_accu.primary_colour)
-    } else {
         (accu.secondary_colour, original_accu.secondary_colour)
+    } else {
+        (accu.primary_colour, original_accu.primary_colour)
     };
 
     local.primary_colour = compact(&colour, &original_colour, &style.new_style.primary_colour);
@@ -417,19 +417,19 @@ fn compact_font_size(value: f64, previous_value: f64, current_style_value: f64) 
 // Transparency needs special handling since the fade needs to be applied in each case.
 fn compact_transparency(
     style: &StyleContext,
-    original_accu: &RenderContext,
     accu: &RenderContext,
+    original_accu: &RenderContext,
     local: &mut Local,
 ) {
     let (transparency, original_transparency) = if accu.use_secondary {
         (
-            accu.primary_transparency,
-            original_accu.primary_transparency,
+            accu.secondary_transparency,
+            original_accu.secondary_transparency,
         )
     } else {
         (
-            accu.secondary_transparency,
-            original_accu.secondary_transparency,
+            accu.primary_transparency,
+            original_accu.primary_transparency,
         )
     };
 
@@ -543,6 +543,14 @@ fn bake_karaoke() {}
 mod tests {
     use super::*;
     use assert_matches2::assert_matches;
+
+    fn empty_style_context() -> StyleContext {
+        StyleContext {
+            original_style: subtitle::Style::default(),
+            new_style: subtitle::Style::default(),
+            style_lookup: Box::new(|_| panic!("called style_lookup on an empty style context")),
+        }
+    }
 
     #[test]
     fn fade() {
@@ -669,20 +677,15 @@ mod tests {
 
     #[test]
     fn compact() {
+        let style_context = empty_style_context();
+
         let mut accu = RenderContext::default();
-        let style = subtitle::Style::default();
-        accu.reset(&style);
+        accu.reset(&style_context.original_style);
         accu.strike_out = true;
 
         let mut new_accu = accu.clone();
         new_accu.italic = true;
         new_accu.strike_out = false;
-
-        let style_context = StyleContext {
-            original_style: style.clone(),
-            new_style: style,
-            style_lookup: Box::new(|_| panic!()),
-        };
 
         let mut local = Local::empty();
 
@@ -691,5 +694,29 @@ mod tests {
         assert_matches!(local.underline, Resettable::Keep);
         assert_matches!(local.strike_out, Resettable::Reset);
         assert_matches!(local.italic, Resettable::Override(true));
+    }
+
+    #[test]
+    fn compact_fade() {
+        let style_context = empty_style_context();
+        let accu = RenderContext {
+            fade_value: Transparency(200),
+            ..RenderContext::default()
+        };
+
+        let mut new_accu = accu.clone();
+        new_accu.primary_transparency = Transparency(100);
+        let mut local = Local::empty();
+
+        compact_all(&style_context, &new_accu, &accu, &mut local);
+
+        assert_matches!(
+            local.primary_transparency,
+            Resettable::Override(Transparency(222))
+        );
+        assert_matches!(
+            local.border_transparency,
+            Resettable::Override(Transparency(200))
+        );
     }
 }
