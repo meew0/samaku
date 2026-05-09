@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Add, Index, IndexMut, Range, Sub};
+use std::ops::{Add, AddAssign, Index, IndexMut, Range, Sub, SubAssign};
 
 pub use emit::emit;
 pub use emit::emit_timecode;
@@ -259,6 +259,34 @@ impl From<Duration> for nde::tags::Milliseconds {
         #[expect(clippy::cast_possible_truncation, reason = "matches libass behavior")]
         let ms = Self(value.0 as i32);
         ms
+    }
+}
+
+impl Add<Duration> for Duration {
+    type Output = Duration;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Duration(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign<Duration> for Duration {
+    fn add_assign(&mut self, rhs: Duration) {
+        self.0 += rhs.0;
+    }
+}
+
+impl Sub<Duration> for Duration {
+    type Output = Duration;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Duration(self.0 - rhs.0)
+    }
+}
+
+impl SubAssign<Duration> for Duration {
+    fn sub_assign(&mut self, rhs: Duration) {
+        self.0 -= rhs.0;
     }
 }
 

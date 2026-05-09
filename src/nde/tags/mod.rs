@@ -1629,12 +1629,19 @@ pub enum KaraokeOnset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KaraokeEffect {
     /// Maps to `\k`.
+    /// The syllable is held at the secondary colour for the associated duration,
+    /// then instantly switched to the primary colour afterwards.
     FillInstant,
 
     /// Maps to `\kf`.
+    /// The syllabls is swept from the primary colour to the secondary colour
+    /// over the associated duration.
     FillSweep,
 
     /// Maps to `\ko`.
+    /// The syllable is held at the secondary colour and without a border for the
+    /// associated duration, then the text colour is instantly switched to the
+    /// primary colour and the border is instantly displayed after the duration.
     BorderInstant,
 }
 

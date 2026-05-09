@@ -2,11 +2,12 @@
     clippy::cast_possible_truncation,
     reason = "this module needs to convert lots of types back and forth to exactly match libass' behavior"
 )]
+#![allow(dead_code, reason = "for now")]
 
 use super::{
-    lerp::Lerp, Animation, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade,
-    FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Local, LocalAnimatable, Milliseconds,
-    Resettable, SimpleFade, Transparency,
+    lerp::Lerp, Animation, AnimationInterval, Centiseconds, Colour, ComplexFade, DecimalTransparency,
+    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeOnset,
+    Local, LocalAnimatable, Milliseconds, Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -180,98 +181,6 @@ pub fn bake(
             Span::Drawing(local, drawing) => {}
         }
     }
-}
-
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "required to exactly reproduce libass' logic here"
-)]
-#[expect(
-    clippy::cast_sign_loss,
-    reason = "required to exactly reproduce libass' logic here"
-)]
-fn bake_fade(time: TimeContext, fade: Fade) -> Transparency {
-    let complex_fade = match fade {
-        Fade::Simple(simple_fade) => convert_simple_to_complex_fade(time, simple_fade),
-        Fade::Complex(complex_fade) => complex_fade,
-    };
-
-    let now: i64 = time.relative().0;
-
-    // This logic is taken from `interpolate_alpha` in libass
-    if now < i64::from(complex_fade.fade_in_start.0) {
-        // Before fade in
-        complex_fade.transparency_before.into()
-    } else if now < i64::from(complex_fade.fade_in_end.0) {
-        // During fade in
-        let numerator =
-            f64::from(((now as u32) - complex_fade.fade_in_start.0.cast_unsigned()).cast_signed());
-        let denominator = f64::from(
-            (complex_fade.fade_in_end.0.cast_unsigned()
-                - complex_fade.fade_in_start.0.cast_unsigned())
-            .cast_signed(),
-        );
-        let cf = numerator / denominator;
-        #[expect(
-            clippy::suboptimal_flops,
-            reason = "we need the 2 roundings to exactly reproduce libass"
-        )]
-        let a_float = f64::from(complex_fade.transparency_before.0) * (1.0 - cf)
-            + cf * f64::from(complex_fade.transparency_main.0);
-        Transparency(a_float as i32)
-    } else if now < i64::from(complex_fade.fade_out_start.0) {
-        // Between fade in and fade out
-        complex_fade.transparency_main.into()
-    } else if now < i64::from(complex_fade.fade_out_end.0) {
-        // During fade out
-        let numerator =
-            f64::from(((now as u32) - complex_fade.fade_out_start.0.cast_unsigned()).cast_signed());
-        let denominator = f64::from(
-            (complex_fade.fade_out_end.0.cast_unsigned()
-                - complex_fade.fade_out_start.0.cast_unsigned())
-            .cast_signed(),
-        );
-        let cf = numerator / denominator;
-        #[expect(
-            clippy::suboptimal_flops,
-            reason = "we need the 2 roundings to exactly reproduce libass"
-        )]
-        let a_float = f64::from(complex_fade.transparency_main.0) * (1.0 - cf)
-            + cf * f64::from(complex_fade.transparency_after.0);
-        Transparency(a_float as i32)
-    } else {
-        // After fade out
-        complex_fade.transparency_after.into()
-    }
-}
-
-fn convert_simple_to_complex_fade(time: TimeContext, simple_fade: SimpleFade) -> ComplexFade {
-    let fade_out_end: Milliseconds = time.duration.into();
-    let fade_out_start = Milliseconds(fade_out_end.0 - simple_fade.fade_out_duration.0);
-
-    ComplexFade {
-        transparency_before: DecimalTransparency(255),
-        transparency_main: DecimalTransparency(0),
-        transparency_after: DecimalTransparency(255),
-        fade_in_start: Milliseconds(0),
-        fade_in_end: simple_fade.fade_in_duration,
-        fade_out_start,
-        fade_out_end,
-    }
-}
-
-fn apply_fade(transparency: &mut Transparency, fade: Transparency) {
-    if fade.0 > 0 {
-        let mult_result = mult_alpha(u32::from(transparency.rendered()), fade.0.cast_unsigned());
-        *transparency = Transparency(mult_result.cast_signed());
-    }
-}
-
-fn mult_alpha(first: u32, second: u32) -> u32 {
-    let result_u64 = u64::from(first)
-        - (u64::from(first) * u64::from(second) + 0x7f_u64) / 0xff_u64
-        + u64::from(second);
-    result_u64 as u32
 }
 
 fn bake_local(
@@ -713,18 +622,256 @@ fn calculate_power(
     }
 }
 
+/// Convert spans potentially containing karaoke elements into a vec
+/// specifying the time `b`, as an offset from the event start time,
+/// before which the span with the corresponding index
+/// should have the secondary colour. After time `b`, it shows primary.
+///
+/// ## How libass represents karaoke timing
+///
+/// During parsing (`ass_parse_tags`), each `\k`/`\kf`/`\ko` tag updates:
+/// - `state->effect_skip_timing += (uint32_t)state->effect_timing` — accumulate
+///   the previous duration as "skip time" before this new syllable.
+/// - `state->effect_timing = dtoi32(val * 10)` — set the new syllable duration (ms).
+///
+/// `\kt` instead *sets* `effect_skip_timing` absolutely and marks `reset_effect`.
+///
+/// Crucially, `ass_render.c:2192-2195` resets `effect_timing`, `effect_skip_timing`,
+/// and `reset_effect` to 0/false after each glyph is created. So these values never
+/// carry between spans; each span's first glyph gets only the tags from its own block.
+///
+/// ## `ass_process_karaoke_effects` (the second pass)
+///
+/// After all glyphs are created, `split_style_runs` decides which glyphs start a new
+/// "run" (a contiguous group rendered identically). The primary trigger for a new run
+/// is `effect_timing != 0`. A span with `effect_timing == 0` (e.g. `\k0` or `\kt`
+/// alone) therefore does *not* start its own run — its glyph falls into the preceding
+/// run and is processed in the within-run accumulation loop.
+///
+/// The main loop then maintains a running `timing` counter (milliseconds). For each
+/// run boundary it computes:
+/// ```text
+/// tm_start = timing + start->effect_skip_timing
+/// tm_end   = tm_start + start->effect_timing
+/// timing   = !has_reset * tm_end + skip_timing   (where skip_timing accumulates
+///                                                  effect_skip_timing of within-run glyphs)
+/// ```
+/// All glyphs in the run transition secondary→primary at `tm_start`.
+///
+/// ## Mapping to our span model
+///
+/// Because state resets after each glyph, our `Karaoke` struct encodes per-span:
+/// - `NoDelay`          → `effect_skip_timing = 0`,          `reset_effect = false`
+/// - `RelativeDelay(d)` → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = false`
+/// - `Absolute(d)`      → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = true`
+///
+/// A span with `effect_timing == 0` shares its run with the previous boundary glyph,
+/// so the returned baked value is the same as the previous span's — the span
+/// "appears" to transition at the same time even though the timeline advances by `skip`.
+fn bake_karaoke(spans: &[Span]) -> Vec<subtitle::Duration> {
+    // Running karaoke timeline position in milliseconds. Corresponds to `timing` in
+    // `ass_process_karaoke_effects` (there it's `int32_t`, but we use `i64` to avoid
+    // worrying about overflow in intermediate calculations).
+    let mut timing: i64 = 0;
+
+    // The most recent baked value from a span with non-zero duration. Zero-duration
+    // spans inherit this value — they fall into the previous run in libass and therefore
+    // share its transition time.
+    let mut last_baked = subtitle::Duration(0);
+
+    // Whether any explicit karaoke effect type (\k, \kf, \ko) has been encountered.
+    // Corresponds to whether the accumulated `effect_type` in
+    // `ass_process_karaoke_effects` is `EF_NONE` or not. \kt alone does not set
+    // `effect_type`, so it never flips this flag on its own.
+    let mut seen_effect = false;
+
+    spans
+        .iter()
+        .map(|span| {
+            let karaoke = match *span {
+                Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
+                // \r does not touch karaoke state; treat as a zero-duration no-op.
+                Span::Reset | Span::ResetToStyle(_) => {
+                    return if seen_effect {
+                        last_baked
+                    } else {
+                        subtitle::Duration(0)
+                    };
+                }
+            };
+
+            // \k / \kf / \ko set effect_type on the glyph; \kt alone leaves it EF_NONE.
+            // `seen_effect` tracks whether the accumulated effect_type is EF_NONE or not.
+            if karaoke.effect.is_some() {
+                seen_effect = true;
+            }
+
+            // Until the first karaoke tag the span always renders in primary colour.
+            if !seen_effect {
+                return subtitle::Duration(0);
+            }
+
+            // Translate our onset to libass's `effect_skip_timing` and `reset_effect`.
+            let (skip, is_reset) = match karaoke.onset {
+                // \k/\kf/\ko with no preceding sibling tag in the same block.
+                KaraokeOnset::NoDelay => (0_i64, false),
+                // Multiple \k-family tags in one block: the earlier tags' durations
+                // accumulate as skip timing for the final one.
+                KaraokeOnset::RelativeDelay(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), false),
+                // \kt: sets skip absolutely and marks reset_effect = true, which causes
+                // `ass_process_karaoke_effects` to set timing = 0 before adding the skip.
+                KaraokeOnset::Absolute(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), true),
+            };
+
+            // effect = None means \kt was the last (or only) tag — effect_timing = 0.
+            let duration = karaoke
+                .effect
+                .map_or(0_i64, |(_, cs)| i64::from(ass_dtoi32(cs.0 * 10.0)));
+
+            // \kt (reset_effect = true) causes timing = 0 before applying skip.
+            // In libass this happens when the within-run glyph with reset_effect is seen
+            // before the next boundary; we apply it here at the span level.
+            if is_reset {
+                timing = 0;
+            }
+
+            // tm_start: when this span's karaoke effect begins (ms from event start).
+            // tm_end: when the effect window closes; timing advances to here.
+            // For non-KF effects libass also sets tm_end = tm_start for the *rendering*
+            // step, but `timing` is updated from the original tm_end beforehand.
+            let tm_start = timing + skip;
+            let tm_end = tm_start + duration;
+            timing = tm_end;
+
+            // A span with duration == 0 does not create its own run boundary in libass
+            // (because `effect_timing == 0` is the primary starts_new_run trigger).
+            // Its glyphs end up inside the previous run and share its transition time.
+            // We model this by returning last_baked unchanged; the `skip` still advanced
+            // `timing` so subsequent spans are positioned correctly.
+            if duration != 0 {
+                last_baked = subtitle::Duration(tm_start);
+            }
+            last_baked
+        })
+        .collect()
+}
+
+fn convert_ktime(centis: Centiseconds) -> subtitle::Duration {
+    subtitle::Duration(i64::from(ass_dtoi32(centis.0 * 10.0)))
+}
+
+fn ass_dtoi32(val: f64) -> i32 {
+    if val.is_nan() || val <= f64::from(i32::MIN) || val >= f64::from(i32::MAX) + 1.0 {
+        i32::MIN
+    } else {
+        val as i32
+    }
+}
+
 fn bake_global_animations() {
     // TODO
 }
 
-fn bake_move() {}
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "required to exactly reproduce libass' logic here"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "required to exactly reproduce libass' logic here"
+)]
+fn bake_fade(time: TimeContext, fade: Fade) -> Transparency {
+    let complex_fade = match fade {
+        Fade::Simple(simple_fade) => convert_simple_to_complex_fade(time, simple_fade),
+        Fade::Complex(complex_fade) => complex_fade,
+    };
 
-fn bake_karaoke() {}
+    let now: i64 = time.relative().0;
+
+    // This logic is taken from `interpolate_alpha` in libass
+    if now < i64::from(complex_fade.fade_in_start.0) {
+        // Before fade in
+        complex_fade.transparency_before.into()
+    } else if now < i64::from(complex_fade.fade_in_end.0) {
+        // During fade in
+        let numerator =
+            f64::from(((now as u32) - complex_fade.fade_in_start.0.cast_unsigned()).cast_signed());
+        let denominator = f64::from(
+            (complex_fade.fade_in_end.0.cast_unsigned()
+                - complex_fade.fade_in_start.0.cast_unsigned())
+            .cast_signed(),
+        );
+        let cf = numerator / denominator;
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "we need the 2 roundings to exactly reproduce libass"
+        )]
+        let a_float = f64::from(complex_fade.transparency_before.0) * (1.0 - cf)
+            + cf * f64::from(complex_fade.transparency_main.0);
+        Transparency(a_float as i32)
+    } else if now < i64::from(complex_fade.fade_out_start.0) {
+        // Between fade in and fade out
+        complex_fade.transparency_main.into()
+    } else if now < i64::from(complex_fade.fade_out_end.0) {
+        // During fade out
+        let numerator =
+            f64::from(((now as u32) - complex_fade.fade_out_start.0.cast_unsigned()).cast_signed());
+        let denominator = f64::from(
+            (complex_fade.fade_out_end.0.cast_unsigned()
+                - complex_fade.fade_out_start.0.cast_unsigned())
+            .cast_signed(),
+        );
+        let cf = numerator / denominator;
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "we need the 2 roundings to exactly reproduce libass"
+        )]
+        let a_float = f64::from(complex_fade.transparency_main.0) * (1.0 - cf)
+            + cf * f64::from(complex_fade.transparency_after.0);
+        Transparency(a_float as i32)
+    } else {
+        // After fade out
+        complex_fade.transparency_after.into()
+    }
+}
+
+fn convert_simple_to_complex_fade(time: TimeContext, simple_fade: SimpleFade) -> ComplexFade {
+    let fade_out_end: Milliseconds = time.duration.into();
+    let fade_out_start = Milliseconds(fade_out_end.0 - simple_fade.fade_out_duration.0);
+
+    ComplexFade {
+        transparency_before: DecimalTransparency(255),
+        transparency_main: DecimalTransparency(0),
+        transparency_after: DecimalTransparency(255),
+        fade_in_start: Milliseconds(0),
+        fade_in_end: simple_fade.fade_in_duration,
+        fade_out_start,
+        fade_out_end,
+    }
+}
+
+fn apply_fade(transparency: &mut Transparency, fade: Transparency) {
+    if fade.0 > 0 {
+        let mult_result = mult_alpha(u32::from(transparency.rendered()), fade.0.cast_unsigned());
+        *transparency = Transparency(mult_result.cast_signed());
+    }
+}
+
+fn mult_alpha(first: u32, second: u32) -> u32 {
+    let result_u64 = u64::from(first)
+        - (u64::from(first) * u64::from(second) + 0x7f_u64) / 0xff_u64
+        + u64::from(second);
+    result_u64 as u32
+}
+
+fn bake_move() {
+    // TODO
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::Maybe3D;
+    use crate::nde::tags::{parse, Karaoke, KaraokeEffect, Maybe3D};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
@@ -734,129 +881,6 @@ mod tests {
             new_style: subtitle::Style::default(),
             style_lookup: Box::new(|_| panic!("called style_lookup on an empty style context")),
         }
-    }
-
-    #[test]
-    fn fade() {
-        let simple_fade = SimpleFade {
-            fade_in_duration: Milliseconds(500),
-            fade_out_duration: Milliseconds(500),
-        };
-
-        let complex_fade = ComplexFade {
-            transparency_before: DecimalTransparency(100),
-            transparency_main: DecimalTransparency(150),
-            transparency_after: DecimalTransparency(200),
-            fade_in_start: Milliseconds(250),
-            fade_in_end: Milliseconds(750),
-            fade_out_start: Milliseconds(1500),
-            fade_out_end: Milliseconds(2500),
-        };
-
-        let mut time_context = TimeContext {
-            start: subtitle::StartTime(1000),
-            duration: subtitle::Duration(3000),
-            now: subtitle::StartTime(1000),
-        };
-
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(255)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(100)
-        );
-
-        time_context.now = subtitle::StartTime(1250);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(127)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(100)
-        );
-
-        time_context.now = subtitle::StartTime(1500);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(125)
-        );
-
-        time_context.now = subtitle::StartTime(1750);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(150)
-        );
-
-        time_context.now = subtitle::StartTime(2000);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(150)
-        );
-
-        time_context.now = subtitle::StartTime(2500);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(150)
-        );
-
-        time_context.now = subtitle::StartTime(3000);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(175)
-        );
-
-        time_context.now = subtitle::StartTime(3500);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(0)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(200)
-        );
-
-        time_context.now = subtitle::StartTime(3750);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(127)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(200)
-        );
-
-        time_context.now = subtitle::StartTime(4000);
-        assert_eq!(
-            bake_fade(time_context, Fade::Simple(simple_fade)),
-            Transparency(255)
-        );
-        assert_eq!(
-            bake_fade(time_context, Fade::Complex(complex_fade)),
-            Transparency(200)
-        );
     }
 
     #[test]
@@ -1003,6 +1027,209 @@ mod tests {
         assert_matches!(local.underline, Resettable::Keep);
         assert_matches!(local.strike_out, Resettable::Reset);
         assert_matches!(local.italic, Resettable::Override(true));
+    }
+
+    fn karaoke_span(karaoke: Karaoke) -> Span {
+        Span::Tags(
+            Local {
+                karaoke,
+                ..Local::empty()
+            },
+            String::new(),
+        )
+    }
+
+    #[test]
+    fn karaoke() {
+        let spans = vec![
+            karaoke_span(Karaoke::empty()),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(20.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::BorderInstant, Centiseconds(30.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(0.0))),
+                onset: KaraokeOnset::RelativeDelay(Centiseconds(40.0)),
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(50.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(300.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: None,
+                onset: KaraokeOnset::Absolute(Centiseconds(200.0)),
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(50.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(0.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(-50.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+            karaoke_span(Karaoke {
+                effect: Some((KaraokeEffect::FillInstant, Centiseconds(-100.0))),
+                onset: KaraokeOnset::NoDelay,
+            }),
+        ];
+
+        let (_, parsed_spans) = parse(
+            "a{\\k20}a{\\ko30}a{\\k40\\k0}a{\\k50}a{\\k300}a{\\kt200}a{\\k50}a{\\k0}a{\\k-50}a{\\k-100}a",
+        );
+        for (i, span) in spans.iter().enumerate() {
+            assert_matches!(span, &Span::Tags(ref specified_tags, _));
+            assert_matches!(&parsed_spans[i], &Span::Tags(ref parsed_tags, _));
+            assert_eq!(specified_tags.karaoke, parsed_tags.karaoke);
+        }
+
+        let baked = bake_karaoke(&spans);
+
+        assert_eq!(baked[0], subtitle::Duration(0));
+        assert_eq!(baked[1], subtitle::Duration(0));
+        assert_eq!(baked[2], subtitle::Duration(200));
+        assert_eq!(baked[3], subtitle::Duration(200));
+        assert_eq!(baked[4], subtitle::Duration(900));
+        assert_eq!(baked[5], subtitle::Duration(1400));
+        assert_eq!(baked[6], subtitle::Duration(1400));
+        assert_eq!(baked[7], subtitle::Duration(2000));
+        assert_eq!(baked[8], subtitle::Duration(2000));
+        assert_eq!(baked[9], subtitle::Duration(2500));
+        assert_eq!(baked[10], subtitle::Duration(2000));
+    }
+
+    #[test]
+    fn fade() {
+        let simple_fade = SimpleFade {
+            fade_in_duration: Milliseconds(500),
+            fade_out_duration: Milliseconds(500),
+        };
+
+        let complex_fade = ComplexFade {
+            transparency_before: DecimalTransparency(100),
+            transparency_main: DecimalTransparency(150),
+            transparency_after: DecimalTransparency(200),
+            fade_in_start: Milliseconds(250),
+            fade_in_end: Milliseconds(750),
+            fade_out_start: Milliseconds(1500),
+            fade_out_end: Milliseconds(2500),
+        };
+
+        let mut time_context = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(1000),
+        };
+
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(255)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(100)
+        );
+
+        time_context.now = subtitle::StartTime(1250);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(127)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(100)
+        );
+
+        time_context.now = subtitle::StartTime(1500);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(125)
+        );
+
+        time_context.now = subtitle::StartTime(1750);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(150)
+        );
+
+        time_context.now = subtitle::StartTime(2000);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(150)
+        );
+
+        time_context.now = subtitle::StartTime(2500);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(150)
+        );
+
+        time_context.now = subtitle::StartTime(3000);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(175)
+        );
+
+        time_context.now = subtitle::StartTime(3500);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(0)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(200)
+        );
+
+        time_context.now = subtitle::StartTime(3750);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(127)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(200)
+        );
+
+        time_context.now = subtitle::StartTime(4000);
+        assert_eq!(
+            bake_fade(time_context, Fade::Simple(simple_fade)),
+            Transparency(255)
+        );
+        assert_eq!(
+            bake_fade(time_context, Fade::Complex(complex_fade)),
+            Transparency(200)
+        );
     }
 
     #[test]
