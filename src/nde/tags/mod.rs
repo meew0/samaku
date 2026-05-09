@@ -274,7 +274,7 @@ pub struct Local {
     pub text_rotation: Maybe3D,
     pub text_shear: Maybe2D,
 
-    pub font_encoding: Resettable<i32>,
+    pub font_encoding: Resettable<FontEncoding>,
 
     pub primary_colour: Resettable<Colour>,
     pub secondary_colour: Resettable<Colour>,
@@ -1428,6 +1428,28 @@ impl emit::Value for EmitFontSize {
             }
         }
     }
+}
+
+/// libass font encoding parameter (corresponding to “Encoding” in styles).
+///
+/// If this is set to a value other than `1` or `-1`, libass will avoid selecting
+/// fonts that lack coverage in the legacy Windows codepage specified by
+/// the value.
+///
+/// See the following libass issue for a detailed explanation:
+/// https://github.com/libass/libass/issues/662.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontEncoding(pub i32);
+
+impl FontEncoding {
+    /// libass-specific value that supposedly autodetects the required encoding, and also causes
+    /// text to be layouted/shaped across override boundaries, which breaks VSFilter compatibility
+    /// but is desirable for certain cursive scripts.
+    pub const LIBASS_AUTODETECT: FontEncoding = FontEncoding(-1);
+}
+
+impl emit::Value for FontEncoding {
+    emit_value_newtype!();
 }
 
 /// Represents the effect and timing of a karaoke syllable.

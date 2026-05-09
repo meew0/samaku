@@ -16,7 +16,8 @@ pub use event_track::*;
 pub use import::import;
 
 use crate::nde::tags::{
-    Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
+    Alignment, Colour, FontEncoding, HorizontalAlignment, Transparency, VerticalAlignment,
+    WrapStyle,
 };
 use crate::{media, message, model, nde, style};
 
@@ -435,24 +436,6 @@ pub enum YCbCrMatrix {
     Smtpe240MPc,
     FccTv,
     FccPc,
-}
-
-/// libass font encoding parameter (corresponding to “Encoding” in styles).
-///
-/// If this is set to a value other than `1` or `-1`, libass will avoid selecting
-/// fonts that lack coverage in the legacy Windows codepage specified by
-/// the value.
-///
-/// See the following libass issue for a detailed explanation:
-/// https://github.com/libass/libass/issues/662.
-#[derive(Debug, Clone, Copy)]
-pub struct FontEncoding(pub i32);
-
-impl FontEncoding {
-    /// libass-specific value that supposedly autodetects the required encoding, and also causes
-    /// text to be layouted/shaped across override boundaries, which breaks VSFilter compatibility
-    /// but is desirable for certain cursive scripts.
-    pub const LIBASS_AUTODETECT: FontEncoding = FontEncoding(-1);
 }
 
 #[derive(Debug, Clone)]

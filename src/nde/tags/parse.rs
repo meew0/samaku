@@ -2,7 +2,7 @@ use crate::nde::Span;
 
 use super::{
     Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade,
-    DecimalTransparency, Drawing, Fade, FontSize, FontSizeDelta, FontWeight, Global,
+    DecimalTransparency, Drawing, Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global,
     GlobalAnimatable, HorizontalAlignment, KaraokeEffect, Local, LocalAnimatable, Maybe2D,
     Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle, Resettable, SimpleFade,
     Transparency, VerticalAlignment, WrapStyle,
@@ -667,7 +667,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
             Some(_) | None => Resettable::Reset,
         };
     } else if twa.tag::<false>("fe") {
-        local.font_encoding = resettable(twa.int_arg(0));
+        local.font_encoding = resettable(twa.int_arg(0).map(FontEncoding));
     } else {
         return false;
     }
@@ -1581,7 +1581,7 @@ mod tests {
         assert!(!block.end_previous_drawing);
         assert_eq!(block.new_drawing_scale, Some(1));
         assert_eq!(global.wrap_style, Override(WrapStyle::EndOfLine));
-        assert_eq!(block.new_local.font_encoding, Override(1));
+        assert_eq!(block.new_local.font_encoding, Override(FontEncoding(1)));
 
         let mut global = Global::empty();
         let block = parse_tag_block(
