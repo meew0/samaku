@@ -47,7 +47,7 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
     global_overrides_option: Option<&Local>,
     spans: &mut [Span],
 ) {
-    let style_context = StyleContext {
+    let mut style_context = StyleContext {
         original_style: event_style,
         new_style: event_style,
     };
@@ -61,7 +61,7 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
         accu.animate(time, style_context, &global_overrides.animations);
     }
 
-    let fade = global_tags
+    accu.fade_value = global_tags
         .fade
         .map_or(Transparency(0), |fade| bake_fade(time, fade));
 
@@ -71,25 +71,42 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
         accu.apply_karaoke(time, karaoke[i]);
 
         match *span {
-            Span::Tags(ref mut local, ref text) => {
-                // Clear global overrides from local tags, since they have already been
-                // applied to the accumulator.
-                if let Some(global_overrides) = global_overrides_option {
-                    local.clear_from(global_overrides);
-                }
+            Span::Tags(ref mut local, _) | Span::Drawing(ref mut local, _) => {
+                bake_local(
+                    time,
+                    style_context,
+                    &mut accu,
+                    local,
+                    global_overrides_option,
+                );
             }
-            Span::Reset => {}
-            Span::ResetToStyle(ref style_name) => {}
-            Span::Drawing(ref mut local, ref drawing) => {
-                if let Some(global_overrides) = global_overrides_option {
-                    local.clear_from(global_overrides);
-                }
+            Span::Reset => {
+                style_context.new_style = style_context.original_style;
+                let local = bake_reset(style_context, &mut accu);
+                *span = Span::Tags(local, String::new());
+            }
+            Span::ResetToStyle(ref style_name) => {
+                style_context.new_style = style_lookup(style_name);
+                let local = bake_reset(style_context, &mut accu);
+                *span = Span::Tags(local, String::new());
             }
         }
     }
 }
 
-fn bake_local(time: TimeContext, style: StyleContext, accu: &mut RenderContext, local: &mut Local) {
+fn bake_local(
+    time: TimeContext,
+    style: StyleContext,
+    accu: &mut RenderContext,
+    local: &mut Local,
+    global_overrides_option: Option<&Local>,
+) {
+    // Clear global overrides from local tags, if present, since they have already been
+    // applied to the accumulator.
+    if let Some(global_overrides) = global_overrides_option {
+        local.clear_from(global_overrides);
+    }
+
     // First, we make a copy of the original render context, so we can compare the
     // changes that were made by the local tags.
     let original_accu = accu.clone();
@@ -165,6 +182,11 @@ struct RenderContext {
 impl RenderContext {
     // Roughly corresponds to `ass_reset_render_context`
     fn reset(&mut self, style: &subtitle::Style) {
+        self.primary_transparency = style.primary_transparency;
+        self.secondary_transparency = style.secondary_transparency;
+        self.border_transparency = style.border_transparency;
+        self.shadow_transparency = style.shadow_transparency;
+
         self.primary_colour = style.primary_colour;
         self.secondary_colour = style.secondary_colour;
         self.border_colour = style.border_colour;
@@ -342,6 +364,8 @@ impl RenderContext {
         }
     }
 
+    /// Turns the differences between this and the `original_accu` into override tags
+    /// that are placed into `local`.
     fn compact_all(&self, local: &mut Local, original_accu: &RenderContext, style: StyleContext) {
         macro_rules! compact {
             ($property:ident) => {
@@ -967,7 +991,7 @@ mod tests {
 
         let mut new_accu = accu.clone();
         let mut new_local = tags.clone();
-        bake_local(time, style, &mut new_accu, &mut new_local);
+        bake_local(time, style, &mut new_accu, &mut new_local, None);
         assert_matches!(new_local.italic, Resettable::Override(true));
         assert_matches!(new_local.underline, Resettable::Keep);
         assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
@@ -981,10 +1005,11 @@ mod tests {
         assert!(new_local.animations.is_empty());
 
         let mut new_accu = accu.clone();
+        new_accu.border_transparency = Transparency(50);
         let mut new_local = tags;
         new_local.border_transparency = Resettable::Override(Transparency(100));
         time.now = subtitle::StartTime(2500);
-        bake_local(time, style, &mut new_accu, &mut new_local);
+        bake_local(time, style, &mut new_accu, &mut new_local, None);
         assert_matches!(new_local.letter_spacing, Resettable::Override(fsp));
         assert_float_absolute_eq!(fsp, 2.5, 0.01);
         assert_matches!(new_local.border_transparency, Resettable::Reset);
@@ -1352,6 +1377,30 @@ mod tests {
         assert_matches!(
             local.border_transparency,
             Resettable::Override(Transparency(200))
+        );
+    }
+
+    #[test]
+    fn reset() {
+        let original_style = subtitle::Style {
+            border_transparency: Transparency(100),
+            ..subtitle::Style::default()
+        };
+        let new_style = subtitle::Style {
+            border_transparency: Transparency(50),
+            ..subtitle::Style::default()
+        };
+        let style = StyleContext {
+            original_style: &original_style,
+            new_style: &new_style,
+        };
+        let mut accu = RenderContext::default();
+        accu.reset(style.original_style);
+        let local = bake_reset(style, &mut accu);
+        assert_eq!(local.underline, Resettable::Keep,);
+        assert_matches!(
+            local.border_transparency,
+            Resettable::Override(Transparency(50))
         );
     }
 }
