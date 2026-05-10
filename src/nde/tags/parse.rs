@@ -989,6 +989,13 @@ where
             y2: twa.int_arg(3).unwrap(),
         };
         global.rectangle_clip = Some(rect_clip(rect));
+
+        // As specifying a rectangle clip overrides all previous rectangle clips,
+        // it will also override clip animations.
+        // There are no global animations other than rectangle clip ones,
+        // so clearing all global animations suffices to clear previous clip
+        // animations
+        global.animations.clear();
     } else if global.vector_clip.is_none() {
         let scale: i32 = match twa.nargs() {
             2 => twa.int_arg(0).unwrap(),
@@ -1008,11 +1015,6 @@ where
         // so if we found a vector clip but one already exists,
         // there is nothing to be done.
     }
-
-    // As specifying a clip overrides all previous clips, it will also override clip animations.
-    // There are no global animations other than clip ones, so clearing all global animations
-    // suffices to clear previous clip animations
-    global.animations.clear();
 }
 
 fn end_span(

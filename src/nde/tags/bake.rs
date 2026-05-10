@@ -4,9 +4,9 @@
 )]
 
 use super::{
-    lerp::Lerp, Animation, AnimationInterval, Colour, ComplexFade, DecimalTransparency, Fade,
-    FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
-    Local, LocalAnimatable, Milliseconds, Resettable, SimpleFade, Transparency,
+    lerp::Lerp, Animation, AnimationInterval, Clip, Colour, ComplexFade, DecimalTransparency,
+    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
+    Local, LocalAnimatable, Milliseconds, Rectangle, Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -842,8 +842,49 @@ fn ass_dtoi32(val: f64) -> i32 {
     }
 }
 
-fn bake_global_animations() {
-    // TODO
+fn bake_global_animations(
+    time: TimeContext,
+    global: &mut Global,
+    playback_resolution: subtitle::Resolution,
+) {
+    let frame_rect = Rectangle {
+        x1: 0,
+        y1: 0,
+        x2: playback_resolution.x,
+        y2: playback_resolution.y,
+    };
+
+    // The rectangle clip is the only thing that can be globally animated.
+    let mut accu = if let Some(ref clip) = global.rectangle_clip {
+        *clip.value()
+    } else {
+        frame_rect
+    };
+
+    let mut last_clip: Option<Clip<Rectangle>> = None;
+
+    for animation in global.animations.drain(..) {
+        let power = calculate_power(time, animation.acceleration, animation.interval);
+        if let Some(clip) = animation.modifiers.clip {
+            let target = clip.value();
+            accu.x1 = accu.x1.lerp(target.x1, power);
+            accu.y1 = accu.y1.lerp(target.y1, power);
+            accu.x2 = accu.x2.lerp(target.x2, power);
+            accu.y2 = accu.y2.lerp(target.y2, power);
+            last_clip = Some(clip);
+        }
+    }
+
+    // Copy over clip type (inverse/contained)
+    if let Some(ref new_clip) = last_clip {
+        global.rectangle_clip = Some(new_clip.clone());
+    }
+
+    // Copy over clip bounds
+    if let Some(ref mut clip) = global.rectangle_clip {
+        let bounds = clip.value_mut();
+        *bounds = accu;
+    }
 }
 
 #[expect(
@@ -945,7 +986,7 @@ fn bake_move() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{parse, Centiseconds, Karaoke, Maybe3D};
+    use crate::nde::tags::{parse, Centiseconds, GlobalAnimatable, Karaoke, Maybe3D};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
@@ -1402,5 +1443,67 @@ mod tests {
             local.border_transparency,
             Resettable::Override(Transparency(50))
         );
+    }
+
+    #[test]
+    fn global_animation() {
+        let source_rect = Rectangle {
+            x1: 50,
+            y1: 50,
+            x2: 100,
+            y2: 100
+        };
+        
+        let target_rect = Rectangle {
+            x1: 100,
+            y1: 50,
+            x2: 125,
+            y2: 100
+        };
+        
+        let global = Global {
+            position: None,
+            rectangle_clip: Some(Clip::Contained(source_rect)),
+            vector_clip: None,
+            origin: None,
+            fade: None,
+            wrap_style: Resettable::Keep,
+            alignment: Default::default(),
+            animations: vec![
+                Animation {
+                    modifiers: GlobalAnimatable { clip: Some(Clip::Inverse(target_rect)) },
+                    acceleration: 1.0,
+                    interval: None,
+                }
+            ],
+        };
+        
+        let mut time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(1000),
+        };
+        
+        let resolution = subtitle::Resolution {
+            x: 1920,
+            y: 1080,
+        };
+        
+        let mut new_global = global.clone();
+        bake_global_animations(time, &mut new_global, resolution);
+        assert_matches!(new_global.rectangle_clip, Some(Clip::Inverse(rect)));
+        assert_eq!(rect.x1, 50);
+
+        time.now = subtitle::StartTime(2500);
+        let mut new_global = global.clone();
+        bake_global_animations(time, &mut new_global, resolution);
+        assert_matches!(new_global.rectangle_clip, Some(Clip::Inverse(rect)));
+        assert_eq!(rect.x1, 75);
+
+        time.now = subtitle::StartTime(4000);
+        let mut new_global = global.clone();
+        bake_global_animations(time, &mut new_global, resolution);
+        assert_matches!(new_global.rectangle_clip, Some(Clip::Inverse(rect)));
+        assert_eq!(rect.x1, 100);
     }
 }

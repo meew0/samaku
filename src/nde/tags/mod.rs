@@ -1746,6 +1746,16 @@ impl<T: emit::Value> Clip<T> {
     pub fn is_inverse(&self) -> bool {
         matches!(self, Clip::Inverse(_))
     }
+
+    pub fn value(&self) -> &T {
+        let (Clip::Contained(ref value) | Clip::Inverse(ref value)) = *self;
+        value
+    }
+
+    pub fn value_mut(&mut self) -> &mut T {
+        let (Clip::Contained(ref mut value) | Clip::Inverse(ref mut value)) = *self;
+        value
+    }
 }
 
 impl<T: emit::Value> emit::Tag for Clip<T> {

@@ -14,9 +14,9 @@ Last Style Storage: Default
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.500000
-Scroll Position: 66
-Active Line: 89
-Video Position: 5153
+Scroll Position: 85
+Active Line: 92
+Video Position: 5270
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -118,3 +118,5 @@ Dialogue: 0,0:03:26.00,0:03:28.00,Default,,0,0,0,,{\1c&HFF0000&\t(\1c&H00FF00&)\
 Dialogue: 0,0:03:28.00,0:03:30.00,Default,,0,0,0,,{\1c&HFF0000&\t(\1c&H00FFFF&)\t(\xshad100\1c&H00FF00&)\1c&H0000FF&}a
 Dialogue: 0,0:03:30.00,0:03:32.00,Default,,0,0,0,,{\pos(100,50)\t(\xbord10\ybord10\xshad10\yshad10\be1\blur5\fs10\fscx2\fscy3\fsp5\frx10\fry15\frz20\fax2\fay2\1c&HFF0000&\2c&HFFFF00&\3c&H00FFFF&\4c&H0000FF&\1a&H33&\2a&H66&\3a&H99&\4a&HBB&)}All animated tags
 Dialogue: 0,0:03:32.00,0:03:34.00,Default,,0,0,0,,{\pos(100,50)\t(\xbord10\ybord10\xshad10\yshad10\be1\blur5\fs10\fscx2\fscy3\fsp5\frx10\fry15\frz20\fax2\fay2\1c&HFF0000&\2c&HFFFF00&\3c&H00FFFF&\4c&H0000FF&\1a&H33&\2a&H66&\3a&H99&\4a&HBB&)\xbord10\ybord10\xshad10\yshad10\be1\blur5\fs10\fscx2\fscy3\fsp5\frx10\fry15\frz20\fax2\fay2\1c&HFF0000&\2c&HFFFF00&\3c&H00FFFF&\4c&H0000FF&\1a&H33&\2a&H66&\3a&H99&\4a&HBB&}All animated tags
+Dialogue: 0,0:03:34.00,0:03:36.00,Default,,0,0,0,,{\t(\clip(75,50,125,100))\clip(m 70.8 72.8 l 49.33 41.73 73.06 88.93 27.47 60.27 78.4 102.53 110.53 67.46 90.13 79.87 78.93 87.33)}abcdefghijkl
+Dialogue: 0,0:03:36.00,0:03:38.00,Default,,0,0,0,,{\t(\clip(75,50,125,100))\p1\clip(m 70.8 72.8 l 42.13 3.33 59.66 61.33 27.47 60.27 98.4 105.13 196.53 20.06 121.53 48.87 103.33 7.13 78.8 22 80.2 53.6)}m 0 0 s 100 0 100 100 0 100 c{\p0}
