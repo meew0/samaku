@@ -40,13 +40,16 @@ pub struct StyleContext<'a> {
 /// - Karaoke sweeps are not handled (`\K` / `\kf` tags; `KaraokeEffect::FillSweep`)
 /// - The `\ko` / `KaraokeEffect:BorderInstant` karaoke effect is also not handled
 /// - Effects (as in, marquee etc.) are not handled
+///
+/// The resulting spans are not yet simplified.
 pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
     time: TimeContext,
     event_style: &'a subtitle::Style,
     style_lookup: &'a F,
-    global_tags: &Global,
-    global_overrides_option: Option<&Local>,
+    global_tags: &mut Global,
     spans: &mut [Span],
+    playback_resolution: subtitle::Resolution,
+    global_overrides_option: Option<&Local>,
 ) {
     let mut style_context = StyleContext {
         original_style: event_style,
@@ -56,15 +59,13 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
     let mut accu = RenderContext::default();
     accu.reset(event_style);
 
-    // Apply local overrides
-    if let Some(global_overrides) = global_overrides_option {
-        accu.apply_all_resettables(style_context, global_overrides);
-        accu.animate(time, style_context, &global_overrides.animations);
-    }
-
     accu.fade_value = global_tags
         .fade
         .map_or(Transparency(0), |fade| bake_fade(time, fade));
+    global_tags.fade = None;
+
+    bake_global_animations(time, global_tags, playback_resolution);
+    bake_move(time, global_tags);
 
     let karaoke = bake_karaoke(spans);
 
@@ -83,12 +84,12 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
             }
             Span::Reset => {
                 style_context.new_style = style_context.original_style;
-                let local = bake_reset(style_context, &mut accu);
+                let local = bake_reset(time, style_context, &mut accu, global_overrides_option);
                 *span = Span::Tags(local, String::new());
             }
             Span::ResetToStyle(ref style_name) => {
                 style_context.new_style = style_lookup(style_name);
-                let local = bake_reset(style_context, &mut accu);
+                let local = bake_reset(time, style_context, &mut accu, global_overrides_option);
                 *span = Span::Tags(local, String::new());
             }
         }
@@ -102,12 +103,6 @@ fn bake_local(
     local: &mut Local,
     global_overrides_option: Option<&Local>,
 ) {
-    // Clear global overrides from local tags, if present, since they have already been
-    // applied to the accumulator.
-    if let Some(global_overrides) = global_overrides_option {
-        local.clear_from(global_overrides);
-    }
-
     // First, we make a copy of the original render context, so we can compare the
     // changes that were made by the local tags.
     let original_accu = accu.clone();
@@ -120,16 +115,34 @@ fn bake_local(
     // Now, we apply all animations in order.
     accu.animate(time, style, &local.animations);
 
+    // Apply global overrides
+    if let Some(global_overrides) = global_overrides_option {
+        accu.apply_all_resettables(style, global_overrides);
+        accu.animate(time, style, &global_overrides.animations);
+    }
+
     // Finally, we take the difference between the changed render context and the
     // original one, and convert this difference into new override tags.
     accu.compact_all(local, &original_accu, style);
 }
 
-fn bake_reset(style: StyleContext, accu: &mut RenderContext) -> Local {
+fn bake_reset(
+    time: TimeContext,
+    style: StyleContext,
+    accu: &mut RenderContext,
+    global_overrides_option: Option<&Local>,
+) -> Local {
     // This method is similar to `bake_local`, except we reset the render context
     // to `new_style`.
     let original_accu = accu.clone();
     accu.reset(style.new_style);
+
+    // Apply global overrides
+    if let Some(global_overrides) = global_overrides_option {
+        accu.apply_all_resettables(style, global_overrides);
+        accu.animate(time, style, &global_overrides.animations);
+    }
+
     let mut local = Local::empty();
     accu.compact_all(&mut local, &original_accu, style);
     local
@@ -178,6 +191,11 @@ struct RenderContext {
     use_secondary: bool,
 
     fade_value: Transparency,
+
+    text_colour: Colour,
+    text_transparency_after_fade: Transparency,
+    border_transparency_after_fade: Transparency,
+    shadow_transparency_after_fade: Transparency,
 }
 
 impl RenderContext {
@@ -187,11 +205,15 @@ impl RenderContext {
         self.secondary_transparency = style.secondary_transparency;
         self.border_transparency = style.border_transparency;
         self.shadow_transparency = style.shadow_transparency;
+        self.text_transparency_after_fade = style.primary_transparency;
+        self.border_transparency_after_fade = style.border_transparency;
+        self.shadow_transparency_after_fade = style.shadow_transparency;
 
         self.primary_colour = style.primary_colour;
         self.secondary_colour = style.secondary_colour;
         self.border_colour = style.border_colour;
         self.shadow_colour = style.shadow_colour;
+        self.text_colour = style.primary_colour;
 
         self.italic = style.italic;
         self.font_weight = FontWeight::BoldToggle(style.bold);
@@ -367,7 +389,12 @@ impl RenderContext {
 
     /// Turns the differences between this and the `original_accu` into override tags
     /// that are placed into `local`.
-    fn compact_all(&self, local: &mut Local, original_accu: &RenderContext, style: StyleContext) {
+    fn compact_all(
+        &mut self,
+        local: &mut Local,
+        original_accu: &RenderContext,
+        style: StyleContext,
+    ) {
         macro_rules! compact {
             ($property:ident) => {
                 compact!($property, &style.original_style.$property);
@@ -433,15 +460,15 @@ impl RenderContext {
         compact!(font_encoding, &style.original_style.encoding);
 
         // Apply karaoke effect (by changing the primary to the secondary colour if necessary)
-        let (colour, original_colour) = if self.use_secondary {
-            (self.secondary_colour, original_accu.secondary_colour)
+        self.text_colour = if self.use_secondary {
+            self.secondary_colour
         } else {
-            (self.primary_colour, original_accu.primary_colour)
+            self.primary_colour
         };
 
         local.primary_colour = compact(
-            &colour,
-            &original_colour,
+            &self.text_colour,
+            &original_accu.text_colour,
             &style.original_style.primary_colour,
         );
         compact!(border_colour);
@@ -463,42 +490,36 @@ impl RenderContext {
 
     // Transparency needs special handling since the fade needs to be applied in each case.
     fn compact_transparency(
-        &self,
+        &mut self,
         local: &mut Local,
         original_accu: &RenderContext,
         style: StyleContext,
     ) {
-        let (transparency, original_transparency) = if self.use_secondary {
-            (
-                self.secondary_transparency,
-                original_accu.secondary_transparency,
-            )
+        let text_transparency = if self.use_secondary {
+            self.secondary_transparency
         } else {
-            (
-                self.primary_transparency,
-                original_accu.primary_transparency,
-            )
+            self.primary_transparency
         };
 
-        let mut primary_transparency = transparency;
-        apply_fade(&mut primary_transparency, self.fade_value);
+        self.text_transparency_after_fade = text_transparency;
+        apply_fade(&mut self.text_transparency_after_fade, self.fade_value);
         local.primary_transparency = compact(
-            &primary_transparency,
-            &original_transparency,
+            &self.text_transparency_after_fade,
+            &original_accu.text_transparency_after_fade,
             &style.original_style.primary_transparency,
         );
-        let mut border_transparency = self.border_transparency;
-        apply_fade(&mut border_transparency, self.fade_value);
+        self.border_transparency_after_fade = self.border_transparency;
+        apply_fade(&mut self.border_transparency_after_fade, self.fade_value);
         local.border_transparency = compact(
-            &border_transparency,
-            &original_accu.border_transparency,
+            &self.border_transparency_after_fade,
+            &original_accu.border_transparency_after_fade,
             &style.original_style.border_transparency,
         );
-        let mut shadow_transparency = self.shadow_transparency;
-        apply_fade(&mut shadow_transparency, self.fade_value);
+        self.shadow_transparency_after_fade = self.shadow_transparency;
+        apply_fade(&mut self.shadow_transparency_after_fade, self.fade_value);
         local.shadow_transparency = compact(
-            &shadow_transparency,
-            &original_accu.shadow_transparency,
+            &self.shadow_transparency_after_fade,
+            &original_accu.shadow_transparency_after_fade,
             &style.original_style.shadow_transparency,
         );
     }
@@ -555,6 +576,10 @@ impl Default for RenderContext {
             drawing_baseline_offset: 0.0,
             use_secondary: false,
             fade_value: Transparency(0),
+            text_colour: Colour::BLACK,
+            text_transparency_after_fade: Transparency(0),
+            border_transparency_after_fade: Transparency(0),
+            shadow_transparency_after_fade: Transparency(0),
         }
     }
 }
@@ -1016,6 +1041,7 @@ mod tests {
     };
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
+    use std::cell::RefCell;
 
     #[test]
     fn local() {
@@ -1073,7 +1099,7 @@ mod tests {
         assert!(new_local.animations.is_empty());
 
         let mut new_accu = accu.clone();
-        new_accu.border_transparency = Transparency(50);
+        new_accu.reset(&new_style);
         let mut new_local = tags;
         new_local.border_transparency = Resettable::Override(Transparency(100));
         time.now = subtitle::StartTime(2500);
@@ -1450,6 +1476,11 @@ mod tests {
 
     #[test]
     fn reset() {
+        let time = TimeContext {
+            start: subtitle::StartTime::default(),
+            duration: subtitle::Duration::default(),
+            now: subtitle::StartTime::default(),
+        };
         let original_style = subtitle::Style {
             border_transparency: Transparency(100),
             ..subtitle::Style::default()
@@ -1464,7 +1495,7 @@ mod tests {
         };
         let mut accu = RenderContext::default();
         accu.reset(style.original_style);
-        let local = bake_reset(style, &mut accu);
+        let local = bake_reset(time, style, &mut accu, None);
         assert_eq!(local.underline, Resettable::Keep,);
         assert_matches!(
             local.border_transparency,
@@ -1585,5 +1616,134 @@ mod tests {
         bake_move(time, &mut new_global);
         assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
         assert_float_absolute_eq!(pos.x, 30.0, 0.01);
+    }
+
+    #[test]
+    fn all() {
+        let line = "{\\fade(50,100,150,250,750,1250,1750))\\clip(75,25,125,75)\\move(80,80,100,100)\\t(\\clip(50,0,100,50))\\k25}Sphinx {\\t(500,1500,0.5,\\3c&H00FFFF&)\\k25}of {\\rStyle 2\\4c&HFF00FF&\\k25}black\\Nquartz, judge\\Nmy vow";
+        let (mut global, mut spans) = parse(line);
+        assert_eq!(spans.len(), 4);
+
+        let time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(2000),
+            now: subtitle::StartTime(1700),
+        };
+
+        let event_style = subtitle::Style::default();
+        let style_2 = subtitle::Style {
+            border_width: 10.0,
+            ..subtitle::Style::default()
+        };
+
+        let style_lookup_called_counter = RefCell::new(0);
+        let style_lookup = |name: &str| {
+            *style_lookup_called_counter.borrow_mut() += 1;
+            if name == "Style 2" {
+                &style_2
+            } else {
+                panic!("the style lookup should not have been called with style name: '{name}'")
+            }
+        };
+
+        let resolution = subtitle::Resolution { x: 1920, y: 1080 };
+
+        let green = Colour {
+            red: 0,
+            green: 255,
+            blue: 0,
+        };
+        let global_overrides = Local {
+            shadow_colour: Resettable::Override(green),
+            ..Local::empty()
+        };
+
+        bake(
+            time,
+            &event_style,
+            &style_lookup,
+            &mut global,
+            &mut spans,
+            resolution,
+            Some(&global_overrides),
+        );
+
+        assert_eq!(style_lookup_called_counter.take(), 1);
+
+        // Clip
+        assert_matches!(
+            global.rectangle_clip,
+            Some(Clip::Contained(global_rectangle_clip))
+        );
+        assert_eq!(global_rectangle_clip.x1, 66);
+        assert!(global.animations.is_empty());
+
+        // Position
+        assert_matches!(
+            global.position,
+            Some(PositionOrMove::Position(global_position))
+        );
+        assert_float_absolute_eq!(global_position.x, 87.0, 0.01);
+
+        assert_matches!(&spans[0], &Span::Tags(ref local_0, ref text_0));
+        assert_matches!(&spans[1], &Span::Tags(ref local_1, ref text_1));
+        assert_matches!(&spans[2], &Span::Tags(ref local_2, ref text_2));
+        assert_matches!(&spans[3], &Span::Tags(ref local_3, ref text_3));
+        assert_eq!(text_0, "Sphinx ");
+        assert_eq!(text_1, "of ");
+        assert_eq!(text_2, "");
+        assert_eq!(text_3, "black\\Nquartz, judge\\Nmy vow");
+
+        // Karaoke
+        assert_matches!(local_0.primary_colour, Resettable::Keep);
+        assert_matches!(local_1.primary_colour, Resettable::Keep);
+        assert_matches!(local_2.primary_colour, Resettable::Keep);
+        /*assert_matches!(
+            local_3.primary_colour,
+            Resettable::Override(local_3_primary_colour)
+        );
+        assert_eq!(
+            local_3_primary_colour,
+            Colour {
+                red: 255,
+                green: 0,
+                blue: 0
+            }
+        );*/
+
+        // Fade
+        assert_matches!(global.fade, None);
+        assert_matches!(
+            local_0.primary_transparency,
+            Resettable::Override(transparency)
+        );
+        assert_eq!(transparency, Transparency(95));
+        assert_matches!(local_1.primary_transparency, Resettable::Keep);
+
+        // \t animation
+        assert_matches!(
+            local_1.border_colour,
+            Resettable::Override(local_1_border_colour)
+        );
+        assert_eq!(
+            local_1_border_colour,
+            Colour {
+                red: 114,
+                green: 114,
+                blue: 0
+            }
+        );
+
+        // Reset
+        assert_matches!(local_2.border_colour, Resettable::Reset);
+        assert_matches!(local_2.border.x, Resettable::Override(10.0));
+
+        // Global override
+        assert_matches!(
+            local_0.shadow_colour,
+            Resettable::Override(local_0_shadow_colour)
+        );
+        assert_eq!(local_0_shadow_colour, green);
+        assert_matches!(local_3.shadow_colour, Resettable::Keep);
     }
 }
