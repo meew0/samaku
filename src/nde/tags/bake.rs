@@ -6,7 +6,8 @@
 use super::{
     lerp::Lerp, Animation, AnimationInterval, Clip, Colour, ComplexFade, DecimalTransparency,
     Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
-    Local, LocalAnimatable, Milliseconds, Rectangle, Resettable, SimpleFade, Transparency,
+    Local, LocalAnimatable, Milliseconds, Position, PositionOrMove, Rectangle, Resettable,
+    SimpleFade, Transparency,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -979,14 +980,40 @@ fn mult_alpha(first: u32, second: u32) -> u32 {
     result_u64 as u32
 }
 
-fn bake_move() {
-    // TODO
+fn bake_move(time: TimeContext, global: &mut Global) {
+    if let Some(PositionOrMove::Move(move_data)) = global.position {
+        let (t1, t2) = match move_data.timing {
+            Some(timing) => (timing.start_time.0, timing.end_time.0),
+            None => (0, time.duration.0 as i32),
+        };
+
+        let now = time.relative().0 as i32;
+
+        let power = if now <= t1 {
+            0.0
+        } else if now >= t2 {
+            1.0
+        } else {
+            let numerator = f64::from((now.cast_unsigned() - t1.cast_unsigned()).cast_signed());
+            let delta_t = f64::from(t2.cast_unsigned() - t1.cast_unsigned());
+            numerator / delta_t
+        };
+
+        let new_x = power * (move_data.final_position.x - move_data.initial_position.x)
+            + move_data.initial_position.x;
+        let new_y = power * (move_data.final_position.y - move_data.initial_position.y)
+            + move_data.initial_position.y;
+
+        global.position = Some(PositionOrMove::Position(Position { x: new_x, y: new_y }));
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{parse, Centiseconds, GlobalAnimatable, Karaoke, Maybe3D};
+    use crate::nde::tags::{
+        parse, Centiseconds, GlobalAnimatable, Karaoke, Maybe3D, Move, MoveTiming,
+    };
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
@@ -1451,16 +1478,16 @@ mod tests {
             x1: 50,
             y1: 50,
             x2: 100,
-            y2: 100
+            y2: 100,
         };
-        
+
         let target_rect = Rectangle {
             x1: 100,
             y1: 50,
             x2: 125,
-            y2: 100
+            y2: 100,
         };
-        
+
         let global = Global {
             position: None,
             rectangle_clip: Some(Clip::Contained(source_rect)),
@@ -1468,27 +1495,24 @@ mod tests {
             origin: None,
             fade: None,
             wrap_style: Resettable::Keep,
-            alignment: Default::default(),
-            animations: vec![
-                Animation {
-                    modifiers: GlobalAnimatable { clip: Some(Clip::Inverse(target_rect)) },
-                    acceleration: 1.0,
-                    interval: None,
-                }
-            ],
+            alignment: Resettable::Keep,
+            animations: vec![Animation {
+                modifiers: GlobalAnimatable {
+                    clip: Some(Clip::Inverse(target_rect)),
+                },
+                acceleration: 1.0,
+                interval: None,
+            }],
         };
-        
+
         let mut time = TimeContext {
             start: subtitle::StartTime(1000),
             duration: subtitle::Duration(3000),
             now: subtitle::StartTime(1000),
         };
-        
-        let resolution = subtitle::Resolution {
-            x: 1920,
-            y: 1080,
-        };
-        
+
+        let resolution = subtitle::Resolution { x: 1920, y: 1080 };
+
         let mut new_global = global.clone();
         bake_global_animations(time, &mut new_global, resolution);
         assert_matches!(new_global.rectangle_clip, Some(Clip::Inverse(rect)));
@@ -1501,9 +1525,65 @@ mod tests {
         assert_eq!(rect.x1, 75);
 
         time.now = subtitle::StartTime(4000);
-        let mut new_global = global.clone();
+        let mut new_global = global;
         bake_global_animations(time, &mut new_global, resolution);
         assert_matches!(new_global.rectangle_clip, Some(Clip::Inverse(rect)));
         assert_eq!(rect.x1, 100);
+    }
+
+    #[test]
+    fn global_move() {
+        let global = Global {
+            position: Some(PositionOrMove::Move(Move {
+                initial_position: Position { x: 10.0, y: 20.0 },
+                final_position: Position { x: 30.0, y: 60.0 },
+                timing: Some(MoveTiming {
+                    start_time: Milliseconds(500),
+                    end_time: Milliseconds(1000),
+                }),
+            })),
+            rectangle_clip: None,
+            vector_clip: None,
+            origin: None,
+            fade: None,
+            wrap_style: Resettable::Keep,
+            alignment: Resettable::Keep,
+            animations: vec![],
+        };
+
+        let mut time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(1000),
+        };
+
+        let mut new_global = global.clone();
+        bake_move(time, &mut new_global);
+        assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, 10.0, 0.01);
+
+        time.now = subtitle::StartTime(1500);
+        let mut new_global = global.clone();
+        bake_move(time, &mut new_global);
+        assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, 10.0, 0.01);
+
+        time.now = subtitle::StartTime(1750);
+        let mut new_global = global.clone();
+        bake_move(time, &mut new_global);
+        assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, 20.0, 0.01);
+
+        time.now = subtitle::StartTime(2000);
+        let mut new_global = global.clone();
+        bake_move(time, &mut new_global);
+        assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, 30.0, 0.01);
+
+        time.now = subtitle::StartTime(3000);
+        let mut new_global = global;
+        bake_move(time, &mut new_global);
+        assert_matches!(new_global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, 30.0, 0.01);
     }
 }
