@@ -7,3 +7,4 @@ packaging/linuxdeploy-*.AppImage
 packaging/appimagetool-*.AppImage
 .cargo/
 deps/
+test_outputs/

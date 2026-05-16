@@ -163,10 +163,8 @@ fn run_comparison<
                                 println!("   Indirect: {:?}", indirect);
 
                                 if direct.data != indirect.data {
-                                    let direct_path =
-                                        write_bitmap(count, &direct.data.bytes, "direct");
-                                    let indirect_path =
-                                        write_bitmap(count, &indirect.data.bytes, "indirect");
+                                    let direct_path = write_bitmap(count, direct, "direct");
+                                    let indirect_path = write_bitmap(count, indirect, "indirect");
                                     println!(
                                         "    -> wrote data files to {direct_path} and {indirect_path}"
                                     );
@@ -307,11 +305,27 @@ impl std::fmt::Debug for ImageData {
     }
 }
 
-fn write_bitmap(count: u64, bitmap: &[u8], suffix: &str) -> String {
+fn write_bitmap(count: u64, image: &AssImage, suffix: &str) -> String {
     use std::io::prelude::*;
 
-    let path = format!("{count:04}_{suffix}.dat");
+    let bitmap_b64 = data_encoding::BASE64.encode(&image.data.bytes);
+    let json = format!(
+        r#"{{"width":{w},"height":{h},"stride":{s},"dest_x":{dx},"dest_y":{dy},"colour_red":{cr},"colour_green":{cg},"colour_blue":{cb},"transparency":{t},"bitmap":"{bmp}"}}"#,
+        w = image.width,
+        h = image.height,
+        s = image.stride,
+        dx = image.dest_x,
+        dy = image.dest_y,
+        cr = image.colour.red,
+        cg = image.colour.green,
+        cb = image.colour.blue,
+        t = image.transparency.0,
+        bmp = bitmap_b64,
+    );
+
+    std::fs::create_dir_all("test_outputs/libass_compare").unwrap();
+    let path = format!("test_outputs/libass_compare/{count:04}_{suffix}.json");
     let mut file = std::fs::File::create(&path).unwrap();
-    file.write_all(bitmap).unwrap();
+    file.write_all(json.as_bytes()).unwrap();
     path
 }

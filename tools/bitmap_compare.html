@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bitmap Comparator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Lato', sans-serif;
+    background: #1a1a1a;
+    color: #ddd;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #252525;
+    border-bottom: 1px solid #444;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  header h1 {
+    font-size: 1rem;
+    color: #aaa;
+    white-space: nowrap;
+  }
+
+  .file-drop {
+    border: 2px dashed #555;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+    white-space: nowrap;
+  }
+  .file-drop:hover, .file-drop.dragover { border-color: #FF6600; background: #2a2a2a; }
+  .file-drop.loaded { border-color: #4a9; }
+  .file-drop input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .file-drop .label { pointer-events: none; font-size: 0.85rem; }
+  .file-drop .filename { color: #FF6600; font-size: 0.75rem; margin-top: 2px; }
+
+  .zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #aaa;
+  }
+  .zoom-control input[type=range] { width: 120px; cursor: pointer; }
+  #zoom-label { color: #FF6600; min-width: 2.5em; }
+
+  .toggle-label {
+    font-size: 0.85rem;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  main {
+    display: flex;
+    flex: 1;
+    overflow: auto;
+  }
+
+  .pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #333;
+    overflow: auto;
+  }
+  .pane:last-child { border-right: none; }
+
+  .pane-header {
+    background: #222;
+    border-bottom: 1px solid #333;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    color: #888;
+    flex-shrink: 0;
+  }
+  .pane-header .pane-title { font-size: 0.9rem; color: #ccc; margin-bottom: 4px; }
+  .pane-header .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pane-header .meta span { background: #2a2a2a; padding: 1px 6px; border-radius: 3px; }
+  .pane-header .diff-count { margin-top: 4px; }
+  .pane-header .diff-count.has-diffs { color: #FF6600; }
+  .pane-header .diff-count.no-diffs { color: #4a9; }
+
+  .colour-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #2a2a2a;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 1px solid #666;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    padding: 12px;
+    overflow: auto;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    cursor: crosshair;
+  }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    color: #444;
+    font-size: 0.9rem;
+  }
+
+  #tooltip {
+    position: fixed;
+    background: #333;
+    border: 1px solid #555;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 3px;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    white-space: pre;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bitmap Comparator</h1>
+
+  <div class="file-drop" id="dropA">
+    <input type="file" accept=".json,.dat" id="fileA">
+    <div class="label">Load File A</div>
+    <div class="filename" id="nameA"></div>
+  </div>
+
+  <div class="file-drop" id="dropB">
+    <input type="file" accept=".json,.dat" id="fileB">
+    <div class="label">Load File B</div>
+    <div class="filename" id="nameB"></div>
+  </div>
+
+  <div class="zoom-control">
+    Zoom:
+    <input type="range" id="zoom" min="1" max="32" value="8" step="1">
+    <span id="zoom-label">8x</span>
+  </div>
+
+  <label class="toggle-label">
+    <input type="checkbox" id="show-grid" checked>
+    Grid
+  </label>
+
+  <label class="toggle-label">
+    <input type="checkbox" id="show-highlights" checked>
+    Highlights
+  </label>
+
+  <label class="toggle-label">
+    <input type="checkbox" id="show-values" checked>
+    Values
+  </label>
+</header>
+
+<main>
+  <div class="pane" id="paneA">
+    <div class="pane-header">
+      <div class="pane-title">File A</div>
+      <div class="meta" id="metaA"></div>
+      <div class="diff-count" id="diffA"></div>
+    </div>
+    <div class="canvas-wrap" id="wrapA">
+      <div class="empty-state">Load a file to view</div>
+    </div>
+  </div>
+
+  <div class="pane" id="paneB">
+    <div class="pane-header">
+      <div class="pane-title">File B</div>
+      <div class="meta" id="metaB"></div>
+      <div class="diff-count" id="diffB"></div>
+    </div>
+    <div class="canvas-wrap" id="wrapB">
+      <div class="empty-state">Load a file to view</div>
+    </div>
+  </div>
+</main>
+
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+const state = { a: null, b: null };
+
+// ── File loading ───────────────────────────────────────────────────────────
+
+function b64ToUint8(b64) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+function parseFile(text) {
+  const d = JSON.parse(text);
+  const bitmap = b64ToUint8(d.bitmap);
+  return {
+    width:        d.width,
+    height:       d.height,
+    stride:       d.stride,
+    dest_x:       d.dest_x,
+    dest_y:       d.dest_y,
+    colour_red:   d.colour_red,
+    colour_green: d.colour_green,
+    colour_blue:  d.colour_blue,
+    transparency: d.transparency,
+    bitmap,
+  };
+}
+
+function pixel(img, x, y) {
+  if (x < 0 || y < 0 || x >= img.width || y >= img.height) return null;
+  return img.bitmap[y * img.stride + x];
+}
+
+// ── Diff ────────────────────────────────────────────────────────────────────
+
+// Returns a Set of "x,y" strings for all differing pixels
+function computeDiff(a, b) {
+  if (!a || !b) return new Set();
+  const W = Math.max(a.width, b.width);
+  const H = Math.max(a.height, b.height);
+  const diffs = new Set();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const va = pixel(a, x, y);
+      const vb = pixel(b, x, y);
+      if (va !== vb) diffs.add(`${x},${y}`);
+    }
+  }
+  return diffs;
+}
+
+// ── Rendering ───────────────────────────────────────────────────────────────
+
+function renderImage(canvasId, wrapId, img, diffs, zoom, showGrid, showHighlights, showValues) {
+  const wrap = document.getElementById(wrapId);
+
+  if (!img) {
+    wrap.innerHTML = '<div class="empty-state">Load a file to view</div>';
+    return;
+  }
+
+  let canvas = document.getElementById(canvasId);
+  if (!canvas) {
+    wrap.innerHTML = '';
+    canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    wrap.appendChild(canvas);
+    attachTooltip(canvas);
+  }
+  // Update stored state on the element for tooltip use
+  canvas._img   = img;
+  canvas._diffs = diffs;
+  canvas._zoom  = zoom;
+
+  const W = img.width;
+  const H = img.height;
+  canvas.width  = W * zoom;
+  canvas.height = H * zoom;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw pixels
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const v = img.bitmap[y * img.stride + x];
+      const isDiff = diffs.has(`${x},${y}`);
+
+      // Background greyscale
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+
+      // Diff border (2px orange, inset)
+      if (isDiff && showHighlights) {
+        ctx.strokeStyle = '#FF6600';
+        ctx.lineWidth = Math.max(1, Math.min(2, zoom / 4));
+        const inset = ctx.lineWidth / 2;
+        ctx.strokeRect(
+          x * zoom + inset,
+          y * zoom + inset,
+          zoom - inset * 2,
+          zoom - inset * 2
+        );
+      }
+
+      // Hex value label (zoom ≥ 16)
+      if (showValues && zoom >= 16) {
+        const hex = v.toString(16).padStart(2, '0').toUpperCase();
+        ctx.font = `${Math.max(8, zoom * 0.35)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = v < 160 ? '#fff' : '#000';
+        ctx.fillText(hex, x * zoom + zoom / 2, y * zoom + zoom / 2);
+      }
+    }
+  }
+
+  // Grid lines (zoom ≥ 4)
+  if (showGrid && zoom >= 4) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < W; x++) {
+      ctx.moveTo(x * zoom + 0.5, 0);
+      ctx.lineTo(x * zoom + 0.5, H * zoom);
+    }
+    for (let y = 1; y < H; y++) {
+      ctx.moveTo(0, y * zoom + 0.5);
+      ctx.lineTo(W * zoom, y * zoom + 0.5);
+    }
+    ctx.stroke();
+  }
+}
+
+// ── Tooltip ─────────────────────────────────────────────────────────────────
+
+const tooltip = document.getElementById('tooltip');
+
+function attachTooltip(canvas) {
+  canvas.addEventListener('mousemove', (e) => {
+    const img   = canvas._img;
+    const diffs = canvas._diffs;
+    const zoom  = canvas._zoom;
+    if (!img) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor((e.clientX - rect.left) / zoom);
+    const py = Math.floor((e.clientY - rect.top)  / zoom);
+    if (px < 0 || py < 0 || px >= img.width || py >= img.height) {
+      tooltip.style.display = 'none';
+      return;
+    }
+
+    const v = img.bitmap[py * img.stride + px];
+    const isDiff = diffs.has(`${px},${py}`);
+    tooltip.textContent =
+      `(${px}, ${py})\nval: ${v} (0x${v.toString(16).padStart(2,'0').toUpperCase()})` +
+      (isDiff ? '\n▶ DIFFERS' : '');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top  = (e.clientY + 8)  + 'px';
+  });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+}
+
+// ── Update all ───────────────────────────────────────────────────────────────
+
+function updateAll() {
+  const zoom           = parseInt(document.getElementById('zoom').value, 10);
+  const showGrid       = document.getElementById('show-grid').checked;
+  const showHighlights = document.getElementById('show-highlights').checked;
+  const showValues     = document.getElementById('show-values').checked;
+  const diffs          = computeDiff(state.a, state.b);
+
+  renderImage('canvasA', 'wrapA', state.a, diffs, zoom, showGrid, showHighlights, showValues);
+  renderImage('canvasB', 'wrapB', state.b, diffs, zoom, showGrid, showHighlights, showValues);
+
+  updateDiffCount('diffA', state.a, diffs);
+  updateDiffCount('diffB', state.b, diffs);
+}
+
+function updateMeta(id, img) {
+  const el = document.getElementById(id);
+  if (!img) { el.innerHTML = ''; return; }
+  const r = img.colour_red, g = img.colour_green, b = img.colour_blue;
+  el.innerHTML =
+    `<span>w: ${img.width}</span>` +
+    `<span>h: ${img.height}</span>` +
+    `<span>stride: ${img.stride}</span>` +
+    `<span>dest: (${img.dest_x}, ${img.dest_y})</span>` +
+    `<span class="colour-chip">` +
+      `<span class="colour-swatch" style="background:rgb(${r},${g},${b})"></span>` +
+      `rgb(${r},${g},${b})` +
+    `</span>` +
+    `<span>transparency: ${img.transparency}</span>`;
+}
+
+function updateDiffCount(id, img, diffs) {
+  const el = document.getElementById(id);
+  if (!state.a || !state.b) { el.textContent = ''; el.className = 'diff-count'; return; }
+  const n = diffs.size;
+  el.textContent = n === 0 ? 'Identical' : `${n} differing pixel${n === 1 ? '' : 's'}`;
+  el.className   = 'diff-count ' + (n === 0 ? 'no-diffs' : 'has-diffs');
+}
+
+// ── File input wiring ────────────────────────────────────────────────────────
+
+function loadFile(which, file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      state[which] = parseFile(e.target.result);
+    } catch (err) {
+      alert(`Failed to parse file: ${err.message}`);
+      return;
+    }
+    const metaId = which === 'a' ? 'metaA' : 'metaB';
+    updateMeta(metaId, state[which]);
+
+    const nameId = which === 'a' ? 'nameA' : 'nameB';
+    document.getElementById(nameId).textContent = file.name;
+
+    const dropId = which === 'a' ? 'dropA' : 'dropB';
+    document.getElementById(dropId).classList.add('loaded');
+
+    updateAll();
+  };
+  reader.readAsText(file);
+}
+
+function wireFileInput(inputId, which) {
+  const input = document.getElementById(inputId);
+  input.addEventListener('change', () => {
+    if (input.files[0]) loadFile(which, input.files[0]);
+  });
+}
+
+function wireDrop(dropId, which) {
+  const el = document.getElementById(dropId);
+  el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('dragover'); });
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(which, file);
+  });
+}
+
+wireFileInput('fileA', 'a');
+wireFileInput('fileB', 'b');
+wireDrop('dropA', 'a');
+wireDrop('dropB', 'b');
+
+document.getElementById('zoom').addEventListener('input', (e) => {
+  document.getElementById('zoom-label').textContent = e.target.value + 'x';
+  updateAll();
+});
+
+document.getElementById('show-grid').addEventListener('change', updateAll);
+document.getElementById('show-highlights').addEventListener('change', updateAll);
+document.getElementById('show-values').addEventListener('change', updateAll);
+</script>
+</body>
+</html>
