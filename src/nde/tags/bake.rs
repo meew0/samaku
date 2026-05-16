@@ -387,7 +387,7 @@ impl RenderContext {
             animate_2d!(border, style.new_style.border_width);
             animate_2d!(shadow, style.new_style.shadow_distance);
 
-            animate_single!(soften, 0);
+            animate_soften(&mut self.soften, animation.modifiers.soften, 0, power);
             animate_single!(gaussian_blur, 0.0);
 
             animate_font_size(
@@ -710,6 +710,22 @@ fn animate_single<T>(
         Resettable::Reset => *original_value = current_style_value,
         Resettable::Override(override_value) => {
             *original_value = original_value.lerp(override_value, power);
+        }
+    }
+}
+
+fn animate_soften(
+    original_value: &mut i32,
+    target_value: Resettable<i32>,
+    current_style_value: i32,
+    power: f64,
+) {
+    match target_value {
+        Resettable::Keep => {}
+        Resettable::Reset => *original_value = current_style_value,
+        Resettable::Override(override_value) => {
+            let new_soften = f64::from(*original_value).lerp(f64::from(override_value), power);
+            *original_value = ass_dtoi32(new_soften + 0.5);
         }
     }
 }
