@@ -1345,7 +1345,7 @@ impl FontSize {
                 emit::simple_tag_resettable(sink, "fs", Resettable::Reset::<&EmitFontSize>)
             }
             FontSize::Set(font_size) => {
-                let emit_value = EmitFontSize::Set(font_size.max(0.0));
+                let emit_value = EmitFontSize::Set(font_size);
                 emit::simple_tag(sink, "fs", Some(&emit_value))
             }
         }?;
@@ -1417,7 +1417,13 @@ impl emit::Value for EmitFontSize {
         W: std::fmt::Write,
     {
         match *self {
-            Self::Set(font_size) => font_size.emit_value(sink),
+            Self::Set(font_size) => {
+                // First emit a space so values unambiguously get parsed as `Set`,
+                // rather than `Delta`. This is important if the value is negative
+                // (`\fs-10` is different from `\fs -10`)
+                sink.write_char(' ')?;
+                font_size.emit_value(sink)
+            }
             Self::Increase(delta) => {
                 sink.write_char('+')?;
                 delta.emit_value(sink)
@@ -2316,9 +2322,9 @@ mod tests {
         assert_emits!(FontSize::Reset(FontSizeDelta::ZERO), "\\fs");
         assert_emits!(FontSize::Reset(FontSizeDelta(1.0)), "\\fs\\fs+1");
         assert_emits!(FontSize::Reset(FontSizeDelta(-1.0)), "\\fs\\fs-1");
-        assert_emits!(FontSize::Set(1.0), "\\fs1");
-        assert_emits!(FontSize::Set(0.0), "\\fs0");
-        assert_emits!(FontSize::Set(-1.0), "\\fs0");
+        assert_emits!(FontSize::Set(1.0), "\\fs 1");
+        assert_emits!(FontSize::Set(0.0), "\\fs 0");
+        assert_emits!(FontSize::Set(-1.0), "\\fs -1");
 
         Ok(())
     }

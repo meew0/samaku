@@ -315,18 +315,7 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
                 // whereas `\fs +10` sets it to 10.
                 match str_arg.chars().next().unwrap() {
                     '+' | '-' => FontSize::Delta(FontSizeDelta(parsed)),
-                    _ => {
-                        // libass has the additional behaviour that if a font size ever becomes 0
-                        // or negative, through e.g. `\fs -10` or `\fs10\fs-20`, it gets reset to
-                        // its default value.
-                        // We can do this in the first case, where an absolute non-positive value
-                        // is specified, but not in the second case.
-                        if parsed <= 0.0 {
-                            FontSize::Reset(FontSizeDelta::ZERO)
-                        } else {
-                            FontSize::Set(parsed)
-                        }
-                    }
+                    _ => FontSize::Set(parsed),
                 }
             }
             None => FontSize::Reset(FontSizeDelta::ZERO),
@@ -1839,6 +1828,14 @@ mod tests {
             block.new_local.animations[0].modifiers.shadow.x,
             Resettable::Override(_)
         );
+    }
+
+    #[test]
+    fn animation_fs_space() {
+        let local = test_single_local("t(1,2,3,\\fs -120)");
+        assert_eq!(local.animations.len(), 1);
+        let anim = &local.animations[0];
+        assert_eq!(anim.modifiers.font_size, FontSize::Set(-120.0));
     }
 
     #[test]
