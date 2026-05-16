@@ -871,19 +871,27 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     let mut accu = RenderContext::default();
     accu.reset(style_context.original_style);
 
+    let mut prev_drawing = false;
+
     for span in spans {
         match *span {
             Span::Tags(ref local, ref text) => {
                 let mut local_original = Some(local.clone());
                 let mut local_copy = local.clone();
 
-                let respan_state = bake_local(
+                let mut respan_state = bake_local(
                     time,
                     style_context,
                     &mut accu,
                     &mut local_copy,
                     global_overrides_option,
                 );
+
+                // If a drawing ends, this always creates a new run
+                if prev_drawing {
+                    respan_state = RespanState::StartNewRun;
+                    prev_drawing = false;
+                }
 
                 let mut respan_state_opt = Some(respan_state);
                 let mut add_newline = false;
@@ -911,17 +919,8 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                 }
             }
             Span::Drawing(ref local, ref drawing) => {
-                let mut local_copy = local.clone();
-                let respan_state = bake_local(
-                    time,
-                    style_context,
-                    &mut accu,
-                    &mut local_copy,
-                    global_overrides_option,
-                );
-
                 new_spans.push(Span::Drawing(local.clone(), drawing.clone()));
-                respan_states.push(respan_state);
+                respan_states.push(RespanState::StartNewRun); // A drawing always creates a new run
             }
             Span::Reset => {
                 style_context.new_style = style_context.original_style;
