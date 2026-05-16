@@ -39,6 +39,8 @@ pub struct StyleContext<'a> {
 /// Limitations:
 /// - Karaoke sweeps are not handled (`\K` / `\kf` tags; `KaraokeEffect::FillSweep`)
 /// - The `\ko` / `KaraokeEffect:BorderInstant` karaoke effect is also not handled
+/// - Some edge cases when starting a new run within a karaoke syl are not handled (for instance, automatic line breaks)
+/// - Changing `BorderStyle` within a line is not supported (as this cannot even be specified with override tags)
 /// - Effects (as in, marquee etc.) are not handled
 ///
 /// The resulting spans are not yet simplified.
@@ -47,7 +49,7 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
     event_style: &'a subtitle::Style,
     style_lookup: &'a F,
     global_tags: &mut Global,
-    spans: &mut [Span],
+    spans: &mut Vec<Span>,
     playback_resolution: subtitle::Resolution,
     global_overrides_option: Option<&Local>,
 ) {
@@ -67,10 +69,23 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
     bake_global_animations(time, global_tags, playback_resolution);
     bake_move(time, global_tags);
 
-    let karaoke = bake_karaoke(spans);
+    let karaoke_opt = has_karaoke(spans).then(|| {
+        let (split_spans, respan_states) = respan(
+            time,
+            style_context,
+            style_lookup,
+            spans,
+            global_overrides_option,
+        );
+        *spans = split_spans;
+
+        bake_karaoke(spans, &respan_states)
+    });
 
     for (i, span) in spans.iter_mut().enumerate() {
-        accu.apply_karaoke(time, karaoke[i]);
+        if let Some(karaoke) = karaoke_opt.as_ref() {
+            accu.apply_karaoke(time, karaoke[i]);
+        }
 
         match *span {
             Span::Tags(ref mut local, _) | Span::Drawing(ref mut local, _) => {
@@ -84,12 +99,14 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
             }
             Span::Reset => {
                 style_context.new_style = style_context.original_style;
-                let local = bake_reset(time, style_context, &mut accu, global_overrides_option);
+                let (local, _) =
+                    bake_reset(time, style_context, &mut accu, global_overrides_option);
                 *span = Span::Tags(local, String::new());
             }
             Span::ResetToStyle(ref style_name) => {
                 style_context.new_style = style_lookup(style_name);
-                let local = bake_reset(time, style_context, &mut accu, global_overrides_option);
+                let (local, _) =
+                    bake_reset(time, style_context, &mut accu, global_overrides_option);
                 *span = Span::Tags(local, String::new());
             }
         }
@@ -102,7 +119,7 @@ fn bake_local(
     accu: &mut RenderContext,
     local: &mut Local,
     global_overrides_option: Option<&Local>,
-) {
+) -> RespanState {
     // First, we make a copy of the original render context, so we can compare the
     // changes that were made by the local tags.
     let original_accu = accu.clone();
@@ -124,6 +141,8 @@ fn bake_local(
     // Finally, we take the difference between the changed render context and the
     // original one, and convert this difference into new override tags.
     accu.compact_all(local, &original_accu, style);
+
+    accu.starts_new_run(&original_accu)
 }
 
 fn bake_reset(
@@ -131,7 +150,7 @@ fn bake_reset(
     style: StyleContext,
     accu: &mut RenderContext,
     global_overrides_option: Option<&Local>,
-) -> Local {
+) -> (Local, RespanState) {
     // This method is similar to `bake_local`, except we reset the render context
     // to `new_style`.
     let original_accu = accu.clone();
@@ -145,7 +164,7 @@ fn bake_reset(
 
     let mut local = Local::empty();
     accu.compact_all(&mut local, &original_accu, style);
-    local
+    (local, accu.starts_new_run(&original_accu))
 }
 
 /// Accumulates style info/overrides over time.
@@ -545,6 +564,40 @@ impl RenderContext {
             }
         }
     }
+
+    /// Determine whether the changes made in this render context
+    /// compared to the given previous one would start a new run in libass.
+    /// Roughly corresponds to libass' `split_style_runs`.
+    fn starts_new_run(&self, previous: &RenderContext) -> RespanState {
+        // Missing: font->desc.vertical; border_style
+        #[expect(clippy::float_cmp, reason = "to exactly match libass")]
+        if self.font_name != previous.font_name
+            || self.font_size != previous.font_size
+            || self.primary_colour != previous.primary_colour
+            || self.secondary_colour != previous.secondary_colour
+            || self.border_colour != previous.border_colour
+            || self.shadow_colour != previous.shadow_colour
+            || self.primary_transparency != previous.primary_transparency
+            || self.secondary_transparency != previous.secondary_transparency
+            || self.border_transparency != previous.border_transparency
+            || self.shadow_transparency != previous.shadow_transparency
+            || self.soften != previous.soften
+            || self.gaussian_blur != previous.gaussian_blur
+            || self.shadow != previous.shadow
+            || self.text_rotation != previous.text_rotation
+            || self.text_shear != previous.text_shear
+            || self.border != previous.border
+            || self.letter_spacing != previous.letter_spacing
+            || self.italic != previous.italic
+            || self.font_weight != previous.font_weight
+            || self.underline != previous.underline
+            || self.strike_out != previous.strike_out
+        {
+            RespanState::StartNewRun
+        } else {
+            RespanState::Default
+        }
+    }
 }
 
 impl Default for RenderContext {
@@ -725,6 +778,117 @@ fn calculate_power(
     }
 }
 
+fn has_karaoke(spans: &[Span]) -> bool {
+    for span in spans {
+        match *span {
+            Span::Tags(ref local, _) | Span::Drawing(ref local, _)
+                if local.karaoke.effect.is_some() =>
+            {
+                return true;
+            }
+
+            _ => {}
+        }
+    }
+
+    false
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+enum RespanState {
+    #[default]
+    Default,
+
+    /// Force start a new run even if the karaoke duration is zero.
+    StartNewRun,
+}
+
+/// Preprocess and split spans for correct karaoke purposes.
+///
+/// In libass, each new run (`starts_new_run`) automatically becomes a new karaoke syl.
+/// Our karaoke logic, however, assumes karaoke syls are only those with nonzero duration.
+/// So we need to split up spans containing multiple runs (i.e. those with linebreaks)
+/// and mark spans that start a new run (due to style changes) even without a specified
+/// karaoke duration.
+fn respan<'a, F: Fn(&str) -> &'a subtitle::Style>(
+    time: TimeContext,
+    mut style_context: StyleContext<'a>,
+    style_lookup: &'a F,
+    spans: &[Span],
+    global_overrides_option: Option<&Local>,
+) -> (Vec<Span>, Vec<RespanState>) {
+    let mut new_spans = Vec::with_capacity(spans.len());
+    let mut respan_states = Vec::with_capacity(spans.len());
+
+    // Essentially we just run a stripped-down version of the baking process
+    // in order to be able to detect style changes.
+    let mut accu = RenderContext::default();
+    accu.reset(style_context.original_style);
+
+    for span in spans {
+        match *span {
+            Span::Tags(ref local, ref text) => {
+                let mut local_original = Some(local.clone());
+                let mut local_copy = local.clone();
+
+                let respan_state = bake_local(
+                    time,
+                    style_context,
+                    &mut accu,
+                    &mut local_copy,
+                    global_overrides_option,
+                );
+
+                let mut respan_state_opt = Some(respan_state);
+
+                // This does not match libass behaviour, as libass can use libunibreak to break at
+                // exotic newline characters.
+                // Also, libass also starts a new run for automatically broken lines...
+                for run in text.split("\\N") {
+                    // Use the original tags and the determined respan state for the first span.
+                    // For all subsequent newly created spans, use empty tags and force-start a new run.
+
+                    // TODO: possible small optimization: a karaoke effect can only ever
+                    // apply to the second span after it is specified, not any subsequent ones.
+                    // So we might not need to make a new span for *every* new line.
+                    let new_local = local_original.take().unwrap_or_default();
+                    new_spans.push(Span::Tags(new_local, run.to_owned()));
+                    respan_states.push(respan_state_opt.take().unwrap_or(RespanState::StartNewRun));
+                }
+            }
+            Span::Drawing(ref local, ref drawing) => {
+                let mut local_copy = local.clone();
+                let respan_state = bake_local(
+                    time,
+                    style_context,
+                    &mut accu,
+                    &mut local_copy,
+                    global_overrides_option,
+                );
+
+                new_spans.push(Span::Drawing(local.clone(), drawing.clone()));
+                respan_states.push(respan_state);
+            }
+            Span::Reset => {
+                style_context.new_style = style_context.original_style;
+                let (_, respan_state) =
+                    bake_reset(time, style_context, &mut accu, global_overrides_option);
+                new_spans.push(Span::Reset);
+                respan_states.push(respan_state);
+            }
+            Span::ResetToStyle(ref style_name) => {
+                style_context.new_style = style_lookup(style_name);
+                let (_, respan_state) =
+                    bake_reset(time, style_context, &mut accu, global_overrides_option);
+                new_spans.push(Span::ResetToStyle(style_name.to_owned()));
+                respan_states.push(respan_state);
+            }
+        }
+    }
+
+    (new_spans, respan_states)
+}
+
 /// Convert spans potentially containing karaoke elements into a vec of
 /// `(transition_time, effect)` pairs, one per span.
 ///
@@ -776,7 +940,10 @@ fn calculate_power(
 /// A span with `effect_timing == 0` shares its run with the previous boundary glyph,
 /// so the returned baked value is the same as the previous span's — the span
 /// "appears" to transition at the same time even though the timeline advances by `skip`.
-fn bake_karaoke(spans: &[Span]) -> Vec<(subtitle::Duration, Option<KaraokeEffect>)> {
+fn bake_karaoke(
+    spans: &[Span],
+    respan_states: &[RespanState],
+) -> Vec<(subtitle::Duration, Option<KaraokeEffect>)> {
     // Running karaoke timeline position in milliseconds. Corresponds to `timing` in
     // `ass_process_karaoke_effects` (there it's `int32_t`, but we use `i64` to avoid
     // worrying about overflow in intermediate calculations).
@@ -795,7 +962,8 @@ fn bake_karaoke(spans: &[Span]) -> Vec<(subtitle::Duration, Option<KaraokeEffect
 
     spans
         .iter()
-        .map(|span| {
+        .zip(respan_states)
+        .map(|(span, respan_state)| {
             let karaoke = match *span {
                 Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
                 // \r does not touch karaoke state; treat as a zero-duration no-op.
@@ -849,10 +1017,12 @@ fn bake_karaoke(spans: &[Span]) -> Vec<(subtitle::Duration, Option<KaraokeEffect
 
             // A span with duration == 0 does not create its own run boundary in libass
             // (because `effect_timing == 0` is the primary starts_new_run trigger).
+            // !! UNLESS we need to force start a new run due to the respan state !!
+
             // Its glyphs end up inside the previous run and share its transition time.
             // We model this by returning last_baked unchanged; the `skip` still advanced
             // `timing` so subsequent spans are positioned correctly.
-            if duration != 0 {
+            if duration != 0 || matches!(respan_state, RespanState::StartNewRun) {
                 last_baked = subtitle::Duration(tm_start);
             }
             (last_baked, active_effect_type)
@@ -1276,7 +1446,9 @@ mod tests {
             assert_eq!(specified_tags.karaoke, parsed_tags.karaoke);
         }
 
-        let baked = bake_karaoke(&spans);
+        let respan_states: Vec<RespanState> =
+            std::iter::repeat_n(RespanState::Default, spans.len()).collect();
+        let baked = bake_karaoke(&spans, &respan_states);
 
         assert_eq!(baked[0], (subtitle::Duration(0), None));
         assert_eq!(
@@ -1318,6 +1490,90 @@ mod tests {
         assert_eq!(
             baked[10],
             (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+        );
+    }
+
+    #[test]
+    fn karaoke_local_mix() {
+        let (_, spans) = parse("{\\k20}a{\\k20}b{}c{\\k20}d\\Ne{\\k20}f{\\3c&HFFFF00&}g");
+        assert_eq!(spans.len(), 6);
+
+        let time = TimeContext {
+            start: subtitle::StartTime(1000),
+            duration: subtitle::Duration(3000),
+            now: subtitle::StartTime(2000),
+        };
+
+        let event_style = subtitle::Style::default();
+
+        let style_context = StyleContext {
+            original_style: &event_style,
+            new_style: &event_style,
+        };
+
+        let style_lookup = |_name: &str| panic!("the style lookup should not have been called");
+
+        let (new_spans, respan_state) = respan(time, style_context, &style_lookup, &spans, None);
+        assert_eq!(new_spans.len(), 7);
+        assert_eq!(respan_state.len(), 7);
+
+        assert_matches!(&new_spans[0], &Span::Tags(_, ref text));
+        assert_eq!(text, "a");
+        assert_matches!(&respan_state[0], &RespanState::Default);
+
+        assert_matches!(&new_spans[1], &Span::Tags(_, ref text));
+        assert_eq!(text, "b");
+        assert_matches!(&respan_state[1], &RespanState::Default);
+
+        assert_matches!(&new_spans[2], &Span::Tags(_, ref text));
+        assert_eq!(text, "c");
+        assert_matches!(&respan_state[2], &RespanState::Default);
+
+        assert_matches!(&new_spans[3], &Span::Tags(_, ref text));
+        assert_eq!(text, "d");
+        assert_matches!(&respan_state[3], &RespanState::Default);
+
+        assert_matches!(&new_spans[4], &Span::Tags(_, ref text));
+        assert_eq!(text, "e");
+        assert_matches!(&respan_state[4], &RespanState::StartNewRun);
+
+        assert_matches!(&new_spans[5], &Span::Tags(_, ref text));
+        assert_eq!(text, "f");
+        assert_matches!(&respan_state[5], &RespanState::Default);
+
+        assert_matches!(&new_spans[6], &Span::Tags(_, ref text));
+        assert_eq!(text, "g");
+        assert_matches!(&respan_state[6], &RespanState::StartNewRun);
+
+        let baked = bake_karaoke(&new_spans, &respan_state);
+
+        assert_eq!(
+            baked[0],
+            (subtitle::Duration(0), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[1],
+            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[2],
+            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[3],
+            (subtitle::Duration(400), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[4],
+            (subtitle::Duration(600), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[5],
+            (subtitle::Duration(600), Some(KaraokeEffect::FillInstant))
+        );
+        assert_eq!(
+            baked[6],
+            (subtitle::Duration(800), Some(KaraokeEffect::FillInstant))
         );
     }
 
@@ -1495,7 +1751,7 @@ mod tests {
         };
         let mut accu = RenderContext::default();
         accu.reset(style.original_style);
-        let local = bake_reset(time, style, &mut accu, None);
+        let (local, _) = bake_reset(time, style, &mut accu, None);
         assert_eq!(local.underline, Resettable::Keep,);
         assert_matches!(
             local.border_transparency,
@@ -1668,7 +1924,8 @@ mod tests {
             Some(&global_overrides),
         );
 
-        assert_eq!(style_lookup_called_counter.take(), 1);
+        // once in respan, once in bake itself
+        assert_eq!(style_lookup_called_counter.take(), 2);
 
         // Clip
         assert_matches!(
@@ -1689,27 +1946,23 @@ mod tests {
         assert_matches!(&spans[1], &Span::Tags(ref local_1, ref text_1));
         assert_matches!(&spans[2], &Span::Tags(ref local_2, ref text_2));
         assert_matches!(&spans[3], &Span::Tags(ref local_3, ref text_3));
+        assert_matches!(&spans[4], &Span::Tags(ref local_4, ref text_4));
         assert_eq!(text_0, "Sphinx ");
         assert_eq!(text_1, "of ");
         assert_eq!(text_2, "");
-        assert_eq!(text_3, "black\\Nquartz, judge\\Nmy vow");
+        assert_eq!(text_3, "black");
+        assert_eq!(text_4, "quartz, judge");
 
         // Karaoke
         assert_matches!(local_0.primary_colour, Resettable::Keep);
         assert_matches!(local_1.primary_colour, Resettable::Keep);
         assert_matches!(local_2.primary_colour, Resettable::Keep);
-        /*assert_matches!(
-            local_3.primary_colour,
-            Resettable::Override(local_3_primary_colour)
+        assert_matches!(local_3.primary_colour, Resettable::Keep);
+        assert_matches!(
+            local_4.primary_colour,
+            Resettable::Override(local_4_primary_colour)
         );
-        assert_eq!(
-            local_3_primary_colour,
-            Colour {
-                red: 255,
-                green: 0,
-                blue: 0
-            }
-        );*/
+        assert_eq!(local_4_primary_colour, event_style.secondary_colour);
 
         // Fade
         assert_matches!(global.fade, None);
