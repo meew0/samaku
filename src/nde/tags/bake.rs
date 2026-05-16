@@ -864,6 +864,7 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                 );
 
                 let mut respan_state_opt = Some(respan_state);
+                let mut add_newline = false;
 
                 // This does not match libass behaviour, as libass can use libunibreak to break at
                 // exotic newline characters.
@@ -876,8 +877,15 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                     // apply to the second span after it is specified, not any subsequent ones.
                     // So we might not need to make a new span for *every* new line.
                     let new_local = local_original.take().unwrap_or_default();
-                    new_spans.push(Span::Tags(new_local, run.to_owned()));
+                    let new_run = if add_newline {
+                        format!("\\N{run}")
+                    } else {
+                        run.to_owned()
+                    };
+                    new_spans.push(Span::Tags(new_local, new_run));
                     respan_states.push(respan_state_opt.take().unwrap_or(RespanState::StartNewRun));
+
+                    add_newline = true;
                 }
             }
             Span::Drawing(ref local, ref drawing) => {
@@ -1569,7 +1577,7 @@ mod tests {
         assert_matches!(&respan_state[3], &RespanState::Default);
 
         assert_matches!(&new_spans[4], &Span::Tags(_, ref text));
-        assert_eq!(text, "e");
+        assert_eq!(text, "\\Ne");
         assert_matches!(&respan_state[4], &RespanState::StartNewRun);
 
         assert_matches!(&new_spans[5], &Span::Tags(_, ref text));
@@ -1986,7 +1994,7 @@ mod tests {
         assert_eq!(text_1, "of ");
         assert_eq!(text_2, "");
         assert_eq!(text_3, "black");
-        assert_eq!(text_4, "quartz, judge");
+        assert_eq!(text_4, "\\Nquartz, judge");
 
         // Karaoke
         assert_matches!(local_0.primary_colour, Resettable::Keep);
