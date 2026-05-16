@@ -13,7 +13,7 @@ impl Lerp for i32 {
         reason = "not avoidable in this case"
     )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as i32
+        f64::from(self).lerp(f64::from(other), power) as i32
     }
 
     fn out(self) -> Self::Output {
@@ -33,7 +33,7 @@ impl Lerp for u32 {
         reason = "not avoidable in this case"
     )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u32
+        f64::from(self).lerp(f64::from(other), power) as u32
     }
 
     fn out(self) -> Self::Output {
@@ -53,7 +53,7 @@ impl Lerp for u8 {
         reason = "not avoidable in this case"
     )]
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        f64::from(self).mul_add(1.0 - power, f64::from(other) * power) as u8
+        f64::from(self).lerp(f64::from(other), power) as u8
     }
 
     fn out(self) -> Self::Output {
@@ -65,7 +65,12 @@ impl Lerp for f64 {
     type Output = f64;
 
     fn lerp(self, other: Self, power: f64) -> Self::Output {
-        self.mul_add(1.0 - power, other * power)
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "we need the rounding error to exactly match libass behaviour"
+        )]
+        let result = (1.0 - power) * self + other * power;
+        result
     }
 
     fn out(self) -> Self::Output {
