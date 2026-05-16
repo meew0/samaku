@@ -32,7 +32,7 @@ fn parse() {
     media::subtitle::set_libass_test_callback();
 
     for &(file_name, file_content) in ASS_FILES {
-        run_comparison(file_name, file_content, parse_round_trip)
+        run_comparison(file_name, file_content, "parse", parse_round_trip)
     }
 }
 
@@ -42,7 +42,7 @@ fn bake() {
     media::subtitle::set_libass_test_callback();
 
     for &(file_name, file_content) in ASS_FILES {
-        run_comparison(file_name, file_content, bake_round_trip)
+        run_comparison(file_name, file_content, "bake", bake_round_trip)
     }
 }
 
@@ -56,6 +56,7 @@ fn run_comparison<
 >(
     file_name: &str,
     file_content: &str,
+    test_name: &str,
     round_trip_fn: F,
 ) {
     let opaque_track = media::subtitle::OpaqueTrack::parse(file_content);
@@ -72,7 +73,11 @@ fn run_comparison<
 
     for event_index in track.iter_all_in_order() {
         let event = &track[event_index];
-        let should_fail = event.effect == "should fail";
+        let should_fail = event
+            .effect
+            .strip_prefix("fail:")
+            .and_then(|s| s.split(',').find(|name| *name == test_name))
+            .is_some();
         let mut failed_once = false;
 
         let direct = subtitle::Event {
@@ -169,8 +174,9 @@ fn run_comparison<
                                 }
                             }
                         }
-                        break 'inner;
                     }
+
+                    break 'inner;
                 }
             }
         }

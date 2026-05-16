@@ -16,7 +16,7 @@ Last Style Storage: Default
 Video File: ?dummy:24:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
 Video Zoom Percent: 0.750000
-Scroll Position: 19
+Scroll Position: 10
 Active Line: 27
 Video Position: 1632
 
@@ -49,11 +49,11 @@ Dialogue: 0,0:00:46.00,0:00:48.00,Default,,0,0,0,,{\clip(m 70.8 72.8 l 49.33 41.
 Dialogue: 0,0:00:48.00,0:00:50.00,Default,,0,0,0,,{\clip(m 70.8 72.8 l 49.33 41.73 73.06 88.93 27.47 60.27 78.4 102.53 110.53 67.46 90.13 79.87 78.93 87.33)\t(\clip(75,50,125,100))\clip(90,50,125,100)}abcdefghijkl
 Dialogue: 0,0:00:50.00,0:00:52.00,Default,,0,0,0,,{\fade(50,100,150,250,750,1250,1750))\clip(75,25,125,75)\move(80,80,100,100)\t(\clip(50,0,100,50))\k25}Sphinx {\t(500,1500,0.5,\3c&H00FFFF&)\k25}of {\rStyle 2\1c&HFFFF00&\4c&HFF00FF&\k25}black\Nquartz, judge\Nmy vow
 Dialogue: 0,0:00:52.00,0:00:54.00,Default,,0,0,0,,{\k20}a{\k20}b{}c{\k20}d\Ne{\k20}f{\3c&HFFFF00&}g
-Dialogue: 0,0:00:54.00,0:00:56.00,Default,,0,0,0,should fail,{\k20\pos(116.8,75.07)}Sphinx of black quartz, judge my vow.
+Dialogue: 0,0:00:54.00,0:00:56.00,Default,,0,0,0,fail:bake,{\k20\pos(116.8,75.07)}Sphinx of black quartz, judge my vow.
 Dialogue: 0,0:00:56.00,0:00:58.00,Default,,0,0,0,,{\k20}a{\1c&HFF0000&}a{\k20}b{\r}b{\k20}c{\r}c
 Dialogue: 0,0:00:58.00,0:01:00.00,Default,,0,0,0,,{\k100}a{\1c&HFF0000&\t(0,500,\1c&HFFFFFF&)}b
 Dialogue: 0,0:01:00.00,0:01:02.00,Default,,0,0,0,,{\k20}a{\b1}a{\k20}b{\i1}b{\k20}c{\u1}c{\k20}d{\s1}d
 Dialogue: 0,0:01:02.00,0:01:04.00,Default,,0,0,0,,{\kt20}a\Nb
 Dialogue: 0,0:01:04.00,0:01:06.00,Default,,0,0,0,,{\fade(50,100,150,250,750,1250,1750))\clip(75,25,125,75)\move(80,80,100,100)\t(\clip(50,0,100,50))\k25}Sphinx {\t(500,1500,0.5,\3c&H00FFFF&)\k25}of {\rTest style\1c&HFFFF00&\4c&HFF00FF&\k25}black\Nquartz, judge\Nmy vow
-Dialogue: 0,0:01:06.00,0:01:08.00,Default,,0,0,0,should fail,Test{\rborderbox}asdfasdf
-Dialogue: 0,0:01:08.00,0:01:13.00,Default,,0,0,0,should fail,{\pos(88.93,37.33)}a{\k20}a{\ko30}a{\k40\k0}a{\k50}a{\k300}a{\kt200}a{\k50}a{\k0}a{\k-50}a{\k-100}a
+Dialogue: 0,0:01:06.00,0:01:08.00,Default,,0,0,0,fail:bake,Test{\rborderbox}asdfasdf
+Dialogue: 0,0:01:08.00,0:01:13.00,Default,,0,0,0,fail:bake,{\pos(88.93,37.33)}a{\k20}a{\ko30}a{\k40\k0}a{\k50}a{\k300}a{\kt200}a{\k50}a{\k0}a{\k-50}a{\k-100}a
