@@ -65,7 +65,18 @@ pub fn bake<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     accu.fade_value = global_tags
         .fade
         .map_or(Transparency(0), |fade| bake_fade(time, fade));
-    global_tags.fade = None;
+
+    // https://github.com/libass/libass/blob/c425f6d7ec9ca7e5dfa3f8bbed29a6ddbf39a596/libass/ass_render.c#L2511
+    // libass treats lines with nonzero fade slightly differently from ones without,
+    // even if the transparency value would be the same.
+    // So we need to assign a "force wrapped" fade to the line to achieve the same effect.
+    // The difference in the final image is imperceptibly small but it exists.
+    global_tags.fade = accu.fade_value.wrapped().then_some(FORCE_WRAP_FADE);
+
+    // Similar story for this one:
+    // https://github.com/libass/libass/blob/c425f6d7ec9ca7e5dfa3f8bbed29a6ddbf39a596/libass/ass_render.c#L2502
+    // However we do not take this into account since there is no difference whatsoever in the composited images
+    // (since they are fully transparent anyway)
 
     bake_global_animations(time, global_tags, playback_resolution);
     bake_move(time, global_tags);
@@ -530,6 +541,16 @@ impl RenderContext {
             &original_accu.text_transparency_after_fade,
             &style.original_style.primary_transparency,
         );
+
+        // We need to add the secondary transparency as well,
+        // since libass uses it for determining border fill state
+        // https://github.com/libass/libass/blob/c425f6d7ec9ca7e5dfa3f8bbed29a6ddbf39a596/libass/ass_render.c#L2510
+        local.secondary_transparency = compact(
+            &self.secondary_transparency,
+            &original_accu.secondary_transparency,
+            &style.original_style.secondary_transparency,
+        );
+
         self.border_transparency_after_fade = self.border_transparency;
         apply_fade(&mut self.border_transparency_after_fade, self.fade_value);
         local.border_transparency = compact(
@@ -880,7 +901,8 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                 respan_states.push(respan_state);
             }
             Span::ResetToStyle(ref style_name) => {
-                style_context.new_style = style_lookup(style_name).unwrap_or(style_context.original_style);
+                style_context.new_style =
+                    style_lookup(style_name).unwrap_or(style_context.original_style);
                 let (_, respan_state) =
                     bake_reset(time, style_context, &mut accu, global_overrides_option);
                 new_spans.push(Span::ResetToStyle(style_name.to_owned()));
@@ -1177,6 +1199,16 @@ fn mult_alpha(first: u32, second: u32) -> u32 {
         + u64::from(second);
     result_u64 as u32
 }
+
+const FORCE_WRAP_FADE: Fade = Fade::Complex(ComplexFade {
+    transparency_before: DecimalTransparency(-256),
+    transparency_main: DecimalTransparency(-256),
+    transparency_after: DecimalTransparency(-256),
+    fade_in_start: Milliseconds(0),
+    fade_in_end: Milliseconds(0),
+    fade_out_start: Milliseconds(0),
+    fade_out_end: Milliseconds(0),
+});
 
 fn bake_move(time: TimeContext, global: &mut Global) {
     if let Some(PositionOrMove::Move(move_data)) = global.position {

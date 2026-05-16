@@ -1023,6 +1023,11 @@ impl Transparency {
     pub fn rendered(self) -> u8 {
         self.0 as u8
     }
+
+    #[must_use]
+    pub fn wrapped(self) -> bool {
+        i32::from(self.rendered()) != self.0
+    }
 }
 
 impl lerp::Lerp for Transparency {

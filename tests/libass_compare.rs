@@ -130,7 +130,12 @@ fn run_comparison<
                 &mut |image| indirect_images.push(AssImage::from(image, &build_hasher)),
             );
 
-            let different = direct_images != indirect_images;
+            let different = direct_images.len() != indirect_images.len()
+                || direct_images
+                    .iter()
+                    .zip(indirect_images.iter())
+                    .any(|(direct, indirect)| !direct.visible_eq(indirect));
+
             if different {
                 failed_once = true;
 
@@ -281,6 +286,19 @@ impl AssImage {
             colour,
             transparency,
             data: ImageData::new(image.bitmap, build_hasher),
+        }
+    }
+
+    pub fn visible_eq(&self, other: &AssImage) -> bool {
+        if self.transparency == Transparency(255) && other.transparency == Transparency(255) {
+            // Do not compare the image data
+            self.width == other.width
+                && self.height == other.height
+                && self.dest_x == other.dest_x
+                && self.dest_y == other.dest_y
+                && self.stride == other.stride
+        } else {
+            self == other
         }
     }
 }
