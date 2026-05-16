@@ -58,6 +58,15 @@ impl<T> Resettable<T> {
             Keep => Keep,
         }
     }
+
+    #[must_use]
+    pub fn map<F: FnOnce(&T) -> T>(&self, map_fn: F) -> Resettable<T> {
+        match *self {
+            Resettable::Override(ref x) => Resettable::Override(map_fn(x)),
+            Resettable::Reset => Resettable::Reset,
+            Resettable::Keep => Resettable::Keep,
+        }
+    }
 }
 
 impl<T> lerp::Lerp for Resettable<T>
@@ -268,6 +277,9 @@ pub struct Local {
 
     pub font_name: Resettable<String>,
     pub font_size: FontSize,
+
+    /// Maps to `\fscx` and `\fscy`. Note that the values are handled internally as pure factors,
+    /// not as percentages: 2.0 would be twice as large.
     pub font_scale: Maybe2D,
     pub letter_spacing: Resettable<f64>,
 
@@ -541,7 +553,9 @@ impl Local {
 
         emit::simple_tag_resettable(sink, "fn", self.font_name.as_ref())?;
         self.font_size.emit(sink)?;
-        self.font_scale.emit(sink, "fsc", "")?;
+        self.font_scale
+            .map(|value| value * 100.0)
+            .emit(sink, "fsc", "")?;
         emit::simple_tag_resettable(sink, "fsp", self.letter_spacing.as_ref())?;
 
         self.text_rotation.emit(sink, "fr", "")?;
@@ -778,6 +792,14 @@ impl Maybe2D {
         Maybe2D {
             x: self.x.take(),
             y: self.y.take(),
+        }
+    }
+
+    #[must_use]
+    pub fn map<F: FnMut(f64) -> f64>(&self, mut map_fn: F) -> Maybe2D {
+        Maybe2D {
+            x: self.x.map(|val| map_fn(*val)),
+            y: self.y.map(|val| map_fn(*val)),
         }
     }
 

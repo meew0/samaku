@@ -293,10 +293,10 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
         local.gaussian_blur = resettable(twa.float_arg(0));
         local.clear_animated_property(|la| &mut la.gaussian_blur);
     } else if twa.tag::<false>("fscx") {
-        local.font_scale.x = resettable(twa.float_arg(0));
+        local.font_scale.x = resettable(twa.float_arg(0).map(|value| value / 100.0));
         local.clear_animated_property(|la| &mut la.font_scale.x);
     } else if twa.tag::<false>("fscy") {
-        local.font_scale.y = resettable(twa.float_arg(0));
+        local.font_scale.y = resettable(twa.float_arg(0).map(|value| value / 100.0));
         local.clear_animated_property(|la| &mut la.font_scale.y);
     } else if twa.tag::<false>("fsc") {
         local.font_scale = Maybe2D {
@@ -1458,8 +1458,8 @@ mod tests {
             }))
         );
         assert_eq!(block.new_local.gaussian_blur, Override(11.0));
-        assert_eq!(block.new_local.font_scale.x, Override(12.0));
-        assert_eq!(block.new_local.font_scale.y, Override(13.0));
+        assert_eq!(block.new_local.font_scale.x, Override(0.12));
+        assert_eq!(block.new_local.font_scale.y, Override(0.13));
         assert_eq!(block.new_local.letter_spacing, Override(14.0));
         assert_eq!(block.new_local.font_size, FontSize::Set(15.0));
         assert_eq!(block.new_local.text_rotation.x, Override(16.0));
