@@ -4,10 +4,10 @@
 )]
 
 use super::{
-    lerp::Lerp, Animation, AnimationInterval, Clip, Colour, ComplexFade, DecimalTransparency,
-    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, KaraokeEffect, KaraokeOnset,
-    Local, LocalAnimatable, Milliseconds, Position, PositionOrMove, Rectangle, Resettable,
-    SimpleFade, Transparency,
+    lerp::Lerp, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade,
+    DecimalTransparency, Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke,
+    KaraokeEffect, KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove,
+    Rectangle, Resettable, SimpleFade, Transparency,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -95,9 +95,10 @@ pub fn bake<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     });
 
     for (i, span) in spans.iter_mut().enumerate() {
-        if let Some(karaoke) = karaoke_opt.as_ref() {
-            accu.apply_karaoke(time, karaoke[i]);
-        }
+        // Apply karaoke effect
+        let new_respan_state = karaoke_opt
+            .as_ref()
+            .map(|karaoke| accu.apply_karaoke(time, karaoke[i]));
 
         match *span {
             Span::Tags(ref mut local, _) | Span::Drawing(ref mut local, _) => {
@@ -108,19 +109,22 @@ pub fn bake<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                     local,
                     global_overrides_option,
                 );
+                maybe_force_run_break(local, new_respan_state);
             }
             Span::Reset => {
                 style_context.new_style = style_context.original_style;
-                let (local, _) =
+                let (mut local, _) =
                     bake_reset(time, style_context, &mut accu, global_overrides_option);
+                maybe_force_run_break(&mut local, new_respan_state);
                 *span = Span::Tags(local, String::new());
             }
             Span::ResetToStyle(ref style_name) => {
                 // If the new style cannot be found, libass resets it to the original style
                 style_context.new_style =
                     style_lookup(style_name).unwrap_or(style_context.original_style);
-                let (local, _) =
+                let (mut local, _) =
                     bake_reset(time, style_context, &mut accu, global_overrides_option);
+                maybe_force_run_break(&mut local, new_respan_state);
                 *span = Span::Tags(local, String::new());
             }
         }
@@ -518,6 +522,7 @@ impl RenderContext {
             .then_some(self.drawing_baseline_offset);
         local.drawing_baseline_offset = new_drawing_baseline_offset;
 
+        local.karaoke = Karaoke::empty();
         local.animations.clear();
     }
 
@@ -570,9 +575,9 @@ impl RenderContext {
     fn apply_karaoke(
         &mut self,
         time: TimeContext,
-        effect_data: (subtitle::Duration, Option<KaraokeEffect>),
-    ) {
-        let (duration, effect) = effect_data;
+        effect_data: (RespanState, subtitle::Duration, Option<KaraokeEffect>),
+    ) -> RespanState {
+        let (respan_state, duration, effect) = effect_data;
         match effect {
             None => self.use_secondary = false,
             Some(KaraokeEffect::FillInstant) => {
@@ -587,6 +592,7 @@ impl RenderContext {
                 self.use_secondary = false;
             }
         }
+        respan_state
     }
 
     /// Determine whether the changes made in this render context
@@ -834,7 +840,7 @@ fn has_karaoke(spans: &[Span]) -> bool {
     false
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum RespanState {
     #[default]
     Default,
@@ -935,6 +941,11 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
         }
     }
 
+    // The first span always starts a new run
+    if let Some(first_respan_state) = respan_states.get_mut(0) {
+        *first_respan_state = RespanState::StartNewRun;
+    }
+
     (new_spans, respan_states)
 }
 
@@ -992,7 +1003,7 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
 fn bake_karaoke(
     spans: &[Span],
     respan_states: &[RespanState],
-) -> Vec<(subtitle::Duration, Option<KaraokeEffect>)> {
+) -> Vec<(RespanState, subtitle::Duration, Option<KaraokeEffect>)> {
     // Running karaoke timeline position in milliseconds. Corresponds to `timing` in
     // `ass_process_karaoke_effects` (there it's `int32_t`, but we use `i64` to avoid
     // worrying about overflow in intermediate calculations).
@@ -1017,7 +1028,7 @@ fn bake_karaoke(
                 Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
                 // \r does not touch karaoke state; treat as a zero-duration no-op.
                 Span::Reset | Span::ResetToStyle(_) => {
-                    return (last_baked, active_effect_type);
+                    return (RespanState::Default, last_baked, active_effect_type);
                 }
             };
 
@@ -1029,7 +1040,7 @@ fn bake_karaoke(
 
             // Until the first \k/\kf/\ko tag the span always renders in primary colour.
             if active_effect_type.is_none() {
-                return (subtitle::Duration(0), None);
+                return (RespanState::Default, subtitle::Duration(0), None);
             }
 
             // Translate our onset to libass's `effect_skip_timing` and `reset_effect`.
@@ -1067,16 +1078,40 @@ fn bake_karaoke(
             // A span with duration == 0 does not create its own run boundary in libass
             // (because `effect_timing == 0` is the primary starts_new_run trigger).
             // !! UNLESS we need to force start a new run due to the respan state !!
-
             // Its glyphs end up inside the previous run and share its transition time.
             // We model this by returning last_baked unchanged; the `skip` still advanced
             // `timing` so subsequent spans are positioned correctly.
             if duration != 0 || matches!(respan_state, RespanState::StartNewRun) {
                 last_baked = subtitle::Duration(tm_start);
             }
-            (last_baked, active_effect_type)
+
+            // We only need to force a new run if this span would not start a new run anyway,
+            // as indicated by the previous respan state.
+            let new_respan_state =
+                if duration != 0 && !matches!(respan_state, RespanState::StartNewRun) {
+                    RespanState::StartNewRun
+                } else {
+                    RespanState::Default
+                };
+
+            (new_respan_state, last_baked, active_effect_type)
         })
         .collect()
+}
+
+fn maybe_force_run_break(local: &mut Local, new_respan_state: Option<RespanState>) {
+    // If the karaoke effect would start a new run, we need to force libass to actually do that.
+    // There is no trivial way to achieve this on its own. The least hacky way seems to be
+    // setting a karaoke effect with a very large duration (such that it never actually ends).
+    // An alternative might be messing with the font family name in some way (e.g. changing
+    // from lower to upper case)
+    if new_respan_state == Some(RespanState::StartNewRun) {
+        local.karaoke = Karaoke {
+            // 10⁹ centiseconds = 10⁷ seconds = 116 days
+            effect: Some((KaraokeEffect::FillInstant, Centiseconds(1_000_000_000.0))),
+            onset: KaraokeOnset::NoDelay,
+        }
+    }
 }
 
 fn ass_dtoi32(val: f64) -> i32 {
@@ -1265,9 +1300,7 @@ fn bake_move(time: TimeContext, global: &mut Global) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{
-        parse, Centiseconds, GlobalAnimatable, Karaoke, Maybe3D, Move, MoveTiming,
-    };
+    use crate::nde::tags::{parse, GlobalAnimatable, Maybe3D, Move, MoveTiming};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
     use std::cell::RefCell;
@@ -1509,46 +1542,89 @@ mod tests {
             std::iter::repeat_n(RespanState::Default, spans.len()).collect();
         let baked = bake_karaoke(&spans, &respan_states);
 
-        assert_eq!(baked[0], (subtitle::Duration(0), None));
+        assert_eq!(
+            baked[0],
+            (RespanState::Default, subtitle::Duration(0), None)
+        );
         assert_eq!(
             baked[1],
-            (subtitle::Duration(0), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(0),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[2],
-            (subtitle::Duration(200), Some(KaraokeEffect::BorderInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(200),
+                Some(KaraokeEffect::BorderInstant)
+            )
         );
         assert_eq!(
             baked[3],
-            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(200),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[4],
-            (subtitle::Duration(900), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(900),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[5],
-            (subtitle::Duration(1400), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(1400),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[6],
-            (subtitle::Duration(1400), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(1400),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[7],
-            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(2000),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[8],
-            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(2000),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[9],
-            (subtitle::Duration(2500), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(2500),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[10],
-            (subtitle::Duration(2000), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(2000),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
     }
 
@@ -1578,7 +1654,7 @@ mod tests {
 
         assert_matches!(&new_spans[0], &Span::Tags(_, ref text));
         assert_eq!(text, "a");
-        assert_matches!(&respan_state[0], &RespanState::Default);
+        assert_matches!(&respan_state[0], &RespanState::StartNewRun);
 
         assert_matches!(&new_spans[1], &Span::Tags(_, ref text));
         assert_eq!(text, "b");
@@ -1608,31 +1684,59 @@ mod tests {
 
         assert_eq!(
             baked[0],
-            (subtitle::Duration(0), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(0),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[1],
-            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(200),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[2],
-            (subtitle::Duration(200), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(200),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[3],
-            (subtitle::Duration(400), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(400),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[4],
-            (subtitle::Duration(600), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(600),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[5],
-            (subtitle::Duration(600), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(600),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
         assert_eq!(
             baked[6],
-            (subtitle::Duration(800), Some(KaraokeEffect::FillInstant))
+            (
+                RespanState::Default,
+                subtitle::Duration(800),
+                Some(KaraokeEffect::FillInstant)
+            )
         );
     }
 

@@ -13,10 +13,10 @@ PlayResY: 108
 Last Style Storage: Default
 Video File: ?dummy:24000/1001:40000:1920:1080:47:163:254:
 Video AR Value: 1.777778
-Video Zoom Percent: 0.500000
-Scroll Position: 72
-Active Line: 79
-Video Position: 4556
+Video Zoom Percent: 0.375000
+Scroll Position: 63
+Active Line: 92
+Video Position: 5179
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -66,11 +66,11 @@ Dialogue: 0,0:01:27.00,0:01:30.00,Default,,0,0,0,,aa{\r(Style)}aa{\r(Style))}aa
 Dialogue: 0,0:01:30.00,0:01:33.00,Default,,0,0,0,,aa{\r Style}aa{\rStyle }aa
 Dialogue: 0,0:01:33.00,0:01:36.00,Default,,0,0,0,,a{\b0}a{\b1}a{\b2}a{\b700}a
 Dialogue: 0,0:01:36.00,0:01:39.00,Bold,,0,0,0,,a{\b0}a{\b}a{\b0}a{\b3}a{\ba}a
-Dialogue: 0,0:01:39.00,0:01:42.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\k10\k10\k10\k10\k10\k10\k10\k10\k10\kf10}ccc
-Dialogue: 0,0:01:42.00,0:01:45.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kf100}ccc
-Dialogue: 0,0:01:45.00,0:01:48.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\k10\kt100\kf10}ccc
-Dialogue: 0,0:01:48.00,0:01:51.00,Default,,0,0,0,,{\k10}aaa{\k100}bbb{\kf100}ccc
-Dialogue: 0,0:01:51.00,0:01:54.00,Default,,0,0,0,,{\k50}aaa{\kf50}bbb{\k0}ccc{\kf50}ddd
+Dialogue: 0,0:01:39.00,0:01:42.00,Default,,0,0,0,fail:bake,{\k10}aaa{\k10}bbb{\k10\k10\k10\k10\k10\k10\k10\k10\k10\kf10}ccc
+Dialogue: 0,0:01:42.00,0:01:45.00,Default,,0,0,0,fail:bake,{\k10}aaa{\k10}bbb{\kf100}ccc
+Dialogue: 0,0:01:45.00,0:01:48.00,Default,,0,0,0,fail:bake,{\k10}aaa{\k10}bbb{\k10\kt100\kf10}ccc
+Dialogue: 0,0:01:48.00,0:01:51.00,Default,,0,0,0,fail:bake,{\k10}aaa{\k100}bbb{\kf100}ccc
+Dialogue: 0,0:01:51.00,0:01:54.00,Default,,0,0,0,fail:bake,{\k50}aaa{\kf50}bbb{\k0}ccc{\kf50}ddd
 Dialogue: 0,0:01:54.00,0:01:57.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kt100}ccc{\k10}ddd
 Dialogue: 0,0:01:57.00,0:02:00.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\r}ccc
 Dialogue: 0,0:02:00.00,0:02:03.00,Default,,0,0,0,,{\k10}aaa{\k10}bbb{\kt20\k80\kf10}ccc
