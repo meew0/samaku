@@ -20,15 +20,16 @@ pub struct TimeContext {
 }
 
 impl TimeContext {
+    #[must_use]
     pub fn relative(&self) -> subtitle::Duration {
         self.now - self.start
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct StyleContext<'a> {
-    pub original_style: &'a subtitle::Style,
-    pub new_style: &'a subtitle::Style,
+struct StyleContext<'a> {
+    original_style: &'a subtitle::Style,
+    new_style: &'a subtitle::Style,
 }
 
 /// Bakes styles and animations into the given event.
@@ -44,7 +45,7 @@ pub struct StyleContext<'a> {
 /// - Effects (as in, marquee etc.) are not handled
 ///
 /// The resulting spans are not yet simplified.
-pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
+pub fn bake<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     time: TimeContext,
     event_style: &'a subtitle::Style,
     style_lookup: &'a F,
@@ -104,7 +105,9 @@ pub fn bake<'a, F: Fn(&str) -> &'a subtitle::Style>(
                 *span = Span::Tags(local, String::new());
             }
             Span::ResetToStyle(ref style_name) => {
-                style_context.new_style = style_lookup(style_name);
+                // If the new style cannot be found, libass resets it to the original style
+                style_context.new_style =
+                    style_lookup(style_name).unwrap_or(style_context.original_style);
                 let (local, _) =
                     bake_reset(time, style_context, &mut accu, global_overrides_option);
                 *span = Span::Tags(local, String::new());
@@ -810,7 +813,7 @@ enum RespanState {
 /// So we need to split up spans containing multiple runs (i.e. those with linebreaks)
 /// and mark spans that start a new run (due to style changes) even without a specified
 /// karaoke duration.
-fn respan<'a, F: Fn(&str) -> &'a subtitle::Style>(
+fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     time: TimeContext,
     mut style_context: StyleContext<'a>,
     style_lookup: &'a F,
@@ -877,7 +880,7 @@ fn respan<'a, F: Fn(&str) -> &'a subtitle::Style>(
                 respan_states.push(respan_state);
             }
             Span::ResetToStyle(ref style_name) => {
-                style_context.new_style = style_lookup(style_name);
+                style_context.new_style = style_lookup(style_name).unwrap_or(style_context.original_style);
                 let (_, respan_state) =
                     bake_reset(time, style_context, &mut accu, global_overrides_option);
                 new_spans.push(Span::ResetToStyle(style_name.to_owned()));
@@ -1896,7 +1899,7 @@ mod tests {
         let style_lookup = |name: &str| {
             *style_lookup_called_counter.borrow_mut() += 1;
             if name == "Style 2" {
-                &style_2
+                Some(&style_2)
             } else {
                 panic!("the style lookup should not have been called with style name: '{name}'")
             }

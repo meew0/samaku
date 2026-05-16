@@ -5,7 +5,7 @@ pub use emit::emit;
 pub use parse::parse;
 pub use parse::raw as parse_raw;
 
-mod bake;
+pub mod bake;
 mod emit;
 mod lerp;
 mod parse;
