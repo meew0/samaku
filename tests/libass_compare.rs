@@ -152,27 +152,32 @@ fn run_comparison<
                         );
                     } else {
                         println!(" : Found {} images", direct_images.len());
-                        for (i, (direct, indirect)) in
+                        for (i, (direct_img, indirect_img)) in
                             direct_images.iter().zip(indirect_images.iter()).enumerate()
                         {
-                            if direct == indirect {
+                            if direct_img == indirect_img {
                                 println!(" ({}) [equal]", i);
                             } else {
                                 println!(" ({})", i);
-                                println!("   Direct:   {:?}", direct);
-                                println!("   Indirect: {:?}", indirect);
-
-                                if direct.data != indirect.data {
-                                    let direct_path = write_bitmap(count, direct, "direct");
-                                    let indirect_path = write_bitmap(count, indirect, "indirect");
-                                    println!(
-                                        "    -> wrote data files to {direct_path} and {indirect_path}"
-                                    );
-                                    count += 1;
-                                }
+                                println!("   Direct:   {:?}", direct_img);
+                                println!("   Indirect: {:?}", indirect_img);
                             }
                         }
                     }
+
+                    let path = write_all_bitmaps(
+                        count,
+                        &direct_images,
+                        &indirect_images,
+                        &direct.text,
+                        &indirect.text,
+                        now_offset,
+                        event.start.0,
+                        FRAME_SIZE.x,
+                        FRAME_SIZE.y,
+                    );
+                    println!("    -> wrote comparison file to {path}");
+                    count += 1;
 
                     break 'inner;
                 }
@@ -305,26 +310,72 @@ impl std::fmt::Debug for ImageData {
     }
 }
 
-fn write_bitmap(count: u64, image: &AssImage, suffix: &str) -> String {
+#[expect(clippy::too_many_arguments, reason = "it's simpler like this")]
+fn write_all_bitmaps(
+    count: u64,
+    direct_images: &[AssImage],
+    indirect_images: &[AssImage],
+    direct_text: &str,
+    indirect_text: &str,
+    now_offset: i64,
+    start_time: i64,
+    frame_width: i32,
+    frame_height: i32,
+) -> String {
     use std::io::prelude::*;
 
-    let bitmap_b64 = data_encoding::BASE64.encode(&image.data.bytes);
+    fn json_escape(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                c => out.push(c),
+            }
+        }
+        out
+    }
+
+    fn encode_image(image: &AssImage) -> String {
+        let bitmap_b64 = data_encoding::BASE64.encode(&image.data.bytes);
+        format!(
+            r#"{{"width":{w},"height":{h},"stride":{s},"dest_x":{dx},"dest_y":{dy},"colour_red":{cr},"colour_green":{cg},"colour_blue":{cb},"transparency":{t},"bitmap":"{bmp}"}}"#,
+            w = image.width,
+            h = image.height,
+            s = image.stride,
+            dx = image.dest_x,
+            dy = image.dest_y,
+            cr = image.colour.red,
+            cg = image.colour.green,
+            cb = image.colour.blue,
+            t = image.transparency.0,
+            bmp = bitmap_b64,
+        )
+    }
+
+    fn encode_images(images: &[AssImage]) -> String {
+        let parts: Vec<String> = images.iter().map(encode_image).collect();
+        format!("[{}]", parts.join(","))
+    }
+
     let json = format!(
-        r#"{{"width":{w},"height":{h},"stride":{s},"dest_x":{dx},"dest_y":{dy},"colour_red":{cr},"colour_green":{cg},"colour_blue":{cb},"transparency":{t},"bitmap":"{bmp}"}}"#,
-        w = image.width,
-        h = image.height,
-        s = image.stride,
-        dx = image.dest_x,
-        dy = image.dest_y,
-        cr = image.colour.red,
-        cg = image.colour.green,
-        cb = image.colour.blue,
-        t = image.transparency.0,
-        bmp = bitmap_b64,
+        r#"{{"frame_width":{fw},"frame_height":{fh},"direct_text":"{dt}","indirect_text":"{it}","now_offset_ms":{no},"start_time_ms":{st},"direct_images":{di},"indirect_images":{ii}}}"#,
+        fw = frame_width,
+        fh = frame_height,
+        dt = json_escape(direct_text),
+        it = json_escape(indirect_text),
+        no = now_offset,
+        st = start_time,
+        di = encode_images(direct_images),
+        ii = encode_images(indirect_images),
     );
 
     std::fs::create_dir_all("test_outputs/libass_compare").unwrap();
-    let path = format!("test_outputs/libass_compare/{count:04}_{suffix}.json");
+    let path = format!("test_outputs/libass_compare/{count:04}.json");
     let mut file = std::fs::File::create(&path).unwrap();
     file.write_all(json.as_bytes()).unwrap();
     path
