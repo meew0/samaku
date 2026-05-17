@@ -646,7 +646,7 @@ impl Samaku {
     }
 
     fn subscription(&self) -> Subscription<message::Message> {
-        use iced::advanced::graphics::futures::{boxed_stream, MaybeSend};
+        use iced::advanced::graphics::futures::{MaybeSend, boxed_stream};
         use iced::advanced::subscription::{EventStream, Recipe};
         use iced::futures::StreamExt as _;
         use std::hash::Hasher as _;
