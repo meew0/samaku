@@ -23,7 +23,7 @@ iced = { version = "0.14.0", features = [
     "smol",
     "svg",
 ] }
-iced_aw = { version = "0.13.1", features = ["menu", "selection_list"] }
+iced_aw = { version = "0.14.1", features = ["menu", "selection_list"] }
 iced_fonts = { version = "0.3.0", features = ["bootstrap"] }
 iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "e4dd909680a1f668b6cbc0150d5c5c84cbe473c2" }
 rfd = "0.17.2"
@@ -43,8 +43,8 @@ static_assertions = "1.1.0"
 
 # Various data structures and utilities
 regex = "1.12"
-interavl = "0.5"
-indexmap = "2.13"
+interavl = "0.6"
+indexmap = "2.14"
 fast-float2 = "0.2"
 
 # dtolnay collection
