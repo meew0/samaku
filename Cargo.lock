@@ -216,6 +216,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_float_eq"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd9777fd8234cccd34019d9e26d70c8247f9baf24c8fdc0b56c548cf943af2ed"
+
+[[package]]
 name = "assert_matches2"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4166,6 +4172,7 @@ name = "samaku"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_float_eq",
  "assert_matches2",
  "ciborium",
  "colorous",

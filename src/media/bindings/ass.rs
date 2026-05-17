@@ -16,7 +16,7 @@ type VaList = libass::__va_list_tag;
 #[cfg(target_env = "msvc")]
 type VaList = i8;
 
-use crate::nde::tags::{Alignment, WrapStyle};
+use crate::nde::tags::{Alignment, FontEncoding, WrapStyle};
 use crate::subtitle;
 
 pub(crate) type CString = std::ffi::CString;
@@ -404,7 +404,7 @@ pub(crate) fn style_from_raw(raw_style: &RawStyle) -> subtitle::Style {
             right: raw_style.MarginR,
             vertical: raw_style.MarginV,
         },
-        encoding: subtitle::FontEncoding(raw_style.Encoding),
+        encoding: FontEncoding(raw_style.Encoding),
         blur: raw_style.Blur,
         justify: subtitle::JustifyMode::from(raw_style.Justify),
     }

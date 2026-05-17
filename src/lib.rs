@@ -322,6 +322,10 @@
     reason = "conflicts with clippy::pattern_type_mismatch, and the more explicit style seems preferable"
 )]
 #![allow(
+    clippy::struct_excessive_bools,
+    reason = "good idea in principle, but returns false positives for large structs that contain 20 fields of which 4 are bools, which we have a lot of in samaku (styles/override tags)"
+)]
+#![allow(
     clippy::struct_field_names,
     reason = "https://github.com/rust-lang/rust-clippy/issues/12922#issuecomment-2166124359"
 )]

@@ -52,7 +52,7 @@ impl OpaqueTrack {
     /// # Panics
     /// Panics if libass fails to parse the data.
     #[must_use]
-    pub fn parse(data: &String) -> OpaqueTrack {
+    pub fn parse(data: &str) -> OpaqueTrack {
         let track = LIBRARY
             .with_borrow(|library| library.read_memory(data.as_bytes(), None))
             .unwrap();
@@ -318,7 +318,7 @@ mod tests {
 
         set_libass_test_callback();
 
-        let opaque_track = OpaqueTrack::parse(&ASS_FILE.to_owned());
+        let opaque_track = OpaqueTrack::parse(ASS_FILE);
 
         // There will be one extra for libass' default style
         assert_eq!(opaque_track.styles().len(), 3);

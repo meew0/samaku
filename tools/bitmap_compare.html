@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bitmap Comparator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Lato', sans-serif;
+    background: #1a1a1a;
+    color: #ddd;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+
+  header {
+    background: #252525;
+    border-bottom: 1px solid #444;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  header h1 { font-size: 1rem; color: #aaa; white-space: nowrap; }
+
+  .file-drop {
+    border: 2px dashed #555;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+    white-space: nowrap;
+  }
+  .file-drop:hover, .file-drop.dragover { border-color: #FF6600; background: #2a2a2a; }
+  .file-drop.loaded { border-color: #4a9; }
+  .file-drop input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .file-drop .label { pointer-events: none; font-size: 0.85rem; }
+  .file-drop .filename { color: #FF6600; font-size: 0.75rem; margin-top: 2px; }
+
+  .zoom-control {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.85rem; color: #aaa;
+  }
+  .zoom-control input[type=range] { width: 110px; cursor: pointer; }
+  #zoom-label { color: #FF6600; min-width: 2.5em; }
+
+  .toggle-label {
+    font-size: 0.85rem; color: #aaa;
+    display: flex; align-items: center; gap: 4px;
+    cursor: pointer; white-space: nowrap;
+  }
+
+  .view-mode-wrap {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.85rem; color: #aaa;
+  }
+  .view-mode-wrap select {
+    background: #333; color: #ddd; border: 1px solid #555;
+    border-radius: 3px; padding: 3px 6px; font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  /* ── Event info bar ── */
+
+  #info {
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    color: #999;
+    display: none;
+  }
+  #info.visible { display: block; }
+  #info .info-row { display: flex; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  #info .info-row:last-child { margin-bottom: 0; }
+  #info .info-label { color: #666; flex-shrink: 0; }
+  #info .info-text { color: #bbb; font-family: monospace; font-size: 0.8rem; word-break: break-all; }
+  #info .timing { color: #888; }
+
+  /* ── Comparison sections ── */
+
+  #comparisons { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+
+  .empty-state {
+    display: flex; align-items: center; justify-content: center;
+    flex: 1; min-height: 300px; color: #444; font-size: 0.9rem;
+  }
+
+  .comparison {
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .comparison-header {
+    background: #222;
+    border-bottom: 1px solid #333;
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .comparison-header .pair-index { color: #666; }
+  .comparison-header .diff-label { font-weight: 700; }
+  .comparison-header .diff-label.has-diffs { color: #FF6600; }
+  .comparison-header .diff-label.no-diffs  { color: #4a9; }
+  .comparison-header .diff-label.one-missing { color: #c44; }
+
+  .comparison-panes { display: flex; }
+
+  .pane {
+    flex: 1;
+    min-width: 0;
+    border-right: 1px solid #2a2a2a;
+    display: flex;
+    flex-direction: column;
+  }
+  .pane:last-child { border-right: none; }
+
+  .pane-header {
+    background: #1e1e1e;
+    border-bottom: 1px solid #2a2a2a;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    color: #666;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .pane-header .pane-side { color: #aaa; font-weight: 700; margin-right: 4px; }
+  .pane-header span { background: #252525; padding: 1px 5px; border-radius: 3px; }
+
+  .colour-chip { display: inline-flex; align-items: center; gap: 4px; background: #252525; padding: 1px 5px; border-radius: 3px; }
+  .colour-swatch { display: inline-block; width: 10px; height: 10px; border: 1px solid #555; border-radius: 2px; flex-shrink: 0; }
+
+  .canvas-wrap { padding: 10px; overflow: auto; background: #111; }
+
+  canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+
+  .missing-pane {
+    flex: 1; background: #1a0000;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 80px; color: #633; font-size: 0.85rem;
+  }
+
+  /* ── Composited section ── */
+
+  #composited-section {
+    border: 1px solid #444;
+    border-radius: 6px;
+    overflow: hidden;
+    display: none;
+  }
+  #composited-section.visible { display: block; }
+
+  /* ── Tooltip ── */
+
+  #tooltip {
+    position: fixed; background: #333; border: 1px solid #555;
+    padding: 4px 8px; font-size: 0.75rem; border-radius: 3px;
+    pointer-events: none; display: none; z-index: 100;
+    white-space: pre; line-height: 1.5; font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bitmap Comparator</h1>
+
+  <div class="file-drop" id="drop">
+    <input type="file" accept=".json,.dat" id="fileInput">
+    <div class="label">Load comparison file</div>
+    <div class="filename" id="fileName"></div>
+  </div>
+
+  <div class="zoom-control">
+    Zoom:
+    <input type="range" id="zoom" min="1" max="32" value="8" step="1">
+    <span id="zoom-label">8x</span>
+  </div>
+
+  <div class="view-mode-wrap">
+    View:
+    <select id="view-mode">
+      <option value="mask">Mask</option>
+      <option value="colour">Colour</option>
+    </select>
+  </div>
+
+  <div class="view-mode-wrap">
+    Background:
+    <select id="bg-mode">
+      <option value="checker">Checkered</option>
+      <option value="white">White</option>
+      <option value="black">Black</option>
+    </select>
+  </div>
+
+  <label class="toggle-label"><input type="checkbox" id="show-grid" checked> Grid</label>
+  <label class="toggle-label"><input type="checkbox" id="show-highlights" checked> Highlights</label>
+  <label class="toggle-label"><input type="checkbox" id="show-values" checked> Values</label>
+</header>
+
+<div id="info"></div>
+
+<div id="comparisons">
+  <div class="empty-state">Load a comparison file to view</div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+let state = null;
+
+// ── File parsing ───────────────────────────────────────────────────────────
+
+function b64ToUint8(b64) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+function decodeImage(d) {
+  return {
+    width:        d.width,
+    height:       d.height,
+    stride:       d.stride,
+    dest_x:       d.dest_x,
+    dest_y:       d.dest_y,
+    colour_red:   d.colour_red,
+    colour_green: d.colour_green,
+    colour_blue:  d.colour_blue,
+    transparency: d.transparency,
+    bitmap: b64ToUint8(d.bitmap),
+  };
+}
+
+function parseFile(text) {
+  const d = JSON.parse(text);
+  return {
+    frame_width:    d.frame_width,
+    frame_height:   d.frame_height,
+    direct_text:    d.direct_text,
+    indirect_text:  d.indirect_text,
+    now_offset_ms:  d.now_offset_ms,
+    start_time_ms:  d.start_time_ms,
+    direct_images:  d.direct_images.map(decodeImage),
+    indirect_images: d.indirect_images.map(decodeImage),
+    // cached composited buffers (filled on first render)
+    _compositeDirect:   null,
+    _compositeIndirect: null,
+  };
+}
+
+// ── Pixel access + diff (per-image) ───────────────────────────────────────
+
+function pixel(img, x, y) {
+  if (!img || x < 0 || y < 0 || x >= img.width || y >= img.height) return null;
+  return img.bitmap[y * img.stride + x];
+}
+
+function computeDiff(imgA, imgB) {
+  if (!imgA && !imgB) return new Set();
+  const W = Math.max(imgA ? imgA.width  : 0, imgB ? imgB.width  : 0);
+  const H = Math.max(imgA ? imgA.height : 0, imgB ? imgB.height : 0);
+  const diffs = new Set();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (pixel(imgA, x, y) !== pixel(imgB, x, y)) diffs.add(`${x},${y}`);
+    }
+  }
+  return diffs;
+}
+
+// ── Background helpers ─────────────────────────────────────────────────────
+
+// Returns the background grey level (0‒255) at source pixel (x, y).
+// checker_size is in source pixels (image pixels for individual images, frame pixels for composite).
+function getBg(x, y, checker_size, bgMode) {
+  if (bgMode === 'white') return 255;
+  if (bgMode === 'black') return 0;
+  return ((Math.floor(x / checker_size) + Math.floor(y / checker_size)) & 1) === 0 ? 204 : 153;
+}
+
+// Blend (r,g,b,a: 0‒255) over the configured background at (x,y).
+function blendOverBg(r, g, b, a, x, y, checker_size, bgMode) {
+  const bg = getBg(x, y, checker_size, bgMode);
+  const fa = a / 255;
+  return [
+    Math.round(r * fa + bg * (1 - fa)),
+    Math.round(g * fa + bg * (1 - fa)),
+    Math.round(b * fa + bg * (1 - fa)),
+  ];
+}
+
+// ── Compositing ────────────────────────────────────────────────────────────
+
+// Compute the bounding box covering all images from both sides.
+function computeCropBox(directImages, indirectImages) {
+  const all = [...directImages, ...indirectImages];
+  if (all.length === 0) return { x: 0, y: 0, w: 1, h: 1 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const img of all) {
+    minX = Math.min(minX, img.dest_x);
+    minY = Math.min(minY, img.dest_y);
+    maxX = Math.max(maxX, img.dest_x + img.width);
+    maxY = Math.max(maxY, img.dest_y + img.height);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+// Returns Float32Array [r,g,b,a per pixel] (0‒255 scale) for the crop region.
+function compositeImages(images, cropX, cropY, cropW, cropH) {
+  const buf = new Float32Array(cropW * cropH * 4); // all zeros = transparent
+
+  for (const img of images) {
+    const { width, height, stride, dest_x, dest_y,
+            colour_red: cr, colour_green: cg, colour_blue: cb,
+            transparency, bitmap } = img;
+    const a_colour = (255 - transparency) / 255;
+
+    for (let iy = 0; iy < height; iy++) {
+      for (let ix = 0; ix < width; ix++) {
+        const cx = dest_x + ix - cropX, cy = dest_y + iy - cropY;
+        if (cx < 0 || cy < 0 || cx >= cropW || cy >= cropH) continue;
+
+        const src_a = (bitmap[iy * stride + ix] / 255) * a_colour;
+        const idx = (cy * cropW + cx) * 4;
+        const dst_a = buf[idx + 3] / 255;
+        const out_a = src_a + dst_a * (1 - src_a);
+
+        if (out_a > 0) {
+          buf[idx]     = (cr / 255 * src_a + buf[idx]     / 255 * dst_a * (1 - src_a)) / out_a * 255;
+          buf[idx + 1] = (cg / 255 * src_a + buf[idx + 1] / 255 * dst_a * (1 - src_a)) / out_a * 255;
+          buf[idx + 2] = (cb / 255 * src_a + buf[idx + 2] / 255 * dst_a * (1 - src_a)) / out_a * 255;
+        }
+        buf[idx + 3] = out_a * 255;
+      }
+    }
+  }
+  return buf;
+}
+
+// Compute a diff Set between two composited float buffers (same size).
+function compositesDiff(bufA, bufB, frameW, frameH) {
+  const diffs = new Set();
+  for (let y = 0; y < frameH; y++) {
+    for (let x = 0; x < frameW; x++) {
+      const idx = (y * frameW + x) * 4;
+      let same = true;
+      for (let c = 0; c < 4; c++) {
+        if (Math.round(bufA[idx + c]) !== Math.round(bufB[idx + c])) { same = false; break; }
+      }
+      if (!same) diffs.add(`${x},${y}`);
+    }
+  }
+  return diffs;
+}
+
+// ── Individual image rendering ─────────────────────────────────────────────
+
+function renderImage(canvas, img, diffs, zoom, mode, bgMode, showGrid, showHighlights, showValues) {
+  const W = img.width, H = img.height;
+  canvas.width  = W * zoom;
+  canvas.height = H * zoom;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const r = img.colour_red, g = img.colour_green, b = img.colour_blue;
+  const a_colour = 255 - img.transparency;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const v = img.bitmap[y * img.stride + x];
+      const isDiff = diffs.has(`${x},${y}`);
+
+      if (mode === 'colour') {
+        const combined_a = v * a_colour / 255;
+        const [pr, pg, pb] = blendOverBg(r, g, b, combined_a, x, y, 2, bgMode);
+        ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
+      } else {
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+      }
+      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+
+      if (isDiff && showHighlights) {
+        ctx.strokeStyle = '#FF6600';
+        ctx.lineWidth = Math.max(1, Math.min(2, zoom / 4));
+        const ins = ctx.lineWidth / 2;
+        ctx.strokeRect(x * zoom + ins, y * zoom + ins, zoom - ins * 2, zoom - ins * 2);
+      }
+
+      if (showValues && zoom >= 16) {
+        const hex = v.toString(16).padStart(2, '0').toUpperCase();
+        ctx.font = `${Math.max(8, zoom * 0.35)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = v < 160 ? '#fff' : '#000';
+        ctx.fillText(hex, x * zoom + zoom / 2, y * zoom + zoom / 2);
+      }
+    }
+  }
+
+  if (showGrid && zoom >= 4) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < W; x++) { ctx.moveTo(x * zoom + 0.5, 0); ctx.lineTo(x * zoom + 0.5, H * zoom); }
+    for (let y = 1; y < H; y++) { ctx.moveTo(0, y * zoom + 0.5); ctx.lineTo(W * zoom, y * zoom + 0.5); }
+    ctx.stroke();
+  }
+}
+
+// ── Composited canvas rendering ────────────────────────────────────────────
+
+function renderComposite(canvas, floatBuf, frameW, frameH, diffs, zoom, bgMode, showHighlights) {
+  canvas.width  = frameW * zoom;
+  canvas.height = frameH * zoom;
+
+  // Build an offscreen 1:1 canvas with background + composited pixels blended together
+  const off = document.createElement('canvas');
+  off.width = frameW; off.height = frameH;
+  const offCtx = off.getContext('2d');
+  const imgData = offCtx.createImageData(frameW, frameH);
+  const d = imgData.data;
+
+  for (let y = 0; y < frameH; y++) {
+    for (let x = 0; x < frameW; x++) {
+      const src = (y * frameW + x) * 4;
+      const [pr, pg, pb] = blendOverBg(
+        floatBuf[src], floatBuf[src + 1], floatBuf[src + 2], floatBuf[src + 3],
+        x, y, 4, bgMode
+      );
+      d[src]     = pr;
+      d[src + 1] = pg;
+      d[src + 2] = pb;
+      d[src + 3] = 255;
+    }
+  }
+  offCtx.putImageData(imgData, 0, 0);
+
+  // Draw scaled onto the main canvas
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, 0, 0, frameW * zoom, frameH * zoom);
+
+  // Diff highlight borders
+  if (showHighlights && diffs.size > 0) {
+    const lw = Math.max(1, Math.min(2, zoom / 4));
+    ctx.strokeStyle = '#FF6600';
+    ctx.lineWidth = lw;
+    const ins = lw / 2;
+    for (const key of diffs) {
+      const [x, y] = key.split(',').map(Number);
+      ctx.strokeRect(x * zoom + ins, y * zoom + ins, zoom - ins * 2, zoom - ins * 2);
+    }
+  }
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────────────
+
+const tooltip = document.getElementById('tooltip');
+
+function attachImageTooltip(canvas, getState) {
+  canvas.addEventListener('mousemove', (e) => {
+    const { img, diffs, zoom } = getState();
+    if (!img) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor((e.clientX - rect.left) / zoom);
+    const py = Math.floor((e.clientY - rect.top)  / zoom);
+    if (px < 0 || py < 0 || px >= img.width || py >= img.height) {
+      tooltip.style.display = 'none'; return;
+    }
+    const v = img.bitmap[py * img.stride + px];
+    tooltip.textContent =
+      `(${px}, ${py})\nval: ${v} (0x${v.toString(16).padStart(2,'0').toUpperCase()})` +
+      (diffs.has(`${px},${py}`) ? '\n▶ DIFFERS' : '');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top  = (e.clientY + 8)  + 'px';
+  });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+}
+
+function attachCompositeTooltip(canvas, getState) {
+  canvas.addEventListener('mousemove', (e) => {
+    const { buf, cropW, cropH, cropX, cropY, diffs, zoom } = getState();
+    if (!buf) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor((e.clientX - rect.left) / zoom);
+    const py = Math.floor((e.clientY - rect.top)  / zoom);
+    if (px < 0 || py < 0 || px >= cropW || py >= cropH) {
+      tooltip.style.display = 'none'; return;
+    }
+    const idx = (py * cropW + px) * 4;
+    const [tr, tg, tb, ta] = [buf[idx], buf[idx+1], buf[idx+2], buf[idx+3]].map(Math.round);
+    tooltip.textContent =
+      `(${px + cropX}, ${py + cropY})\nR:${tr} G:${tg} B:${tb} A:${ta}` +
+      (diffs.has(`${px},${py}`) ? '\n▶ DIFFERS' : '');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top  = (e.clientY + 8)  + 'px';
+  });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+}
+
+// ── Pane header HTML ───────────────────────────────────────────────────────
+
+function paneHeaderHTML(side, img) {
+  if (!img) return `<span class="pane-side">${side}</span>`;
+  const r = img.colour_red, g = img.colour_green, b = img.colour_blue;
+  return `<span class="pane-side">${side}</span>` +
+    `<span>w: ${img.width}</span>` +
+    `<span>h: ${img.height}</span>` +
+    `<span>stride: ${img.stride}</span>` +
+    `<span>dest: (${img.dest_x}, ${img.dest_y})</span>` +
+    `<span class="colour-chip"><span class="colour-swatch" style="background:rgb(${r},${g},${b})"></span>rgb(${r},${g},${b})</span>` +
+    `<span>transparency: ${img.transparency}</span>`;
+}
+
+// ── Per-canvas live state (for tooltips) ──────────────────────────────────
+
+const canvasState = new WeakMap();
+
+// ── Build / update comparison sections ────────────────────────────────────
+
+function renderAll() {
+  if (!state) return;
+
+  const zoom           = parseInt(document.getElementById('zoom').value, 10);
+  const mode           = document.getElementById('view-mode').value;
+  const bgMode         = document.getElementById('bg-mode').value;
+  const showGrid       = document.getElementById('show-grid').checked;
+  const showHighlights = document.getElementById('show-highlights').checked;
+  const showValues     = document.getElementById('show-values').checked;
+
+  const container = document.getElementById('comparisons');
+  const N = Math.max(state.direct_images.length, state.indirect_images.length);
+
+  // Create or reuse <section> elements for per-image pairs
+  const existing = Array.from(container.querySelectorAll('section.comparison'));
+  for (let i = N; i < existing.length; i++) existing[i].remove();
+
+  for (let i = 0; i < N; i++) {
+    const imgA = state.direct_images[i]   ?? null;
+    const imgB = state.indirect_images[i] ?? null;
+    const diffs = computeDiff(imgA, imgB);
+
+    let section = existing[i];
+    if (!section) {
+      section = buildComparisonSection(i);
+      container.appendChild(section);
+    }
+
+    // Update comparison header
+    const hdr = section.querySelector('.diff-label');
+    let diffText, diffClass;
+    if (!imgA || !imgB) {
+      diffText  = imgA ? 'no indirect image' : 'no direct image';
+      diffClass = 'one-missing';
+    } else if (diffs.size === 0) {
+      diffText  = 'Identical';
+      diffClass = 'no-diffs';
+    } else {
+      diffText  = `${diffs.size} differing pixel${diffs.size === 1 ? '' : 's'}`;
+      diffClass = 'has-diffs';
+    }
+    hdr.textContent = diffText;
+    hdr.className   = `diff-label ${diffClass}`;
+
+    section.querySelector('.pane-header-a').innerHTML = paneHeaderHTML('Direct', imgA);
+    section.querySelector('.pane-header-b').innerHTML = paneHeaderHTML('Indirect', imgB);
+
+    renderPane(section, 'a', imgA, diffs, zoom, mode, bgMode, showGrid, showHighlights, showValues);
+    renderPane(section, 'b', imgB, diffs, zoom, mode, bgMode, showGrid, showHighlights, showValues);
+  }
+
+  // Composited section
+  renderCompositedSection(zoom, bgMode, showHighlights);
+}
+
+function buildComparisonSection(index) {
+  const section = document.createElement('section');
+  section.className = 'comparison';
+  section.innerHTML = `
+    <div class="comparison-header">
+      <span class="pair-index">Image ${index}</span>
+      <span class="diff-label"></span>
+    </div>
+    <div class="comparison-panes">
+      <div class="pane" data-side="a">
+        <div class="pane-header pane-header-a"></div>
+        <div class="canvas-wrap"></div>
+      </div>
+      <div class="pane" data-side="b">
+        <div class="pane-header pane-header-b"></div>
+        <div class="canvas-wrap"></div>
+      </div>
+    </div>`;
+  return section;
+}
+
+function renderPane(section, side, img, diffs, zoom, mode, bgMode, showGrid, showHighlights, showValues) {
+  const pane = section.querySelector(`.pane[data-side="${side}"]`);
+  const wrap = pane.querySelector('.canvas-wrap');
+
+  if (!img) {
+    wrap.innerHTML = '<div class="missing-pane">no image</div>';
+    return;
+  }
+
+  let canvas = wrap.querySelector('canvas');
+  if (!canvas) {
+    wrap.innerHTML = '';
+    canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    attachImageTooltip(canvas, () => canvasState.get(canvas) ?? {});
+  }
+
+  canvasState.set(canvas, { img, diffs, zoom });
+  renderImage(canvas, img, diffs, zoom, mode, bgMode, showGrid, showHighlights, showValues);
+}
+
+// ── Composited section ─────────────────────────────────────────────────────
+
+function renderCompositedSection(zoom, bgMode, showHighlights) {
+  const { direct_images, indirect_images } = state;
+
+  // Compute (cached) crop box and composited buffers
+  if (!state._cropBox) state._cropBox = computeCropBox(direct_images, indirect_images);
+  const { x: cropX, y: cropY, w: cropW, h: cropH } = state._cropBox;
+
+  if (!state._compositeDirect)   state._compositeDirect   = compositeImages(direct_images,   cropX, cropY, cropW, cropH);
+  if (!state._compositeIndirect) state._compositeIndirect = compositeImages(indirect_images, cropX, cropY, cropW, cropH);
+
+  const bufD = state._compositeDirect;
+  const bufI = state._compositeIndirect;
+  const diffs = compositesDiff(bufD, bufI, cropW, cropH);
+
+  let section = document.getElementById('composited-section');
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'composited-section';
+    section.innerHTML = `
+      <div class="comparison-header">
+        <span class="pair-index">Composited</span>
+        <span class="diff-label"></span>
+        <span id="comp-crop-info" style="color:#666;margin-left:6px"></span>
+      </div>
+      <div class="comparison-panes">
+        <div class="pane" data-side="direct">
+          <div class="pane-header">
+            <span class="pane-side">Direct</span>
+            <span id="comp-direct-count"></span>
+          </div>
+          <div class="canvas-wrap" id="comp-wrap-direct"></div>
+        </div>
+        <div class="pane" data-side="indirect">
+          <div class="pane-header">
+            <span class="pane-side">Indirect</span>
+            <span id="comp-indirect-count"></span>
+          </div>
+          <div class="canvas-wrap" id="comp-wrap-indirect"></div>
+        </div>
+      </div>`;
+    document.getElementById('comparisons').appendChild(section);
+  }
+  section.classList.add('visible');
+
+  // Update header
+  const hdr = section.querySelector('.diff-label');
+  if (diffs.size === 0) {
+    hdr.textContent = 'Identical'; hdr.className = 'diff-label no-diffs';
+  } else {
+    hdr.textContent = `${diffs.size} differing pixel${diffs.size === 1 ? '' : 's'}`;
+    hdr.className = 'diff-label has-diffs';
+  }
+  document.getElementById('comp-crop-info').textContent = `(${cropX},${cropY}) ${cropW}×${cropH}`;
+
+  // Image counts
+  document.getElementById('comp-direct-count').textContent = `${direct_images.length} image${direct_images.length === 1 ? '' : 's'}`;
+  document.getElementById('comp-indirect-count').textContent = `${indirect_images.length} image${indirect_images.length === 1 ? '' : 's'}`;
+
+  // Render each side
+  for (const [side, buf] of [['direct', bufD], ['indirect', bufI]]) {
+    const wrap = document.getElementById(`comp-wrap-${side}`);
+    let canvas = wrap.querySelector('canvas');
+    if (!canvas) {
+      wrap.innerHTML = '';
+      canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      attachCompositeTooltip(canvas, () => canvasState.get(canvas) ?? {});
+    }
+    canvasState.set(canvas, { buf, cropW, cropH, cropX, cropY, diffs, zoom });
+    renderComposite(canvas, buf, cropW, cropH, diffs, zoom, bgMode, showHighlights);
+  }
+}
+
+// ── Info bar ───────────────────────────────────────────────────────────────
+
+function updateInfo() {
+  const el = document.getElementById('info');
+  if (!state) { el.className = ''; return; }
+  el.className = 'visible';
+  el.innerHTML =
+    `<div class="info-row">` +
+      `<span class="info-label">Direct:</span>` +
+      `<span class="info-text">${escapeHTML(state.direct_text)}</span>` +
+    `</div>` +
+    `<div class="info-row">` +
+      `<span class="info-label">Indirect:</span>` +
+      `<span class="info-text">${escapeHTML(state.indirect_text)}</span>` +
+    `</div>` +
+    `<div class="info-row">` +
+      `<span class="timing">${state.now_offset_ms} ms from start of event (start time: ${state.start_time_ms} ms) — frame ${state.frame_width}×${state.frame_height}</span>` +
+    `</div>`;
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── File loading ───────────────────────────────────────────────────────────
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      state = parseFile(e.target.result);
+    } catch (err) {
+      alert(`Failed to parse file: ${err.message}`);
+      return;
+    }
+
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('drop').classList.add('loaded');
+
+    // Clear existing comparison sections (composited-section will be rebuilt)
+    const container = document.getElementById('comparisons');
+    container.innerHTML = '';
+
+    updateInfo();
+    renderAll();
+  };
+  reader.readAsText(file);
+}
+
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+const drop = document.getElementById('drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+// ── Controls ───────────────────────────────────────────────────────────────
+
+document.getElementById('zoom').addEventListener('input', (e) => {
+  document.getElementById('zoom-label').textContent = e.target.value + 'x';
+  renderAll();
+});
+
+['show-grid', 'show-highlights', 'show-values', 'view-mode', 'bg-mode'].forEach(id => {
+  document.getElementById(id).addEventListener('change', renderAll);
+});
+</script>
+</body>
+</html>

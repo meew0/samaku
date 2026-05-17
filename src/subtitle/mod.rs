@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Add, Index, IndexMut, Range, Sub};
+use std::ops::{Add, AddAssign, Index, IndexMut, Range, Sub, SubAssign};
 
 pub use emit::emit;
 pub use emit::emit_timecode;
@@ -16,7 +16,8 @@ pub use event_track::*;
 pub use import::import;
 
 use crate::nde::tags::{
-    Alignment, Colour, HorizontalAlignment, Transparency, VerticalAlignment, WrapStyle,
+    Alignment, Colour, FontEncoding, HorizontalAlignment, Transparency, VerticalAlignment,
+    WrapStyle,
 };
 use crate::{media, message, model, nde, style};
 
@@ -249,9 +250,55 @@ impl Sub<StartTime> for StartTime {
 
 /// The duration for which an element is shown, in milliseconds.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub struct Duration(pub i64);
+
+impl From<Duration> for nde::tags::Milliseconds {
+    fn from(value: Duration) -> Self {
+        #[expect(clippy::cast_possible_truncation, reason = "matches libass behavior")]
+        let ms = Self(value.0 as i32);
+        ms
+    }
+}
+
+impl Add<Duration> for Duration {
+    type Output = Duration;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Duration(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign<Duration> for Duration {
+    fn add_assign(&mut self, rhs: Duration) {
+        self.0 += rhs.0;
+    }
+}
+
+impl Sub<Duration> for Duration {
+    type Output = Duration;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Duration(self.0 - rhs.0)
+    }
+}
+
+impl SubAssign<Duration> for Duration {
+    fn sub_assign(&mut self, rhs: Duration) {
+        self.0 -= rhs.0;
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Angle(pub f64);
@@ -430,29 +477,7 @@ pub enum YCbCrMatrix {
     FccPc,
 }
 
-/// libass font encoding parameter (corresponding to “Encoding” in styles).
-///
-/// If this is set to a value other than `1` or `-1`, libass will avoid selecting
-/// fonts that lack coverage in the legacy Windows codepage specified by
-/// the value.
-///
-/// See the following libass issue for a detailed explanation:
-/// https://github.com/libass/libass/issues/662.
-#[derive(Debug, Clone, Copy)]
-pub struct FontEncoding(pub i32);
-
-impl FontEncoding {
-    /// libass-specific value that supposedly autodetects the required encoding, and also causes
-    /// text to be layouted/shaped across override boundaries, which breaks VSFilter compatibility
-    /// but is desirable for certain cursive scripts.
-    pub const LIBASS_AUTODETECT: FontEncoding = FontEncoding(-1);
-}
-
 #[derive(Debug, Clone)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "needed to represent libass' styles in this case"
-)]
 pub struct Style {
     /// The style's name. Do not modify this value directly; instead, use `StyleList::rename`!
     pub name: String,

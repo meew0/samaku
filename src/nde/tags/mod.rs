@@ -1,9 +1,11 @@
 use std::{fmt::Debug, ops::Add};
 
+pub use bake::bake;
 pub use emit::emit;
 pub use parse::parse;
 pub use parse::raw as parse_raw;
 
+pub mod bake;
 mod emit;
 mod lerp;
 mod parse;
@@ -54,6 +56,15 @@ impl<T> Resettable<T> {
             Override(ref x) => Override(x),
             Reset => Reset,
             Keep => Keep,
+        }
+    }
+
+    #[must_use]
+    pub fn map<F: FnOnce(&T) -> T>(&self, map_fn: F) -> Resettable<T> {
+        match *self {
+            Resettable::Override(ref x) => Resettable::Override(map_fn(x)),
+            Resettable::Reset => Resettable::Reset,
+            Resettable::Keep => Resettable::Keep,
         }
     }
 }
@@ -266,13 +277,16 @@ pub struct Local {
 
     pub font_name: Resettable<String>,
     pub font_size: FontSize,
+
+    /// Maps to `\fscx` and `\fscy`. Note that the values are handled internally as pure factors,
+    /// not as percentages: 2.0 would be twice as large.
     pub font_scale: Maybe2D,
     pub letter_spacing: Resettable<f64>,
 
     pub text_rotation: Maybe3D,
     pub text_shear: Maybe2D,
 
-    pub font_encoding: Resettable<i32>,
+    pub font_encoding: Resettable<FontEncoding>,
 
     pub primary_colour: Resettable<Colour>,
     pub secondary_colour: Resettable<Colour>,
@@ -497,6 +511,27 @@ impl Local {
             .lerp(other.drawing_baseline_offset, power);
     }
 
+    /// Clears the given property from the animations contained in this tag block.
+    /// This operation is necessary because if an override tag is specified after
+    /// a `\t` animation block, it overrides the animation and causes the property
+    /// to become static again.
+    pub fn clear_animated_property<T>(&mut self, accessor: fn(&mut LocalAnimatable) -> &mut T)
+    where
+        T: Default,
+    {
+        for animation in &mut self.animations {
+            let property_ref = accessor(&mut animation.modifiers);
+            *property_ref = Default::default();
+        }
+    }
+
+    /// Removes empty animations.
+    pub fn compact_animations(&mut self) {
+        let empty = LocalAnimatable::empty();
+        self.animations
+            .retain(|animation| animation.modifiers != empty);
+    }
+
     /// Emit the tags specified in `self` as ASS override tags into the given writable sink.
     ///
     /// # Errors
@@ -518,7 +553,9 @@ impl Local {
 
         emit::simple_tag_resettable(sink, "fn", self.font_name.as_ref())?;
         self.font_size.emit(sink)?;
-        self.font_scale.emit(sink, "fsc", "")?;
+        self.font_scale
+            .map(|value| value * 100.0)
+            .emit(sink, "fsc", "")?;
         emit::simple_tag_resettable(sink, "fsp", self.letter_spacing.as_ref())?;
 
         self.text_rotation.emit(sink, "fr", "")?;
@@ -632,7 +669,7 @@ impl emit::Value for LocalAnimatable {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Milliseconds(i32);
+pub struct Milliseconds(pub i32);
 
 macro_rules! emit_value_newtype {
     () => {
@@ -650,7 +687,7 @@ impl emit::Value for Milliseconds {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Centiseconds(f64);
+pub struct Centiseconds(pub f64);
 
 impl Add for Centiseconds {
     type Output = Self;
@@ -755,6 +792,14 @@ impl Maybe2D {
         Maybe2D {
             x: self.x.take(),
             y: self.y.take(),
+        }
+    }
+
+    #[must_use]
+    pub fn map<F: FnMut(f64) -> f64>(&self, mut map_fn: F) -> Maybe2D {
+        Maybe2D {
+            x: self.x.map(|val| map_fn(*val)),
+            y: self.y.map(|val| map_fn(*val)),
         }
     }
 
@@ -1000,6 +1045,11 @@ impl Transparency {
     pub fn rendered(self) -> u8 {
         self.0 as u8
     }
+
+    #[must_use]
+    pub fn wrapped(self) -> bool {
+        i32::from(self.rendered()) != self.0
+    }
 }
 
 impl lerp::Lerp for Transparency {
@@ -1021,6 +1071,22 @@ impl emit::Value for Transparency {
     {
         write!(sink, "&H{:X}&", self.0)
     }
+}
+
+/// A subtitle transparency value in the context of a complex fade.
+/// Subtly different from `Transparency`, since it is emitted into a decimal value,
+/// not a hexadecimal one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecimalTransparency(pub i32);
+
+impl From<DecimalTransparency> for Transparency {
+    fn from(value: DecimalTransparency) -> Self {
+        Self(value.0)
+    }
+}
+
+impl emit::Value for DecimalTransparency {
+    emit_value_newtype!();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1306,7 +1372,7 @@ impl FontSize {
                 emit::simple_tag_resettable(sink, "fs", Resettable::Reset::<&EmitFontSize>)
             }
             FontSize::Set(font_size) => {
-                let emit_value = EmitFontSize::Set(font_size.max(0.0));
+                let emit_value = EmitFontSize::Set(font_size);
                 emit::simple_tag(sink, "fs", Some(&emit_value))
             }
         }?;
@@ -1378,7 +1444,13 @@ impl emit::Value for EmitFontSize {
         W: std::fmt::Write,
     {
         match *self {
-            Self::Set(font_size) => font_size.emit_value(sink),
+            Self::Set(font_size) => {
+                // First emit a space so values unambiguously get parsed as `Set`,
+                // rather than `Delta`. This is important if the value is negative
+                // (`\fs-10` is different from `\fs -10`)
+                sink.write_char(' ')?;
+                font_size.emit_value(sink)
+            }
             Self::Increase(delta) => {
                 sink.write_char('+')?;
                 delta.emit_value(sink)
@@ -1389,6 +1461,28 @@ impl emit::Value for EmitFontSize {
             }
         }
     }
+}
+
+/// libass font encoding parameter (corresponding to “Encoding” in styles).
+///
+/// If this is set to a value other than `1` or `-1`, libass will avoid selecting
+/// fonts that lack coverage in the legacy Windows codepage specified by
+/// the value.
+///
+/// See the following libass issue for a detailed explanation:
+/// https://github.com/libass/libass/issues/662.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontEncoding(pub i32);
+
+impl FontEncoding {
+    /// libass-specific value that supposedly autodetects the required encoding, and also causes
+    /// text to be layouted/shaped across override boundaries, which breaks VSFilter compatibility
+    /// but is desirable for certain cursive scripts.
+    pub const LIBASS_AUTODETECT: FontEncoding = FontEncoding(-1);
+}
+
+impl emit::Value for FontEncoding {
+    emit_value_newtype!();
 }
 
 /// Represents the effect and timing of a karaoke syllable.
@@ -1568,12 +1662,19 @@ pub enum KaraokeOnset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KaraokeEffect {
     /// Maps to `\k`.
+    /// The syllable is held at the secondary colour for the associated duration,
+    /// then instantly switched to the primary colour afterwards.
     FillInstant,
 
     /// Maps to `\kf`.
+    /// The syllabls is swept from the primary colour to the secondary colour
+    /// over the associated duration.
     FillSweep,
 
     /// Maps to `\ko`.
+    /// The syllable is held at the secondary colour and without a border for the
+    /// associated duration, then the text colour is instantly switched to the
+    /// primary colour and the border is instantly displayed after the duration.
     BorderInstant,
 }
 
@@ -1626,16 +1727,16 @@ impl emit::Value for SimpleFade {
 /// Between those times, it will transition linearly between
 /// the respective transparency values.
 ///
-/// Note that the transparency values have type `i32`
-/// instead of the usual `u8`. They will be truncated to size `u8`,
-/// but only *after* interpolation, which means that specifying
-/// far larger values than 255 (or far smaller ones than 0)
-/// will produce a fun wrapping effect.
+/// Note that the transparency values have type `i32` (newtyped as
+/// `DecimalTransparency`) instead of the usual `u8`. They will be
+/// truncated to size `u8`, but only *after* interpolation, which
+/// means that specifying far larger values than 255 (or far smaller
+/// ones than 0) will produce a fun wrapping effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComplexFade {
-    pub transparency_before: i32,
-    pub transparency_main: i32,
-    pub transparency_after: i32,
+    pub transparency_before: DecimalTransparency,
+    pub transparency_main: DecimalTransparency,
+    pub transparency_after: DecimalTransparency,
     pub fade_in_start: Milliseconds,
     pub fade_in_end: Milliseconds,
     pub fade_out_start: Milliseconds,
@@ -1677,6 +1778,16 @@ pub enum Clip<T: emit::Value> {
 impl<T: emit::Value> Clip<T> {
     pub fn is_inverse(&self) -> bool {
         matches!(self, Clip::Inverse(_))
+    }
+
+    pub fn value(&self) -> &T {
+        let (Clip::Contained(ref value) | Clip::Inverse(ref value)) = *self;
+        value
+    }
+
+    pub fn value_mut(&mut self) -> &mut T {
+        let (Clip::Contained(ref mut value) | Clip::Inverse(ref mut value)) = *self;
+        value
     }
 }
 
@@ -1999,9 +2110,9 @@ mod tests {
             })),
             origin: Some(Position { x: 3.0, y: 4.0 }),
             fade: Some(Fade::Complex(ComplexFade {
-                transparency_before: 0,
-                transparency_main: 100,
-                transparency_after: 200,
+                transparency_before: DecimalTransparency(0),
+                transparency_main: DecimalTransparency(100),
+                transparency_after: DecimalTransparency(200),
                 fade_in_start: Milliseconds(300),
                 fade_in_end: Milliseconds(400),
                 fade_out_start: Milliseconds(500),
@@ -2238,9 +2349,9 @@ mod tests {
         assert_emits!(FontSize::Reset(FontSizeDelta::ZERO), "\\fs");
         assert_emits!(FontSize::Reset(FontSizeDelta(1.0)), "\\fs\\fs+1");
         assert_emits!(FontSize::Reset(FontSizeDelta(-1.0)), "\\fs\\fs-1");
-        assert_emits!(FontSize::Set(1.0), "\\fs1");
-        assert_emits!(FontSize::Set(0.0), "\\fs0");
-        assert_emits!(FontSize::Set(-1.0), "\\fs0");
+        assert_emits!(FontSize::Set(1.0), "\\fs 1");
+        assert_emits!(FontSize::Set(0.0), "\\fs 0");
+        assert_emits!(FontSize::Set(-1.0), "\\fs -1");
 
         Ok(())
     }

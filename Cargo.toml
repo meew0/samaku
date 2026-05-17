@@ -66,6 +66,7 @@ miniz_oxide = "0.9"
 
 # Test dependencies
 assert_matches2 = "0.1.2"
+assert_float_eq = "1.2.0"
 
 # Benchmark dependencies
 criterion = "0.8"

@@ -27,7 +27,7 @@ pub struct Event {
     pub global_tags: tags::Global,
 
     /// Global overrides for local tags: normally these tags would only apply to a specific section
-    /// of text and could be overridden by future occurrencies. But if one of the tags in this field
+    /// of text and could be overridden by future occurrences. But if one of the tags in this field
     /// is set, it will be removed from all local tag sets in compilation, such that it is
     /// guaranteed to apply over the entire event.
     pub overrides: tags::Local,
