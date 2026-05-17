@@ -1027,7 +1027,7 @@ fn bake_karaoke(
                 Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
                 // \r does not touch karaoke state; treat as a zero-duration no-op.
                 Span::Reset | Span::ResetToStyle(_) => {
-                    return (RespanState::Default, last_baked, active_effect_type);
+                    return (*respan_state, last_baked, active_effect_type);
                 }
             };
 
@@ -1084,14 +1084,14 @@ fn bake_karaoke(
                 last_baked = subtitle::Duration(tm_start);
             }
 
-            // We only need to force a new run if this span would not start a new run anyway,
-            // as indicated by the previous respan state.
-            let new_respan_state =
-                if duration != 0 && !matches!(respan_state, RespanState::StartNewRun) {
-                    RespanState::StartNewRun
-                } else {
-                    RespanState::Default
-                };
+            // Force start a new run if either the previous respan state indicated that
+            // we should do this (because style properties changed) or if a new karaoke
+            // syllable starts.
+            let new_respan_state = if duration != 0 {
+                RespanState::StartNewRun
+            } else {
+                *respan_state
+            };
 
             (new_respan_state, last_baked, active_effect_type)
         })
@@ -1684,7 +1684,7 @@ mod tests {
         assert_eq!(
             baked[0],
             (
-                RespanState::Default,
+                RespanState::StartNewRun,
                 subtitle::Duration(0),
                 Some(KaraokeEffect::FillInstant)
             )
@@ -1716,7 +1716,7 @@ mod tests {
         assert_eq!(
             baked[4],
             (
-                RespanState::Default,
+                RespanState::StartNewRun,
                 subtitle::Duration(600),
                 Some(KaraokeEffect::FillInstant)
             )
@@ -1732,8 +1732,126 @@ mod tests {
         assert_eq!(
             baked[6],
             (
-                RespanState::Default,
+                RespanState::StartNewRun,
                 subtitle::Duration(800),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+    }
+
+    #[test]
+    fn karaoke_edge_cases() {
+        let mut time = TimeContext {
+            start: subtitle::StartTime(0),
+            duration: subtitle::Duration(2000),
+            now: subtitle::StartTime(200),
+        };
+
+        let event_style = subtitle::Style::default();
+        let style_context = StyleContext {
+            original_style: &event_style,
+            new_style: &event_style,
+        };
+        let style_lookup = |_name: &str| panic!("the style lookup should not have been called");
+
+        let (_, spans) = parse("a{\\kt50}b{\\k20}c{\\k20}d");
+        assert_eq!(spans.len(), 4);
+        let (new_spans, respan_state) = respan(time, style_context, &style_lookup, &spans, None);
+        assert_eq!(new_spans.len(), 4);
+        assert_eq!(respan_state.len(), 4);
+        let baked = bake_karaoke(&new_spans, &respan_state);
+
+        assert_eq!(
+            baked[0],
+            (RespanState::Default, subtitle::Duration(0), None)
+        );
+        assert_eq!(
+            baked[1],
+            (RespanState::Default, subtitle::Duration(0), None)
+        );
+        assert_eq!(
+            baked[2],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(0),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+        assert_eq!(
+            baked[3],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(500),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+
+        time.now = subtitle::StartTime(0);
+        let (_, spans) = parse("a{\\k50\\k0}b{\\k20}c{\\k20}d");
+        assert_eq!(spans.len(), 4);
+        let (new_spans, respan_state) = respan(time, style_context, &style_lookup, &spans, None);
+        assert_eq!(new_spans.len(), 4);
+        assert_eq!(respan_state.len(), 4);
+        let baked = bake_karaoke(&new_spans, &respan_state);
+
+        assert_eq!(
+            baked[0],
+            (RespanState::Default, subtitle::Duration(0), None)
+        );
+        assert_eq!(
+            baked[1],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(500),
+                Some(KaraokeEffect::FillInstant),
+            )
+        );
+        assert_eq!(
+            baked[2],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(500),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+        assert_eq!(
+            baked[3],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(700),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+
+        time.now = subtitle::StartTime(0);
+        let (_, spans) = parse("{\\k20}a\\N{\\kt0}b");
+        assert_eq!(spans.len(), 2);
+        let (new_spans, respan_state) = respan(time, style_context, &style_lookup, &spans, None);
+        assert_eq!(new_spans.len(), 3);
+        assert_eq!(respan_state.len(), 3);
+        let baked = bake_karaoke(&new_spans, &respan_state);
+
+        assert_eq!(
+            baked[0],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(0),
+                Some(KaraokeEffect::FillInstant)
+            )
+        );
+        assert_eq!(
+            baked[1],
+            (
+                RespanState::StartNewRun,
+                subtitle::Duration(0),
+                Some(KaraokeEffect::FillInstant),
+            )
+        );
+        assert_eq!(
+            baked[2],
+            (
+                RespanState::Default,
+                subtitle::Duration(0),
                 Some(KaraokeEffect::FillInstant)
             )
         );
