@@ -4,10 +4,10 @@
 )]
 
 use super::{
-    lerp::Lerp, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade,
-    DecimalTransparency, Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke,
-    KaraokeEffect, KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove,
-    Rectangle, Resettable, SimpleFade, Transparency,
+    Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency,
+    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke, KaraokeEffect,
+    KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove, Rectangle,
+    Resettable, SimpleFade, Transparency, lerp::Lerp,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -845,17 +845,51 @@ enum RespanState {
     #[default]
     Default,
 
-    /// Force start a new run even if the karaoke duration is zero.
+    /// Start a new karaoke run even if this span's karaoke duration is zero.
+    ///
+    /// This is produced by `respan` whenever a style change (colour, font, etc.) occurs
+    /// between consecutive glyphs, mirroring the checks in libass's `split_style_runs`.
+    /// It is also carried forward from a `Reset`/`ResetToStyle` span (which has no glyph
+    /// of its own) to the first text span after it, because in libass the style change
+    /// lands on that first text glyph.
     StartNewRun,
+
+    /// Produced by `respan` when splitting a span at a `\\N` linebreak, and the resulting
+    /// sub-span contains only the `\\N` character with no text content after it.
+    ///
+    /// In libass, the `\\N` glyph itself is skipped (it has `skip=true`) and is
+    /// within-run of the preceding karaoke boundary — so karaoke timing does not advance.
+    /// However, the span still starts a new visual line, so `bake_karaoke` outputs
+    /// `StartNewRun` for the downstream renderer (to make libass insert the `\k` that
+    /// forces a run break) while leaving the karaoke timeline unchanged.
+    ///
+    /// Contrast with a sub-span such as `\\Nccc`: the first character *after* the `\\N`
+    /// is the one that starts a new run in libass (the linebreak code marks it
+    /// `starts_new_run=true`), so `respan` gives that sub-span `StartNewRun` instead.
+    ForcedNewRun,
 }
 
-/// Preprocess and split spans for correct karaoke purposes.
+/// Preprocess and split spans to record which ones will start a new run in libass.
 ///
-/// In libass, each new run (`starts_new_run`) automatically becomes a new karaoke syl.
-/// Our karaoke logic, however, assumes karaoke syls are only those with nonzero duration.
-/// So we need to split up spans containing multiple runs (i.e. those with linebreaks)
-/// and mark spans that start a new run (due to style changes) even without a specified
-/// karaoke duration.
+/// libass's `split_style_runs` (ass_render.c) marks a glyph `starts_new_run=true` when
+/// any of the following hold vs the preceding glyph:
+/// - `effect_timing != 0` — the glyph carries a non-zero karaoke duration (`\k`/`\kf`/`\ko`).
+/// - `effect_type != EF_NONE && effect_type != last_seen_non_none_effect_type` — the
+///   effect type changed; crucially this fires on the first non-EF_NONE glyph (EF_NONE →
+///   EF_KARAOKE transition) because `last_effect_type` begins as the first glyph's type.
+/// - Any rendering property changed: primary/secondary/border/shadow colour, font name,
+///   font size, bold, italic, underline, strikeout, border, shadow, spacing, rotation,
+///   shear, blur, be, scale_x/y, or decoration flags.
+/// - The glyph immediately follows a `\N` linebreak (handled by the linebreak code, not
+///   `split_style_runs` itself; only applies when there is text content after the `\N`).
+///
+/// `\r`/`\rStyle` spans produce no glyphs themselves; the style change lands on the first
+/// text glyph after the reset. `respan` assigns `StartNewRun` to the Reset span, and
+/// `bake_karaoke` carries it forward to the next text span via `carry_new_run`.
+///
+/// Spans containing `\N` are split so that each sub-span can be given an independent
+/// `RespanState` (either `StartNewRun` for sub-spans with text content, or `ForcedNewRun`
+/// for a trailing `\N`-only sub-span that is within-run in libass).
 fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
     time: TimeContext,
     mut style_context: StyleContext<'a>,
@@ -913,7 +947,19 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
                         run.to_owned()
                     };
                     new_spans.push(Span::Tags(new_local, new_run));
-                    respan_states.push(respan_state_opt.take().unwrap_or(RespanState::StartNewRun));
+                    // First sub-span: use the original respan_state from bake_local.
+                    // Subsequent sub-spans (\\N splits):
+                    //   - If the sub-span has no text after the \\N (run == ""): the \\N glyph
+                    //     itself is within-run in libass (ForcedNewRun) — no new karaoke boundary.
+                    //   - If it has text (e.g. "\\Nccc"): the first character after \\N starts a new
+                    //     run in libass (libass marks it starts_new_run via the linebreak code).
+                    respan_states.push(respan_state_opt.take().unwrap_or({
+                        if run.is_empty() {
+                            RespanState::ForcedNewRun
+                        } else {
+                            RespanState::StartNewRun
+                        }
+                    }));
 
                     add_newline = true;
                 }
@@ -949,75 +995,133 @@ fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
 }
 
 /// Convert spans potentially containing karaoke elements into a vec of
-/// `(transition_time, effect)` pairs, one per span.
+/// `(respan_state, transition_time, effect)` triples, one per span.
 ///
-/// `transition_time` is a millisecond offset from event start: before this time the span
-/// shows in secondary colour; at or after it the span shows in primary.
-///
-/// `effect` is `None` until the first `\k`/`\kf`/`\ko` tag is encountered, then carries
-/// the most recently seen effect type forward (including across `\kt`-only spans, because
-/// `\kt` alone does not update `effect_type` in libass).
+/// - `respan_state` is `StartNewRun` when the span must start a new libass run (so the
+///   caller inserts a `\k1000000000` to force the break), or `Default`/`ForcedNewRun` for
+///   within-run spans.
+/// - `transition_time` is a millisecond offset from event start: before this time the
+///   span's glyphs are shown in secondary colour; at or after it they are shown in primary.
+/// - `effect` is `None` until the first `\k`/`\kf`/`\ko` tag is encountered, then carries
+///   the most recently seen effect type forward (including across `\kt`-only and EF_NONE
+///   spans, because libass's `effect_type` variable is sticky once set).
 ///
 /// ## How libass represents karaoke timing
 ///
-/// During parsing (`ass_parse_tags`), each `\k`/`\kf`/`\ko` tag updates:
-/// - `state->effect_skip_timing += (uint32_t)state->effect_timing` — accumulate
-///   the previous duration as "skip time" before this new syllable.
+/// ### Parsing pass (`ass_parse_tags`)
+///
+/// Each `\k`/`\kf`/`\ko` tag shifts the running timing state:
+/// - `state->effect_skip_timing += (uint32_t)state->effect_timing` — push the previous
+///   syllable duration into the "skip" accumulator (VSFilter `\k50\k0` compat).
 /// - `state->effect_timing = dtoi32(val * 10)` — set the new syllable duration (ms).
 ///
-/// `\kt` instead *sets* `effect_skip_timing` absolutely and marks `reset_effect`.
+/// `\kt` instead *sets* `effect_skip_timing = dtoi32(val*10)` and marks `reset_effect=true`
+/// (absolute timing reset instead of relative advance).
 ///
-/// Crucially, `ass_render.c:2192-2195` resets `effect_timing`, `effect_skip_timing`,
-/// and `reset_effect` to 0/false after each glyph is created. So these values never
-/// carry between spans; each span's first glyph gets only the tags from its own block.
+/// `ass_render.c` resets `effect_timing`, `effect_skip_timing`, and `reset_effect` to
+/// zero/false immediately after each glyph is created. So these values are strictly
+/// per-span: the first glyph of a span sees only the tags from that span's own block.
 ///
-/// ## `ass_process_karaoke_effects` (the second pass)
+/// ### Run-splitting pass (`split_style_runs`)
 ///
-/// After all glyphs are created, `split_style_runs` decides which glyphs start a new
-/// "run" (a contiguous group rendered identically). The primary trigger for a new run
-/// is `effect_timing != 0`. A span with `effect_timing == 0` (e.g. `\k0` or `\kt`
-/// alone) therefore does *not* start its own run — its glyph falls into the preceding
-/// run and is processed in the within-run accumulation loop.
+/// After all glyphs are laid out, `split_style_runs` marks `starts_new_run=true` on a
+/// glyph whenever any of these hold vs the previous glyph:
+/// - `effect_timing != 0` — the glyph has a non-zero karaoke duration.
+/// - `effect_type != EF_NONE && effect_type != last_seen_non_none_type` — the effect type
+///   changed from a non-NONE value; this catches the EF_NONE→EF_KARAOKE transition
+///   (first syllable after plain text) because `last_seen_non_none_type` starts as the
+///   first glyph's type, which is EF_NONE when the event begins without a karaoke tag.
+/// - Any rendering property changed: colours, font, size, bold/italic/underline/strikeout,
+///   border, shadow, spacing, rotation, shear, blur, scale, decoration flags.
+/// - (Separately) the glyph immediately follows a `\N` linebreak (not from
+///   `split_style_runs` itself but from the linebreak-handling code in the layout pass).
 ///
-/// The main loop then maintains a running `timing` counter (milliseconds). For each
-/// run boundary it computes:
+/// `\r`/`\rStyle` produces no glyph. The style change it causes appears on the *first
+/// text glyph after the reset*, which therefore gets `starts_new_run=true` due to the
+/// colour/font property change.
+///
+/// ### Karaoke-effects pass (`ass_process_karaoke_effects`)
+///
+/// The loop walks all glyphs (plus a sentinel at `i = text_info->length`). Whenever
+/// `starts_new_run=true` (or the sentinel), a boundary is triggered for the group that
+/// just ended. Within-run glyphs (between boundaries) only accumulate:
 /// ```text
+/// if reset_effect: has_reset = true; skip_timing = 0
+/// skip_timing += effect_skip_timing
+/// ```
+///
+/// At each boundary the "start" glyph determines the group's timing:
+/// ```text
+/// if start->reset_effect: timing = 0
 /// tm_start = timing + start->effect_skip_timing
 /// tm_end   = tm_start + start->effect_timing
-/// timing   = !has_reset * tm_end + skip_timing   (where skip_timing accumulates
-///                                                  effect_skip_timing of within-run glyphs)
+/// timing   = !has_reset * tm_end + skip_timing
+/// has_reset = false; skip_timing = 0
 /// ```
-/// All glyphs in the run transition secondary→primary at `tm_start`.
+///
+/// If `effect_type` (carried from the last seen non-EF_NONE boundary) is still `EF_NONE`,
+/// the entire boundary is skipped — no timing is assigned to those glyphs. Once a real
+/// effect type (`EF_KARAOKE`, etc.) has been seen, all subsequent boundaries use it.
+///
+/// For non-`\kf` effects, `tm_end = tm_start` for rendering: the glyph switches colour
+/// instantaneously at `tm_start` (secondary before, primary at-or-after).
 ///
 /// ## Mapping to our span model
 ///
-/// Because state resets after each glyph, our `Karaoke` struct encodes per-span:
+/// Because libass resets effect state after each glyph, our `Karaoke` struct encodes
+/// per-span values that map directly to libass's per-glyph fields:
 /// - `NoDelay`          → `effect_skip_timing = 0`,            `reset_effect = false`
 /// - `RelativeDelay(d)` → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = false`
 /// - `Absolute(d)`      → `effect_skip_timing = dtoi32(d*10)`, `reset_effect = true`
 ///
-/// A span with `effect_timing == 0` shares its run with the previous boundary glyph,
-/// so the returned baked value is the same as the previous span's — the span
-/// "appears" to transition at the same time even though the timeline advances by `skip`.
+/// A span with `effect_timing == 0` (no `\k`/`\kf`/`\ko` tag, or `\k0`) is within-run:
+/// it does not start its own boundary, so its baked value is the same as the previous
+/// boundary's — the span visually transitions at the same time as the last boundary.
 fn bake_karaoke(
     spans: &[Span],
     respan_states: &[RespanState],
 ) -> Vec<(RespanState, subtitle::Duration, Option<KaraokeEffect>)> {
-    // Running karaoke timeline position in milliseconds. Corresponds to `timing` in
-    // `ass_process_karaoke_effects` (there it's `int32_t`, but we use `i64` to avoid
-    // worrying about overflow in intermediate calculations).
+    // Running karaoke timeline position in milliseconds. Mirrors `timing` in libass's
+    // `ass_process_karaoke_effects` (there it's `int32_t`; we use `i64` to avoid
+    // overflow in intermediate calculations).
     let mut timing: i64 = 0;
 
-    // The most recent baked value from a span with non-zero duration. Zero-duration
-    // spans inherit this value — they fall into the previous run in libass and therefore
-    // share its transition time.
+    // tm_start of the most recent non-EF_NONE boundary. Within-run spans return this
+    // unchanged — their glyphs share the same secondary→primary transition as the last
+    // boundary glyph.
     let mut last_baked = subtitle::Duration(0);
 
-    // The most recently seen karaoke effect type. Corresponds to the accumulated
-    // `effect_type` in `ass_process_karaoke_effects`. None = EF_NONE (no karaoke yet).
-    // \kt alone (effect = None) does not update this, matching libass behaviour where
-    // \kt leaves the glyph's effect_type at EF_NONE so the accumulated value is kept.
+    // Most recently seen real karaoke effect type (EF_KARAOKE, EF_KARAOKE_KF, etc.).
+    // None = EF_NONE (no real effect seen yet).
+    // In libass, `effect_type` in `ass_process_karaoke_effects` is a running "last seen
+    // non-EF_NONE type" variable: it is updated when a boundary glyph has a non-EF_NONE
+    // effect, and stays unchanged otherwise. We mirror this: `\kt` alone (which has no
+    // `karaoke.effect`) does not update `active_effect_type`.
     let mut active_effect_type: Option<KaraokeEffect> = None;
+
+    // Within-run `has_reset` and `skip_timing` from libass's `ass_process_karaoke_effects`,
+    // accumulated only for spans processed *before* the first non-EF_NONE boundary
+    // (while `active_effect_type` is still `None`).
+    //
+    // When the first real boundary is hit, libass applies:
+    //   timing = !has_reset * tm_end + skip_timing
+    // so any \kt (absolute offset) seen before the first \k feeds into that formula.
+    //
+    // After the first non-EF_NONE boundary these are reset. Subsequent within-run spans
+    // use direct timing advancement (timing += skip / timing = 0 for resets), which is
+    // mathematically equivalent to the formula when pending_* are zero, and preserves
+    // the behaviour the `karaoke` unit test was written against.
+    let mut pending_has_reset = false;
+    let mut pending_skip_timing: i64 = 0;
+
+    // `\r`/`\rStyle` spans produce no glyphs, so they cannot start a karaoke boundary.
+    // In libass the style change caused by the reset lands on the first text glyph *after*
+    // the reset (that glyph's colour/font properties differ from the preceding glyph, so
+    // `split_style_runs` marks it `starts_new_run=true`). We replicate this by carrying
+    // the `StartNewRun` forward to the next Tags/Drawing span rather than consuming it on
+    // the glyph-less Reset span — which would otherwise insert a spurious `\k1000000000`
+    // into empty text and corrupt the skip_timing of the following glyph.
+    let mut carry_new_run = false;
 
     spans
         .iter()
@@ -1025,88 +1129,140 @@ fn bake_karaoke(
         .map(|(span, respan_state)| {
             let karaoke = match *span {
                 Span::Tags(ref local, _) | Span::Drawing(ref local, _) => local.karaoke,
-                // \r does not touch karaoke state; treat as a zero-duration no-op.
                 Span::Reset | Span::ResetToStyle(_) => {
-                    return (*respan_state, last_baked, active_effect_type);
+                    // No glyph: carry StartNewRun to the next text span (see `carry_new_run`).
+                    // Return Default so no `\k` is emitted for this glyph-less span.
+                    if *respan_state == RespanState::StartNewRun {
+                        carry_new_run = true;
+                    }
+                    return (RespanState::Default, last_baked, active_effect_type);
                 }
             };
 
-            // \k / \kf / \ko set effect_type on the glyph; \kt alone leaves it EF_NONE
-            // and therefore does not update active_effect_type.
-            if let Some((et, _)) = karaoke.effect {
-                active_effect_type = Some(et);
-            }
-
-            // Until the first \k/\kf/\ko tag the span always renders in primary colour.
-            if active_effect_type.is_none() {
-                return (RespanState::Default, subtitle::Duration(0), None);
-            }
-
-            // Translate our onset to libass's `effect_skip_timing` and `reset_effect`.
-            let (skip, is_reset) = match karaoke.onset {
-                // \k/\kf/\ko with no preceding sibling tag in the same block.
-                KaraokeOnset::NoDelay => (0_i64, false),
-                // Multiple \k-family tags in one block: the earlier tags' durations
-                // accumulate as skip timing for the final one.
-                KaraokeOnset::RelativeDelay(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), false),
-                // \kt: sets skip absolutely and marks reset_effect = true, which causes
-                // `ass_process_karaoke_effects` to set timing = 0 before adding the skip.
-                KaraokeOnset::Absolute(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), true),
-            };
-
-            // effect = None means \kt was the last (or only) tag — effect_timing = 0.
-            let duration = karaoke
-                .effect
-                .map_or(0_i64, |(_, cs)| i64::from(ass_dtoi32(cs.0 * 10.0)));
-
-            // \kt (reset_effect = true) causes timing = 0 before applying skip.
-            // In libass this happens when the within-run glyph with reset_effect is seen
-            // before the next boundary; we apply it here at the span level.
-            if is_reset {
-                timing = 0;
-            }
-
-            // tm_start: when this span's karaoke effect begins (ms from event start).
-            // tm_end: when the effect window closes; timing advances to here.
-            // For non-KF effects libass also sets tm_end = tm_start for the *rendering*
-            // step, but `timing` is updated from the original tm_end beforehand.
-            let tm_start = timing + skip;
-            let tm_end = tm_start + duration;
-            timing = tm_end;
-
-            // A span with duration == 0 does not create its own run boundary in libass
-            // (because `effect_timing == 0` is the primary starts_new_run trigger).
-            // !! UNLESS we need to force start a new run due to the respan state !!
-            // Its glyphs end up inside the previous run and share its transition time.
-            // We model this by returning last_baked unchanged; the `skip` still advanced
-            // `timing` so subsequent spans are positioned correctly.
-            if duration != 0 || matches!(respan_state, RespanState::StartNewRun) {
-                last_baked = subtitle::Duration(tm_start);
-            }
-
-            // Force start a new run if either the previous respan state indicated that
-            // we should do this (because style properties changed) or if a new karaoke
-            // syllable starts.
-            let new_respan_state = if duration != 0 {
+            // Consume any StartNewRun forwarded from a preceding Reset span. This makes
+            // the first text glyph after `\r` behave like `starts_new_run=true` in libass.
+            let effective_respan_state = if carry_new_run {
+                carry_new_run = false;
                 RespanState::StartNewRun
             } else {
                 *respan_state
             };
 
-            (new_respan_state, last_baked, active_effect_type)
+            // `\k`/`\kf`/`\ko` set the glyph's effect type; `\kt` alone leaves it EF_NONE.
+            // Track whether this span is the first real-effect boundary, because libass's
+            // `split_style_runs` also starts a new run when the effect type transitions
+            // from EF_NONE to a real type for the first time.
+            let is_first_non_none = karaoke.effect.is_some() && active_effect_type.is_none();
+            if let Some((et, _)) = karaoke.effect {
+                active_effect_type = Some(et);
+            }
+
+            // Translate our onset to libass's effect_skip_timing / reset_effect.
+            let (skip, is_reset) = match karaoke.onset {
+                KaraokeOnset::NoDelay => (0_i64, false),
+                KaraokeOnset::RelativeDelay(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), false),
+                KaraokeOnset::Absolute(cs) => (i64::from(ass_dtoi32(cs.0 * 10.0)), true),
+            };
+
+            let duration = karaoke
+                .effect
+                .map_or(0_i64, |(_, cs)| i64::from(ass_dtoi32(cs.0 * 10.0)));
+
+            // A span starts a new karaoke boundary (i.e. its first glyph has
+            // `starts_new_run=true` in libass) when any of these hold:
+            //   1. `duration != 0` — non-zero `effect_timing`; always triggers in
+            //      `split_style_runs` regardless of style changes.
+            //   2. `is_first_non_none` — the EF_NONE → real-effect transition. libass's
+            //      `split_style_runs` fires when `effect_type != EF_NONE && effect_type
+            //      != last_seen_non_none_type`, which triggers the first time a real-
+            //      effect glyph follows one or more EF_NONE glyphs.
+            //   3. `effective_respan_state == StartNewRun` — a rendering-property change
+            //      (colour, font, etc.), including a change carried from a preceding Reset.
+            //
+            // `ForcedNewRun` (a `\N`-only sub-span) is intentionally excluded: the `\N`
+            // glyph is within-run in libass (it is skipped for rendering), so karaoke
+            // timing does not advance for it.
+            let starts_new_run = duration != 0
+                || is_first_non_none
+                || matches!(effective_respan_state, RespanState::StartNewRun);
+
+            if !starts_new_run {
+                // Within-run span. Update timing state but do not create a new boundary.
+                if active_effect_type.is_none() {
+                    // Before the first non-EF_NONE boundary: mirror libass's within-run
+                    // accumulation into `has_reset` / `skip_timing`, so the values are
+                    // ready for the formula when the first real boundary arrives.
+                    if is_reset {
+                        pending_has_reset = true;
+                        pending_skip_timing = 0;
+                    }
+                    pending_skip_timing += skip;
+                } else {
+                    // After the first non-EF_NONE boundary: advance `timing` directly.
+                    // This is mathematically equivalent to the libass formula when
+                    // pending_* are zero (the normal case here), and preserves the
+                    // behaviour the `karaoke` unit test was written against.
+                    if is_reset {
+                        timing = 0;
+                    }
+                    timing += skip;
+                }
+
+                // `ForcedNewRun` means the span is a `\N`-only sub-span: within-run for
+                // karaoke timing, but starting a new visual line. Emit `StartNewRun` so
+                // the caller inserts the `\k1000000000` that forces a libass run break.
+                let out_state = if matches!(effective_respan_state, RespanState::ForcedNewRun) {
+                    RespanState::StartNewRun
+                } else {
+                    effective_respan_state
+                };
+                return (out_state, last_baked, active_effect_type);
+            }
+
+            // The span starts a new boundary. In libass this is where a new group begins
+            // and the *previous* group's timing is finalised. If no real effect type has
+            // been seen yet (EF_NONE throughout), libass skips the group entirely: no
+            // tm_start is assigned and `pending_*` are NOT reset (they keep accumulating).
+            if active_effect_type.is_none() {
+                return (RespanState::Default, subtitle::Duration(0), None);
+            }
+
+            // Non-EF_NONE boundary. `\kt` on this glyph (is_reset=true) resets the
+            // running timeline to zero before computing tm_start — an absolute position.
+            if is_reset {
+                timing = 0;
+            }
+
+            let tm_start = timing + skip;
+            let tm_end = tm_start + duration;
+
+            // Libass formula applied after finalising each non-EF_NONE group:
+            //   timing = !has_reset * tm_end + skip_timing
+            // `pending_*` carry within-run state accumulated since the last boundary
+            // (or since the start, for the first boundary). After the first boundary
+            // they are reset; subsequent within-run spans use direct timing advancement
+            // above, leaving them at zero, which reduces the formula to `timing = tm_end`.
+            timing = if pending_has_reset { 0 } else { tm_end } + pending_skip_timing;
+            pending_has_reset = false;
+            pending_skip_timing = 0;
+
+            last_baked = subtitle::Duration(tm_start);
+
+            (RespanState::StartNewRun, last_baked, active_effect_type)
         })
         .collect()
 }
 
 fn maybe_force_run_break(local: &mut Local, new_respan_state: Option<RespanState>) {
-    // If the karaoke effect would start a new run, we need to force libass to actually do that.
-    // There is no trivial way to achieve this on its own. The least hacky way seems to be
-    // setting a karaoke effect with a very large duration (such that it never actually ends).
-    // An alternative might be messing with the font family name in some way (e.g. changing
-    // from lower to upper case)
+    // When `bake_karaoke` says this span must start a new libass run, we have to make
+    // libass actually do so. The only reliable trigger in `split_style_runs` that we can
+    // set from override tags is `effect_timing != 0`, so we inject a `\k` with a huge
+    // duration (10⁹ cs ≈ 116 days) to ensure the run break. Colour and other style
+    // properties are handled separately by `bake_local`/`bake_reset`. We use
+    // `KaraokeEffect::FillInstant` (\k) rather than \kf/\ko so that it never
+    // produces visible karaoke-fill animation artefacts at normal playback times.
     if new_respan_state == Some(RespanState::StartNewRun) {
         local.karaoke = Karaoke {
-            // 10⁹ centiseconds = 10⁷ seconds = 116 days
             effect: Some((KaraokeEffect::FillInstant, Centiseconds(1_000_000_000.0))),
             onset: KaraokeOnset::NoDelay,
         }
@@ -1299,7 +1455,7 @@ fn bake_move(time: TimeContext, global: &mut Global) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nde::tags::{parse, GlobalAnimatable, Maybe3D, Move, MoveTiming};
+    use crate::nde::tags::{GlobalAnimatable, Maybe3D, Move, MoveTiming, parse};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
     use std::cell::RefCell;
