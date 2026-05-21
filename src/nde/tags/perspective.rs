@@ -243,87 +243,6 @@ pub enum OrgMode {
     Keep(Position),
 }
 
-/// Alignment-derived shifts and the alignment value itself, needed by
-/// [`quad_to_tags`]. `align` is the libass numpad alignment (1..=9).
-#[derive(Debug, Clone, Copy)]
-pub struct LineGeometry {
-    pub align: i32,
-    /// Bounding box of the un-transformed text: `(min, max)`.
-    pub bbox_min: Vector2<f64>,
-    pub bbox_max: Vector2<f64>,
-}
-
-const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
-
-pub struct Perspective {
-    pos: Vector2<f64>,
-    org: Vector2<f64>,
-    scale: Vector2<f64>,
-    rot_x: f64,
-    rot_y: f64,
-    rot_z: f64,
-    raw_fax: f64,
-}
-
-impl Perspective {
-    /// Converts this perspective data into ASS override tags.
-    /// Takes as input previous values (from previous override tags, or style information).
-    /// The given `global` tags are modified in place. New `local` tags are returned
-    /// that can be used in `override_from`/`clear_from` as desired.
-    pub fn apply(
-        &self,
-        global: &mut Global,
-        old_font_scale: Vector2<f64>,
-        old_border: Vector2<f64>,
-        old_shadow: Vector2<f64>,
-    ) -> Option<Local> {
-        let angle_x = self.rot_x * RAD2DEG;
-        let angle_y = -self.rot_y * RAD2DEG;
-        let angle_z = -self.rot_z * RAD2DEG;
-
-        let new_font_scale = self.scale;
-        let fax = self.raw_fax * self.scale.y / self.scale.x;
-        let fay = 0.0;
-
-        // Border and shadow scale with the change in fsc (component-wise).
-        let border_shadow_ratio = new_font_scale.component_div(&old_font_scale);
-        let new_border = old_border.component_mul(&border_shadow_ratio);
-        let new_shadow = old_shadow.component_mul(&border_shadow_ratio);
-
-        let is_finite = angle_x.is_finite()
-            && angle_y.is_finite()
-            && angle_z.is_finite()
-            && fax.is_finite()
-            && vector_is_finite(self.org)
-            && vector_is_finite(self.pos)
-            && vector_is_finite(new_font_scale)
-            && vector_is_finite(new_border)
-            && vector_is_finite(new_shadow);
-
-        is_finite.then(|| {
-            global.position = Some(PositionOrMove::Position(self.pos.into()));
-            global.origin = Some(self.org.into());
-
-            Local {
-                text_rotation: Maybe3D {
-                    x: Resettable::Override(angle_x),
-                    y: Resettable::Override(angle_x),
-                    z: Resettable::Override(angle_x),
-                },
-                text_shear: vector![fax, fay].into(),
-                font_scale: new_font_scale.into(),
-                border: new_border.into(),
-                shadow: new_shadow.into(),
-                ..Local::empty()
-            }
-        })
-    }
-}
-
-fn vector_is_finite(vector: Vector2<f64>) -> bool {
-    vector.x.is_finite() && vector.y.is_finite()
-}
-
 /// Calculates the perspective override tags that make a subtitle's base rectangle project onto the given quad.
 ///
 /// Inputs are in **script** coordinates.
@@ -479,6 +398,77 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
     }
 }
 
+const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
+
+pub struct Perspective {
+    pos: Vector2<f64>,
+    org: Vector2<f64>,
+    scale: Vector2<f64>,
+    rot_x: f64,
+    rot_y: f64,
+    rot_z: f64,
+    raw_fax: f64,
+}
+
+impl Perspective {
+    /// Converts this perspective data into ASS override tags.
+    /// Takes as input previous values (from previous override tags, or style information).
+    /// The given `global` tags are modified in place. New `local` tags are returned
+    /// that can be used in `override_from`/`clear_from` as desired.
+    pub fn apply(
+        &self,
+        global: &mut Global,
+        old_font_scale: Vector2<f64>,
+        old_border: Vector2<f64>,
+        old_shadow: Vector2<f64>,
+    ) -> Option<Local> {
+        let angle_x = self.rot_x * RAD2DEG;
+        let angle_y = -self.rot_y * RAD2DEG;
+        let angle_z = -self.rot_z * RAD2DEG;
+
+        let new_font_scale = self.scale;
+        let fax = self.raw_fax * self.scale.y / self.scale.x;
+        let fay = 0.0;
+
+        // Border and shadow scale with the change in fsc (component-wise).
+        let border_shadow_ratio = new_font_scale.component_div(&old_font_scale);
+        let new_border = old_border.component_mul(&border_shadow_ratio);
+        let new_shadow = old_shadow.component_mul(&border_shadow_ratio);
+
+        let is_finite = angle_x.is_finite()
+            && angle_y.is_finite()
+            && angle_z.is_finite()
+            && fax.is_finite()
+            && vector_is_finite(self.org)
+            && vector_is_finite(self.pos)
+            && vector_is_finite(new_font_scale)
+            && vector_is_finite(new_border)
+            && vector_is_finite(new_shadow);
+
+        is_finite.then(|| {
+            global.position = Some(PositionOrMove::Position(self.pos.into()));
+            global.origin = Some(self.org.into());
+
+            Local {
+                text_rotation: Maybe3D {
+                    x: Resettable::Override(angle_x),
+                    y: Resettable::Override(angle_y),
+                    z: Resettable::Override(angle_z),
+                },
+                text_shear: vector![fax, fay].into(),
+                font_scale: new_font_scale.into(),
+                border: new_border.into(),
+                shadow: new_shadow.into(),
+                ..Local::empty()
+            }
+        })
+    }
+}
+
+fn vector_is_finite(vector: Vector2<f64>) -> bool {
+    vector.x.is_finite() && vector.y.is_finite()
+}
+
 /// The inverse of [`quad_to_tags`]: given the perspective tags,
 /// project the sign's base rectangle to the four quad corners,
 /// as specified by the rotations, scalings, etc. in the `Perspective` object.
@@ -563,6 +553,7 @@ fn rotate_z(vector: Vector3<f64>, theta: f64) -> Vector3<f64> {
 mod tests {
     use super::*;
     use assert_float_eq::assert_float_absolute_eq;
+    use assert_matches2::assert_matches;
 
     const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
@@ -813,5 +804,36 @@ mod tests {
         assert_float_absolute_eq!(perspective_nofax.pos.y, 133.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.x, 219.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.y, 147.0, 0.1);
+    }
+
+    #[test]
+    fn apply() {
+        let (tags, _, _, _) = persp_quad_1();
+
+        let mut global = Global::empty();
+
+        let scale = vector![0.9, 1.1];
+        let shadow = vector![2.0, 3.0];
+        let border = vector![4.0, 5.0];
+
+        let local = tags.apply(&mut global, scale, border, shadow);
+        assert_matches!(local, Some(local));
+
+        assert_matches!(global.origin, Some(org));
+        assert_float_absolute_eq!(org.x, tags.org.x, 1e-9);
+        assert_float_absolute_eq!(org.y, tags.org.y, 1e-9);
+
+        assert_matches!(global.position, Some(PositionOrMove::Position(pos)));
+        assert_float_absolute_eq!(pos.x, tags.pos.x, 1e-9);
+        assert_float_absolute_eq!(pos.y, tags.pos.y, 1e-9);
+
+        assert_matches!(local.font_scale.x, Resettable::Override(fscx));
+        assert_matches!(local.shadow.x, Resettable::Override(xshad));
+        assert_float_absolute_eq!(xshad, shadow.x * fscx / scale.x, 1e-9);
+
+        assert_matches!(local.text_rotation.y, Resettable::Override(fry));
+        assert_float_absolute_eq!(fry, -tags.rot_y * RAD2DEG, 1e-9);
+
+        assert_matches!(local.text_shear.y, Resettable::Override(0.0));
     }
 }
