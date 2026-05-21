@@ -253,7 +253,6 @@ pub struct LineGeometry {
     pub bbox_max: Vector2<f64>,
 }
 
-const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
 
 pub struct Perspective {
@@ -564,6 +563,8 @@ fn rotate_z(vector: Vector3<f64>, theta: f64) -> Vector3<f64> {
 mod tests {
     use super::*;
     use assert_float_eq::assert_float_absolute_eq;
+
+    const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
     fn quad_approx_equal(quad1: &Quad, quad2: &Quad, epsilon: f64) -> bool {
         let result = (quad1.q0.x - quad2.q0.x).abs() < epsilon
