@@ -346,6 +346,9 @@ pub enum Node {
 
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),
+
+    /// A boolean setting at the given index was toggled.
+    ToggleSetting(usize),
 }
 
 #[cfg(test)]

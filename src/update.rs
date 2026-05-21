@@ -1304,6 +1304,26 @@ fn update_internal(
                 .update_node(filter_index, node_index, node_message)
                 .context("Failed to dispatch message to node");
             global_state.toasts.anyhow(result);
+
+            // If this node is the active reticule source, re-activate to pick up any structural
+            // changes to the reticule list (e.g. a mode toggle that changes how many handles exist).
+            let is_reticule_source = global_state.reticules.as_ref().is_some_and(|reticules| {
+                reticules.source_filter_index == filter_index
+                    && reticules.source_node_index == node_index
+            });
+            if is_reticule_source {
+                let new_list = {
+                    let filter = global_state.subtitles.extradata[filter_index].assert_filter_mut();
+                    filter.graph.nodes[node_index.0].node.reticule_activate()
+                };
+                if new_list.is_empty() {
+                    global_state.reticules = None;
+                } else if let Some(ref mut reticules) = global_state.reticules {
+                    reticules.list = new_list;
+                } else {
+                    // Reticules were already cleared concurrently; nothing to update.
+                }
+            }
         }
     }
 
