@@ -1385,9 +1385,7 @@ mod tests {
         // Create a File containing a single event that specifies an NDE filter which splits it
         // frame-by-frame, and ensure that the exported output contains the correct number of
         // resulting events.
-
-        let mut graph =
-            nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
+        let graph = nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
 
         let filter = nde::Filter {
             name: "foo".to_owned(),

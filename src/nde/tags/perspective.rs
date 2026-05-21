@@ -5,7 +5,7 @@
 
 use crate::nde::tags::{Alignment, Global, Local, Maybe3D, Position, PositionOrMove, Resettable};
 use crate::subtitle;
-use nalgebra::{vector, Matrix2, Rotation3, Vector2, Vector3};
+use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
 
 /// A planar quadrilateral, corners ordered counter-clockwise
 /// (`q0` = top-left, `q1` = top-right, `q2` = bottom-right, `q3` = bottom-left;

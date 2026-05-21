@@ -32,11 +32,6 @@ impl Node for MotionTrack {
         inputs: &[&SocketValue],
         context: &Context,
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(
-            inputs.len() > 1,
-            "the required number of inputs should be present"
-        ); // Elide bounds checks
-
         super::retrieve!(inputs[0], &SocketValue::MultipleEvents(ref events));
         let frame_rate = context.frame_rate;
 

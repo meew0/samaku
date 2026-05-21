@@ -785,11 +785,9 @@ fn make_pin<'a>(
             iced::Color::from_rgb(0.19, 0.90, 0.90),
             "Rectangle",
         ),
-        nde::node::SocketType::Quad => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(0.73, 0.38, 0.76),
-            "Quad",
-        ),
+        nde::node::SocketType::Quad => {
+            (BLOB_RADIUS, iced::Color::from_rgb(0.73, 0.38, 0.76), "Quad")
+        }
     };
 
     // TODO: figure out how to apply shape/border radius, and size
