@@ -9,6 +9,7 @@ pub mod bake;
 mod emit;
 mod lerp;
 mod parse;
+pub mod perspective;
 
 /// A resettable subtitle value override.
 ///
@@ -65,6 +66,14 @@ impl<T> Resettable<T> {
             Resettable::Override(ref x) => Resettable::Override(map_fn(x)),
             Resettable::Reset => Resettable::Reset,
             Resettable::Keep => Resettable::Keep,
+        }
+    }
+
+    pub fn override_or<'a>(&'a self, default: &'a T) -> &'a T {
+        if let &Resettable::Override(ref x) = self {
+            x
+        } else {
+            default
         }
     }
 }
@@ -761,12 +770,34 @@ pub struct Position {
     pub y: f64,
 }
 
+impl Position {
+    #[must_use]
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+}
+
 impl emit::Value for Position {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
         write!(sink, "{},{}", self.x, self.y)
+    }
+}
+
+impl From<nalgebra::Vector2<f64>> for Position {
+    fn from(value: nalgebra::Vector2<f64>) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+        }
+    }
+}
+
+impl From<Position> for nalgebra::Vector2<f64> {
+    fn from(value: Position) -> Self {
+        nalgebra::Vector2::new(value.x, value.y)
     }
 }
 
@@ -846,6 +877,15 @@ impl lerp::Lerp for Maybe2D {
 
     fn out(self) -> Self::Output {
         self
+    }
+}
+
+impl From<nalgebra::Vector2<f64>> for Maybe2D {
+    fn from(vector: nalgebra::Vector2<f64>) -> Self {
+        Self {
+            x: Resettable::Override(vector.x),
+            y: Resettable::Override(vector.y),
+        }
     }
 }
 
@@ -1223,11 +1263,33 @@ pub enum VerticalAlignment {
     Center = 8,
 }
 
+impl VerticalAlignment {
+    #[must_use]
+    pub fn shift_factor(self) -> f64 {
+        match self {
+            VerticalAlignment::Top => 0.0,
+            VerticalAlignment::Center => 0.5,
+            VerticalAlignment::Sub => 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HorizontalAlignment {
     Left = 1,
     Center = 2,
     Right = 3,
+}
+
+impl HorizontalAlignment {
+    #[must_use]
+    pub fn shift_factor(self) -> f64 {
+        match self {
+            HorizontalAlignment::Left => 0.0,
+            HorizontalAlignment::Center => 0.5,
+            HorizontalAlignment::Right => 1.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
