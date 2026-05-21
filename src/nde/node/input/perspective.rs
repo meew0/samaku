@@ -14,6 +14,9 @@ pub struct InputQuad {
     /// When `show_outer` is true: locks the inner quad so only outer corners can be dragged.
     #[serde(default)]
     pub lock_inner: bool,
+    /// Whether to draw a perspective grid overlaid on the inner quad, fading outward.
+    #[serde(default)]
+    pub show_grid: bool,
 }
 
 fn bool_true() -> bool {
@@ -152,7 +155,13 @@ impl Node for InputQuad {
                 message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(1))
             }));
 
-        iced::widget::column![show_outer_cb, lock_inner_cb]
+        let show_grid_cb = iced::widget::checkbox(self.show_grid)
+            .label("Grid")
+            .on_toggle(move |_| {
+                message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(2))
+            });
+
+        iced::widget::column![show_outer_cb, lock_inner_cb, show_grid_cb]
             .spacing(4.0)
             .width(iced::Length::Fill)
             .into()
@@ -171,6 +180,7 @@ impl Node for InputQuad {
                 }
             }
             1 => self.lock_inner = !self.lock_inner,
+            2 => self.show_grid = !self.show_grid,
             _ => anyhow::bail!("Unknown setting index: {index}"),
         }
         Ok(())
@@ -339,6 +349,55 @@ impl Node for InputQuad {
             })
         };
 
+        if self.show_grid {
+            // How far beyond the inner quad's UV [0, 1] the grid extends on each side.
+            // Increase for a wider grid, decrease for a tighter one (e.g. 0.4 = just outside).
+            const GRID_MARGIN: f64 = 1.0;
+            const GRID_MIN: f64 = -GRID_MARGIN;
+            const GRID_MAX: f64 = 1.0 + GRID_MARGIN;
+            const GRID_STEP: f64 = 0.1;
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "GRID_MARGIN is a small positive constant; N_LINES fits in u8"
+            )]
+            const N_LINES: u8 = ((GRID_MAX - GRID_MIN) / GRID_STEP + 1.0) as u8;
+            const N_SAMPLES: u8 = 12;
+            let samp_step = (GRID_MAX - GRID_MIN) / f64::from(N_SAMPLES);
+
+            for line_idx in 0..N_LINES {
+                let uv_t = f64::from(line_idx).mul_add(GRID_STEP, GRID_MIN);
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "alpha is in [0, 0.45], which fits in f32"
+                )]
+                let alpha =
+                    ((1.0 - (uv_t - 0.5).abs() / (GRID_MARGIN + 0.5)).max(0.0) as f32) * 0.45;
+                if alpha <= 0.001 {
+                    continue;
+                }
+
+                let grid_path = canvas::Path::new(|builder| {
+                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![GRID_MIN, uv_t])));
+                    for samp_idx in 1..=N_SAMPLES {
+                        let uv_u = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
+                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_u, uv_t])));
+                    }
+                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, GRID_MIN])));
+                    for samp_idx in 1..=N_SAMPLES {
+                        let uv_v = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
+                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, uv_v])));
+                    }
+                });
+                canvas_frame.stroke(
+                    &grid_path,
+                    canvas::Stroke::default()
+                        .with_color(style::SAMAKU_PRIMARY.scale_alpha(alpha))
+                        .with_width(0.75),
+                );
+            }
+        }
+
         if self.show_outer {
             // Inner quad solid, outer quad dashed.
             canvas_frame.stroke(&quad_path(&inner), solid_stroke);
@@ -350,7 +409,7 @@ impl Node for InputQuad {
     }
 
     fn content_size(&self) -> iced::Size {
-        iced::Size::new(200.0, 125.0)
+        iced::Size::new(200.0, 150.0)
     }
 }
 
@@ -362,6 +421,7 @@ inventory::submit! {
             outer: perspective::Quad::make_rect(vector![100.0, 100.0], vector![400.0, 400.0]),
             show_outer: true,
             lock_inner: false,
+            show_grid: false,
         })
     )
 }
