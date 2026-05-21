@@ -8,7 +8,6 @@ use std::fmt::Debug;
 pub use clip::ClipRectangle;
 pub use gradient::Gradient;
 pub use input::InputEvent;
-pub use input::InputFrameRate;
 pub use input::InputPosition;
 pub use input::InputRectangle;
 pub use input::InputTags;
@@ -192,10 +191,6 @@ pub enum SocketType {
     Position,
     Rectangle,
     FrameRate,
-
-    /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
-    /// input and thus acts as a node that supplies an initial value to the graph.
-    LeafInput(LeafInputType),
 }
 
 impl SocketType {
@@ -208,11 +203,7 @@ impl SocketType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum LeafInputType {
-    Event,
-    FrameRate,
-}
+pub type Context<'a> = subtitle::compile::Context<'a>;
 
 #[typetag::serde(tag = "type")]
 #[expect(unused_variables, reason = "trait with default methods")]
@@ -229,7 +220,11 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// # Errors
     /// Can return an [`BasicError`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>>;
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>>;
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.

@@ -448,12 +448,13 @@ mod tests {
             SHADOW_2_TRANSPARENCY
         );
 
-        let context = subtitle::compile::Context {
+        let mut context = subtitle::compile::Context {
             frame_rate: FRAME_RATE,
+            source_event: None,
         };
         let compiled_events = event_track.compile_range(
             &subtitle::Extradata::default(),
-            &context,
+            &mut context,
             StartTime(1000)..StartTime(3000),
         );
         assert_eq!(compiled_events[0].style_index, default_usize);

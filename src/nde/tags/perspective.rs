@@ -10,12 +10,13 @@ use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
 /// A planar quadrilateral, corners ordered counter-clockwise
 /// (`q0` = top-left, `q1` = top-right, `q2` = bottom-right, `q3` = bottom-left;
 /// though the math itself only assumes a consistent cyclic order).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(from = "SerdeQuad", into = "SerdeQuad")]
 pub struct Quad {
-    q0: Vector2<f64>,
-    q1: Vector2<f64>,
-    q2: Vector2<f64>,
-    q3: Vector2<f64>,
+    pub q0: Vector2<f64>,
+    pub q1: Vector2<f64>,
+    pub q2: Vector2<f64>,
+    pub q3: Vector2<f64>,
 }
 
 impl Quad {
@@ -197,6 +198,27 @@ impl Quad {
             q2: self.uv_to_xy(uv_quad.q2),
             q3: self.uv_to_xy(uv_quad.q3),
         }
+    }
+}
+
+type SerdeQuad = (f64, f64, f64, f64, f64, f64, f64, f64);
+impl From<SerdeQuad> for Quad {
+    fn from(value: SerdeQuad) -> Self {
+        Quad {
+            q0: vector![value.0, value.1],
+            q1: vector![value.2, value.3],
+            q2: vector![value.4, value.5],
+            q3: vector![value.6, value.7],
+        }
+    }
+}
+
+impl From<Quad> for SerdeQuad {
+    fn from(value: Quad) -> Self {
+        (
+            value.q0.x, value.q0.y, value.q1.x, value.q1.y, value.q2.x, value.q2.y, value.q3.x,
+            value.q3.y,
+        )
     }
 }
 

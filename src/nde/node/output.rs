@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Node, SocketType, SocketValue};
+use super::{Context, Node, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Output;
@@ -19,7 +19,11 @@ impl Node for Output {
         &[]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        _context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }

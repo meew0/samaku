@@ -51,9 +51,11 @@ pub fn emit<W: Write>(
         AttachmentType::Font,
     )?;
 
-    if let Some(context) = compile_context {
+    if let Some(mut context) = compile_context {
         // Compile events
-        let compiled = subtitles.events.compile_all(&subtitles.extradata, &context);
+        let compiled = subtitles
+            .events
+            .compile_all(&subtitles.extradata, &mut context);
         emit_events(writer, compiled.iter(), subtitles.styles.as_slice())?;
     } else {
         // Export events verbatim

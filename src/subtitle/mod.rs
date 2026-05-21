@@ -1389,23 +1389,6 @@ mod tests {
         let mut graph =
             nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
 
-        // The SplitFrameByFrame node requires a frame rate, so add a respective input node and
-        // connect it
-        graph.nodes.push(nde::graph::VisualNode {
-            node: Box::new(nde::node::InputFrameRate {}),
-            position: iced::Point::new(0.0, 200.0),
-        });
-        graph.connect(
-            nde::graph::PreviousEndpoint {
-                node_index: nde::graph::NodeId(3),
-                socket_index: nde::graph::SocketId(0),
-            },
-            nde::graph::NextEndpoint {
-                node_index: nde::graph::NodeId(1),
-                socket_index: nde::graph::SocketId(1),
-            },
-        );
-
         let filter = nde::Filter {
             name: "foo".to_owned(),
             graph,
@@ -1432,6 +1415,7 @@ mod tests {
                 numerator: 24,
                 denominator: 1,
             },
+            source_event: None,
         };
         let mut emitted = String::new();
         emit(&mut emitted, &ass_file, Some(context)).unwrap();
@@ -1459,13 +1443,14 @@ mod tests {
         .into_iter()
         .collect();
 
-        let context = compile::Context {
+        let mut context = compile::Context {
             frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
+            source_event: None,
         };
-        let compiled = events.compile_all(&Extradata::default(), &context);
+        let compiled = events.compile_all(&Extradata::default(), &mut context);
 
         assert_eq!(compiled.len(), 1);
     }

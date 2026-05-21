@@ -311,7 +311,7 @@ fn update_internal(
             subtitle::emit(
                 &mut data,
                 &global_state.subtitles,
-                Some(global_state.compile_context()),
+                Some(global_state.compile_context(None)),
             )
             .expect("subtitle::emit() failed"); // should never happen
 

@@ -539,9 +539,13 @@ impl Samaku {
     }
 
     /// Create a context for compilation.
-    pub fn compile_context(&self) -> subtitle::compile::Context {
+    pub fn compile_context<'a>(
+        &self,
+        source_event: Option<&'a subtitle::Event<'static>>,
+    ) -> subtitle::compile::Context<'a> {
         subtitle::compile::Context {
             frame_rate: self.frame_rate(),
+            source_event,
         }
     }
 

@@ -249,7 +249,7 @@ impl Graph {
 
         for (previous, _) in self.iter_previous(next) {
             let prev = previous.node_index;
-            if cycle_detector.set_parent(next, prev).cycle_found() {
+            if cycle_detector.set_parent(prev, next).cycle_found() {
                 return CycleFound(true);
             }
             if !seen[prev.0]
@@ -368,17 +368,71 @@ mod tests {
 
     #[test]
     fn cycle() {
-        let mut graph_with_cycle = Graph::from_single_intermediate(Box::new(node::Italic {}));
-        graph_with_cycle.connections.insert(
+        let mut connections = HashMap::new();
+        connections.insert(
+            NextEndpoint {
+                node_index: NodeId(0),
+                socket_index: SocketId(0),
+            },
+            PreviousEndpoint {
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
+            },
+        );
+        connections.insert(
+            NextEndpoint {
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
+            },
+            PreviousEndpoint {
+                node_index: NodeId(2),
+                socket_index: SocketId(0),
+            },
+        );
+        connections.insert(
             NextEndpoint {
                 node_index: NodeId(2),
                 socket_index: SocketId(0),
             },
             PreviousEndpoint {
-                node_index: NodeId(0),
+                node_index: NodeId(3),
                 socket_index: SocketId(0),
             },
         );
+        // this connection should create a cycle
+        connections.insert(
+            NextEndpoint {
+                node_index: NodeId(2),
+                socket_index: SocketId(0),
+            },
+            PreviousEndpoint {
+                node_index: NodeId(1),
+                socket_index: SocketId(0),
+            },
+        );
+
+        let graph_with_cycle = Graph {
+            nodes: vec![
+                VisualNode {
+                    node: Box::new(node::Output {}),
+                    position: iced::Point { x: 600.0, y: 0.0 },
+                },
+                VisualNode {
+                    node: Box::new(node::SplitFrameByFrame {}),
+                    position: iced::Point { x: 400.0, y: 0.0 },
+                },
+                VisualNode {
+                    node: Box::new(node::Italic {}),
+                    position: iced::Point { x: 200.0, y: 0.0 },
+                },
+                VisualNode {
+                    node: Box::new(node::InputEvent {}),
+                    position: iced::Point { x: 0.0, y: 0.0 },
+                },
+            ],
+            connections,
+        };
+
         let dfs_result = graph_with_cycle.dfs();
         assert_eq!(dfs_result, DfsResult::CycleFound);
     }
