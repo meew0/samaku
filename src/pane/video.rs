@@ -342,6 +342,22 @@ fn draw_reticule(
                 alpha_factor,
             );
         }
+        model::reticule::Shape::Circle => {
+            let circle = canvas::Path::circle(center_point, reticule.radius * 0.5);
+            frame.fill(&circle, style::SAMAKU_TEXT.scale_alpha(alpha_factor));
+            frame.stroke(
+                &circle,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_BACKGROUND)
+                    .with_width(2.0),
+            );
+            frame.stroke(
+                &circle,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_PRIMARY)
+                    .with_width(1.0),
+            );
+        }
     }
 }
 

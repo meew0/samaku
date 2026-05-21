@@ -12,7 +12,7 @@ impl Node for SplitFrameByFrame {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::IndividualEvent, SocketType::FrameRate]
+        &[SocketType::IndividualEvent]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {

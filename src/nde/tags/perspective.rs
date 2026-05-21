@@ -5,7 +5,7 @@
 
 use crate::nde::tags::{Alignment, Global, Local, Maybe3D, Position, PositionOrMove, Resettable};
 use crate::subtitle;
-use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
+use nalgebra::{vector, Matrix2, Rotation3, Vector2, Vector3};
 
 /// A planar quadrilateral, corners ordered counter-clockwise
 /// (`q0` = top-left, `q1` = top-right, `q2` = bottom-right, `q3` = bottom-left;
@@ -422,6 +422,7 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
 
 const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
 
+#[derive(Debug, Clone)]
 pub struct Perspective {
     pos: Vector2<f64>,
     org: Vector2<f64>,

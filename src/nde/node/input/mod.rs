@@ -2,8 +2,10 @@ use super::{BasicError, Context, Node, Shell, SocketType, SocketValue};
 use crate::model::reticule;
 use crate::{message, nde, subtitle};
 
+pub use perspective::InputQuad;
 pub use rectangle::InputRectangle;
 
+mod perspective;
 mod rectangle;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

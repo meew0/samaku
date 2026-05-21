@@ -9,6 +9,7 @@ pub use clip::ClipRectangle;
 pub use gradient::Gradient;
 pub use input::InputEvent;
 pub use input::InputPosition;
+pub use input::InputQuad;
 pub use input::InputRectangle;
 pub use input::InputTags;
 pub use motion_track::MotionTrack;
@@ -17,7 +18,7 @@ pub use positioning::SetPosition;
 pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
-use crate::{media, message, model, nde, subtitle};
+use crate::{message, model, nde, subtitle};
 
 mod clip;
 mod gradient;
@@ -49,8 +50,7 @@ pub enum SocketValue<'a> {
 
     Position(nde::tags::Position),
     Rectangle(nde::tags::Rectangle),
-
-    FrameRate(media::FrameRate),
+    Quad(nde::tags::perspective::Quad),
 
     SourceEvent(&'a subtitle::Event<'static>),
 
@@ -68,7 +68,7 @@ impl SocketValue<'_> {
             SocketValue::GlobalTags(_) => Some(SocketType::GlobalTags),
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
-            SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
+            SocketValue::Quad(_) => Some(SocketType::Quad),
             SocketValue::None | SocketValue::SourceEvent(_) | SocketValue::CompiledEvents(_) => {
                 None
             }
@@ -85,7 +85,7 @@ impl SocketValue<'_> {
             SocketValue::GlobalTags(_) => "GlobalTags",
             SocketValue::Position(_) => "Position",
             SocketValue::Rectangle(_) => "Rectangle",
-            SocketValue::FrameRate(_) => "FrameRate",
+            SocketValue::Quad(_) => "Quad",
             SocketValue::SourceEvent(_) => "SourceEvent",
             SocketValue::CompiledEvents(_) => "CompiledEvents",
         }
@@ -190,7 +190,7 @@ pub enum SocketType {
     GlobalTags,
     Position,
     Rectangle,
-    FrameRate,
+    Quad,
 }
 
 impl SocketType {

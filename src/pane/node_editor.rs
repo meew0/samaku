@@ -785,10 +785,10 @@ fn make_pin<'a>(
             iced::Color::from_rgb(0.19, 0.90, 0.90),
             "Rectangle",
         ),
-        nde::node::SocketType::FrameRate => (
+        nde::node::SocketType::Quad => (
             BLOB_RADIUS,
             iced::Color::from_rgb(0.73, 0.38, 0.76),
-            "Frame rate",
+            "Quad",
         ),
     };
 
