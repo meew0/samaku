@@ -5,7 +5,7 @@
 
 use crate::nde::tags::{Alignment, Global, Local, Maybe3D, Position, PositionOrMove, Resettable};
 use crate::subtitle;
-use nalgebra::{Matrix2, Rotation3, Vector2, Vector3};
+use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
 
 /// A planar quadrilateral, corners ordered counter-clockwise
 /// (`q0` = top-left, `q1` = top-right, `q2` = bottom-right, `q3` = bottom-left;
@@ -126,7 +126,7 @@ impl Quad {
                 ),
             );
 
-        Vector2::new(uv_u, uv_v)
+        vector![uv_u, uv_v]
     }
 
     /// Inverse of [`xy_to_uv`]: maps bilinear `(u, v)` coordinates back to screen-space.
@@ -154,7 +154,7 @@ impl Quad {
             uv_u * y1 * x3.mul_add(y2, -(x2 * y3)),
         ) / denom;
 
-        k0 + Vector2::new(px, py)
+        k0 + vector![px, py]
     }
 
     /// Builds an axis-aligned quad from two opposite corners.
@@ -162,10 +162,10 @@ impl Quad {
     #[must_use]
     pub fn make_rect(top_left: Vector2<f64>, bottom_right: Vector2<f64>) -> Self {
         Self {
-            q0: Vector2::new(top_left.x, top_left.y),
-            q1: Vector2::new(bottom_right.x, top_left.y),
-            q2: Vector2::new(bottom_right.x, bottom_right.y),
-            q3: Vector2::new(top_left.x, bottom_right.y),
+            q0: vector![top_left.x, top_left.y],
+            q1: vector![bottom_right.x, top_left.y],
+            q2: vector![bottom_right.x, bottom_right.y],
+            q3: vector![top_left.x, bottom_right.y],
         }
     }
 
@@ -189,7 +189,7 @@ impl Quad {
     pub fn outer(&self, top_left_uv: Vector2<f64>, bottom_right_uv: Vector2<f64>) -> Quad {
         let denom = bottom_right_uv - top_left_uv;
         let lo = (-top_left_uv).component_div(&denom);
-        let hi = Vector2::new(1.0 - top_left_uv.x, 1.0 - top_left_uv.y).component_div(&denom);
+        let hi = vector![1.0 - top_left_uv.x, 1.0 - top_left_uv.y].component_div(&denom);
         let uv_quad = Quad::make_rect(lo, hi);
         Quad {
             q0: self.uv_to_xy(uv_quad.q0),
@@ -227,7 +227,7 @@ fn solve_2x2(a1: Vector2<f64>, a2: Vector2<f64>, target: Vector2<f64>) -> Vector
     let matrix = Matrix2::from_columns(&[a1, a2]);
     match matrix.try_inverse() {
         Some(inv) => inv * target,
-        None => Vector2::new(f64::NAN, f64::NAN),
+        None => vector![f64::NAN, f64::NAN],
     }
 }
 
@@ -310,7 +310,7 @@ impl Perspective {
                     y: Resettable::Override(angle_x),
                     z: Resettable::Override(angle_x),
                 },
-                text_shear: Vector2::new(fax, fay).into(),
+                text_shear: vector![fax, fay].into(),
                 font_scale: new_font_scale.into(),
                 border: new_border.into(),
                 shadow: new_shadow.into(),
@@ -363,23 +363,23 @@ pub fn quad_to_tags(
     let q3 = quad.q3 - org;
 
     // Lift the quad into the reconstructed 3D parallelogram.
-    let r0 = Vector3::new(q0.x, q0.y, screen_z);
-    let r1 = z1 * Vector3::new(q1.x, q1.y, screen_z);
-    let r2 = (z1 + z3 - 1.0) * Vector3::new(q2.x, q2.y, screen_z);
-    let r3 = z3 * Vector3::new(q3.x, q3.y, screen_z);
+    let r0 = vector![q0.x, q0.y, screen_z];
+    let r1 = z1 * vector![q1.x, q1.y, screen_z];
+    let r2 = (z1 + z3 - 1.0) * vector![q2.x, q2.y, screen_z];
+    let r3 = z3 * vector![q3.x, q3.y, screen_z];
     let mut parallelogram = [r0, r1, r2, r3];
 
     // Find the z coordinate of the point projecting to the origin.
-    let side0 = r1 - r0;
-    let side1 = r3 - r0;
-    let orgla = solve_2x2(side0.xy(), side1.xy(), (-r0).xy());
+    let top_side = r1 - r0;
+    let left_side = r3 - r0;
+    let orgla = solve_2x2(top_side.xy(), left_side.xy(), (-r0).xy());
     let (orgla0, orgla1) = (orgla[0], orgla[1]);
-    let orgz = (r0 + orgla0 * side0 + orgla1 * side1).z;
+    let oz = (r0 + orgla0 * top_side + orgla1 * left_side).z;
 
     // Normalize so the origin has z=screen_z, and move the screen plane to z=0.
-    let zoff = Vector3::new(0.0, 0.0, screen_z);
+    let z_offset = vector![0.0, 0.0, screen_z];
     for corner in &mut parallelogram {
-        *corner = *corner * screen_z / orgz - zoff;
+        *corner = *corner * screen_z / oz - z_offset;
     }
 
     // Find the normal vector of the parallelogram we want to rotate.
@@ -416,14 +416,14 @@ pub fn quad_to_tags(
         (bounding_box.0.into(), bounding_box.1.into());
     let scale_x = width / (bbox_max.x - bbox_min.x).max(1.0);
     let scale_y = height / (bbox_max.y - bbox_min.y).max(1.0);
-    let scale = Vector2::new(scale_x, scale_y);
+    let scale = vector![scale_x, scale_y];
 
     let shift_v = alignment.vertical.shift_factor();
     let shift_h = alignment.horizontal.shift_factor();
 
     let top_left_corner_xy = parallelogram[0].xy();
     let pos = org + top_left_corner_xy - bbox_min.component_mul(&scale)
-        + Vector2::new(width * shift_h, height * shift_v);
+        + vector![width * shift_h, height * shift_v];
 
     Perspective {
         pos,
@@ -470,7 +470,7 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
             let center2t = t - circle_center;
             let len = center2t.norm();
             t = if len == 0.0 {
-                circle_center + Vector2::new(radius, 0.0)
+                circle_center + vector![radius, 0.0]
             } else {
                 circle_center + center2t / len * radius
             };
@@ -506,10 +506,10 @@ pub fn tags_to_quad(
         let mut point = corner;
 
         // Apply \fax and \fay
-        point = Vector2::new(point.y.mul_add(fax, point.x), point.y);
+        point = vector![point.y.mul_add(fax, point.x), point.y];
 
         // Translate to alignment point
-        point += Vector2::new(shift_x, shift_y);
+        point += vector![shift_x, shift_y];
 
         // Apply scaling
         point.component_mul_assign(&perspective.scale);
@@ -518,16 +518,16 @@ pub fn tags_to_quad(
         point += perspective.pos - perspective.org;
 
         // Rotate ZXY
-        let mut qv = Vector3::new(point.x, point.y, 0.0);
-        qv = rotate_z(qv, perspective.rot_z);
-        qv = rotate_x(qv, -perspective.rot_x);
-        qv = rotate_y(qv, -perspective.rot_y);
+        let mut point_3d = vector![point.x, point.y, 0.0];
+        point_3d = rotate_z(point_3d, perspective.rot_z);
+        point_3d = rotate_x(point_3d, -perspective.rot_x);
+        point_3d = rotate_y(point_3d, -perspective.rot_y);
 
-        // Project
-        qv *= screen_z / (qv.z + screen_z);
+        // Project back onto screen
+        point_3d *= screen_z / (point_3d.z + screen_z);
 
         // Move to origin
-        out[i] = qv.xy() + perspective.org;
+        out[i] = point_3d.xy() + perspective.org;
     }
 
     Quad {
@@ -586,10 +586,10 @@ mod tests {
 
     fn sample_irregular_quad() -> Quad {
         Quad {
-            q0: Vector2::new(100.0, 120.0),
-            q1: Vector2::new(540.0, 90.0),
-            q2: Vector2::new(600.0, 420.0),
-            q3: Vector2::new(60.0, 400.0),
+            q0: vector![100.0, 120.0],
+            q1: vector![540.0, 90.0],
+            q2: vector![600.0, 420.0],
+            q3: vector![60.0, 400.0],
         }
     }
 
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn xy_uv_roundtrip() {
         let quad = sample_irregular_quad();
-        let point = Vector2::new(333.0, 250.0);
+        let point = vector![333.0, 250.0];
 
         let round_trip_point = quad.uv_to_xy(quad.xy_to_uv(point));
         assert_float_absolute_eq!(point.x, round_trip_point.x, 1e-9);
@@ -630,10 +630,10 @@ mod tests {
 
         // Self-intersecting “bowtie” ordering is not convex.
         let bowtie = Quad {
-            q0: Vector2::new(0.0, 0.0),
-            q1: Vector2::new(100.0, 0.0),
-            q2: Vector2::new(0.0, 100.0),
-            q3: Vector2::new(100.0, 100.0),
+            q0: vector![0.0, 0.0],
+            q1: vector![100.0, 0.0],
+            q2: vector![0.0, 100.0],
+            q3: vector![100.0, 100.0],
         };
         assert!(!bowtie.is_convex());
     }
@@ -641,8 +641,8 @@ mod tests {
     #[test]
     fn inner_outer_roundtrip() {
         let outer = sample_irregular_quad();
-        let c1 = Vector2::new(0.2, 0.15);
-        let c2 = Vector2::new(0.8, 0.7);
+        let c1 = vector![0.2, 0.15];
+        let c2 = vector![0.8, 0.7];
 
         let inner = outer.inner(c1, c2);
         let outer2 = inner.outer(c1, c2);
@@ -655,13 +655,13 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let tags = Perspective {
-            org: Vector2::new(960.0, 540.0),
-            pos: Vector2::new(900.0, 500.0),
+            org: vector![960.0, 540.0],
+            pos: vector![900.0, 500.0],
             rot_x: 22.0 * DEG2RAD,
             rot_y: 15.0 * DEG2RAD,
             rot_z: -7.0 * DEG2RAD,
             raw_fax: 0.0,
-            scale: Vector2::new(1.2, 0.95),
+            scale: vector![1.2, 0.95],
         };
 
         let bmin = Position::new(0.0, 0.0);
@@ -717,13 +717,13 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let tags = Perspective {
-            org: Vector2::new(960.0, 540.0),
-            pos: Vector2::new(850.0, 480.0),
+            org: vector![960.0, 540.0],
+            pos: vector![850.0, 480.0],
             rot_x: 18.0 * DEG2RAD,
             rot_y: 22.0 * DEG2RAD,
             rot_z: -11.0 * DEG2RAD,
             raw_fax: 0.25,
-            scale: Vector2::new(1.1, 0.9),
+            scale: vector![1.1, 0.9],
         };
         let bmin = Position::new(0.0, 0.0);
         let bmax = Position::new(280.0, 70.0);
@@ -741,10 +741,10 @@ mod tests {
     fn known_values() {
         // Values from https://mz.sb/persp
         let quad = Quad {
-            q0: Vector2::new(220.0, 130.0),
-            q1: Vector2::new(620.0, 160.0),
-            q2: Vector2::new(560.0, 370.0),
-            q3: Vector2::new(200.0, 340.0),
+            q0: vector![220.0, 130.0],
+            q1: vector![620.0, 160.0],
+            q2: vector![560.0, 370.0],
+            q3: vector![200.0, 340.0],
         };
 
         let (alpha, beta) = quad.diagonal_intersection();
