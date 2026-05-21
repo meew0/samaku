@@ -67,33 +67,64 @@ impl Quad {
         let (x1, y1, x2, y2, x3, y3, px, py) =
             (k1.x, k1.y, k2.x, k2.y, k3.x, k3.y, point_rel.x, point_rel.y);
 
-        let uv_u = -(((x2 * y1 - x1 * y2)
-            * (x3 * py - px * y3)
-            * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3)))
-            / (x2
-                * x2
-                * (x3 * y1 * y1 * (-py + y3) + y3 * (px * y1 * (y1 - y3) + x1 * (py - y1) * y3))
-                + x2 * (x3 * x3 * y1 * y1 * (py - y2)
-                    + 2.0 * x3 * (x1 * py * y2 * (y1 - y3) + px * y1 * (-y1 + y2) * y3)
-                    + x1 * y3 * (x1 * (-py + y2) * y3 + 2.0 * px * y1 * (-y2 + y3)))
-                + y2 * (px * x3 * x3 * y1 * (y1 - y2)
-                    + x1 * x3 * x3 * (y1 * y2 + py * (-2.0 * y1 + y2))
-                    - x1 * x1
-                        * (x3 * py * (y2 - 2.0 * y3) + x3 * y2 * y3 + px * y3 * (-y2 + y3)))));
+        let uv_u = -((x2.mul_add(y1, -(x1 * y2))
+            * x3.mul_add(py, -(px * y3))
+            * x1.mul_add(-y2 + y3, x3.mul_add(-y1 + y2, x2 * (y1 - y3))))
+            / y2.mul_add(
+                (x1 * x1).mul_add(
+                    -(px * y3).mul_add(
+                        -y2 + y3,
+                        (x3 * py).mul_add(2.0_f64.mul_add(-y3, y2), x3 * y2 * y3),
+                    ),
+                    (px * x3 * x3 * y1).mul_add(
+                        y1 - y2,
+                        x1 * x3 * x3 * y1.mul_add(y2, py * (-2.0_f64).mul_add(y1, y2)),
+                    ),
+                ),
+                (x2 * x2).mul_add(
+                    (x3 * y1 * y1).mul_add(
+                        -py + y3,
+                        y3 * (px * y1).mul_add(y1 - y3, x1 * (py - y1) * y3),
+                    ),
+                    x2 * (x1 * y3).mul_add(
+                        (x1 * (-py + y2)).mul_add(y3, 2.0 * px * y1 * (-y2 + y3)),
+                        (x3 * x3 * y1 * y1).mul_add(
+                            py - y2,
+                            2.0 * x3 * (x1 * py * y2).mul_add(y1 - y3, px * y1 * (-y1 + y2) * y3),
+                        ),
+                    ),
+                ),
+            ));
 
-        let uv_v = ((x1 * py - px * y1)
-            * (x3 * y2 - x2 * y3)
-            * (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)))
-            / (x2
-                * (x3 * x3 * y1 * y1 * (-py + y2)
-                    + x1 * y3 * (2.0 * px * y1 * (y2 - y3) + x1 * (py - y2) * y3)
-                    - 2.0 * x3 * (x1 * py * y2 * (y1 - y3) + px * y1 * (-y1 + y2) * y3))
-                + x2 * x2
-                    * (x3 * y1 * y1 * (py - y3)
-                        + y3 * (x1 * (-py + y1) * y3 + px * y1 * (-y1 + y3)))
-                + y2 * (px * x3 * x3 * y1 * (-y1 + y2)
-                    + x1 * x3 * x3 * (2.0 * py * y1 - py * y2 - y1 * y2)
-                    + x1 * x1 * (x3 * py * (y2 - 2.0 * y3) + x3 * y2 * y3 + px * y3 * (-y2 + y3))));
+        let uv_v = (x1.mul_add(py, -(px * y1))
+            * x3.mul_add(y2, -(x2 * y3))
+            * x2.mul_add(-y1 + y3, x3.mul_add(y1 - y2, x1 * (y2 - y3))))
+            / y2.mul_add(
+                (x1 * x1).mul_add(
+                    (px * y3).mul_add(
+                        -y2 + y3,
+                        (x3 * py).mul_add(2.0_f64.mul_add(-y3, y2), x3 * y2 * y3),
+                    ),
+                    (px * x3 * x3 * y1).mul_add(
+                        -y1 + y2,
+                        x1 * x3 * x3 * y1.mul_add(-y2, (2.0 * py).mul_add(y1, -(py * y2))),
+                    ),
+                ),
+                x2.mul_add(
+                    (2.0 * x3).mul_add(
+                        -(x1 * py * y2).mul_add(y1 - y3, px * y1 * (-y1 + y2) * y3),
+                        (x3 * x3 * y1 * y1).mul_add(
+                            -py + y2,
+                            x1 * y3 * (2.0 * px * y1).mul_add(y2 - y3, x1 * (py - y2) * y3),
+                        ),
+                    ),
+                    x2 * x2
+                        * (x3 * y1 * y1).mul_add(
+                            py - y3,
+                            y3 * (x1 * (-py + y1)).mul_add(y3, px * y1 * (-y1 + y3)),
+                        ),
+                ),
+            );
 
         Vector2::new(uv_u, uv_v)
     }
@@ -107,11 +138,21 @@ impl Quad {
         let uv_u = uv.x;
         let uv_v = uv.y;
 
-        let denom = x3 * ((-1.0 + uv_u + uv_v) * y1 + y2 - uv_v * y2)
-            + x2 * (y1 - uv_u * y1 + (-1.0 + uv_v) * y3)
-            + x1 * ((-1.0 + uv_u) * y2 - (-1.0 + uv_u + uv_v) * y3);
-        let px = (uv_v * x3 * (x2 * y1 - x1 * y2) + uv_u * x1 * (x3 * y2 - x2 * y3)) / denom;
-        let py = (uv_v * y3 * (x2 * y1 - x1 * y2) + uv_u * y1 * (x3 * y2 - x2 * y3)) / denom;
+        let denom = x1.mul_add(
+            (-1.0 + uv_u).mul_add(y2, -((-1.0 + uv_u + uv_v) * y3)),
+            x3.mul_add(
+                uv_v.mul_add(-y2, (-1.0 + uv_u + uv_v).mul_add(y1, y2)),
+                x2 * (-1.0 + uv_v).mul_add(y3, uv_u.mul_add(-y1, y1)),
+            ),
+        );
+        let px = (uv_v * x3).mul_add(
+            x2.mul_add(y1, -(x1 * y2)),
+            uv_u * x1 * x3.mul_add(y2, -(x2 * y3)),
+        ) / denom;
+        let py = (uv_v * y3).mul_add(
+            x2.mul_add(y1, -(x1 * y2)),
+            uv_u * y1 * x3.mul_add(y2, -(x2 * y3)),
+        ) / denom;
 
         k0 + Vector2::new(px, py)
     }
@@ -406,7 +447,7 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
     // a*(x^2 + y^2) - b.x - b.y + c = 0 with these coefficients.
     let a = (1.0 - z1) * (1.0 - z3);
     let b = z1 * v1 + z3 * v3 - z1 * z3 * (v1 + v3);
-    let c = z1 * z3 * v1.dot(&v3) + (z1 - 1.0) * (z3 - 1.0) * screen_z * screen_z;
+    let c = (z1 * z3).mul_add(v1.dot(&v3), (z1 - 1.0) * (z3 - 1.0) * screen_z * screen_z);
 
     // Default t puts \org at the center of the quad; find the valid t
     // closest to it.
