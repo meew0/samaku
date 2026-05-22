@@ -151,6 +151,13 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         }
     }
 
+    // Finalise `LayoutRes`
+    if let Some(layout_resolution) = script_info.layout_resolution
+        && (layout_resolution.x == 0 || layout_resolution.y == 0)
+    {
+        script_info.layout_resolution = None;
+    }
+
     // Finalise opaque section, if it exists
     if !header.is_empty() {
         opaque_sections.insert(header, section);
@@ -451,6 +458,22 @@ fn parse_script_info_line(
     } else if key == "PlayResY" {
         if let Ok(int_value) = value.parse::<i32>() {
             script_info.playback_resolution.y = int_value;
+        }
+    } else if key == "LayoutResX" {
+        if let Ok(int_value) = value.parse::<i32>() {
+            if let Some(layout_resolution) = script_info.layout_resolution.as_mut() {
+                layout_resolution.x = int_value;
+            } else {
+                script_info.layout_resolution = Some(subtitle::Resolution { x: int_value, y: 0 });
+            }
+        }
+    } else if key == "LayoutResY" {
+        if let Ok(int_value) = value.parse::<i32>() {
+            if let Some(layout_resolution) = script_info.layout_resolution.as_mut() {
+                layout_resolution.y = int_value;
+            } else {
+                script_info.layout_resolution = Some(subtitle::Resolution { x: 0, y: int_value });
+            }
         }
     } else if key == "WrapStyle" {
         if let Ok(int_value) = value.parse::<i32>() {
@@ -940,9 +963,14 @@ pub mod tests {
         parse_script_info_line("YCbCr Matrix: TV.709", &mut info)?;
         parse_script_info_line("PlayResX: 1920", &mut info)?;
         parse_script_info_line("PlayResY: 1080", &mut info)?;
+        parse_script_info_line("LayoutResX: 1280", &mut info)?;
+        parse_script_info_line("LayoutResY: 720", &mut info)?;
 
         assert_eq!(info.playback_resolution.x, 1920);
         assert_eq!(info.playback_resolution.y, 1080);
+        assert_matches!(info.layout_resolution, Some(layout_resolution));
+        assert_eq!(layout_resolution.x, 1280);
+        assert_eq!(layout_resolution.y, 720);
         assert_eq!(info.wrap_style, WrapStyle::EndOfLine);
         assert!(info.scaled_border_and_shadow);
         assert_matches!(info.ycbcr_matrix, YCbCrMatrix::Bt709Tv);

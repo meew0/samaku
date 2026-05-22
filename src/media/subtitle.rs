@@ -448,9 +448,13 @@ mod tests {
             SHADOW_2_TRANSPARENCY
         );
 
+        let (style_list, _) = subtitle::StyleList::from_vec(styles.clone());
         let mut context = subtitle::compile::Context {
             frame_rate: FRAME_RATE,
             source_event: None,
+            styles: &style_list,
+            playback_resolution: opaque_track.script_info().playback_resolution,
+            layout_resolution: opaque_track.script_info().playback_resolution, // just use the PlayRes here, doesn't matter at all
         };
         let compiled_events = event_track.compile_range(
             &subtitle::Extradata::default(),

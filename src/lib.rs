@@ -538,14 +538,32 @@ impl Samaku {
         }
     }
 
+    /// The effective layout resolution: either the defined layout resolution,
+    /// or the resolution of the loaded video, or the playback resolution.
+    pub fn effective_layout_resolution(&self) -> subtitle::Resolution {
+        if let Some(layout_resolution) = self.subtitles.script_info.layout_resolution {
+            layout_resolution
+        } else if let Some(video_metadata) = self.video_metadata.as_ref() {
+            subtitle::Resolution {
+                x: video_metadata.width,
+                y: video_metadata.height,
+            }
+        } else {
+            self.subtitles.script_info.playback_resolution
+        }
+    }
+
     /// Create a context for compilation.
     pub fn compile_context<'a>(
-        &self,
+        &'a self,
         source_event: Option<&'a subtitle::Event<'static>>,
     ) -> subtitle::compile::Context<'a> {
         subtitle::compile::Context {
             frame_rate: self.frame_rate(),
             source_event,
+            styles: &self.subtitles.styles,
+            playback_resolution: self.subtitles.script_info.playback_resolution,
+            layout_resolution: self.effective_layout_resolution(),
         }
     }
 

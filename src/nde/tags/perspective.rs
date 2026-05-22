@@ -3,7 +3,10 @@
 //! Code mostly derived from https://github.com/arch1t3cht/Aegisub/blob/e79aa896bd676400c2fbbb9e625bc58b491358da/src/visual_tool_perspective.cpp.
 //! See https://mz.sb/persp for an explanation of the mathematics behind this transformation.
 
-use crate::nde::tags::{Alignment, Global, Local, Maybe3D, Position, PositionOrMove, Resettable};
+use crate::nde::BoundingBox;
+use crate::nde::tags::{
+    Alignment, Float2D, Global, Local, Maybe3D, Position, PositionOrMove, Resettable,
+};
 use crate::subtitle;
 use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
 
@@ -279,7 +282,7 @@ pub fn quad_to_tags(
     quad: &Quad,
     org_mode: OrgMode,
     alignment: Alignment,
-    bounding_box: (Position, Position),
+    bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Perspective {
     // Find a parallelogram projecting to the quad. Independent of translation.
@@ -353,8 +356,10 @@ pub fn quad_to_tags(
 
     let width = top_edge.norm();
     let height = left_edge.y.abs();
-    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) =
-        (bounding_box.0.into(), bounding_box.1.into());
+    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) = (
+        bounding_box.top_left.into(),
+        bounding_box.bottom_right.into(),
+    );
     let scale_x = width / (bbox_max.x - bbox_min.x).max(1.0);
     let scale_y = height / (bbox_max.y - bbox_min.y).max(1.0);
     let scale = vector![scale_x, scale_y];
@@ -441,9 +446,9 @@ impl Perspective {
     pub fn apply(
         &self,
         global: &mut Global,
-        old_font_scale: Vector2<f64>,
-        old_border: Vector2<f64>,
-        old_shadow: Vector2<f64>,
+        old_font_scale: Float2D,
+        old_border: Float2D,
+        old_shadow: Float2D,
     ) -> Option<Local> {
         let angle_x = self.rot_x * RAD2DEG;
         let angle_y = -self.rot_y * RAD2DEG;
@@ -454,9 +459,11 @@ impl Perspective {
         let fay = 0.0;
 
         // Border and shadow scale with the change in fsc (component-wise).
-        let border_shadow_ratio = new_font_scale.component_div(&old_font_scale);
-        let new_border = old_border.component_mul(&border_shadow_ratio);
-        let new_shadow = old_shadow.component_mul(&border_shadow_ratio);
+        let border_shadow_ratio = new_font_scale.component_div(&old_font_scale.into());
+        let border: Vector2<f64> = old_border.into();
+        let shadow: Vector2<f64> = old_shadow.into();
+        let new_border = border.component_mul(&border_shadow_ratio);
+        let new_shadow = shadow.component_mul(&border_shadow_ratio);
 
         let is_finite = angle_x.is_finite()
             && angle_y.is_finite()
@@ -499,11 +506,13 @@ fn vector_is_finite(vector: Vector2<f64>) -> bool {
 pub fn tags_to_quad(
     perspective: &Perspective,
     alignment: Alignment,
-    bounding_box: (Position, Position),
+    bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Quad {
-    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) =
-        (bounding_box.0.into(), bounding_box.1.into());
+    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) = (
+        bounding_box.top_left.into(),
+        bounding_box.bottom_right.into(),
+    );
     let text_width = (bbox_max.x - bbox_min.x).max(1.0);
     let text_height = (bbox_max.y - bbox_min.y).max(1.0);
 
@@ -664,7 +673,7 @@ mod tests {
         assert!(quad_approx_equal(&outer, &outer2, 1e-9));
     }
 
-    fn persp_quad_1() -> (Perspective, Alignment, (Position, Position), f64) {
+    fn persp_quad_1() -> (Perspective, Alignment, BoundingBox, f64) {
         let res = subtitle::Resolution { x: 1920, y: 1080 };
         let screen_z = rescale_screen_z(res, res);
 
@@ -678,26 +687,28 @@ mod tests {
             scale: vector![1.2, 0.95],
         };
 
-        let bmin = Position::new(0.0, 0.0);
-        let bmax = Position::new(300.0, 80.0);
+        let bounding_box = BoundingBox {
+            top_left: Position::new(0.0, 0.0),
+            bottom_right: Position::new(300.0, 80.0),
+        };
         let align = Alignment::try_from_an(5).unwrap();
 
-        (tags, align, (bmin, bmax), screen_z)
+        (tags, align, bounding_box, screen_z)
     }
 
     #[test]
     fn persp_quad_roundtrip_keep() {
-        let (tags, align, (bmin, bmax), screen_z) = persp_quad_1();
+        let (tags, align, bounding_box, screen_z) = persp_quad_1();
 
-        let quad = tags_to_quad(&tags, align, (bmin, bmax), screen_z);
+        let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         let rec = quad_to_tags(
             &quad,
             OrgMode::Keep(tags.org.into()),
             align,
-            (bmin, bmax),
+            bounding_box,
             screen_z,
         );
-        let quad2 = tags_to_quad(&rec, align, (bmin, bmax), screen_z);
+        let quad2 = tags_to_quad(&rec, align, bounding_box, screen_z);
 
         assert_float_absolute_eq!(tags.rot_x, rec.rot_x, 1e-6);
         assert_float_absolute_eq!(tags.rot_y, rec.rot_y, 1e-6);
@@ -715,12 +726,12 @@ mod tests {
 
     #[test]
     fn persp_quad_roundtrip_center() {
-        let (tags, align, (bmin, bmax), screen_z) = persp_quad_1();
+        let (tags, align, bounding_box, screen_z) = persp_quad_1();
 
-        let quad = tags_to_quad(&tags, align, (bmin, bmax), screen_z);
+        let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         assert!(quad.is_convex());
-        let rec = quad_to_tags(&quad, OrgMode::Center, align, (bmin, bmax), screen_z);
-        let quad2 = tags_to_quad(&rec, align, (bmin, bmax), screen_z);
+        let rec = quad_to_tags(&quad, OrgMode::Center, align, bounding_box, screen_z);
+        let quad2 = tags_to_quad(&rec, align, bounding_box, screen_z);
 
         assert!(quad_approx_equal(&quad, &quad2, 1e-6));
     }
@@ -739,15 +750,18 @@ mod tests {
             raw_fax: 0.25,
             scale: vector![1.1, 0.9],
         };
-        let bmin = Position::new(0.0, 0.0);
-        let bmax = Position::new(280.0, 70.0);
+
+        let bounding_box = BoundingBox {
+            top_left: Position::new(0.0, 0.0),
+            bottom_right: Position::new(280.0, 70.0),
+        };
         let align = Alignment::try_from_an(5).unwrap();
-        let quad = tags_to_quad(&tags, align, (bmin, bmax), screen_z);
+        let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         assert!(quad.is_convex());
-        let rec = quad_to_tags(&quad, OrgMode::NoFax, align, (bmin, bmax), screen_z);
+        let rec = quad_to_tags(&quad, OrgMode::NoFax, align, bounding_box, screen_z);
         assert!(rec.raw_fax.abs() < 1e-6);
 
-        let quad2 = tags_to_quad(&rec, align, (bmin, bmax), screen_z);
+        let quad2 = tags_to_quad(&rec, align, bounding_box, screen_z);
         assert!(quad_approx_equal(&quad, &quad2, 1e-6));
     }
 
@@ -772,18 +786,20 @@ mod tests {
         let res = subtitle::Resolution { x: 800, y: 480 };
         let screen_z = rescale_screen_z(res, res);
 
-        let bmin = Position::new(0.0, 0.0);
-        let bmax = Position::new(200.0, 60.0);
+        let bounding_box = BoundingBox {
+            top_left: Position::new(0.0, 0.0),
+            bottom_right: Position::new(200.0, 60.0),
+        };
         let align = Alignment::try_from_an(7).unwrap();
 
         let perspective_center =
-            quad_to_tags(&quad, OrgMode::Center, align, (bmin, bmax), screen_z);
-        let perspective_nofax = quad_to_tags(&quad, OrgMode::NoFax, align, (bmin, bmax), screen_z);
+            quad_to_tags(&quad, OrgMode::Center, align, bounding_box, screen_z);
+        let perspective_nofax = quad_to_tags(&quad, OrgMode::NoFax, align, bounding_box, screen_z);
         let perspective_keep = quad_to_tags(
             &quad,
             OrgMode::Keep(Position::new(400.0, 240.0)),
             align,
-            (bmin, bmax),
+            bounding_box,
             screen_z,
         );
 
@@ -835,9 +851,9 @@ mod tests {
 
         let mut global = Global::empty();
 
-        let scale = vector![0.9, 1.1];
-        let shadow = vector![2.0, 3.0];
-        let border = vector![4.0, 5.0];
+        let scale = Float2D::new(0.9, 1.19);
+        let shadow = Float2D::new(2.0, 3.0);
+        let border = Float2D::new(4.0, 5.0);
 
         let local = tags.apply(&mut global, scale, border, shadow);
         assert_matches!(local, Some(local));

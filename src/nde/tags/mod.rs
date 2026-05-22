@@ -993,6 +993,38 @@ impl lerp::Lerp for Maybe3D {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Float2D {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Float2D {
+    #[must_use]
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+}
+
+impl From<Float2D> for nalgebra::Vector2<f64> {
+    fn from(value: Float2D) -> Self {
+        nalgebra::vector![value.x, value.y]
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Float3D {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl From<Float3D> for nalgebra::Vector3<f64> {
+    fn from(value: Float3D) -> Self {
+        nalgebra::vector![value.x, value.y, value.z]
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Colour {
     pub red: u8,

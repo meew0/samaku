@@ -115,6 +115,10 @@ fn emit_script_info<W: Write>(writer: &mut W, script_info: &ScriptInfo) -> Resul
         "PlayResY: {}{NEWLINE}",
         script_info.playback_resolution.y
     )?;
+    if let Some(layout_resolution) = script_info.layout_resolution {
+        write!(writer, "LayoutResX: {}{NEWLINE}", layout_resolution.x)?;
+        write!(writer, "LayoutResY: {}{NEWLINE}", layout_resolution.y)?;
+    }
 
     emit_kvs(writer, &script_info.extra_info)?;
     write!(writer, "{NEWLINE}")?;

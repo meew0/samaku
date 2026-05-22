@@ -20,10 +20,29 @@ pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
 
 /// Contains all extra data that may be used by NDE filters and must thus be specified
 /// for non-trivial compilations, such as the video frame rate.
+///
+/// Also specifies some utility methods.
 #[derive(Clone)]
 pub struct Context<'a> {
     pub frame_rate: media::FrameRate,
     pub source_event: Option<&'a super::Event<'static>>,
+    pub styles: &'a super::StyleList,
+
+    /// The `PlayRes` defined in the ASS file header,
+    /// or the video resolution, if none is defined.
+    pub playback_resolution: super::Resolution,
+
+    /// The `LayoutRes` defined in the ASS file header,
+    /// or the video resolution, if none is defined.
+    pub layout_resolution: super::Resolution,
+}
+
+impl Context<'_> {
+    /// Find the style of a given event.
+    #[must_use]
+    pub fn get_event_style(&self, event: &nde::Event) -> &super::Style {
+        self.styles.get(event.style_index)
+    }
 }
 
 /// Applies the given `filter` to the given `event`, and returns the resulting events plus certain
@@ -152,12 +171,16 @@ mod tests {
             ..Default::default()
         };
 
+        let style_list = StyleList::new();
         let context = Context {
             frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
             source_event: Some(&event),
+            styles: &style_list,
+            playback_resolution: Resolution::FULL_HD,
+            layout_resolution: Resolution::FULL_HD,
         };
 
         let result = nde(&filter, &context).expect("there should be no error");

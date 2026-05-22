@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
+use crate::nde::tags::Resettable;
+use crate::subtitle;
 pub use graph::Graph;
 pub use node::Node;
-
-use crate::subtitle;
 
 pub mod graph;
 pub mod node;
@@ -94,6 +94,54 @@ impl Event {
         }
     }
 
+    #[must_use]
+    pub fn first_local(&self) -> Option<&tags::Local> {
+        if let Some(&Span::Tags(ref local, _) | &Span::Drawing(ref local, _)) = self.text.first() {
+            Some(local)
+        } else {
+            None
+        }
+    }
+
+    fn effective_tag<'a, T>(
+        &'a self,
+        tag_fn: for<'b> fn(&'b tags::Local) -> &'b Resettable<T>,
+        style_value: &'a T,
+    ) -> &'a T {
+        match *tag_fn(&self.overrides) {
+            Resettable::Override(ref x) => x,
+            Resettable::Reset => style_value,
+            Resettable::Keep => {
+                if let Some(first_local) = self.first_local() {
+                    tag_fn(first_local).override_or(style_value)
+                } else {
+                    style_value
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn effective_border(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.border.x, &style.border_width);
+        let y = *self.effective_tag(|local| &local.border.y, &style.border_width);
+        tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_shadow(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.shadow.x, &style.shadow_distance);
+        let y = *self.effective_tag(|local| &local.shadow.y, &style.shadow_distance);
+        tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_font_scale(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.font_scale.x, &style.scale.x);
+        let y = *self.effective_tag(|local| &local.font_scale.y, &style.scale.y);
+        tags::Float2D { x, y }
+    }
+
     fn clone_and_maybe_override_or_clear(&self, tags: &tags::Local, i: usize) -> tags::Local {
         let mut new_tags = tags.clone();
 
@@ -156,6 +204,13 @@ impl Span {
     fn is_reset(&self) -> bool {
         matches!(self, Self::Reset | Self::ResetToStyle(_))
     }
+}
+
+/// Represents the screen-space bounding box of an event.
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingBox {
+    top_left: tags::Position,
+    bottom_right: tags::Position,
 }
 
 #[cfg(test)]
