@@ -24,15 +24,6 @@ pub enum ControlsMode {
     MotionTrack,
 }
 
-// Elements to display if no video is loaded
-macro_rules! empty {
-    () => {
-        iced::widget::scrollable(iced::widget::row![iced::widget::text(
-            "No video loaded. Press V to load something."
-        ),])
-    };
-}
-
 #[typetag::serde(name = "video")]
 impl super::LocalState for State {
     fn view<'a>(
@@ -40,10 +31,10 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let scroll = match global_state.actual_frame {
-            None => empty!(),
+        let content = match global_state.actual_frame {
+            None => empty(),
             Some((num_frame, ref handle)) => match global_state.video_metadata.as_ref() {
-                None => empty!(),
+                None => empty(),
                 Some(video_metadata) => {
                     let storage_size = subtitle::Resolution {
                         x: video_metadata.width,
@@ -119,24 +110,21 @@ impl super::LocalState for State {
                         storage_size,
                         current_frame: global_state.current_frame(),
                     };
-                    iced::widget::scrollable(view::widget::ImageStack::new(stack, program))
+                    let scroll =
+                        iced::widget::scrollable(view::widget::ImageStack::new(stack, program));
+
+                    let video_container = iced::widget::container(scroll)
+                        .center_x(iced::Length::Fill)
+                        .center_y(iced::Length::Fill);
+
+                    if self.show_controls {
+                        let bottom_bar = view_bottom_bar(self, self_pane, global_state);
+                        iced::widget::column![video_container, bottom_bar].into()
+                    } else {
+                        video_container.into()
+                    }
                 }
             },
-        };
-
-        let content = if self.show_controls {
-            let video_container = iced::widget::container(scroll)
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill);
-
-            let bottom_bar = view_bottom_bar(self, self_pane, global_state);
-
-            iced::widget::column![video_container, bottom_bar,].into()
-        } else {
-            iced::widget::container(scroll)
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill)
-                .into()
         };
 
         super::View {
@@ -148,7 +136,7 @@ impl super::LocalState for State {
     fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
         match pane_message {
             message::Pane::VideoSetControlsMode(controls_mode) => {
-                self.controls_mode = controls_mode
+                self.controls_mode = controls_mode;
             }
             _ => {}
         }
@@ -206,6 +194,18 @@ fn view_bottom_bar<'a>(
     .clip(true)
     .padding(5.0)
     .into()
+}
+
+// Elements to display if no video is loaded
+fn empty<'a>() -> iced::Element<'a, message::Message> {
+    let scroll = iced::widget::scrollable(iced::widget::row![iced::widget::text(
+        "No video loaded. Press V to load something."
+    )]);
+
+    iced::widget::container(scroll)
+        .center_x(iced::Length::Fill)
+        .center_y(iced::Length::Fill)
+        .into()
 }
 
 inventory::submit! {
