@@ -1,6 +1,6 @@
 use crate::{model, nde, subtitle};
 
-use super::{Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SplitFrameByFrame;
@@ -12,21 +12,20 @@ impl Node for SplitFrameByFrame {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::IndividualEvent, SocketType::FrameRate]
+        &[SocketType::IndividualEvent]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(
-            inputs.len() > 1,
-            "the correct number of inputs should be present"
-        ); // Elide bounds checks
-
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         super::retrieve!(inputs[0], &SocketValue::IndividualEvent(ref event));
-        super::retrieve!(inputs[1], &SocketValue::FrameRate(ref frame_rate));
+        let frame_rate = context.frame_rate;
 
         let mut res: Vec<nde::Event> = vec![];
         let mut frame = frame_rate.ms_to_frame(event.start.0);

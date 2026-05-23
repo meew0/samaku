@@ -8,23 +8,25 @@ use std::fmt::Debug;
 pub use clip::ClipRectangle;
 pub use gradient::Gradient;
 pub use input::InputEvent;
-pub use input::InputFrameRate;
 pub use input::InputPosition;
+pub use input::InputQuad;
 pub use input::InputRectangle;
 pub use input::InputTags;
 pub use motion_track::MotionTrack;
 pub use output::Output;
+pub use perspective::Perspective;
 pub use positioning::SetPosition;
 pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
-use crate::{media, message, model, nde, subtitle};
+use crate::{message, model, nde, subtitle};
 
 mod clip;
 mod gradient;
 mod input;
 mod motion_track;
 mod output;
+mod perspective;
 mod positioning;
 mod split;
 mod style_basic;
@@ -50,8 +52,7 @@ pub enum SocketValue<'a> {
 
     Position(nde::tags::Position),
     Rectangle(nde::tags::Rectangle),
-
-    FrameRate(media::FrameRate),
+    Quad(nde::tags::perspective::Quad),
 
     SourceEvent(&'a subtitle::Event<'static>),
 
@@ -69,7 +70,7 @@ impl SocketValue<'_> {
             SocketValue::GlobalTags(_) => Some(SocketType::GlobalTags),
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
-            SocketValue::FrameRate(_) => Some(SocketType::FrameRate),
+            SocketValue::Quad(_) => Some(SocketType::Quad),
             SocketValue::None | SocketValue::SourceEvent(_) | SocketValue::CompiledEvents(_) => {
                 None
             }
@@ -86,7 +87,7 @@ impl SocketValue<'_> {
             SocketValue::GlobalTags(_) => "GlobalTags",
             SocketValue::Position(_) => "Position",
             SocketValue::Rectangle(_) => "Rectangle",
-            SocketValue::FrameRate(_) => "FrameRate",
+            SocketValue::Quad(_) => "Quad",
             SocketValue::SourceEvent(_) => "SourceEvent",
             SocketValue::CompiledEvents(_) => "CompiledEvents",
         }
@@ -191,11 +192,7 @@ pub enum SocketType {
     GlobalTags,
     Position,
     Rectangle,
-    FrameRate,
-
-    /// This represents an “input” to a leaf node, i.e. a node that does not have a user-assignable
-    /// input and thus acts as a node that supplies an initial value to the graph.
-    LeafInput(LeafInputType),
+    Quad,
 }
 
 impl SocketType {
@@ -208,11 +205,7 @@ impl SocketType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum LeafInputType {
-    Event,
-    FrameRate,
-}
+pub type Context<'a> = subtitle::compile::Context<'a>;
 
 #[typetag::serde(tag = "type")]
 #[expect(unused_variables, reason = "trait with default methods")]
@@ -229,7 +222,11 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// # Errors
     /// Can return an [`BasicError`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>>;
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>>;
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.

@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClipRectangle;
@@ -19,7 +19,11 @@ impl Node for ClipRectangle {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        _context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         assert!(
             inputs.len() > 1,
             "the required number of inputs should be present"

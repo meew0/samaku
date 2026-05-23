@@ -5,9 +5,9 @@
 
 use super::{
     Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency,
-    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke, KaraokeEffect,
-    KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove, Rectangle,
-    Resettable, SimpleFade, Transparency, lerp::Lerp,
+    Fade, Float2D, Float3D, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke,
+    KaraokeEffect, KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove,
+    Rectangle, Resettable, SimpleFade, Transparency, lerp::Lerp,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -665,19 +665,6 @@ impl Default for RenderContext {
             shadow_transparency_after_fade: Transparency(0),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-struct Float2D {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-struct Float3D {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
 }
 
 /// Determine the value that a tag will have after applying the given `Resettable`

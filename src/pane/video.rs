@@ -40,11 +40,11 @@ impl super::LocalState for State {
                         }]
                     } else {
                         let instant = std::time::Instant::now();
-                        let context = global_state.compile_context();
+                        let mut context = global_state.compile_context(None);
                         let current_frame_time = video_metadata.frame_rate.frame_to_ms(num_frame);
                         let compiled = global_state.subtitles.events.compile_range(
                             &global_state.subtitles.extradata,
-                            &context,
+                            &mut context,
                             subtitle::StartTime(current_frame_time).stab(),
                         );
                         let elapsed_compile = instant.elapsed();
@@ -340,6 +340,22 @@ fn draw_reticule(
                 -1.0,
                 -1.0,
                 alpha_factor,
+            );
+        }
+        model::reticule::Shape::Circle => {
+            let circle = canvas::Path::circle(center_point, reticule.radius * 0.5);
+            frame.fill(&circle, style::SAMAKU_TEXT.scale_alpha(alpha_factor));
+            frame.stroke(
+                &circle,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_BACKGROUND)
+                    .with_width(2.0),
+            );
+            frame.stroke(
+                &circle,
+                canvas::Stroke::default()
+                    .with_color(style::SAMAKU_PRIMARY)
+                    .with_width(1.0),
             );
         }
     }

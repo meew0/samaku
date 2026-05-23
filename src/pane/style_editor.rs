@@ -539,6 +539,7 @@ where
                 x: i32::from(PREVIEW_WIDTH) * 2,
                 y: i32::from(PREVIEW_HEIGHT) * 2,
             },
+            layout_resolution: global_state.subtitles.script_info.layout_resolution,
             extra_info: HashMap::new(),
         },
     );

@@ -46,6 +46,7 @@ regex = "1.12"
 interavl = "0.6"
 indexmap = "2.14"
 fast-float2 = "0.2"
+nalgebra = "0.34"
 
 # dtolnay collection
 thiserror = "2.0"
@@ -61,6 +62,9 @@ ciborium = "0.2.2"
 data-encoding = "2.10"
 data-encoding-macro = "0.1.19"
 miniz_oxide = "0.9"
+
+# Font metric parsing (used by nde::util::measure to read OS/2 Win metrics)
+ttf-parser = { version = "0.25.1", default-features = false }
 
 [dev-dependencies]
 

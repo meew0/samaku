@@ -335,6 +335,10 @@ pub struct Resolution {
     pub y: i32,
 }
 
+impl Resolution {
+    pub const FULL_HD: Resolution = Resolution { x: 1920, y: 1080 };
+}
+
 /// Converts a libass-style (RGBT — most signficant byte is the red channel, least significant byte
 /// is the transparency) 32-bit packed colour into a pair of [`Colour`] and [`Transparency`].
 #[must_use]
@@ -737,6 +741,12 @@ impl StyleList {
     pub fn as_slice(&self) -> &[Style] {
         &self.styles
     }
+
+    /// Returns the style with the given index, or the default style if it could not be found.
+    #[must_use]
+    pub fn get(&self, style_index: usize) -> &Style {
+        self.styles.get(style_index).unwrap_or(&self.styles[0])
+    }
 }
 
 impl Default for StyleList {
@@ -828,6 +838,7 @@ pub struct ScriptInfo {
     pub timer: f64,
     pub ycbcr_matrix: YCbCrMatrix,
     pub playback_resolution: Resolution,
+    pub layout_resolution: Option<Resolution>,
     pub extra_info: HashMap<String, String>,
 }
 
@@ -843,6 +854,8 @@ impl Default for ScriptInfo {
             // This is not the default libass uses (which is 324x288),
             // but it seems like a reasonable default for a modern age.
             playback_resolution: Resolution { x: 1920, y: 1080 },
+
+            layout_resolution: None,
 
             extra_info: HashMap::new(),
         }
@@ -1385,26 +1398,7 @@ mod tests {
         // Create a File containing a single event that specifies an NDE filter which splits it
         // frame-by-frame, and ensure that the exported output contains the correct number of
         // resulting events.
-
-        let mut graph =
-            nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
-
-        // The SplitFrameByFrame node requires a frame rate, so add a respective input node and
-        // connect it
-        graph.nodes.push(nde::graph::VisualNode {
-            node: Box::new(nde::node::InputFrameRate {}),
-            position: iced::Point::new(0.0, 200.0),
-        });
-        graph.connect(
-            nde::graph::PreviousEndpoint {
-                node_index: nde::graph::NodeId(3),
-                socket_index: nde::graph::SocketId(0),
-            },
-            nde::graph::NextEndpoint {
-                node_index: nde::graph::NodeId(1),
-                socket_index: nde::graph::SocketId(1),
-            },
-        );
+        let graph = nde::Graph::from_single_intermediate(Box::new(nde::node::SplitFrameByFrame {}));
 
         let filter = nde::Filter {
             name: "foo".to_owned(),
@@ -1427,11 +1421,16 @@ mod tests {
             ..Default::default()
         };
 
+        let style_list = StyleList::new();
         let context = compile::Context {
             frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
+            source_event: None,
+            styles: &style_list,
+            playback_resolution: Resolution::FULL_HD,
+            layout_resolution: Resolution::FULL_HD,
         };
         let mut emitted = String::new();
         emit(&mut emitted, &ass_file, Some(context)).unwrap();
@@ -1459,13 +1458,18 @@ mod tests {
         .into_iter()
         .collect();
 
-        let context = compile::Context {
+        let style_list = StyleList::new();
+        let mut context = compile::Context {
             frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
+            source_event: None,
+            styles: &style_list,
+            playback_resolution: Resolution::FULL_HD,
+            layout_resolution: Resolution::FULL_HD,
         };
-        let compiled = events.compile_all(&Extradata::default(), &context);
+        let compiled = events.compile_all(&Extradata::default(), &mut context);
 
         assert_eq!(compiled.len(), 1);
     }

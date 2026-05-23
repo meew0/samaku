@@ -1,13 +1,14 @@
 use std::borrow::Cow;
 
+use crate::nde::tags::{FontSize, FontWeight, Resettable};
+use crate::subtitle;
 pub use graph::Graph;
 pub use node::Node;
-
-use crate::subtitle;
 
 pub mod graph;
 pub mod node;
 pub mod tags;
+pub mod util;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Filter {
@@ -15,6 +16,8 @@ pub struct Filter {
     pub graph: Graph,
 }
 
+/// An NDE event. Differs from [`subtitle::Event`] in that the event text is represented
+/// in parsed form, i.e. as global tags and a vector of tag/content spans.
 #[derive(Debug, Clone)]
 pub struct Event {
     pub start: subtitle::StartTime,
@@ -37,6 +40,22 @@ pub struct Event {
 }
 
 impl Event {
+    #[must_use]
+    pub fn from_ass_event(ass_event: &subtitle::Event) -> Self {
+        let (global, spans) = tags::parse(&ass_event.text);
+
+        Self {
+            start: ass_event.start,
+            duration: ass_event.duration,
+            layer_index: ass_event.layer_index,
+            style_index: ass_event.style_index,
+            margins: ass_event.margins,
+            global_tags: *global,
+            overrides: tags::Local::empty(),
+            text: spans,
+        }
+    }
+
     #[must_use]
     pub fn to_ass_event(&self) -> subtitle::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
@@ -92,6 +111,100 @@ impl Event {
             overrides: self.overrides.clone(),
             text: self.text.clone(),
         }
+    }
+
+    #[must_use]
+    pub fn first_local(&self) -> Option<&tags::Local> {
+        if let Some(&Span::Tags(ref local, _) | &Span::Drawing(ref local, _)) = self.text.first() {
+            Some(local)
+        } else {
+            None
+        }
+    }
+
+    fn effective_tag<'a, T>(
+        &'a self,
+        tag_fn: for<'b> fn(&'b tags::Local) -> &'b Resettable<T>,
+        style_value: &'a T,
+    ) -> &'a T {
+        match *tag_fn(&self.overrides) {
+            Resettable::Override(ref x) => x,
+            Resettable::Reset => style_value,
+            Resettable::Keep => {
+                if let Some(first_local) = self.first_local() {
+                    tag_fn(first_local).override_or(style_value)
+                } else {
+                    style_value
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn effective_border(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.border.x, &style.border_width);
+        let y = *self.effective_tag(|local| &local.border.y, &style.border_width);
+        tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_shadow(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.shadow.x, &style.shadow_distance);
+        let y = *self.effective_tag(|local| &local.shadow.y, &style.shadow_distance);
+        tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_font_scale(&self, style: &subtitle::Style) -> tags::Float2D {
+        let x = *self.effective_tag(|local| &local.font_scale.x, &style.scale.x);
+        let y = *self.effective_tag(|local| &local.font_scale.y, &style.scale.y);
+        tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_font_name<'a>(&'a self, style: &'a subtitle::Style) -> &'a str {
+        let str: &String = self.effective_tag(|local| &local.font_name, &style.font_name);
+        str.as_str()
+    }
+
+    #[must_use]
+    pub fn effective_font_size(&self, style: &subtitle::Style) -> f64 {
+        let val = match self.overrides.font_size {
+            FontSize::Set(val) => val,
+            FontSize::Reset(delta) => delta.apply(style.font_size),
+            FontSize::Delta(delta) => {
+                if let Some(first_local) = self.first_local() {
+                    delta.apply(match first_local.font_size {
+                        FontSize::Set(val) => val,
+                        FontSize::Reset(inner_delta) | FontSize::Delta(inner_delta) => {
+                            inner_delta.apply(style.font_size)
+                        }
+                    })
+                } else {
+                    delta.apply(style.font_size)
+                }
+            }
+        };
+
+        if val > 0.0 { val } else { style.font_size }
+    }
+
+    #[must_use]
+    pub fn effective_font_weight(&self, style: &subtitle::Style) -> FontWeight {
+        *self.effective_tag(
+            |local| &local.font_weight,
+            &FontWeight::BoldToggle(style.bold),
+        )
+    }
+
+    #[must_use]
+    pub fn effective_italic(&self, style: &subtitle::Style) -> bool {
+        *self.effective_tag(|local| &local.italic, &style.italic)
+    }
+
+    #[must_use]
+    pub fn effective_letter_spacing(&self, style: &subtitle::Style) -> f64 {
+        *self.effective_tag(|local| &local.letter_spacing, &style.spacing)
     }
 
     fn clone_and_maybe_override_or_clear(&self, tags: &tags::Local, i: usize) -> tags::Local {
@@ -156,6 +269,13 @@ impl Span {
     fn is_reset(&self) -> bool {
         matches!(self, Self::Reset | Self::ResetToStyle(_))
     }
+}
+
+/// Represents the screen-space bounding box of an event.
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingBox {
+    top_left: tags::Position,
+    bottom_right: tags::Position,
 }
 
 #[cfg(test)]

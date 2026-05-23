@@ -264,8 +264,8 @@ fn view_filter<'a>(
     // not to get the output events, but for the intermediate state,
     // which lets us determine what style to draw nodes in, as well as provide
     // precise information of what types sockets contain
-    let context = global_state.compile_context();
-    let nde_result_or_error = subtitle::compile::nde(active_event, &nde_filter.graph, &context);
+    let context = global_state.compile_context(Some(active_event));
+    let nde_result_or_error = subtitle::compile::nde(&nde_filter.graph, &context);
 
     // Create the (empty) node graph
     let mut graph = create_graph(self_pane, pane_state, nde_filter_id);
@@ -756,7 +756,7 @@ fn make_pin<'a>(
     role: &SocketRole,
     socket_id: SocketId,
     socket_type: nde::node::SocketType,
-) -> Option<iced_nodegraph::NodePin<'a, PinId, message::Message, iced::Theme, iced::Renderer>> {
+) -> iced_nodegraph::NodePin<'a, PinId, message::Message, iced::Theme, iced::Renderer> {
     const BLOB_RADIUS: f32 = 7.0;
 
     // The style of the blob is not determined by a style sheet, but by properties of the `Socket`
@@ -785,27 +785,22 @@ fn make_pin<'a>(
             iced::Color::from_rgb(0.19, 0.90, 0.90),
             "Rectangle",
         ),
-        nde::node::SocketType::FrameRate => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(0.73, 0.38, 0.76),
-            "Frame rate",
-        ),
-        nde::node::SocketType::LeafInput(_) => return None,
+        nde::node::SocketType::Quad => {
+            (BLOB_RADIUS, iced::Color::from_rgb(0.73, 0.38, 0.76), "Quad")
+        }
     };
 
     // TODO: figure out how to apply shape/border radius, and size
 
-    Some(
-        iced_nodegraph::node_pin(
-            role.side,
-            (role.pin_id_func)(socket_id),
-            iced::widget::text(label).style(|_| iced::widget::text::Style {
-                color: Some(style::SAMAKU_TEXT),
-            }),
-        )
-        .direction(role.direction)
-        .color(blob_color),
+    iced_nodegraph::node_pin(
+        role.side,
+        (role.pin_id_func)(socket_id),
+        iced::widget::text(label).style(|_| iced::widget::text::Style {
+            color: Some(style::SAMAKU_TEXT),
+        }),
     )
+    .direction(role.direction)
+    .color(blob_color)
 }
 
 fn make_pin_row<'a>(
@@ -814,9 +809,9 @@ fn make_pin_row<'a>(
     out_socket: Option<nde::node::SocketType>,
 ) -> iced::Element<'a, message::Message> {
     let in_pin_option =
-        in_socket.and_then(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
+        in_socket.map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
     let out_pin_option =
-        out_socket.and_then(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
+        out_socket.map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
 
     if let Some(in_pin) = in_pin_option {
         if let Some(out_pin) = out_pin_option {

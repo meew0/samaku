@@ -20,8 +20,29 @@ pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
 
 /// Contains all extra data that may be used by NDE filters and must thus be specified
 /// for non-trivial compilations, such as the video frame rate.
-pub struct Context {
+///
+/// Also specifies some utility methods.
+#[derive(Clone)]
+pub struct Context<'a> {
     pub frame_rate: media::FrameRate,
+    pub source_event: Option<&'a super::Event<'static>>,
+    pub styles: &'a super::StyleList,
+
+    /// The `PlayRes` defined in the ASS file header,
+    /// or the video resolution, if none is defined.
+    pub playback_resolution: super::Resolution,
+
+    /// The `LayoutRes` defined in the ASS file header,
+    /// or the video resolution, if none is defined.
+    pub layout_resolution: super::Resolution,
+}
+
+impl Context<'_> {
+    /// Find the style of a given event.
+    #[must_use]
+    pub fn get_event_style(&self, event: &nde::Event) -> &super::Style {
+        self.styles.get(event.style_index)
+    }
 }
 
 /// Applies the given `filter` to the given `event`, and returns the resulting events plus certain
@@ -34,9 +55,8 @@ pub struct Context {
 /// # Panics
 /// Panics if the filter's output node does not provide a [`SocketValue::CompiledEvents`].
 pub fn nde<'a, 'b>(
-    event: &'a super::Event<'static>,
     filter: &'b nde::graph::Graph,
-    context: &Context,
+    context: &Context<'a>,
 ) -> Result<NdeResult<'a, 'b>, NdeError> {
     let mut intermediates: Vec<NodeState> = Vec::with_capacity(filter.nodes.len());
     // we cannot use a vec! macro or resize here because NodeStates aren't cloneable
@@ -50,8 +70,6 @@ pub fn nde<'a, 'b>(
         nde::graph::DfsResult::ProcessQueue(queue) => queue,
         nde::graph::DfsResult::CycleFound => return Err(NdeError::CycleInGraph),
     };
-    let source_event_value = nde::node::SocketValue::SourceEvent(event);
-    let frame_rate_value = nde::node::SocketValue::FrameRate(context.frame_rate);
 
     // Go through the process queue and process the individual nodes
     while let Some(node_index) = process_queue.pop_front() {
@@ -59,20 +77,6 @@ pub fn nde<'a, 'b>(
         let desired_inputs = node.desired_inputs();
         let mut inputs: Vec<&nde::node::SocketValue> =
             vec![&nde::node::SocketValue::None; desired_inputs.len()];
-
-        // Pass inputs to leaf nodes
-        for (i, desired_input) in desired_inputs.iter().enumerate() {
-            if let &nde::node::SocketType::LeafInput(desired_leaf_input) = desired_input {
-                match desired_leaf_input {
-                    nde::node::LeafInputType::Event => {
-                        inputs[i] = &source_event_value;
-                    }
-                    nde::node::LeafInputType::FrameRate => {
-                        inputs[i] = &frame_rate_value;
-                    }
-                }
-            }
-        }
 
         // Find connections that would theoretically supply inputs to the current node,
         // check whether those nodes are active, and if they are, supply the inputs
@@ -85,7 +89,7 @@ pub fn nde<'a, 'b>(
         // Run the node and store the results.
         // Note that this is still done even if some of the previous nodes are inactive/errored.
         // This means that the current node will likely error as well, but that is ok
-        intermediates[node_index.0] = match node.run(&inputs) {
+        intermediates[node_index.0] = match node.run(&inputs, context) {
             Ok(outputs) => NodeState::Active(outputs),
             Err(err) => {
                 if first_error_index.is_none() {
@@ -167,14 +171,19 @@ mod tests {
             ..Default::default()
         };
 
+        let style_list = StyleList::new();
         let context = Context {
             frame_rate: media::FrameRate {
                 numerator: 24,
                 denominator: 1,
             },
+            source_event: Some(&event),
+            styles: &style_list,
+            playback_resolution: Resolution::FULL_HD,
+            layout_resolution: Resolution::FULL_HD,
         };
 
-        let result = nde(&event, &filter, &context).expect("there should be no error");
+        let result = nde(&filter, &context).expect("there should be no error");
 
         for node_state in &result.intermediates {
             assert_matches!(node_state, &NodeState::Active { .. });

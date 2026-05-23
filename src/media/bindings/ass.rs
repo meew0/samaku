@@ -565,12 +565,21 @@ impl Track {
             extra_info.insert("Title".to_owned(), title);
         }
 
+        let (layout_res_x, layout_res_y) =
+            unsafe { ((*self.track).LayoutResX, (*self.track).LayoutResY) };
+        let layout_resolution =
+            (layout_res_x != 0 && layout_res_y != 0).then_some(subtitle::Resolution {
+                x: layout_res_x,
+                y: layout_res_y,
+            });
+
         subtitle::ScriptInfo {
             extra_info,
             playback_resolution: subtitle::Resolution {
                 x: unsafe { (*self.track).PlayResX },
                 y: unsafe { (*self.track).PlayResY },
             },
+            layout_resolution,
             timer: unsafe { (*self.track).Timer },
             wrap_style: WrapStyle::from(unsafe { (*self.track).WrapStyle }),
             scaled_border_and_shadow: unsafe { (*self.track).ScaledBorderAndShadow } != 0,
@@ -600,6 +609,12 @@ impl Track {
         unsafe {
             (*self.track).PlayResX = header.playback_resolution.x;
             (*self.track).PlayResY = header.playback_resolution.y;
+
+            if let Some(layout_resolution) = header.layout_resolution {
+                (*self.track).LayoutResX = layout_resolution.x;
+                (*self.track).LayoutResY = layout_resolution.y;
+            }
+
             (*self.track).Timer = header.timer;
             (*self.track).WrapStyle = header.wrap_style as i32;
             (*self.track).ScaledBorderAndShadow = i32::from(header.scaled_border_and_shadow);

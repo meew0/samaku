@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Gradient;
@@ -23,7 +23,11 @@ impl Node for Gradient {
         &[SocketType::AnyEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        _context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         const RESOLUTION: i32 = 5;
 
         assert!(

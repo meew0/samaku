@@ -85,6 +85,8 @@ pub enum Shape {
     CornerTopRight,
     CornerBottomLeft,
     CornerBottomRight,
+    /// A plain filled circle; used for free-angle quad corners.
+    Circle,
 }
 
 #[cfg(test)]

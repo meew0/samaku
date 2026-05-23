@@ -5,7 +5,7 @@ use iced::widget::canvas;
 use model::reticule;
 use std::collections::BTreeMap;
 
-use super::{Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
@@ -20,24 +20,20 @@ impl Node for MotionTrack {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[
-            SocketType::MultipleEvents,
-            SocketType::LeafInput(super::LeafInputType::FrameRate),
-        ]
+        &[SocketType::MultipleEvents]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
         &[SocketType::MultipleEvents]
     }
 
-    fn run(&'_ self, inputs: &[&SocketValue]) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        assert!(
-            inputs.len() > 1,
-            "the required number of inputs should be present"
-        ); // Elide bounds checks
-
+    fn run(
+        &'_ self,
+        inputs: &[&SocketValue],
+        context: &Context,
+    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         super::retrieve!(inputs[0], &SocketValue::MultipleEvents(ref events));
-        super::retrieve!(inputs[1], &SocketValue::FrameRate(ref frame_rate));
+        let frame_rate = context.frame_rate;
 
         let mut new_events: Vec<nde::Event> = vec![];
 

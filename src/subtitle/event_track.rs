@@ -479,7 +479,7 @@ impl EventTrack {
     pub fn compile_range<'a>(
         &'a self,
         extradata: &Extradata,
-        context: &compile::Context,
+        context: &mut compile::Context<'a>,
         interval: Range<StartTime>,
     ) -> Vec<Event<'a>> {
         let mut compiled: Vec<Event<'a>> = vec![];
@@ -496,7 +496,7 @@ impl EventTrack {
     pub fn compile_all<'a>(
         &'a self,
         extradata: &Extradata,
-        context: &compile::Context,
+        context: &mut compile::Context<'a>,
     ) -> Vec<Event<'a>> {
         let mut compiled: Vec<Event<'a>> = vec![];
 
@@ -510,7 +510,7 @@ impl EventTrack {
     fn internal_compile_step<'a>(
         &'a self,
         extradata: &Extradata,
-        context: &compile::Context,
+        context: &mut compile::Context<'a>,
         compiled: &mut Vec<Event<'a>>,
         event_index: EventIndex,
     ) {
@@ -518,10 +518,12 @@ impl EventTrack {
 
         // Skip comments when compiling events
         if !event.is_comment() {
+            context.source_event = Some(event);
+
             // Run the complex `nde` compilation method if the event has a filter assigned,
             // and the trivial one otherwise
             match extradata.nde_filter_for_event(event) {
-                Some(filter) => match compile::nde(event, &filter.graph, context) {
+                Some(filter) => match compile::nde(&filter.graph, context) {
                     Ok(mut nde_result) => match nde_result.events {
                         Some(ref mut events) => compiled.append(events),
                         None => println!("No output from NDE filter"),
