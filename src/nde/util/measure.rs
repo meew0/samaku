@@ -1,7 +1,20 @@
 use iced::advanced::graphics::text as iced_text;
 use iced_text::cosmic_text;
+use std::cell::RefCell;
+use std::sync::Arc;
 
-use crate::{nde, subtitle};
+use crate::{nde, resources, subtitle};
+
+thread_local! {
+    /// The font system used for measuring text
+    static FONT_SYSTEM: RefCell<Option<cosmic_text::FontSystem>> = const { RefCell::new(None) };
+}
+
+fn init_font_system() -> cosmic_text::FontSystem {
+    cosmic_text::FontSystem::new_with_fonts([cosmic_text::fontdb::Source::Binary(Arc::new(
+        resources::BARLOW,
+    ))])
+}
 
 /// Calculate the bounding box width and height for the given event.
 /// Always returns a bounding box starting at the origin.
@@ -34,52 +47,52 @@ pub fn measure(event: &nde::Event, style: &subtitle::Style) -> nde::BoundingBox 
         }
     }
 
-    // Acquire the global font system used by iced for rendering
-    let mut fs_guard = iced_text::font_system().write().unwrap();
-
-    // libass sizes fonts using FT_SIZE_REQUEST_TYPE_REAL_DIM, which maps the Win cell height
-    // (usWinAscent + usWinDescent from the OS/2 table) to the requested font size, rather than
-    // the em-square.  Applying this ratio to cosmic_text's em-square-based font size makes the
-    // glyph advances match libass's output.  The line height stays at `font_size` (= the Win
-    // cell height) in both cases, so height calculations are unaffected.
-    let em_ratio = win_cell_to_em_ratio(font_name, font_weight, italic, fs_guard.raw().db());
-    let effective_em = font_size as f32 * em_ratio;
-
-    // effective_em < font_size: set the glyph size to the smaller effective em-square.
-    // line_height = font_size: preserves the full Win-cell-height line height that libass uses.
-    let metrics = cosmic_text::Metrics::new(effective_em, font_size as f32);
-    let mut buffer = cosmic_text::Buffer::new(fs_guard.raw(), metrics);
-    buffer.set_size(fs_guard.raw(), None, None);
-
-    // letter_spacing is in PlayRes units (same space as font_size).  Dividing by effective_em
-    // keeps the spacing at the same absolute pixel value that libass applies.
-    let letter_spacing_em = (letter_spacing / f64::from(effective_em)) as f32;
-    let attrs = get_cosmic_attrs(font_name, font_weight, italic, letter_spacing_em);
-
-    // Measure each hard line break (\N in ASS) independently, like GetLineBaseExtents
     let mut total_width = 0.0_f64;
     let mut total_height = 0.0_f64;
 
-    for line in full_text.split("\\N") {
-        buffer.set_text(
-            fs_guard.raw(),
-            line,
-            &attrs,
-            cosmic_text::Shaping::Advanced,
-            None,
-        );
+    FONT_SYSTEM.with_borrow_mut(|font_system_opt| {
+        // Initialize font system if this did not already happen
+        let font_system = font_system_opt.get_or_insert_with(init_font_system);
 
-        let (line_width, line_height) = buffer
-            .layout_runs()
-            .fold((0.0_f32, 0.0_f32), |(max_width, total_h), run| {
-                (run.line_w.max(max_width), total_h + run.line_height)
-            });
+        // libass sizes fonts using FT_SIZE_REQUEST_TYPE_REAL_DIM, which maps the Win cell height
+        // (usWinAscent + usWinDescent from the OS/2 table) to the requested font size, rather than
+        // the em-square.  Applying this ratio to cosmic_text's em-square-based font size makes the
+        // glyph advances match libass's output.  The line height stays at `font_size` (= the Win
+        // cell height) in both cases, so height calculations are unaffected.
+        let em_ratio = win_cell_to_em_ratio(font_name, font_weight, italic, font_system.db());
+        let effective_em = font_size as f32 * em_ratio;
 
-        total_width = total_width.max(f64::from(line_width));
-        total_height += f64::from(line_height);
-    }
+        // effective_em < font_size: set the glyph size to the smaller effective em-square.
+        // line_height = font_size: preserves the full Win-cell-height line height that libass uses.
+        let metrics = cosmic_text::Metrics::new(effective_em, font_size as f32);
+        let mut buffer = cosmic_text::Buffer::new(font_system, metrics);
+        buffer.set_size(font_system, None, None);
 
-    drop(fs_guard);
+        // letter_spacing is in PlayRes units (same space as font_size).  Dividing by effective_em
+        // keeps the spacing at the same absolute pixel value that libass applies.
+        let letter_spacing_em = (letter_spacing / f64::from(effective_em)) as f32;
+        let attrs = get_cosmic_attrs(font_name, font_weight, italic, letter_spacing_em);
+
+        // Measure each hard line break (\N in ASS) independently, like GetLineBaseExtents
+        for line in full_text.split("\\N") {
+            buffer.set_text(
+                font_system,
+                line,
+                &attrs,
+                cosmic_text::Shaping::Advanced,
+                None,
+            );
+
+            let (line_width, line_height) = buffer
+                .layout_runs()
+                .fold((0.0_f32, 0.0_f32), |(max_width, total_h), run| {
+                    (run.line_w.max(max_width), total_h + run.line_height)
+                });
+
+            total_width = total_width.max(f64::from(line_width));
+            total_height += f64::from(line_height);
+        }
+    });
 
     // \fscx / \fscy: uniform horizontal and vertical scale of the text block.
     // Values are pure factors (1.0 = no scale, 1.1 = 110%).
