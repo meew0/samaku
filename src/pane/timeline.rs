@@ -1,5 +1,5 @@
 use crate::media::FrameRate;
-use crate::{message, model, style, subtitle, view};
+use crate::{message, model, pane, style, subtitle, view};
 use iced::keyboard::Modifiers;
 use iced::widget::{Action, canvas};
 use iced::{Renderer, Theme, keyboard, mouse};
@@ -919,19 +919,7 @@ fn top_bar<'a>(
     global_state: &'a crate::Samaku,
 ) -> iced::Element<'a, message::Message> {
     let play_button = iced::widget::button("Play").on_press(message::Message::TogglePlayback);
-
-    let frame_number_text = if let Some(metadata) = global_state.video_metadata.as_ref() {
-        let frame_number = global_state
-            .shared
-            .playback_position
-            .current_frame(metadata.frame_rate)
-            .0;
-        format!("{frame_number}")
-    } else {
-        "No video loaded".to_owned()
-    };
-
-    let frame_number_text_widget = iced::widget::text(frame_number_text);
+    let frame_number_text_widget = iced::widget::text(pane::video::frame_number_text(global_state));
 
     iced::widget::container(
         iced::widget::row![play_button, frame_number_text_widget,]

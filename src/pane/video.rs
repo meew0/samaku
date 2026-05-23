@@ -3,8 +3,26 @@ use iced::widget::{Action, canvas};
 
 use crate::{media, message, model, nde, style, subtitle, view};
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct State;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct State {
+    show_controls: bool,
+    controls_mode: ControlsMode,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            show_controls: true,
+            controls_mode: ControlsMode::Reticules,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ControlsMode {
+    Reticules,
+    MotionTrack,
+}
 
 // Elements to display if no video is loaded
 macro_rules! empty {
@@ -19,7 +37,7 @@ macro_rules! empty {
 impl super::LocalState for State {
     fn view<'a>(
         &'a self,
-        _self_pane: super::Pane,
+        self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
         let scroll = match global_state.actual_frame {
@@ -106,20 +124,94 @@ impl super::LocalState for State {
             },
         };
 
-        super::View {
-            title: iced::widget::text("Video").into(),
-            content: iced::widget::container(scroll)
+        let content = if self.show_controls {
+            let video_container = iced::widget::container(scroll)
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill);
+
+            let bottom_bar = view_bottom_bar(self, self_pane, global_state);
+
+            iced::widget::column![video_container, bottom_bar,].into()
+        } else {
+            iced::widget::container(scroll)
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill)
-                .into(),
+                .into()
+        };
+
+        super::View {
+            title: iced::widget::text("Video").into(),
+            content,
         }
     }
+
+    fn update(&mut self, pane_message: message::Pane) -> iced::Task<message::Message> {
+        match pane_message {
+            message::Pane::VideoSetControlsMode(controls_mode) => {
+                self.controls_mode = controls_mode
+            }
+            _ => {}
+        }
+
+        iced::Task::none()
+    }
+}
+
+pub fn frame_number_text(global_state: &crate::Samaku) -> String {
+    if let Some(metadata) = global_state.video_metadata.as_ref() {
+        let frame_number = global_state
+            .shared
+            .playback_position
+            .current_frame(metadata.frame_rate)
+            .0;
+        format!("{frame_number}")
+    } else {
+        "No video loaded".to_owned()
+    }
+}
+
+fn view_bottom_bar<'a>(
+    pane_state: &'a State,
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+) -> iced::Element<'a, message::Message> {
+    let frame_number_text_widget = iced::widget::text(frame_number_text(global_state));
+    let reticules_radio = iced::widget::radio(
+        "Reticules",
+        ControlsMode::Reticules,
+        Some(pane_state.controls_mode),
+        |mode| message::Message::Pane(self_pane, message::Pane::VideoSetControlsMode(mode)),
+    );
+    let motion_track_radio = iced::widget::radio(
+        "Motion track",
+        ControlsMode::MotionTrack,
+        Some(pane_state.controls_mode),
+        |mode| message::Message::Pane(self_pane, message::Pane::VideoSetControlsMode(mode)),
+    );
+
+    iced::widget::container(
+        iced::widget::row![
+            frame_number_text_widget,
+            iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)),
+            iced::widget::text("Mode:"),
+            iced::widget::space::horizontal().width(iced::Length::Fixed(5.0)),
+            reticules_radio,
+            iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)),
+            motion_track_radio,
+            iced::widget::space::horizontal().width(iced::Length::Fixed(5.0)),
+        ]
+        .spacing(5.0)
+        .align_y(iced::Alignment::Center),
+    )
+    .clip(true)
+    .padding(5.0)
+    .into()
 }
 
 inventory::submit! {
     super::Shell::new(
         "Video",
-        || Box::new(State)
+        || Box::new(State::default())
     )
 }
 

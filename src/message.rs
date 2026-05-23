@@ -336,6 +336,9 @@ pub enum Pane {
 
     // Messages for the timeline
     TimelineDragged(pane::timeline::Position),
+
+    // Messages for the video
+    VideoSetControlsMode(pane::video::ControlsMode),
 }
 
 /// Messages dispatched to nodes.

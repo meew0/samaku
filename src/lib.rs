@@ -786,7 +786,7 @@ fn theme(_state: &Samaku) -> iced::Theme {
 }
 
 fn initial_pane_configuration() -> pane_grid::Configuration<pane::State> {
-    let video = pane::State::new(Box::new(pane::video::State {}));
+    let video = pane::State::new(Box::new(pane::video::State::default()));
     let node_editor = pane::State::new(Box::new(pane::node_editor::State::default()));
     let subtitle_grid = pane::State::new(Box::new(pane::grid::State::default()));
     let text_editor = pane::State::new(Box::new(pane::text_editor::State::default()));
