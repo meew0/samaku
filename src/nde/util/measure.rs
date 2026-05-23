@@ -163,13 +163,14 @@ fn get_cosmic_attrs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_float_eq::{assert_float_absolute_eq, assert_float_relative_eq};
+    use crate::media;
+    use assert_float_eq::assert_float_relative_eq;
 
     /// Helper: create the canonical test event used by both `defined_line` and
     /// `defined_line_vs_libass`.
     fn test_event_and_style() -> (nde::Event, subtitle::Style) {
         let (global, spans) = nde::tags::parse(
-            "{\\an7\\b1\\i1\\fs160\\fsp5\\fnBarlow}Sphinx of black quartz,\\Njudge my vow",
+            "{\\pos(0,0)\\an7\\b1\\i1\\fs160\\fsp5\\fnBarlow}Sphinx of black quartz,\\Njudge my vow",
         );
         let event = nde::Event {
             start: subtitle::StartTime(0),
@@ -359,92 +360,92 @@ mod tests {
         render_to_ppm("/tmp/samaku_measure_debug.ppm", &event, &style);
     }
 
-    /// Compare cosmic_text measurements against a libass pixel-render of the same text.
-    ///
-    /// libass uses `FT_SIZE_REQUEST_TYPE_REAL_DIM` so that the Win cell height
-    /// (usWinAscent + usWinDescent) equals the requested font size, whereas cosmic_text
-    /// treats font size as the em-square height.  For Barlow this gives a theoretical
-    /// glyph-size ratio of 1000 / 1361 ≈ 0.7348, which should be visible in the output.
-    ///
-    /// Run with `cargo test defined_line_vs_libass -- --nocapture` to see the comparison.
-    #[test]
-    fn defined_line_vs_libass() {
-        use crate::media::subtitle::{OpaqueTrack, Renderer};
-        use libass_sys::ass_image__bindgen_ty_1 as image_type;
+    fn calc_cosmic_libass(template: &str, event_text: &str) -> (f64, f64) {
+        let ass_content = template.replace("[[EVENT TEXT]]", event_text);
 
-        // Render at PlayResX=4096, PlayResY=1024 with matching frame size for 1:1 pixel scale.
-        // \bord0\shad0 ensures only CHARACTER images are produced, so the bounding box of
-        // all returned images equals the pure text extent.
-        // \pos(0,0)\an7 puts the top-left of the text block at the origin.
-        const ASS_CONTENT: &str = r"[Script Info]
-ScriptType: v4.00+
-PlayResX: 4096
-PlayResY: 1024
-ScaledBorderAndShadow: yes
+        let track = media::subtitle::OpaqueTrack::parse(&ass_content);
+        let event_track = track.to_event_track();
+        let (_, ass_event) = event_track.get_nth(0).unwrap();
+        let style = &track.styles()[ass_event.style_index];
+        let nde_event = nde::Event::from_ass_event(ass_event);
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Barlow,120,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\pos(0,0)\an7\b1\i1\fs160\fsp5\fnBarlow\bord0\shad0}Sphinx of black quartz,\Njudge my vow
-";
-
-        let (event, style) = test_event_and_style();
-        let cosmic_bb = measure(&event, &style);
+        let cosmic_bb = measure(&nde_event, &style);
         println!(
             "cosmic_text:  width={:.1}  height={:.1}",
             cosmic_bb.bottom_right.x, cosmic_bb.bottom_right.y
         );
 
-        crate::media::subtitle::set_libass_test_callback();
+        let frame = track.script_info().playback_resolution;
+        let mut renderer = media::subtitle::Renderer::new();
 
-        let track = OpaqueTrack::parse(ASS_CONTENT);
-        let frame = subtitle::Resolution { x: 4096, y: 1024 };
-        let mut renderer = Renderer::new();
-
+        // We only compare the width, because libass' height is less predictable (since libass
+        // reports the ink bounding box).
         let mut x_min = i32::MAX;
-        let mut y_min = i32::MAX;
         let mut x_max = i32::MIN;
-        let mut y_max = i32::MIN;
-
         renderer.render_subtitles_with_callback(&track, 1000, frame, frame, &mut |img| {
-            if img.metadata.type_ == image_type::IMAGE_TYPE_CHARACTER {
+            if img.metadata.type_ == 0 {
+                // IMAGE_TYPE_CHARACTER
                 x_min = x_min.min(img.metadata.dst_x);
-                y_min = y_min.min(img.metadata.dst_y);
                 x_max = x_max.max(img.metadata.dst_x + img.metadata.w);
-                y_max = y_max.max(img.metadata.dst_y + img.metadata.h);
             }
         });
 
-        assert!(
-            x_max > x_min && y_max > y_min,
-            "libass rendered no character images — check that the Barlow font is installed"
-        );
+        assert!(x_max > x_min, "no images were rendered");
 
         let libass_w = f64::from(x_max - x_min);
-        let libass_h = f64::from(y_max - y_min);
-        println!(
-            "libass pixel: width={libass_w:.1}  height={libass_h:.1}  \
-             origin=({x_min}, {y_min})"
-        );
-        println!(
-            "ratio libass/cosmic: width={:.4}  height={:.4}",
-            libass_w / cosmic_bb.bottom_right.x,
-            libass_h / cosmic_bb.bottom_right.y
-        );
-        println!("Barlow Win metrics: usWinAscent=1112 usWinDescent=249 total=1361 upm=1000");
-        println!(
-            "theoretical em ratio (upm/win_total): {:.4}",
-            1000.0_f64 / 1361.0
-        );
+        (cosmic_bb.bottom_right.x, libass_w)
+    }
 
-        // Width: measure() now matches libass's pixel extent within a few pixels (sub-pixel
-        // rounding differences in advance accumulation).
-        // Height: measure() returns the sum of Win-cell line heights (2×160=320), while libass
-        // reports the ink bounding box (≈282px), so a larger tolerance is expected for height.
-        assert_float_absolute_eq!(cosmic_bb.bottom_right.x, libass_w, 5.0);
-        assert_float_absolute_eq!(cosmic_bb.bottom_right.y, libass_h, 50.0);
+    /// Compare cosmic_text measurements against a libass pixel-render of the same text.
+    #[test]
+    fn defined_line_vs_libass() {
+        media::subtitle::set_libass_test_callback();
+
+        let ass_content = std::fs::read_to_string(crate::test_utils::test_file(
+            "test_files/measure_template.ass",
+        ))
+        .unwrap();
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\b1\i1\fs160\fsp5\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs160\fsp5\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs160\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs40\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs40\fscx110\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs40\fscx110\shad30\fnBarlow}Sphinx of black quartz,",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
+
+        let (cosmic_w, libass_w) = calc_cosmic_libass(
+            &ass_content,
+            r"{\pos(0,0)\an7\fs120\fnBarlow}色は匂えど散りぬるを",
+        );
+        assert_float_relative_eq!(cosmic_w, libass_w, 0.01);
     }
 }

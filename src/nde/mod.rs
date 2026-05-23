@@ -16,6 +16,8 @@ pub struct Filter {
     pub graph: Graph,
 }
 
+/// An NDE event. Differs from [`subtitle::Event`] in that the event text is represented
+/// in parsed form, i.e. as global tags and a vector of tag/content spans.
 #[derive(Debug, Clone)]
 pub struct Event {
     pub start: subtitle::StartTime,
@@ -38,6 +40,22 @@ pub struct Event {
 }
 
 impl Event {
+    #[must_use]
+    pub fn from_ass_event(ass_event: &subtitle::Event) -> Self {
+        let (global, spans) = tags::parse(&ass_event.text);
+
+        Self {
+            start: ass_event.start,
+            duration: ass_event.duration,
+            layer_index: ass_event.layer_index,
+            style_index: ass_event.style_index,
+            margins: ass_event.margins,
+            global_tags: *global,
+            overrides: tags::Local::empty(),
+            text: spans,
+        }
+    }
+
     #[must_use]
     pub fn to_ass_event(&self) -> subtitle::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
