@@ -223,7 +223,7 @@ mod tests {
         let style = &track.styles()[ass_event.style_index];
         let nde_event = nde::Event::from_ass_event(ass_event);
 
-        let cosmic_bb = measure(&nde_event, &style);
+        let cosmic_bb = measure(&nde_event, style);
         println!(
             "cosmic_text:  width={:.1}  height={:.1}",
             cosmic_bb.bottom_right.x, cosmic_bb.bottom_right.y
@@ -293,7 +293,7 @@ mod tests {
         );
         assert_float_relative_eq!(cosmic_w, libass_w, 0.05);
 
-        let (cosmic_w, libass_w) = calc_cosmic_libass(
+        let (_cosmic_w, _libass_w) = calc_cosmic_libass(
             &ass_content,
             r"{\pos(0,0)\an7\fs120\bord0\shad0\fnBarlow}色は匂えど散りぬるを",
         );
