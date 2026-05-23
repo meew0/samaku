@@ -4383,6 +4383,7 @@ dependencies = [
  "smol",
  "static_assertions",
  "thiserror 2.0.18",
+ "ttf-parser",
  "typetag",
  "vsprintf",
 ]

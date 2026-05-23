@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::nde::tags::Resettable;
+use crate::nde::tags::{FontSize, FontWeight, Resettable};
 use crate::subtitle;
 pub use graph::Graph;
 pub use node::Node;
@@ -8,6 +8,7 @@ pub use node::Node;
 pub mod graph;
 pub mod node;
 pub mod tags;
+pub mod util;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Filter {
@@ -140,6 +141,52 @@ impl Event {
         let x = *self.effective_tag(|local| &local.font_scale.x, &style.scale.x);
         let y = *self.effective_tag(|local| &local.font_scale.y, &style.scale.y);
         tags::Float2D { x, y }
+    }
+
+    #[must_use]
+    pub fn effective_font_name<'a>(&'a self, style: &'a subtitle::Style) -> &'a str {
+        let str: &String = self.effective_tag(|local| &local.font_name, &style.font_name);
+        str.as_str()
+    }
+
+    #[must_use]
+    pub fn effective_font_size(&self, style: &subtitle::Style) -> f64 {
+        let val = match self.overrides.font_size {
+            FontSize::Set(val) => val,
+            FontSize::Reset(delta) => delta.apply(style.font_size),
+            FontSize::Delta(delta) => {
+                if let Some(first_local) = self.first_local() {
+                    delta.apply(match first_local.font_size {
+                        FontSize::Set(val) => val,
+                        FontSize::Reset(inner_delta) | FontSize::Delta(inner_delta) => {
+                            inner_delta.apply(style.font_size)
+                        }
+                    })
+                } else {
+                    delta.apply(style.font_size)
+                }
+            }
+        };
+
+        if val > 0.0 { val } else { style.font_size }
+    }
+
+    #[must_use]
+    pub fn effective_font_weight(&self, style: &subtitle::Style) -> FontWeight {
+        *self.effective_tag(
+            |local| &local.font_weight,
+            &FontWeight::BoldToggle(style.bold),
+        )
+    }
+
+    #[must_use]
+    pub fn effective_italic(&self, style: &subtitle::Style) -> bool {
+        *self.effective_tag(|local| &local.italic, &style.italic)
+    }
+
+    #[must_use]
+    pub fn effective_letter_spacing(&self, style: &subtitle::Style) -> f64 {
+        *self.effective_tag(|local| &local.letter_spacing, &style.spacing)
     }
 
     fn clone_and_maybe_override_or_clear(&self, tags: &tags::Local, i: usize) -> tags::Local {

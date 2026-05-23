@@ -1516,6 +1516,11 @@ pub struct FontSizeDelta(f64);
 
 impl FontSizeDelta {
     pub const ZERO: FontSizeDelta = FontSizeDelta(0.0);
+
+    #[must_use]
+    pub fn apply(self, base: f64) -> f64 {
+        base * (self.0 + 10.0) / 10.0
+    }
 }
 
 impl Add for FontSizeDelta {

@@ -1,6 +1,8 @@
 use super::{Context, Node, Shell, SocketType, SocketValue};
-use crate::nde;
-use crate::nde::tags::{Resettable, perspective};
+use crate::nde::{
+    self,
+    tags::{Resettable, perspective},
+};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Perspective;
@@ -42,7 +44,7 @@ impl Node for Perspective {
             new_event.overrides.text_shear.y = Resettable::Override(0.0);
 
             let style = context.get_event_style(&new_event);
-            let bounding_box = measure_bounding_box(&new_event);
+            let bounding_box = nde::util::measure(&new_event, style);
             let alignment = *event.global_tags.alignment.override_or(&style.alignment);
             let screen_z = perspective::rescale_screen_z(
                 context.playback_resolution,
@@ -72,10 +74,6 @@ impl Node for Perspective {
         })?;
         Ok(vec![socket_value])
     }
-}
-
-fn measure_bounding_box(_event: &nde::Event) -> nde::BoundingBox {
-    todo!();
 }
 
 inventory::submit! {
