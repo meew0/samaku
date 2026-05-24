@@ -17,18 +17,19 @@ use std::cell::RefCell;
 
 /// A searchable dropdown widget that takes an external `&[T]` slice, keeping
 /// only the text-input search state in a separate, non-generic [`State`].
-pub struct BlendBox<'a, T, Message, Theme = iced::Theme, Renderer = iced::Renderer>
+pub struct BlendBox<'a, L, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
+    L: model::NamedListIterable + ?Sized,
     Theme: Catalog,
     Renderer: text::Renderer,
 {
     state: &'a State,
-    options: &'a [T],
+    options: &'a L,
     text_input: TextInput<'a, TextInputEvent, Theme, Renderer>,
     font: Option<Renderer::Font>,
     selection: text_input::Value,
-    on_selected: Box<dyn Fn(usize) -> Message>,
-    on_option_hovered: Option<Box<dyn Fn(Reference) -> Message>>,
+    on_selected: Box<dyn Fn(L::Key) -> Message>,
+    on_option_hovered: Option<Box<HoverFn<L::Key, Message>>>,
     on_open: Option<Message>,
     on_close: Option<Message>,
     on_input: Option<Box<dyn Fn(String) -> Message>>,
@@ -39,24 +40,29 @@ where
     menu_height: Length,
 }
 
-impl<'a, T, Message, Theme, Renderer> BlendBox<'a, T, Message, Theme, Renderer>
+type HoverFn<K, Message> = dyn Fn(Reference<K>) -> Message;
+
+impl<'a, L, Message, Theme, Renderer> BlendBox<'a, L, Message, Theme, Renderer>
 where
-    T: model::Named + Clone,
+    L: model::NamedListIterable + ?Sized,
     Theme: Catalog,
     Renderer: text::Renderer,
 {
-    pub fn new<F: Fn(usize) -> Message + 'static>(
+    pub fn new<F: Fn(L::Key) -> Message + 'static>(
         state: &'a State,
-        options: &'a [T],
+        options: &'a L,
         placeholder: &str,
-        selection_opt: Option<&T>,
+        selection_opt: Option<model::NamedEntry<L::Key>>,
         on_selected: F,
     ) -> Self {
         let text_input = TextInput::new(placeholder, &state.value())
             .on_input(TextInputEvent::TextChanged)
             .class(Theme::default_input());
 
-        let selection = selection_opt.map(T::name).unwrap_or_default().to_owned();
+        let selection = selection_opt
+            .map(|entry| entry.name)
+            .unwrap_or_default()
+            .to_owned();
 
         Self {
             state,
@@ -84,7 +90,7 @@ where
     }
 
     #[must_use]
-    pub fn on_option_hovered<F: Fn(usize) -> Message + 'static>(
+    pub fn on_option_hovered<F: Fn(L::Key) -> Message + 'static>(
         mut self,
         on_option_hovered: F,
     ) -> Self {
@@ -135,7 +141,7 @@ where
     }
 
     #[must_use]
-    pub fn line_height<L: Into<LineHeight>>(self, line_height: L) -> Self {
+    pub fn line_height<H: Into<LineHeight>>(self, line_height: H) -> Self {
         Self {
             text_input: self.text_input.line_height(line_height),
             ..self
@@ -143,7 +149,7 @@ where
     }
 
     #[must_use]
-    pub fn width<L: Into<Length>>(self, width: L) -> Self {
+    pub fn width<W: Into<Length>>(self, width: W) -> Self {
         Self {
             text_input: self.text_input.width(width),
             ..self
@@ -151,7 +157,7 @@ where
     }
 
     #[must_use]
-    pub fn menu_height<L: Into<Length>>(mut self, menu_height: L) -> Self {
+    pub fn menu_height<H: Into<Length>>(mut self, menu_height: H) -> Self {
         self.menu_height = menu_height.into();
         self
     }
@@ -185,7 +191,11 @@ where
     }
 
     // Utility methods for `update`
-    fn try_publish_on_hovered(&mut self, menu: &Menu, shell: &mut Shell<'_, Message>) -> bool {
+    fn try_publish_on_hovered(
+        &mut self,
+        menu: &Menu<L::Key>,
+        shell: &mut Shell<'_, Message>,
+    ) -> bool {
         if let &mut Some(ref mut on_option_hovered) = &mut self.on_option_hovered
             && let Some(option) = menu
                 .hovered_option
@@ -236,11 +246,11 @@ impl State {
 }
 
 // Internal widget-tree state — one per BlendBox instance in the tree.
-struct Menu {
+struct Menu<K: Copy> {
     menu: menu::State,
     hovered_option: Option<usize>,
-    new_selection: Option<usize>,
-    filtered_options: Vec<Reference>,
+    new_selection: Option<K>,
+    filtered_options: Vec<Reference<K>>,
 }
 
 #[derive(Debug, Clone)]
@@ -248,10 +258,10 @@ enum TextInputEvent {
     TextChanged(String),
 }
 
-impl<T, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for BlendBox<'_, T, Message, Theme, Renderer>
+impl<L, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for BlendBox<'_, L, Message, Theme, Renderer>
 where
-    T: model::Named + Clone + 'static,
+    L: model::NamedListIterable + ?Sized + 'static,
     Message: Clone,
     Theme: Catalog,
     Renderer: text::Renderer,
@@ -312,12 +322,12 @@ where
     }
 
     fn tag(&self) -> widget::tree::Tag {
-        widget::tree::Tag::of::<Menu>()
+        widget::tree::Tag::of::<Menu<L::Key>>()
     }
 
     fn state(&self) -> widget::tree::State {
         let value = self.state.value();
-        let filtered_options = search(self.options.iter(), &value).collect();
+        let filtered_options = search(self.options, &value).collect();
 
         widget::tree::State::new(Menu {
             menu: menu::State::new(),
@@ -351,11 +361,11 @@ where
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
-        let menu = tree.state.downcast_mut::<Menu>();
+        let menu = tree.state.downcast_mut::<Menu<L::Key>>();
 
         // TODO maybe optimize this with some caching or whatever, or by only doing the search when necessary?
         let value = self.state.value();
-        menu.filtered_options = search(self.options.iter(), &value).collect();
+        menu.filtered_options = search(self.options, &value).collect();
 
         let started_focused = tree.children[0]
             .state
@@ -392,7 +402,7 @@ where
             }
 
             menu.hovered_option = Some(0);
-            menu.filtered_options = search(self.options.iter(), &new_value).collect();
+            menu.filtered_options = search(self.options, &new_value).collect();
             self.state.set_value(new_value);
 
             shell.invalidate_layout();
@@ -474,15 +484,7 @@ where
 
         if let Some(selection) = menu.new_selection.take() {
             self.state.clear();
-            menu.filtered_options = self
-                .options
-                .iter()
-                .enumerate()
-                .map(|(i, option)| Reference {
-                    index: i,
-                    name: option.name().to_owned(),
-                })
-                .collect();
+            menu.filtered_options = search(self.options, "").collect();
             menu.menu = menu::State::default();
 
             shell.publish((self.on_selected)(selection));
@@ -559,7 +561,7 @@ where
             ref mut filtered_options,
             ref mut hovered_option,
             ..
-        } = tree.state.downcast_mut::<Menu>();
+        } = tree.state.downcast_mut::<Menu<L::Key>>();
 
         if filtered_options.is_empty() {
             return None;
@@ -604,15 +606,15 @@ where
     }
 }
 
-impl<'a, T, Message, Theme, Renderer> From<BlendBox<'a, T, Message, Theme, Renderer>>
+impl<'a, L, Message, Theme, Renderer> From<BlendBox<'a, L, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
-    T: model::Named + Clone + 'static,
+    L: model::NamedListIterable + ?Sized + 'static,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
     Renderer: text::Renderer + 'a,
 {
-    fn from(blend_box: BlendBox<'a, T, Message, Theme, Renderer>) -> Self {
+    fn from(blend_box: BlendBox<'a, L, Message, Theme, Renderer>) -> Self {
         Self::new(blend_box)
     }
 }
@@ -632,31 +634,30 @@ pub trait Catalog: text_input::Catalog + menu::Catalog {
 
 impl Catalog for iced::Theme {}
 
-fn search<'a, T>(
-    options: impl IntoIterator<Item = &'a T> + 'a,
-    query: &'a str,
-) -> impl Iterator<Item = Reference> + 'a
+fn search<'a, L>(options: &'a L, query: &'a str) -> impl Iterator<Item = Reference<L::Key>> + 'a
 where
-    T: model::Named + 'a,
+    L: model::NamedListIterable + ?Sized + 'a,
 {
     // TODO: compare ignoring case
     options
-        .into_iter()
-        .enumerate()
-        .filter(move |&(_, option)| option.name().contains(query))
-        .map(|(i, option)| Reference {
-            index: i,
-            name: option.name().to_owned(),
+        .iter_named()
+        .filter(move |entry| entry.name.contains(query))
+        .map(|entry| Reference {
+            index: entry.id,
+            name: entry.name.to_owned(),
         })
 }
 
 #[derive(Debug, Clone)]
-struct Reference {
-    index: usize,
+struct Reference<K: Copy> {
+    index: K,
     name: String,
 }
 
-impl std::fmt::Display for Reference {
+impl<K> std::fmt::Display for Reference<K>
+where
+    K: Copy,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }

@@ -155,3 +155,28 @@ impl<T> Clone for NeverClone<T> {
 pub trait Named {
     fn name(&self) -> &str;
 }
+
+pub trait NamedListIterable {
+    type Key: Copy;
+
+    fn iter_named(&self) -> impl Iterator<Item = NamedEntry<'_, Self::Key>>;
+}
+
+impl<T> NamedListIterable for [T]
+where
+    T: Named,
+{
+    type Key = usize;
+
+    fn iter_named(&self) -> impl Iterator<Item = NamedEntry<'_, Self::Key>> {
+        self.iter().enumerate().map(|(i, element)| NamedEntry {
+            id: i,
+            name: element.name(),
+        })
+    }
+}
+
+pub struct NamedEntry<'a, K: Copy> {
+    pub id: K,
+    pub name: &'a str,
+}

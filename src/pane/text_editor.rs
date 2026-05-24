@@ -291,7 +291,10 @@ fn active_first_line<'a>(
 
     // Style selection combo box
     let style_index = multi_event.style_index.primary;
-    let selected_style = &global_state.subtitles.styles[style_index];
+    let selected_style = model::NamedEntry {
+        id: style_index,
+        name: &global_state.subtitles.styles[style_index].name,
+    };
 
     let style_selector = multi_event.style_index.tooltip(
         view::widget::BlendBox::new(
