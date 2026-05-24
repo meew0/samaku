@@ -10,21 +10,21 @@ use iced::keyboard::key;
 use iced::widget::overlay::menu;
 use iced::widget::text::LineHeight;
 use iced::widget::text_input::{self, TextInput};
-use iced::{Element, Event, Length, Padding, Pixels, Rectangle, Size, Theme, Vector};
+use iced::{Element, Event, Length, Padding, Pixels, Rectangle, Size, Vector};
 
 use crate::model;
 use std::cell::RefCell;
 
 /// A searchable dropdown widget that takes an external `&[T]` slice, keeping
 /// only the text-input search state in a separate, non-generic [`State`].
-pub struct BlendBox<'a, T, Message, Th = Theme, Renderer = iced::Renderer>
+pub struct BlendBox<'a, T, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
-    Th: Catalog,
+    Theme: Catalog,
     Renderer: text::Renderer,
 {
     state: &'a State,
     options: &'a [T],
-    text_input: TextInput<'a, TextInputEvent, Th, Renderer>,
+    text_input: TextInput<'a, TextInputEvent, Theme, Renderer>,
     font: Option<Renderer::Font>,
     selection: text_input::Value,
     on_selected: Box<dyn Fn(usize) -> Message>,
@@ -35,28 +35,28 @@ where
     padding: Padding,
     size: Option<f32>,
     text_shaping: text::Shaping,
-    menu_class: <Th as menu::Catalog>::Class<'a>,
+    menu_class: <Theme as menu::Catalog>::Class<'a>,
     menu_height: Length,
 }
 
-impl<'a, T, Message, Th, Renderer> BlendBox<'a, T, Message, Th, Renderer>
+impl<'a, T, Message, Theme, Renderer> BlendBox<'a, T, Message, Theme, Renderer>
 where
     T: model::Named + Clone,
-    Th: Catalog,
+    Theme: Catalog,
     Renderer: text::Renderer,
 {
-    pub fn new(
+    pub fn new<F: Fn(usize) -> Message + 'static>(
         state: &'a State,
         options: &'a [T],
         placeholder: &str,
-        selection: Option<&T>,
-        on_selected: impl Fn(usize) -> Message + 'static,
+        selection_opt: Option<&T>,
+        on_selected: F,
     ) -> Self {
         let text_input = TextInput::new(placeholder, &state.value())
             .on_input(TextInputEvent::TextChanged)
-            .class(Th::default_input());
+            .class(Theme::default_input());
 
-        let selection = selection.map(T::name).unwrap_or_default().to_owned();
+        let selection = selection_opt.map(T::name).unwrap_or_default().to_owned();
 
         Self {
             state,
@@ -72,19 +72,21 @@ where
             padding: text_input::DEFAULT_PADDING,
             size: None,
             text_shaping: text::Shaping::default(),
-            menu_class: <Th as Catalog>::default_menu(),
+            menu_class: <Theme as Catalog>::default_menu(),
             menu_height: Length::Shrink,
         }
     }
 
-    pub fn on_input(mut self, on_input: impl Fn(String) -> Message + 'static) -> Self {
+    #[must_use]
+    pub fn on_input<F: Fn(String) -> Message + 'static>(mut self, on_input: F) -> Self {
         self.on_input = Some(Box::new(on_input));
         self
     }
 
-    pub fn on_option_hovered(
+    #[must_use]
+    pub fn on_option_hovered<F: Fn(usize) -> Message + 'static>(
         mut self,
-        on_option_hovered: impl Fn(usize) -> Message + 'static,
+        on_option_hovered: F,
     ) -> Self {
         self.on_option_hovered = Some(Box::new(move |reference| {
             on_option_hovered(reference.index)
@@ -92,82 +94,113 @@ where
         self
     }
 
+    #[must_use]
     pub fn on_open(mut self, message: Message) -> Self {
         self.on_open = Some(message);
         self
     }
 
+    #[must_use]
     pub fn on_close(mut self, message: Message) -> Self {
         self.on_close = Some(message);
         self
     }
 
-    pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
+    #[must_use]
+    pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
         self.padding = padding.into();
         self.text_input = self.text_input.padding(self.padding);
         self
     }
 
+    #[must_use]
     pub fn font(mut self, font: Renderer::Font) -> Self {
         self.text_input = self.text_input.font(font);
         self.font = Some(font);
         self
     }
 
+    #[must_use]
     pub fn icon(mut self, icon: text_input::Icon<Renderer::Font>) -> Self {
         self.text_input = self.text_input.icon(icon);
         self
     }
 
-    pub fn size(mut self, size: impl Into<Pixels>) -> Self {
-        let size = size.into();
+    #[must_use]
+    pub fn size<P: Into<Pixels>>(mut self, into_size: P) -> Self {
+        let size = into_size.into();
         self.text_input = self.text_input.size(size);
         self.size = Some(size.0);
         self
     }
 
-    pub fn line_height(self, line_height: impl Into<LineHeight>) -> Self {
+    #[must_use]
+    pub fn line_height<L: Into<LineHeight>>(self, line_height: L) -> Self {
         Self {
             text_input: self.text_input.line_height(line_height),
             ..self
         }
     }
 
-    pub fn width(self, width: impl Into<Length>) -> Self {
+    #[must_use]
+    pub fn width<L: Into<Length>>(self, width: L) -> Self {
         Self {
             text_input: self.text_input.width(width),
             ..self
         }
     }
 
-    pub fn menu_height(mut self, menu_height: impl Into<Length>) -> Self {
+    #[must_use]
+    pub fn menu_height<L: Into<Length>>(mut self, menu_height: L) -> Self {
         self.menu_height = menu_height.into();
         self
     }
 
+    #[must_use]
     pub fn text_shaping(mut self, shaping: text::Shaping) -> Self {
         self.text_shaping = shaping;
         self
     }
 
-    pub fn input_style(
+    #[must_use]
+    pub fn input_style<F: Fn(&Theme, text_input::Status) -> text_input::Style + 'a>(
         mut self,
-        style: impl Fn(&Th, text_input::Status) -> text_input::Style + 'a,
+        style: F,
     ) -> Self
     where
-        <Th as text_input::Catalog>::Class<'a>: From<text_input::StyleFn<'a, Th>>,
+        <Theme as text_input::Catalog>::Class<'a>: From<text_input::StyleFn<'a, Theme>>,
     {
         self.text_input = self.text_input.style(style);
         self
     }
 
-    pub fn menu_style(mut self, style: impl Fn(&Th) -> menu::Style + 'a) -> Self
+    #[must_use]
+    pub fn menu_style<F: Fn(&Theme) -> menu::Style + 'a>(mut self, style: F) -> Self
     where
-        <Th as menu::Catalog>::Class<'a>: From<menu::StyleFn<'a, Th>>,
+        <Theme as menu::Catalog>::Class<'a>: From<menu::StyleFn<'a, Theme>>,
     {
-        let style_fn: menu::StyleFn<'a, Th> = Box::new(style);
+        let style_fn: menu::StyleFn<'a, Theme> = Box::new(style);
         self.menu_class = style_fn.into();
         self
+    }
+
+    // Utility methods for `update`
+    fn try_publish_on_hovered(&mut self, menu: &Menu, shell: &mut Shell<'_, Message>) -> bool {
+        if let &mut Some(ref mut on_option_hovered) = &mut self.on_option_hovered
+            && let Some(option) = menu
+                .hovered_option
+                .and_then(|i| menu.filtered_options.get(i))
+        {
+            // Since we don't actually need the name in the `on_option_hovered` handler,
+            // we can avoid unnecessarily cloning it.
+            shell.publish(on_option_hovered(Reference {
+                index: option.index,
+                name: String::new(),
+            }));
+            return true;
+        }
+
+        false
     }
 }
 
@@ -184,6 +217,7 @@ struct Inner {
 }
 
 impl State {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -214,16 +248,16 @@ enum TextInputEvent {
     TextChanged(String),
 }
 
-impl<T, Message, Th, Renderer> Widget<Message, Th, Renderer>
-    for BlendBox<'_, T, Message, Th, Renderer>
+impl<T, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for BlendBox<'_, T, Message, Theme, Renderer>
 where
     T: model::Named + Clone + 'static,
     Message: Clone,
-    Th: Catalog,
+    Theme: Catalog,
     Renderer: text::Renderer,
 {
     fn size(&self) -> Size<Length> {
-        Widget::<TextInputEvent, Th, Renderer>::size(&self.text_input)
+        Widget::<TextInputEvent, Theme, Renderer>::size(&self.text_input)
     }
 
     fn layout(
@@ -249,7 +283,7 @@ where
         &self,
         tree: &widget::Tree,
         renderer: &mut Renderer,
-        theme: &Th,
+        theme: &Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
@@ -294,7 +328,7 @@ where
     }
 
     fn children(&self) -> Vec<widget::Tree> {
-        let text_input_ref: &dyn Widget<TextInputEvent, Th, Renderer> = &self.text_input;
+        let text_input_ref: &dyn Widget<TextInputEvent, Theme, Renderer> = &self.text_input;
         vec![widget::Tree::new(text_input_ref)]
     }
 
@@ -302,6 +336,10 @@ where
         // Intentionally empty — do not clear children.
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "annoying and low priority to decouple" // TODO
+    )]
     fn update(
         &mut self,
         tree: &mut widget::Tree,
@@ -348,8 +386,8 @@ where
         for message in local_messages {
             let TextInputEvent::TextChanged(new_value) = message;
 
-            if let Some(on_input) = &self.on_input {
-                shell.publish((on_input)(new_value.clone()));
+            if let &Some(ref on_input) = &self.on_input {
+                shell.publish(on_input(new_value.clone()));
             }
 
             menu.hovered_option = Some(0);
@@ -366,7 +404,9 @@ where
             .is_focused();
 
         if is_focused {
-            if !started_focused && let Some(on_option_hovered) = &mut self.on_option_hovered {
+            if !started_focused
+                && let &mut Some(ref mut on_option_hovered) = &mut self.on_option_hovered
+            {
                 let hovered_option = menu.hovered_option.unwrap_or(0);
                 if let Some(option) = menu.filtered_options.get(hovered_option) {
                     shell.publish(on_option_hovered(Reference {
@@ -377,17 +417,17 @@ where
                 }
             }
 
-            if let Event::Keyboard(keyboard::Event::KeyPressed {
+            if let &Event::Keyboard(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(named_key),
-                modifiers,
+                ref modifiers,
                 ..
             }) = event
             {
                 let shift_modifier = modifiers.shift();
                 match (named_key, shift_modifier) {
                     (key::Named::Enter, _) => {
-                        if let Some(hovered_index) = &menu.hovered_option
-                            && let Some(reference) = menu.filtered_options.get(*hovered_index)
+                        if let &Some(hovered_index) = &menu.hovered_option
+                            && let Some(reference) = menu.filtered_options.get(hovered_index)
                         {
                             menu.new_selection = Some(reference.index);
                         }
@@ -395,7 +435,7 @@ where
                         shell.request_redraw();
                     }
                     (key::Named::ArrowUp, _) | (key::Named::Tab, true) => {
-                        if let Some(index) = &mut menu.hovered_option {
+                        if let &mut Some(ref mut index) = &mut menu.hovered_option {
                             if *index == 0 {
                                 *index = menu.filtered_options.len().saturating_sub(1);
                             } else {
@@ -405,20 +445,12 @@ where
                             menu.hovered_option = Some(0);
                         }
 
-                        if let Some(on_option_hovered) = &mut self.on_option_hovered
-                            && let Some(option) = menu
-                                .hovered_option
-                                .and_then(|i| menu.filtered_options.get(i))
-                        {
-                            shell.publish((on_option_hovered)(option.clone()));
-                            published_message_to_shell = true;
-                        }
-
+                        published_message_to_shell |= self.try_publish_on_hovered(menu, shell);
                         shell.capture_event();
                         shell.request_redraw();
                     }
                     (key::Named::ArrowDown, _) | (key::Named::Tab, false) if !modifiers.shift() => {
-                        if let Some(index) = &mut menu.hovered_option {
+                        if let &mut Some(ref mut index) = &mut menu.hovered_option {
                             if *index >= menu.filtered_options.len().saturating_sub(1) {
                                 *index = 0;
                             } else {
@@ -430,15 +462,7 @@ where
                             menu.hovered_option = Some(0);
                         }
 
-                        if let Some(on_option_hovered) = &mut self.on_option_hovered
-                            && let Some(option) = menu
-                                .hovered_option
-                                .and_then(|i| menu.filtered_options.get(i))
-                        {
-                            shell.publish((on_option_hovered)(option.clone()));
-                            published_message_to_shell = true;
-                        }
-
+                        published_message_to_shell |= self.try_publish_on_hovered(menu, shell);
                         shell.capture_event();
                         shell.request_redraw();
                     }
@@ -463,8 +487,8 @@ where
             shell.publish((self.on_selected)(selection));
             published_message_to_shell = true;
 
-            let mut local_messages = Vec::new();
-            let mut local_shell = Shell::new(&mut local_messages);
+            let mut inner_local_messages = Vec::new();
+            let mut inner_local_shell = Shell::new(&mut inner_local_messages);
             self.text_input.update(
                 &mut tree.children[0],
                 &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
@@ -472,10 +496,10 @@ where
                 mouse::Cursor::Unavailable,
                 renderer,
                 clipboard,
-                &mut local_shell,
+                &mut inner_local_shell,
                 viewport,
             );
-            shell.request_input_method(local_shell.input_method());
+            shell.request_input_method(inner_local_shell.input_method());
         }
 
         let is_focused_after = tree.children[0]
@@ -493,6 +517,8 @@ where
                     }
                 } else if let Some(on_close) = self.on_close.take() {
                     shell.publish(on_close);
+                } else {
+                    // menu closed, but no close handler defined
                 }
             }
         }
@@ -517,7 +543,7 @@ where
         _renderer: &Renderer,
         viewport: &Rectangle,
         translation: Vector,
-    ) -> Option<overlay::Element<'b, Message, Th, Renderer>> {
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let is_focused = tree.children[0]
             .state
             .downcast_ref::<text_input::State<Renderer::Paragraph>>()
@@ -527,10 +553,10 @@ where
             return None;
         }
 
-        let Menu {
-            menu,
-            filtered_options,
-            hovered_option,
+        let &mut Menu {
+            ref mut menu,
+            ref mut filtered_options,
+            ref mut hovered_option,
             ..
         } = tree.state.downcast_mut::<Menu>();
 
@@ -577,31 +603,33 @@ where
     }
 }
 
-impl<'a, T, Message, Th, Renderer> From<BlendBox<'a, T, Message, Th, Renderer>>
-    for Element<'a, Message, Th, Renderer>
+impl<'a, T, Message, Theme, Renderer> From<BlendBox<'a, T, Message, Theme, Renderer>>
+    for Element<'a, Message, Theme, Renderer>
 where
     T: model::Named + Clone + 'static,
     Message: Clone + 'a,
-    Th: Catalog + 'a,
+    Theme: Catalog + 'a,
     Renderer: text::Renderer + 'a,
 {
-    fn from(blend_box: BlendBox<'a, T, Message, Th, Renderer>) -> Self {
+    fn from(blend_box: BlendBox<'a, T, Message, Theme, Renderer>) -> Self {
         Self::new(blend_box)
     }
 }
 
 /// The theme catalog for a [`BlendBox`].
 pub trait Catalog: text_input::Catalog + menu::Catalog {
+    #[must_use]
     fn default_input<'a>() -> <Self as text_input::Catalog>::Class<'a> {
         <Self as text_input::Catalog>::default()
     }
 
+    #[must_use]
     fn default_menu<'a>() -> <Self as menu::Catalog>::Class<'a> {
         <Self as menu::Catalog>::default()
     }
 }
 
-impl Catalog for Theme {}
+impl Catalog for iced::Theme {}
 
 fn search<'a, T>(
     options: impl IntoIterator<Item = &'a T> + 'a,
@@ -614,11 +642,10 @@ where
     options
         .into_iter()
         .enumerate()
-        .filter_map(move |(i, option)| {
-            option.name().contains(query).then(|| Reference {
-                index: i,
-                name: option.name().to_owned(),
-            })
+        .filter(move |&(_, option)| option.name().contains(query))
+        .map(|(i, option)| Reference {
+            index: i,
+            name: option.name().to_owned(),
         })
 }
 

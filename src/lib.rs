@@ -172,7 +172,7 @@
 #![warn(clippy::renamed_function_params)]
 #![warn(clippy::rest_pat_in_fully_bound_structs)]
 #![warn(clippy::return_and_then)]
-#![warn(clippy::same_name_method)]
+#![allow(clippy::same_name_method, reason = "not actually that confusing")]
 #![warn(clippy::search_is_some)]
 #![warn(clippy::self_named_module_files)]
 #![warn(clippy::semicolon_inside_block)]
