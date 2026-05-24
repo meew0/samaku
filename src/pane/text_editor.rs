@@ -1,16 +1,15 @@
-use crate::{action, message, model, style, subtitle};
+use crate::{action, message, model, style, subtitle, view};
 use iced::keyboard::Key;
 use iced::keyboard::key::Named;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::hash::Hash;
 use std::sync::Arc;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct State {
     #[serde(skip)]
-    styles: iced::widget::combo_box::State<StyleReference>,
+    selected: view::widget::blend_box::State,
     #[serde(skip)]
     editor_content: iced::widget::text_editor::Content,
     #[serde(skip)]
@@ -33,28 +32,12 @@ impl State {
     pub fn text(&self) -> String {
         self.editor_content.text()
     }
-
-    pub fn update_styles(&mut self, styles: &[subtitle::Style]) {
-        self.styles = Self::create_state(styles);
-    }
-
-    fn create_state(styles: &[subtitle::Style]) -> iced::widget::combo_box::State<StyleReference> {
-        let style_refs = styles
-            .iter()
-            .enumerate()
-            .map(|(index, style)| StyleReference {
-                name: style.name().to_owned(),
-                index,
-            })
-            .collect();
-        iced::widget::combo_box::State::new(style_refs)
-    }
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            styles: iced::widget::combo_box::State::new(vec![]),
+            selected: view::widget::blend_box::State::new(),
             editor_content: iced::widget::text_editor::Content::new(),
             editor_text_cache: String::new().into(),
             multi_event: None,
@@ -126,12 +109,6 @@ impl super::LocalState for State {
             }
 
             self.multi_event = Some(multi_event);
-        }
-    }
-
-    fn update_style_lists(&mut self, styles: &[subtitle::Style], copy_styles: bool) {
-        if copy_styles {
-            self.update_styles(styles);
         }
     }
 }
@@ -314,19 +291,16 @@ fn active_first_line<'a>(
 
     // Style selection combo box
     let style_index = multi_event.style_index.primary;
-    let selected_style = StyleReference {
-        name: global_state.subtitles.styles[style_index].name().to_owned(),
-        index: style_index,
-    };
+    let selected_style = &global_state.subtitles.styles[style_index];
+
     let style_selector = multi_event.style_index.tooltip(
-        iced::widget::combo_box(
-            &pane_state.styles,
+        view::widget::BlendBox::new(
+            &pane_state.selected,
+            global_state.subtitles.styles.as_slice(),
             "Style",
-            Some(&selected_style),
+            Some(selected_style),
             message_fn(multi_event, |edit| {
-                message::Message::MultiEditEventStyleIndex(
-                    edit.map(|style_ref: StyleReference| style_ref.index),
-                )
+                message::Message::MultiEditEventStyleIndex(edit)
             }),
         )
         .input_style(|theme, status| iced::widget::text_input::Style {
@@ -474,16 +448,4 @@ inventory::submit! {
         "Text editor",
         || Box::new(State::default())
     )
-}
-
-#[derive(Debug, Clone)]
-struct StyleReference {
-    name: String,
-    index: usize,
-}
-
-impl Display for StyleReference {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.name)
-    }
 }

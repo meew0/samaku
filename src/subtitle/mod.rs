@@ -533,6 +533,12 @@ impl Style {
     }
 }
 
+impl model::Named for Style {
+    fn name(&self) -> &str {
+        self.name()
+    }
+}
+
 impl Default for Style {
     /// Samaku's default style.
     fn default() -> Self {

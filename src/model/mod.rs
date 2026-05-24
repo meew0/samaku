@@ -151,3 +151,7 @@ impl<T> Clone for NeverClone<T> {
         panic!("attempted to clone NeverClone instance");
     }
 }
+
+pub trait Named {
+    fn name(&self) -> &str;
+}
