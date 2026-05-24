@@ -353,6 +353,7 @@ where
     ) {
         let menu = tree.state.downcast_mut::<Menu>();
 
+        // TODO maybe optimize this with some caching or whatever, or by only doing the search when necessary?
         let value = self.state.value();
         menu.filtered_options = search(self.options.iter(), &value).collect();
 
