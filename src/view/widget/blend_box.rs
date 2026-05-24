@@ -181,7 +181,6 @@ pub struct State {
 #[derive(Debug, Clone, Default)]
 struct Inner {
     value: String,
-    pending_unfocus: bool,
 }
 
 impl State {
@@ -199,21 +198,6 @@ impl State {
 
     fn clear(&self) {
         self.inner.borrow_mut().value = String::new();
-    }
-
-    // The overlay's on_selected closure must be Fn (iced requirement), so it
-    // cannot hold a &mut borrow of tree.children to call unfocus() directly.
-    // Instead it sets this flag, and update() — which runs in the same event
-    // cycle, after the overlay — detects it and performs the unfocus there.
-    fn request_unfocus(&self) {
-        self.inner.borrow_mut().pending_unfocus = true;
-    }
-
-    fn take_pending_unfocus(&self) -> bool {
-        let mut inner = self.inner.borrow_mut();
-        let val = inner.pending_unfocus;
-        inner.pending_unfocus = false;
-        val
     }
 }
 
@@ -494,34 +478,6 @@ where
             shell.request_input_method(local_shell.input_method());
         }
 
-        if self.state.take_pending_unfocus() {
-            menu.filtered_options = self
-                .options
-                .iter()
-                .enumerate()
-                .map(|(i, option)| Reference {
-                    index: i,
-                    name: option.name().to_owned(),
-                })
-                .collect();
-            menu.menu = menu::State::default();
-            published_message_to_shell = true;
-
-            let mut local_messages = Vec::new();
-            let mut local_shell = Shell::new(&mut local_messages);
-            self.text_input.update(
-                &mut tree.children[0],
-                &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
-                layout,
-                mouse::Cursor::Unavailable,
-                renderer,
-                clipboard,
-                &mut local_shell,
-                viewport,
-            );
-            shell.request_input_method(local_shell.input_method());
-        }
-
         let is_focused_after = tree.children[0]
             .state
             .downcast_ref::<text_input::State<Renderer::Paragraph>>()
@@ -584,26 +540,22 @@ where
 
         let bounds = layout.bounds();
 
-        // Extract field borrows before the closure so neither `self` nor `tree`
-        // is captured wholesale — the closure only needs immutable access to
-        // specific fields, and `tree.children` must not conflict with the
-        // `tree.state` borrows held by `menu`/`filtered_options`/`hovered_option`.
-        let self_state = self.state;
-        let on_selected = &*self.on_selected;
-        let on_option_hovered = self.on_option_hovered.as_deref();
-        let menu_class = &self.menu_class;
-
         let mut menu_widget = menu::Menu::new(
             menu,
             filtered_options,
             hovered_option,
             |selection| {
-                self_state.clear();
-                self_state.request_unfocus();
-                (on_selected)(selection.index)
+                self.state.clear();
+
+                tree.children[0]
+                    .state
+                    .downcast_mut::<text_input::State<Renderer::Paragraph>>()
+                    .unfocus();
+
+                (self.on_selected)(selection.index)
             },
-            on_option_hovered,
-            menu_class,
+            self.on_option_hovered.as_deref(),
+            &self.menu_class,
         )
         .width(bounds.width)
         .padding(self.padding)
