@@ -1,5 +1,6 @@
 use iced::mouse;
 use iced::widget::{Action, canvas};
+use std::cell::RefCell;
 
 use crate::{media, message, model, nde, style, subtitle, view};
 
@@ -32,98 +33,17 @@ impl super::LocalState for State {
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
         let content = match global_state.actual_frame {
-            None => empty(),
-            Some((num_frame, ref handle)) => match global_state.video_metadata.as_ref() {
-                None => empty(),
-                Some(video_metadata) => {
-                    let storage_size = subtitle::Resolution {
-                        x: video_metadata.width,
-                        y: video_metadata.height,
-                    };
-
-                    let stack = if global_state.subtitles.events.is_empty() {
-                        vec![view::widget::StackedImage {
-                            handle: handle.clone(),
-                            x: 0,
-                            y: 0,
-                        }]
-                    } else {
-                        let instant = std::time::Instant::now();
-                        let mut context = global_state.compile_context(None);
-                        let current_frame_time = video_metadata.frame_rate.frame_to_ms(num_frame);
-                        let compiled = global_state.subtitles.events.compile_range(
-                            &global_state.subtitles.extradata,
-                            &mut context,
-                            subtitle::StartTime(current_frame_time).stab(),
-                        );
-                        let elapsed_compile = instant.elapsed();
-
-                        let instant2 = std::time::Instant::now();
-                        let ass = media::subtitle::OpaqueTrack::from_compiled(
-                            compiled.iter(),
-                            global_state.subtitles.styles.as_slice(),
-                            &global_state.subtitles.script_info,
-                        );
-                        let elapsed_copy = instant2.elapsed();
-
-                        let instant3 = std::time::Instant::now();
-                        let stack = {
-                            let mut view_state = global_state.view.borrow_mut();
-                            view_state.subtitle_renderer.render_subtitles_onto_base(
-                                &ass,
-                                handle.clone(),
-                                num_frame,
-                                video_metadata.frame_rate,
-                                storage_size, // TODO use the actual frame size here (maybe with responsive?)
-                                storage_size,
-                            )
-                        };
-                        let elapsed_render = instant3.elapsed();
-                        println!(
-                            "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
-                            global_state.subtitles.events.len(),
-                            compiled.len(),
-                            elapsed_compile,
-                            elapsed_copy,
-                            elapsed_render
-                        );
-
-                        stack
-                    };
-
-                    let (reticule_list, node) = if let Some(ref reticules) = global_state.reticules
-                    {
-                        let node = global_state
-                            .subtitles
-                            .extradata
-                            .get_node(reticules.source_filter_index, reticules.source_node_index)
-                            .ok();
-                        (reticules.list.as_slice(), node)
-                    } else {
-                        let list: &[model::reticule::Reticule] = &[];
-                        (list, None)
-                    };
-
-                    let program = ReticuleProgram {
-                        reticules: reticule_list,
-                        node,
-                        storage_size,
-                        current_frame: global_state.current_frame(),
-                    };
-                    let scroll =
-                        iced::widget::scrollable(view::widget::ImageStack::new(stack, program));
-
-                    let video_container = iced::widget::container(scroll)
-                        .center_x(iced::Length::Fill)
-                        .center_y(iced::Length::Fill);
-
-                    if self.show_controls {
-                        let bottom_bar = view_bottom_bar(self, self_pane, global_state);
-                        iced::widget::column![video_container, bottom_bar].into()
-                    } else {
-                        video_container.into()
-                    }
-                }
+            None => view_empty(),
+            Some((frame_number, ref video_frame)) => match global_state.video_metadata.as_ref() {
+                None => view_empty(),
+                Some(video_metadata) => view_video(
+                    self,
+                    self_pane,
+                    global_state,
+                    video_metadata,
+                    video_frame,
+                    frame_number,
+                ),
             },
         };
 
@@ -143,6 +63,145 @@ impl super::LocalState for State {
 
         iced::Task::none()
     }
+}
+
+fn view_video<'a>(
+    pane_state: &'a State,
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    video_metadata: &'a media::VideoMetadata,
+    video_frame: &'a iced::widget::image::Handle,
+    frame_number: model::FrameNumber,
+) -> iced::Element<'a, message::Message> {
+    let storage_size = subtitle::Resolution {
+        x: video_metadata.width,
+        y: video_metadata.height,
+    };
+
+    // If we have some subtitles, render them onto the video.
+    // Otherwise, just show the frame directly.
+    let images = if global_state.subtitles.events.is_empty() {
+        vec![view::widget::StackedImage {
+            handle: video_frame.clone(),
+            x: 0,
+            y: 0,
+        }]
+    } else {
+        let context = global_state.compile_context(None);
+        render_subtitles(
+            &global_state.subtitles,
+            context,
+            video_metadata,
+            storage_size,
+            frame_number,
+            video_frame,
+            &global_state.view,
+        )
+    };
+
+    // Create the canvas program to run (either reticules from a node, or motion tracking controls)
+    // and overlay it onto the images, creating an `ImageStack` widget.
+    let image_stack: iced::Element<message::Message> = match pane_state.controls_mode {
+        ControlsMode::Reticules => {
+            view::widget::ImageStack::new(images, view_reticule_program(global_state, storage_size))
+                .into()
+        }
+        ControlsMode::MotionTrack => {
+            view::widget::ImageStack::new(images, view_motion_track_program(global_state)).into()
+        }
+    };
+
+    let scroll = iced::widget::scrollable(image_stack);
+
+    let video_container = iced::widget::container(scroll)
+        .center_x(iced::Length::Fill)
+        .center_y(iced::Length::Fill);
+
+    if pane_state.show_controls {
+        let bottom_bar = view_bottom_bar(pane_state, self_pane, global_state);
+        iced::widget::column![video_container, bottom_bar].into()
+    } else {
+        video_container.into()
+    }
+}
+
+pub fn render_subtitles<'a>(
+    subtitles: &'a subtitle::File,
+    mut context: subtitle::compile::Context<'a>,
+    video_metadata: &media::VideoMetadata,
+    storage_size: subtitle::Resolution,
+    num_frame: model::FrameNumber,
+    handle: &iced::widget::image::Handle,
+    view_state_cell: &RefCell<crate::ViewState>,
+) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
+    let instant = std::time::Instant::now();
+    let current_frame_time = video_metadata.frame_rate.frame_to_ms(num_frame);
+    let compiled = subtitles.events.compile_range(
+        &subtitles.extradata,
+        &mut context,
+        subtitle::StartTime(current_frame_time).stab(),
+    );
+    let elapsed_compile = instant.elapsed();
+
+    let instant2 = std::time::Instant::now();
+    let ass = media::subtitle::OpaqueTrack::from_compiled(
+        compiled.iter(),
+        subtitles.styles.as_slice(),
+        &subtitles.script_info,
+    );
+    let elapsed_copy = instant2.elapsed();
+
+    let instant3 = std::time::Instant::now();
+    let stack = {
+        let mut view_state = view_state_cell.borrow_mut();
+        view_state.subtitle_renderer.render_subtitles_onto_base(
+            &ass,
+            handle.clone(),
+            num_frame,
+            video_metadata.frame_rate,
+            storage_size, // TODO use the actual frame size here (maybe with responsive?)
+            storage_size,
+        )
+    };
+    let elapsed_render = instant3.elapsed();
+    println!(
+        "Subtitle profiling: compiling {} source events to {} compiled events took {:.2?}, copying them into libass took {:.2?}, rendering them took {:.2?}",
+        subtitles.events.len(),
+        compiled.len(),
+        elapsed_compile,
+        elapsed_copy,
+        elapsed_render
+    );
+
+    stack
+}
+
+fn view_reticule_program(
+    global_state: &'_ crate::Samaku,
+    storage_size: subtitle::Resolution,
+) -> ReticuleProgram<'_> {
+    let (reticule_list, node) = if let Some(ref reticules) = global_state.reticules {
+        let node = global_state
+            .subtitles
+            .extradata
+            .get_node(reticules.source_filter_index, reticules.source_node_index)
+            .ok();
+        (reticules.list.as_slice(), node)
+    } else {
+        let list: &[model::reticule::Reticule] = &[];
+        (list, None)
+    };
+
+    ReticuleProgram {
+        reticules: reticule_list,
+        node,
+        storage_size,
+        current_frame: global_state.current_frame(),
+    }
+}
+
+fn view_motion_track_program(_global_state: &crate::Samaku) -> MotionTrackProgram {
+    MotionTrackProgram {}
 }
 
 pub fn frame_number_text(global_state: &crate::Samaku) -> String {
@@ -197,7 +256,7 @@ fn view_bottom_bar<'a>(
 }
 
 // Elements to display if no video is loaded
-fn empty<'a>() -> iced::Element<'a, message::Message> {
+fn view_empty<'a>() -> iced::Element<'a, message::Message> {
     let scroll = iced::widget::scrollable(iced::widget::row![iced::widget::text(
         "No video loaded. Press V to load something."
     )]);
@@ -492,4 +551,24 @@ fn draw_corner_reticule(
             .with_color(style::SAMAKU_PRIMARY)
             .with_width(1.0),
     );
+}
+
+struct MotionTrackProgram;
+
+#[derive(Default)]
+struct MotionTrackState;
+
+impl canvas::Program<message::Message> for MotionTrackProgram {
+    type State = MotionTrackState;
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        _renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        _bounds: iced::Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<canvas::Geometry> {
+        todo!()
+    }
 }
