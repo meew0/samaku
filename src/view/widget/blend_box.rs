@@ -234,7 +234,7 @@ pub fn default_icon() -> text_input::Icon<iced::Font> {
     let font = view::icons::FONT;
     text_input::Icon {
         font,
-        code_point: view::icons::LIST,
+        code_point: view::Icon::List.character(),
         size: None,
         spacing: 4.0,
         side: text_input::Side::Left,

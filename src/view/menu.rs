@@ -91,7 +91,7 @@ pub fn sub_menu<'a>(
     msg: Message,
     children: Vec<Item<'a, Message, iced::Theme, iced::Renderer>>,
 ) -> Item<'a, Message, iced::Theme, iced::Renderer> {
-    let arrow = super::icon(super::icons::CARET_RIGHT_FILL).size(10.0);
+    let arrow = super::Icon::CaretRightFill.text().size(10.0);
 
     Item::with_menu(
         base_button(

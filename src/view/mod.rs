@@ -5,6 +5,8 @@ pub mod menu;
 pub mod toast;
 pub mod widget;
 
+pub use icons::Icon;
+
 /// Create a half-pixel thick horizontal separator line.
 #[must_use]
 pub fn separator() -> iced_aw::quad::Quad {
@@ -38,24 +40,6 @@ pub fn frame_coordinates_to_iced(
     )]
     let point = iced::Point::new(ui_x as f32, ui_y as f32);
     point
-}
-
-/// Create a text widget containing the given icon character.
-///
-/// See [`view::icons`] for some icons to use.
-#[must_use]
-pub fn icon<'a>(codepoint: char) -> iced::widget::Text<'a> {
-    iced::widget::text(codepoint).font(icons::FONT)
-}
-
-/// Create a button that shows the given icon character.
-#[must_use]
-pub fn icon_button<'a>(codepoint: char) -> iced::widget::Button<'a, message::Message> {
-    iced::widget::button(
-        icon(codepoint)
-            .align_x(iced::alignment::Horizontal::Center)
-            .align_y(iced::alignment::Vertical::Center),
-    )
 }
 
 /// Make the given element display a tooltip when hovered.

@@ -568,13 +568,14 @@ fn view_bottom_bar<'a>(
         "Create new filter and assign to selected event"
     };
     let add_button = view::tooltip(
-        view::icon_button(view::icons::PLUS)
+        view::Icon::Plus
+            .button()
             .on_press(message::Message::CreateEmptyFilterAndAssignToSelected),
         add_assign_text,
     );
 
     // Always show the unassign and delete buttons, but only make them active if events are selected.
-    let unassign_button_raw = view::icon_button(view::icons::X);
+    let unassign_button_raw = view::Icon::X.button();
     let unassign_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
         unassign_button_raw.on_press(message::Message::UnassignFilterFromSelectedEvents(
             nde_filter_id,
@@ -587,7 +588,7 @@ fn view_bottom_bar<'a>(
         "Unassign filter from selected events",
     );
 
-    let delete_button_raw = view::icon_button(view::icons::TRASH);
+    let delete_button_raw = view::Icon::Trash.button();
     let delete_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
         delete_button_raw.on_press(message::Message::DeleteFilter(nde_filter_id))
     } else {
@@ -859,7 +860,7 @@ fn add_menu<'a>(
     nde_filter_id: subtitle::ExtradataId,
 ) -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     vec![iced_aw::menu::Item::with_menu(
-        iced::widget::button(view::icon(view::icons::PLUS_LG).size(24.0))
+        iced::widget::button(view::Icon::PlusLg.text().size(24.0))
             .width(iced::Length::Shrink)
             .on_press(message::Message::None),
         iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE, nde_filter_id))

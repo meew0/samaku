@@ -62,12 +62,16 @@ impl super::LocalState for State {
         });
 
         let add_button = view::tooltip(
-            view::icon_button(view::icons::PLUS).on_press(message::Message::AddEvent),
+            view::Icon::Plus
+                .button()
+                .on_press(message::Message::AddEvent),
             "Add new subtitle event",
         );
 
         let delete_button = view::tooltip(
-            view::icon_button(view::icons::TRASH).on_press(message::Message::DeleteSelectedEvents),
+            view::Icon::Trash
+                .button()
+                .on_press(message::Message::DeleteSelectedEvents),
             "Delete selected events",
         );
 
