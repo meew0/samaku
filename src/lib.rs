@@ -389,13 +389,13 @@ use rand as _;
 #[allow(unused_imports, reason = "only used in benchmarks")]
 use rand_pcg as _;
 
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
-
 use iced::widget::container;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::{Alignment, Event};
 use iced::{Element, Length, Settings, Subscription};
+use std::cell::RefCell;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 mod action;
 pub mod config;
@@ -501,7 +501,15 @@ pub struct Samaku {
 
 /// Data that needs to be shared with workers.
 pub struct SharedState {
+    /// Informational boolean value of whether there is currently any audio loaded or not,
+    /// to be used independently of the `audio` mutex.
+    ///
+    /// Not guaranteed to be in sync exactly.
+    /// Mainly useful for UI purposes to avoid waiting on the mutex.
+    pub has_audio: AtomicBool,
+
     /// Currently loaded audio, if present.
+    ///
     /// Can be shared into workers etc., but be sure not to hold the mutex for
     /// too long, otherwise the playback worker will stall.
     pub audio: Arc<Mutex<Option<media::Audio>>>,
@@ -509,6 +517,12 @@ pub struct SharedState {
     /// Authoritative playback position and state.
     /// Set this to seek/pause/resume etc.
     pub playback_position: Arc<model::playback::Position>,
+}
+
+impl SharedState {
+    fn has_audio(&self) -> bool {
+        self.has_audio.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 /// More-or-less temporary data, that needs to be mutable within View functions.
@@ -742,6 +756,7 @@ impl Default for Samaku {
 
         // Initial shared state...
         let shared_state = SharedState {
+            has_audio: AtomicBool::new(false),
             audio: Arc::new(Mutex::new(None)),
             playback_position: Arc::new(model::playback::Position::default()),
         };

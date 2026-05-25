@@ -918,7 +918,21 @@ fn top_bar<'a>(
     _pane_state: &'a State,
     global_state: &'a crate::Samaku,
 ) -> iced::Element<'a, message::Message> {
-    let play_button = iced::widget::button("Play").on_press(message::Message::TogglePlayback);
+    let (play_button_raw, play_text) = if global_state.playing {
+        (view::Icon::Pause.button(), "Pause")
+    } else {
+        (view::Icon::Play.button(), "Play")
+    };
+    let (play_button_active, play_tooltip_text) = if global_state.shared.has_audio() {
+        (
+            play_button_raw.on_press(message::Message::TogglePlayback),
+            play_text,
+        )
+    } else {
+        (play_button_raw, "Play (requires loaded audio)")
+    };
+    let play_button = view::tooltip(play_button_active, play_tooltip_text);
+
     let frame_number_text_widget = iced::widget::text(pane::video::frame_number_text(global_state));
 
     iced::widget::container(

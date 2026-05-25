@@ -54,10 +54,11 @@ pub(crate) fn load_video(global_state: &crate::Samaku, path_buf: PathBuf, index:
 
 pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
     let mut audio_lock = global_state.shared.audio.lock().unwrap();
-    match media::Audio::load(path_buf) {
+    let has_audio = match media::Audio::load(path_buf) {
         Ok(audio) => {
             *audio_lock = Some(audio);
             drop(audio_lock);
+            true
         }
         Err(err) => {
             *audio_lock = None;
@@ -67,8 +68,13 @@ pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
                 "Error while loading audio file".to_owned(),
                 format!("{err:?}"),
             ));
+            false
         }
-    }
+    };
+    global_state
+        .shared
+        .has_audio
+        .store(has_audio, std::sync::atomic::Ordering::Relaxed);
     global_state.workers.emit_restart_audio();
 }
 

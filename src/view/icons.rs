@@ -17,6 +17,8 @@ pub enum Icon {
     CaretRightFill = 0xf231,
     Dash = 0xf2ea,
     List = 0xf479,
+    Pause = 0xf4c4,
+    Play = 0xf4f5,
     Plus = 0xf4fe,
     PlusLg = 0xf64d,
     Trash = 0xf5de,
