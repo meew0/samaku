@@ -4,7 +4,7 @@ cargo test
 err1=$?
 cargo fmt --check
 err2=$?
-cargo clippy
+cargo clippy --tests
 err3=$?
 
 set -e
