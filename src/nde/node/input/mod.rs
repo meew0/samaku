@@ -14,7 +14,7 @@ pub struct InputEvent;
 #[typetag::serde]
 impl Node for InputEvent {
     fn name(&self) -> &'static str {
-        "Input: Subtitle line"
+        "Input: Event"
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
@@ -52,7 +52,7 @@ impl Node for InputEvent {
 
 inventory::submit! {
     Shell::new(
-        &["Input", "Subtitle line"],
+        &["Input", "Event"],
         || Box::new(InputEvent {})
     )
 }

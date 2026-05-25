@@ -62,7 +62,7 @@ impl super::LocalState for State {
                     .spacing(5.0)
                     .into()
             } else {
-                iced::widget::text("No subtitle line currently selected.").into()
+                iced::widget::text("No event currently selected.").into()
             };
 
         super::View {
