@@ -522,9 +522,7 @@ fn view_graph(
     nde_filter_id: subtitle::ExtradataId,
     graph_box: Box<NodeGraph>,
 ) -> iced::Element<message::Message> {
-    let menu_bar = iced_aw::menu::MenuBar::new(add_menu(nde_filter_id))
-        .width(180)
-        .height(32);
+    let menu_bar = iced_aw::menu::MenuBar::new(add_menu(nde_filter_id));
     let menu_container = iced::widget::container(menu_bar)
         .align_left(iced::Length::Fill)
         .align_bottom(iced::Length::Fill)
@@ -561,6 +559,7 @@ fn view_bottom_bar<'a>(
             message::Message::AssignFilterToSelectedEvents(new_selected_filter_id)
         },
     )
+    .width(250.0)
     .icon(view::widget::blend_box::default_icon());
 
     let add_assign_text = if multi_events {
@@ -613,10 +612,11 @@ fn view_bottom_bar<'a>(
         row = row.push(name_box);
     }
 
+    row = row.push(iced::widget::space::horizontal());
+
     if let Some(nde_result_or_error) = nde_result_or_error_opt.as_ref() {
         let error_tooltip = view_error(pane_state, nde_result_or_error);
 
-        row = row.push(iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)));
         row = row.push(error_tooltip);
     }
 
@@ -859,7 +859,9 @@ fn add_menu<'a>(
     nde_filter_id: subtitle::ExtradataId,
 ) -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     vec![iced_aw::menu::Item::with_menu(
-        iced::widget::button(iced::widget::text("Add node")).on_press(message::Message::None),
+        iced::widget::button(view::icon(view::icons::PLUS_LG).size(24.0))
+            .width(iced::Length::Shrink)
+            .on_press(message::Message::None),
         iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE, nde_filter_id))
             .width(iced::Length::Fixed(150.0)),
     )]
