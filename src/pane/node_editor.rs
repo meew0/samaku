@@ -693,10 +693,12 @@ fn format_error(
     error_index: usize,
     error_count_option: Option<usize>,
 ) -> GraphErrorState {
-    let first_error = result
-        .intermediates
-        .get(error_index)
-        .expect("no node state present at error index");
+    let Some(first_error) = result.intermediates.get(error_index) else {
+        // There might not be a node state here,
+        // for example when the filter changed while the selected node did not.
+        return GraphErrorState::none();
+    };
+
     if let NodeState::Error(ref error) = *first_error {
         let first_message = error.to_string();
         let causes = error
