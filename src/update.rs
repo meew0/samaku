@@ -888,11 +888,16 @@ fn update_internal(
             undo.put_no_batch("Set event type", Message::MultiEditEventType(old));
         }
         Message::SetEventStartTimeAndDuration(event_index, start, duration) => {
-            global_state
-                .subtitles
-                .events
-                .update_event_times(event_index, start, duration);
+            let (old_start, old_duration) =
+                global_state
+                    .subtitles
+                    .events
+                    .update_event_times(event_index, start, duration);
             notify_selected_events(global_state);
+            undo.put_instant(
+                "Set event timing",
+                Message::SetEventStartTimeAndDuration(event_index, old_start, old_duration),
+            );
         }
         Message::TextEditorActionPerformed(pane, action_multi_edit) => {
             if let Some(pane_state) = global_state.panes.get_mut(pane) {
