@@ -313,6 +313,10 @@ fn create_graph(
         .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
         //.selection(dbg!(&pane_state.selected_nodes)) // TODO: this method is buggy (if this line is left in, no nodes can be selected at all)
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
+        .pin_defaults(iced_nodegraph::PinConfig {
+            radius: Some(8.0),
+            ..iced_nodegraph::PinConfig::default()
+        })
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
 
@@ -756,7 +760,7 @@ fn make_pin<'a>(
     let (_blob_border_radius, blob_color, label) = match socket_type {
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
         nde::node::SocketType::MultipleEvents => (0.0, style::SAMAKU_PRIMARY, ""),
-        nde::node::SocketType::AnyEvents => (0.0, style::SAMAKU_BACKGROUND, ""),
+        nde::node::SocketType::AnyEvents => (0.0, style::SAMAKU_PRIMARY, ""),
         nde::node::SocketType::LocalTags => (
             BLOB_RADIUS,
             iced::Color::from_rgb(1.0, 1.0, 1.0),
