@@ -775,8 +775,9 @@ fn make_pin<'a>(
     // itself.
     let (_blob_border_radius, blob_color, label) = match socket_type {
         nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
-        nde::node::SocketType::MultipleEvents => (0.0, style::SAMAKU_PRIMARY, ""),
-        nde::node::SocketType::AnyEvents => (0.0, style::SAMAKU_PRIMARY, ""),
+        nde::node::SocketType::MultipleEvents | nde::node::SocketType::AnyEvents => {
+            (0.0, style::SAMAKU_PRIMARY, "")
+        }
         nde::node::SocketType::LocalTags => (
             BLOB_RADIUS,
             iced::Color::from_rgb(1.0, 1.0, 1.0),
