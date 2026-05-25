@@ -2,13 +2,15 @@
 
 ![Screenshot](https://github.com/meew0/samaku/blob/master/screenshot.png?raw=true)
 
-samaku is an editor for non-destructive visual typesetting of ASS subtitles. It aims to solve the primary problem of Lua macro-based typesetting workflows, where once a sign has been typeset, it is very hard to make even minor changes without redoing the sign entirely. Instead of destructive Lua macros, samaku includes a Blender-like node editor for non-destructive editing, where a node graph corresponds to a chain of transformations that are instantly, automatically rerun when the inputs are changed.
+samaku is an editor for non-destructive visual typesetting of ASS (Advanced SubStation Alpha) subtitles. It aims to solve the primary problem of Lua macro-based typesetting workflows, where once a sign has been typeset, it is very hard to make even minor changes without redoing the sign entirely. Instead of destructive Lua macros, samaku includes a Blender-like node editor for non-destructive editing, where a node graph corresponds to a chain of transformations that are instantly, automatically rerun when the inputs are changed.
 
 A secondary goal of samaku is to be an extremely high-performance ASS subtitle editor, effortlessly supporting giant subtitle files (several hundred megabytes or more, hundreds of thousands of events or more).
 
-Note that samaku is currently in a pre-alpha state. It is **very incomplete** and **not yet ready for production use**. Most of the foundational work has been done and the app can be used for basic subtitle editing, and the node editor with its NDE paradigm works in principle. However, so far the selection of nodes is very limited, with no way to do most of the important tasks in typesetting. Also, there will be many bugs and other inconveniences. The app is still lacking significant polish in most areas.
+Note that samaku is currently in a pre-alpha state. It is **very incomplete** and **not yet ready for production use**. Most of the foundational work has been done and the app can be used for basic subtitle editing, and the node editor with its NDE paradigm works in principle. However, so far the selection of nodes is very limited, with no way to do many important tasks in typesetting. Also, there will be many bugs and other inconveniences. The app is still lacking significant polish in most areas.
 
 I make no promises that I will continue to develop samaku into a usable tool. I tend to work on it in short bursts every now and then, with significant latency periods in between. Nevertheless, I am glad if it can be of interest for someone, even educationally.
+
+For an overview of what is theoretically planned at the moment, you can take a look at the [roadmap](https://github.com/users/meew0/projects/1).
 
 ## Project structure
 
@@ -23,7 +25,7 @@ Technology-wise, samaku uses
 
 See the [Cargo.toml](https://github.com/meew0/samaku/blob/master/Cargo.toml) for a full list of dependencies.
 
-To understand the project structure, you should have a basic idea of how [iced projects are structured in general](https://github.com/iced-rs/iced#overview). The application lives in `src/lib.rs`, with the `Samaku` struct containing the state; the messages are defined in `src/message.rs`. The global update method is in `src/update.rs`. For the most part, the application consists of a **pane grid**, containing **panes** with their own view and update logic; these live in the `pane` module. Apart from that, there are the **following** modules in `src`:
+To understand the project structure, you should have a basic idea of how [iced projects are structured in general](https://github.com/iced-rs/iced#overview). The application lives in `src/lib.rs`, with the `Samaku` struct containing the state; the messages are defined in `src/message.rs`. The global update method is in `src/update.rs`. For the most part, the application consists of a **pane grid**, containing **panes** with their own view and update logic; these live in the `pane` module. Apart from that, there are the following modules in `src`:
 
 - `media/bindings`: Thin but safe bindings around the various media libraries.
 - `media`: More integrated bindings to provide specifically the features samaku needs.
@@ -39,8 +41,8 @@ To understand the project structure, you should have a basic idea of how [iced p
 
 Apart from samaku's own code, there are the following modules in the root folder:
 
-- `benches`: [Criterion](https://github.com/bheisler/criterion.rs) benchmarks for ASS tag handling code.
-- `tests`: Integration tests, mainly also for ASS tag handling code.
+- `benches`: [Criterion](https://github.com/bheisler/criterion.rs) benchmarks for some performance-critical components.
+- `tests`: Integration tests, mainly for ASS tag handling code.
 - `test_files`: Static files used for tests.
 - `libass-sys`: Unsafe FFI bindings for libass.
 - `packaging`: Utilities for packaging samaku for distribution.
