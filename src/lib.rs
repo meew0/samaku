@@ -637,9 +637,7 @@ impl Samaku {
             menu::edit(&self.history),
             menu::media(),
         ])
-        .spacing(5.0)
-        .width(180)
-        .height(32);
+        .spacing(5.0);
 
         // The title row — currently only contains the logo and the application name.
         let title_row = iced::widget::row![
