@@ -72,7 +72,7 @@ pub fn tooltip<
         content,
         iced::widget::container(iced::widget::text(tooltip))
             .padding(10)
-            .style(iced::widget::container::rounded_box),
+            .style(iced::widget::container::bordered_box),
         iced::widget::tooltip::Position::Top,
     )
     .into()
