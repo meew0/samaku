@@ -426,10 +426,7 @@ pub fn run() -> iced::Result {
         .subscription(Samaku::subscription)
         .settings(Settings {
             id: Some("samaku".to_owned()),
-            fonts: vec![
-                resources::BARLOW.into(),
-                iced_fonts::BOOTSTRAP_FONT_BYTES.into(),
-            ],
+            fonts: vec![resources::BARLOW.into(), resources::BOOTSTRAP_ICONS.into()],
             default_font: DEFAULT_FONT,
             default_text_size: iced::Pixels(16.0),
             antialiasing: true,
@@ -441,12 +438,7 @@ pub fn run() -> iced::Result {
         .run()
 }
 
-pub const DEFAULT_FONT: iced::Font = iced::Font {
-    family: iced::font::Family::Name("Barlow"),
-    weight: iced::font::Weight::Normal,
-    stretch: iced::font::Stretch::Normal,
-    style: iced::font::Style::Normal,
-};
+pub const DEFAULT_FONT: iced::Font = iced::Font::with_name("Barlow");
 
 /// Global application state.
 pub struct Samaku {

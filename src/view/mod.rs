@@ -47,7 +47,11 @@ pub fn icon<'a>(codepoint: char) -> iced::widget::Text<'a> {
 
 #[must_use]
 pub fn icon_button<'a>(codepoint: char) -> iced::widget::Button<'a, message::Message> {
-    iced::widget::button(icon(codepoint))
+    iced::widget::button(
+        icon(codepoint)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
+    )
 }
 
 #[must_use]
@@ -58,7 +62,7 @@ pub fn tooltip<
 >(
     content: E,
     tooltip: T,
-) -> impl Into<iced::Element<'a, message::Message>> + 'a {
+) -> iced::Element<'a, message::Message> {
     iced::widget::tooltip(
         content,
         iced::widget::container(iced::widget::text(tooltip))
@@ -66,4 +70,5 @@ pub fn tooltip<
             .style(iced::widget::container::rounded_box),
         iced::widget::tooltip::Position::Top,
     )
+    .into()
 }

@@ -61,19 +61,15 @@ impl super::LocalState for State {
                 .into()
         });
 
-        let add_button = iced::widget::button(
-            iced_fonts::bootstrap::plus()
-                .align_x(iced::alignment::Horizontal::Center)
-                .width(iced::Length::Fill),
-        )
-        .on_press(message::Message::AddEvent);
+        let add_button = view::tooltip(
+            view::icon_button(view::icons::PLUS).on_press(message::Message::AddEvent),
+            "Add new subtitle event",
+        );
 
-        let delete_button = iced::widget::button(
-            iced_fonts::bootstrap::dash()
-                .align_x(iced::alignment::Horizontal::Center)
-                .width(iced::Length::Fill),
-        )
-        .on_press(message::Message::DeleteSelectedEvents);
+        let delete_button = view::tooltip(
+            view::icon_button(view::icons::TRASH).on_press(message::Message::DeleteSelectedEvents),
+            "Delete selected events",
+        );
 
         let top_bar = iced::widget::container(
             iced::widget::row![add_button, delete_button]

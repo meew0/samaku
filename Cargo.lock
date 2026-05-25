@@ -4364,7 +4364,6 @@ dependencies = [
  "ffms2-sys",
  "iced",
  "iced_aw",
- "iced_fonts",
  "iced_nodegraph",
  "indexmap",
  "interavl",

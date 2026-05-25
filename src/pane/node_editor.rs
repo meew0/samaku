@@ -680,7 +680,7 @@ fn view_error<'a>(
             color: Some(error_state.color),
         });
 
-    view::tooltip(error_message, error_state.tooltip).into()
+    view::tooltip(error_message, error_state.tooltip)
 }
 
 fn format_error(

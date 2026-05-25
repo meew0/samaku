@@ -1,4 +1,4 @@
-pub const FONT: iced::Font = iced_fonts::BOOTSTRAP_FONT;
+pub const FONT: iced::Font = iced::Font::with_name("bootstrap-icons");
 
 // https://icons.getbootstrap.com
 pub const DASH: char = '\u{f2ea}';
