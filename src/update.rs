@@ -107,7 +107,6 @@ fn update_internal(
                 *pane_state = pane::State::new(constructor());
 
                 notify_selected_events(global_state);
-                notify_filter_lists(global_state);
                 notify_style_lists(global_state, true);
             }
         }
@@ -118,7 +117,6 @@ fn update_internal(
                 *focused_pane_state = pane::State::new(constructor());
 
                 notify_selected_events(global_state);
-                notify_filter_lists(global_state);
                 notify_style_lists(global_state, true);
             }
         }
@@ -952,7 +950,6 @@ fn update_internal(
                 graph: nde::graph::Graph::identity(),
             };
             let filter_index = global_state.subtitles.extradata.push_filter(filter.clone());
-            notify_filter_lists(global_state);
 
             let mut old_selected = Vec::with_capacity(global_state.selected_events.len());
             for selected_event_index in &global_state.selected_events {
@@ -1091,7 +1088,6 @@ fn update_internal(
             let entry = &mut global_state.subtitles.extradata[filter_index];
             let filter = entry.assert_filter_mut();
             let old_name = replace(&mut filter.name, new_name);
-            notify_filter_lists(global_state);
 
             undo.put_instant(
                 "Set filter name",
@@ -1111,8 +1107,6 @@ fn update_internal(
             let removed = global_state.subtitles.extradata.remove(filter_index);
 
             if let Some(subtitle::ExtradataEntry::NdeFilter(filter)) = removed {
-                notify_filter_lists(global_state);
-
                 if let Some(ref mut reticules) = global_state.reticules
                     && reticules.source_filter_index == filter_index
                 {
@@ -1136,7 +1130,6 @@ fn update_internal(
                 global_state.subtitles.events[event_index]
                     .assign_nde_filter(filter_index, &global_state.subtitles.extradata);
             }
-            notify_filter_lists(global_state);
 
             undo.put_no_batch("Restore filter", Message::DeleteFilter(filter_index));
         }
@@ -1359,15 +1352,6 @@ pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
             &global_state.selected_events,
             &global_state.subtitles.events,
         );
-    }
-}
-
-/// Notifies all entities (like node editor panes) that keep some internal copy of the
-/// NDE filter list to update their internal representations.
-pub(crate) fn notify_filter_lists(global_state: &mut super::Samaku) {
-    for pane in global_state.panes.panes.values_mut() {
-        pane.local
-            .update_filter_names(&global_state.subtitles.extradata);
     }
 }
 

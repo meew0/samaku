@@ -2,7 +2,7 @@
 //!
 //! The purpose of this module is to reduce code duplication for actions performed in multiple different places across the codebase, as well as reduce the code load within the `update` function.
 
-use crate::update::{notify_filter_lists, notify_selected_events, notify_style_lists};
+use crate::update::{notify_selected_events, notify_style_lists};
 use crate::{media, message, model, subtitle};
 use std::mem::{replace, swap};
 use std::path::PathBuf;
@@ -16,7 +16,6 @@ pub(crate) fn replace_subtitle_file(
     global_state.selected_events.clear();
 
     notify_selected_events(global_state);
-    notify_filter_lists(global_state);
     notify_style_lists(global_state, true);
 }
 
