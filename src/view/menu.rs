@@ -1,11 +1,10 @@
 //! Utilities for creating menus.
 //! Adapted from <https://github.com/iced-rs/iced_aw/blob/main/examples/menu/src/main.rs>.
-use iced::widget::{button, row, svg, text};
+use iced::widget::{button, row, text};
 use iced::{Color, Element, Length, alignment};
 use iced_aw::menu::{Item, Menu};
 
 use crate::message::Message;
-use crate::resources;
 
 fn button_style(class: &iced::Theme, status: button::Status) -> button::Style {
     let palette = class.extended_palette();
@@ -92,22 +91,12 @@ pub fn sub_menu<'a>(
     msg: Message,
     children: Vec<Item<'a, Message, iced::Theme, iced::Renderer>>,
 ) -> Item<'a, Message, iced::Theme, iced::Renderer> {
-    let handle = svg::Handle::from_memory(resources::CARET_RIGHT_FILL);
-    let arrow = svg(handle)
-        .width(Length::Shrink)
-        .style(|theme: &iced::Theme, _status| svg::Style {
-            color: Some(theme.extended_palette().background.base.text),
-        });
+    let arrow = super::icon(super::icons::CARET_RIGHT_FILL).size(10.0);
 
     Item::with_menu(
         base_button(
-            row![
-                text(label)
-                    .width(Length::Fill)
-                    .align_y(alignment::Vertical::Center),
-                arrow
-            ]
-            .align_y(iced::Alignment::Center),
+            row![text(label).width(Length::Fill), arrow.width(Length::Shrink)]
+                .align_y(iced::Alignment::Center),
             Some(msg),
         )
         .width(Length::Fill),

@@ -1,6 +1,7 @@
 pub const FONT: iced::Font = iced::Font::with_name("bootstrap-icons");
 
 // https://icons.getbootstrap.com
+pub const CARET_RIGHT_FILL: char = '\u{f231}';
 pub const DASH: char = '\u{f2ea}';
 pub const LIST: char = '\u{f479}';
 pub const PLUS: char = '\u{f4fe}';
