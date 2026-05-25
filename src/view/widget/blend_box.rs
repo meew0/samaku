@@ -12,7 +12,7 @@ use iced::widget::text::LineHeight;
 use iced::widget::text_input::{self, TextInput};
 use iced::{Element, Event, Length, Padding, Pixels, Rectangle, Size, Vector};
 
-use crate::model;
+use crate::{model, view};
 use std::cell::RefCell;
 
 /// A searchable dropdown widget that takes an external `&[T]` slice, keeping
@@ -211,6 +211,18 @@ where
         }
 
         false
+    }
+}
+
+#[must_use]
+pub fn default_icon() -> text_input::Icon<iced::Font> {
+    let font = view::icons::FONT;
+    text_input::Icon {
+        font,
+        code_point: view::icons::LIST,
+        size: None,
+        spacing: 4.0,
+        side: text_input::Side::Left,
     }
 }
 

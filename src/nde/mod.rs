@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::nde::tags::{FontSize, FontWeight, Resettable};
-use crate::subtitle;
+use crate::{model, subtitle};
 pub use graph::Graph;
 pub use node::Node;
 
@@ -14,6 +14,16 @@ pub mod util;
 pub struct Filter {
     pub name: String,
     pub graph: Graph,
+}
+
+impl model::Named for Filter {
+    fn name(&self) -> &str {
+        if self.name.is_empty() {
+            "(unnamed filter)"
+        } else {
+            &self.name
+        }
+    }
 }
 
 /// An NDE event. Differs from [`subtitle::Event`] in that the event text is represented

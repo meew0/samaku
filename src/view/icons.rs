@@ -1,0 +1,9 @@
+pub const FONT: iced::Font = iced_fonts::BOOTSTRAP_FONT;
+
+// https://icons.getbootstrap.com
+pub const DASH: char = '\u{f2ea}';
+pub const LIST: char = '\u{f479}';
+pub const PLUS: char = '\u{f4fe}';
+pub const TRASH: char = '\u{f5de}';
+#[expect(clippy::min_ident_chars, reason = "matches bootstrap name")]
+pub const X: char = '\u{f62a}';

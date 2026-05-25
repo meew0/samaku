@@ -941,7 +941,7 @@ fn update_internal(
                 }
             }
         }
-        Message::CreateEmptyFilter => {
+        Message::CreateEmptyFilterAndAssignToSelected => {
             let filter = nde::Filter {
                 name: String::new(),
                 graph: nde::graph::Graph::identity(),
@@ -949,38 +949,54 @@ fn update_internal(
             let filter_index = global_state.subtitles.extradata.push_filter(filter.clone());
             notify_filter_lists(global_state);
 
+            let mut old_selected = Vec::with_capacity(global_state.selected_events.len());
+            for selected_event_index in &global_state.selected_events {
+                old_selected.push((
+                    selected_event_index,
+                    global_state.subtitles.events[selected_event_index]
+                        .assign_nde_filter(filter_index, &global_state.subtitles.extradata),
+                ));
+            }
+
             undo.put_no_batch("Create filter", Message::DeleteFilter(filter_index));
-            undo.override_redo(Message::RestoreFilter(filter_index, filter, vec![]));
+            undo.put_no_batch(
+                "Create filter and assign",
+                Message::MultiAssignFiltersToEvents(old_selected),
+            );
+            undo.override_redo(Message::RestoreFilter(
+                filter_index,
+                filter,
+                global_state.selected_events.indices.clone(),
+            ));
         }
         Message::AssignFilterToEvents(filter_index, events) => {
             let mut old = Vec::with_capacity(events.len());
-            for event_index in &events {
-                old.push(
-                    global_state.subtitles.events[*event_index]
+            for &event_index in &events {
+                old.push((
+                    event_index,
+                    global_state.subtitles.events[event_index]
                         .assign_nde_filter(filter_index, &global_state.subtitles.extradata),
-                );
+                ));
             }
 
             undo.put_no_batch(
                 "Assign filter to events",
-                Message::MultiAssignFiltersToEvents(old, events),
+                Message::MultiAssignFiltersToEvents(old),
             );
         }
         Message::AssignFilterToSelectedEvents(filter_index) => {
             let mut old = Vec::with_capacity(global_state.selected_events.len());
             for selected_event_index in &global_state.selected_events {
-                old.push(
+                old.push((
+                    selected_event_index,
                     global_state.subtitles.events[selected_event_index]
                         .assign_nde_filter(filter_index, &global_state.subtitles.extradata),
-                );
+                ));
             }
 
             undo.put_no_batch(
                 "Assign filter to events",
-                Message::MultiAssignFiltersToEvents(
-                    old,
-                    global_state.selected_events.indices.clone(),
-                ),
+                Message::MultiAssignFiltersToEvents(old),
             );
             undo.override_redo(Message::AssignFilterToEvents(
                 filter_index,
@@ -1021,9 +1037,9 @@ fn update_internal(
                 global_state.selected_events.indices.clone(),
             ));
         }
-        Message::MultiAssignFiltersToEvents(filters, event_indices) => {
-            for (i, event_index) in event_indices.into_iter().enumerate() {
-                if let Some(filter_id) = filters[i] {
+        Message::MultiAssignFiltersToEvents(filters_by_event) => {
+            for (event_index, filter_id_opt) in filters_by_event {
+                if let Some(filter_id) = filter_id_opt {
                     global_state.subtitles.events[event_index]
                         .assign_nde_filter(filter_id, &global_state.subtitles.extradata);
                 } else {
@@ -1079,10 +1095,10 @@ fn update_internal(
         }
         Message::DeleteFilter(filter_index) => {
             // Unassign filters from events that might have it assigned
-            let mut assigned_events = vec![];
+            let mut assigned_events = HashSet::new();
             for (index, event) in global_state.subtitles.events.enumerate_events_mut() {
                 if event.unassign_nde_filter_by_id(filter_index) {
-                    assigned_events.push(index);
+                    assigned_events.insert(index);
                 }
             }
 

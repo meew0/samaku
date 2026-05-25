@@ -1201,6 +1201,18 @@ impl ExtradataEntry {
     }
 }
 
+// TODO: this needs to be refactored if we have other extradata types we might desire to named-iterate over
+impl model::NamedListIterable for Extradata {
+    type Key = ExtradataId;
+
+    fn iter_named(&self) -> impl Iterator<Item = model::NamedEntry<'_, Self::Key>> {
+        self.iter_filters().map(|(id, filter)| model::NamedEntry {
+            id,
+            name: &filter.name,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Attachment {
     attachment_type: AttachmentType,

@@ -134,7 +134,7 @@ impl History {
             | Message::MultiEditEventDuration(_)
             | Message::SetEventStartTimeAndDuration(_, _, _)
             | Message::TextEditorActionPerformed(_, _)
-            | Message::CreateEmptyFilter
+            | Message::CreateEmptyFilterAndAssignToSelected
             | Message::AssignFilterToEvents(_, _)
             | Message::UnassignFilterFromEvents(_, _)
             | Message::AssignFilterToSelectedEvents(_)
@@ -193,7 +193,7 @@ impl History {
             | Message::TogglePlayback
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
-            | Message::MultiAssignFiltersToEvents(_, _)
+            | Message::MultiAssignFiltersToEvents(_)
             | Message::ActivateNodes(_, _)
             | Message::TrackMotionForNode(_, _, _)
             | Message::ModifiersChanged(_)

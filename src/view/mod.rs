@@ -1,5 +1,6 @@
-use crate::{style, subtitle};
+use crate::{message, style, subtitle};
 
+pub mod icons;
 pub mod menu;
 pub mod toast;
 pub mod widget;
@@ -37,4 +38,32 @@ pub fn frame_coordinates_to_iced(
     )]
     let point = iced::Point::new(ui_x as f32, ui_y as f32);
     point
+}
+
+#[must_use]
+pub fn icon<'a>(codepoint: char) -> iced::widget::Text<'a> {
+    iced::widget::text(codepoint).font(icons::FONT)
+}
+
+#[must_use]
+pub fn icon_button<'a>(codepoint: char) -> iced::widget::Button<'a, message::Message> {
+    iced::widget::button(icon(codepoint))
+}
+
+#[must_use]
+pub fn tooltip<
+    'a,
+    E: Into<iced::Element<'a, message::Message>>,
+    T: iced::widget::text::IntoFragment<'a>,
+>(
+    content: E,
+    tooltip: T,
+) -> impl Into<iced::Element<'a, message::Message>> + 'a {
+    iced::widget::tooltip(
+        content,
+        iced::widget::container(iced::widget::text(tooltip))
+            .padding(10)
+            .style(iced::widget::container::rounded_box),
+        iced::widget::tooltip::Position::Top,
+    )
 }

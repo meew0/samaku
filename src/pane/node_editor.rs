@@ -1,19 +1,28 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::sync::LazyLock;
 
 use crate::nde::graph::{NodeId, SocketId};
 use crate::subtitle::compile::{NdeError, NdeResult, NodeState};
 use crate::{message, model, nde, style, subtitle, view};
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
     camera: Camera,
-    filters: Vec<FilterReference>,
-    selection_index: Option<usize>,
-    selected_filter: Option<FilterReference>,
+    #[serde(skip)]
+    blend_box_state: view::widget::blend_box::State,
     selected_nodes: Vec<NodeId>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            camera: Camera::new(iced::Point::ORIGIN, 1.0),
+            blend_box_state: view::widget::blend_box::State::default(),
+            selected_nodes: vec![],
+        }
+    }
 }
 
 #[typetag::serde(name = "node_editor")]
@@ -23,36 +32,56 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let content: iced::Element<message::Message> =
-            if let Some(active_event_index) = global_state.selected_events.active() {
-                // Exactly one event selected
-                let active_event = &global_state.subtitles.events[active_event_index];
+        let content: iced::Element<message::Message> = if global_state.selected_events.is_empty() {
+            iced::widget::text("No event currently selected.").into()
+        } else {
+            let (graph, bottom_bar) =
+                if let Some(active_event_index) = global_state.selected_events.active() {
+                    // Exactly one event selected
+                    let active_event = &global_state.subtitles.events[active_event_index];
 
-                // Check whether the event has an NDE filter assigned. If yes, display the node editor
-                // to edit that filter, otherwise, display the assignment pane
-                match global_state
-                    .subtitles
-                    .extradata
-                    .nde_filter_and_id_for_event(active_event)
-                {
-                    Some((nde_filter_id, nde_filter)) => view_filter(
-                        self_pane,
-                        global_state,
-                        self,
-                        active_event,
-                        nde_filter_id,
-                        nde_filter,
-                    ),
-                    None => view_non_selected(self_pane, self, false),
-                }
-            } else if global_state.selected_events.is_empty() {
-                iced::widget::text("No subtitle currently selected.").into()
-            } else {
-                // Multiple events selected. We can't meaningfully run the filter on multiple events
-                // at once, even if their filters should match, so display the assignment pane
-                // as a fallback so at least a filter can be assigned to multiple events
-                view_non_selected(self_pane, self, true)
-            };
+                    // Check whether the event has an NDE filter assigned. If yes, display the node editor
+                    // to edit that filter, otherwise, display only the bottom bar for assignment
+                    match global_state
+                        .subtitles
+                        .extradata
+                        .nde_filter_and_id_for_event(active_event)
+                    {
+                        Some((nde_filter_id, nde_filter)) => {
+                            let (filter, nde_result_or_error) = view_filter(
+                                self_pane,
+                                global_state,
+                                self,
+                                active_event,
+                                nde_filter_id,
+                                nde_filter,
+                            );
+                            let bottom_bar = view_bottom_bar(
+                                self,
+                                global_state,
+                                Some((nde_filter_id, nde_filter)),
+                                false,
+                                Some(&nde_result_or_error),
+                            );
+                            (filter, bottom_bar)
+                        }
+                        None => (
+                            view_non_selected(),
+                            view_bottom_bar(self, global_state, None, false, None),
+                        ),
+                    }
+                } else {
+                    // Multiple events selected. We can't meaningfully run the filter on multiple events
+                    // at once, even if their filters should match, so display the bottom bar
+                    // as a fallback so at least a filter can be assigned to multiple events
+                    (
+                        view_non_selected(),
+                        view_bottom_bar(self, global_state, None, true, None),
+                    )
+                };
+
+            iced::widget::column![graph, view::separator(), bottom_bar].into()
+        };
 
         super::View {
             title: iced::widget::text("Node editor").into(),
@@ -70,10 +99,6 @@ impl super::LocalState for State {
             }
             message::Pane::NodeEditorSelectionChanged(selected) => {
                 self.selected_nodes = selected;
-            }
-            message::Pane::NodeEditorFilterSelected(selection_index, filter_ref) => {
-                self.selection_index = Some(selection_index);
-                self.selected_filter = Some(filter_ref);
             }
             _ => (),
         }
@@ -96,19 +121,6 @@ impl super::LocalState for State {
         // since setting that is buggy (see `create_graph`)
         // TODO: if this ends up being annoying, we might have to check that anyway.
         self.selected_nodes.clear();
-    }
-
-    fn update_filter_names(&mut self, extradata: &subtitle::Extradata) {
-        self.filters.clear();
-        for (i, filter) in extradata.iter_filters() {
-            self.filters.push(FilterReference {
-                name: filter.name.clone(),
-                index: i,
-            });
-        }
-
-        self.selection_index = None;
-        self.selected_filter = None;
     }
 }
 
@@ -136,27 +148,7 @@ inventory::submit! {
     )
 }
 
-// `iced_node_editor::Matrix` doesn't implement `Debug`.
-// So we have to do this manually...
-impl Debug for State {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("State { <opaque> }")
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            camera: Camera::new(iced::Point::ORIGIN, 1.0),
-            filters: vec![],
-            selection_index: None,
-            selected_filter: None,
-            selected_nodes: vec![],
-        }
-    }
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct Camera {
     position_x: f32,
     position_y: f32,
@@ -236,30 +228,17 @@ type NodeGraph<'a> = iced_nodegraph::NodeGraph<
     iced::Renderer,
 >;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct FilterReference {
-    pub name: String,
-    pub index: subtitle::ExtradataId,
-}
-
-impl Display for FilterReference {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.name.is_empty() {
-            formatter.write_str("(unnamed filter)")
-        } else {
-            formatter.write_str(self.name.as_str())
-        }
-    }
-}
-
-fn view_filter<'a>(
+fn view_filter<'a, 'b>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
-    active_event: &subtitle::Event<'static>,
+    active_event: &'a subtitle::Event<'static>,
     nde_filter_id: subtitle::ExtradataId,
-    nde_filter: &nde::Filter,
-) -> iced::Element<'a, message::Message> {
+    nde_filter: &'b nde::Filter,
+) -> (
+    iced::Element<'a, message::Message>,
+    Result<NdeResult<'a, 'b>, NdeError>,
+) {
     // Before doing much of anything else, we need to run the NDE filter —
     // not to get the output events, but for the intermediate state,
     // which lets us determine what style to draw nodes in, as well as provide
@@ -275,13 +254,7 @@ fn view_filter<'a>(
     create_nodes(&mut graph, nde_filter_id, nde_filter, &nde_result_or_error);
     create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
-    view_graph(
-        pane_state,
-        nde_filter_id,
-        nde_filter,
-        &nde_result_or_error,
-        graph,
-    )
+    (view_graph(nde_filter_id, graph), nde_result_or_error)
 }
 
 fn create_graph(
@@ -545,94 +518,119 @@ fn create_connections(
     }
 }
 
-fn view_graph<'a>(
-    pane_state: &'a State,
+fn view_graph(
     nde_filter_id: subtitle::ExtradataId,
-    nde_filter: &nde::Filter,
-    nde_result_or_error: &Result<NdeResult, NdeError>,
-    graph_box: Box<NodeGraph<'a>>,
-) -> iced::Element<'a, message::Message> {
+    graph_box: Box<NodeGraph>,
+) -> iced::Element<message::Message> {
     let menu_bar = iced_aw::menu::MenuBar::new(add_menu(nde_filter_id))
         .width(180)
         .height(32);
-
-    let unassign_button = iced::widget::button(iced::widget::text("Unassign")).on_press(
-        message::Message::UnassignFilterFromSelectedEvents(nde_filter_id),
-    );
-
-    let name_box = iced::widget::text_input("Filter name", &nde_filter.name)
-        .on_input(move |name| message::Message::SetFilterName(nde_filter_id, name))
-        .padding(5.0)
-        .width(iced::Length::Fixed(200.0));
-
-    let error_tooltip = view_error(pane_state, nde_result_or_error);
-
-    let bottom_bar = iced::widget::container(
-        iced::widget::row![
-            menu_bar,
-            unassign_button,
-            name_box,
-            iced::widget::space::horizontal(),
-            error_tooltip,
-        ]
-        .spacing(5.0)
-        .align_y(iced::Alignment::Center),
-    )
-    .padding(5.0);
+    let menu_container = iced::widget::container(menu_bar)
+        .align_left(iced::Length::Fill)
+        .align_bottom(iced::Length::Fill)
+        .padding(8.0);
 
     let graph: NodeGraph = *graph_box;
-    iced::widget::column![graph, view::separator(), bottom_bar].into()
+    iced::widget::stack![graph, menu_container].into()
 }
 
-fn view_non_selected(
-    self_pane: super::Pane,
-    pane_state: &'_ State,
-    multi_warning: bool,
-) -> iced::Element<'_, message::Message> {
-    let selection_list = iced_aw::selection_list(
-        pane_state.filters.as_slice(),
-        move |selection_index, filter_ref| {
-            message::Message::Pane(
-                self_pane,
-                message::Pane::NodeEditorFilterSelected(selection_index, filter_ref),
-            )
-        },
-    )
-    .width(iced::Length::Fixed(200.0))
-    .height(iced::Length::Fixed(200.0));
+fn view_bottom_bar<'a>(
+    pane_state: &'a State,
+    global_state: &'a crate::Samaku,
+    nde_filter_data: Option<(subtitle::ExtradataId, &nde::Filter)>,
+    multi_events: bool,
+    nde_result_or_error_opt: Option<&Result<NdeResult, NdeError>>,
+) -> iced::Element<'a, message::Message> {
+    let selected_filter = nde_filter_data.map(|(id, filter)| model::NamedEntry {
+        id,
+        name: model::Named::name(filter),
+    });
 
-    let assign_button = iced::widget::button(iced::widget::text("Assign")).on_press_maybe(
-        pane_state
-            .selected_filter
-            .as_ref()
-            .map(|filter_ref| message::Message::AssignFilterToSelectedEvents(filter_ref.index)),
-    );
-    let create_button = iced::widget::button(iced::widget::text("Create new"))
-        .on_press(message::Message::CreateEmptyFilter);
-    let delete_button = iced::widget::button(iced::widget::text("Delete")).on_press_maybe(
-        pane_state
-            .selected_filter
-            .as_ref()
-            .map(|filter_ref| message::Message::DeleteFilter(filter_ref.index)),
-    );
-
-    let warning_text = if multi_warning {
-        iced::widget::text("To edit a filter, select only one event that has it assigned.").style(
-            |_theme| iced::widget::text::Style {
-                color: Some(style::SAMAKU_PRIMARY),
-            },
-        )
+    let blend_box_placeholder_text = if multi_events {
+        "Select filter to assign to all selected events"
     } else {
-        iced::widget::text("")
+        "Select filter to assign"
     };
 
-    iced::widget::column![
-        iced::widget::text("Filters").size(20),
-        selection_list,
-        iced::widget::row![assign_button, create_button, delete_button].spacing(5),
-        warning_text,
-    ]
-    .spacing(5)
+    let blend_box = view::widget::BlendBox::new(
+        &pane_state.blend_box_state,
+        &global_state.subtitles.extradata,
+        blend_box_placeholder_text,
+        selected_filter,
+        move |new_selected_filter_id| {
+            message::Message::AssignFilterToSelectedEvents(new_selected_filter_id)
+        },
+    )
+    .icon(view::widget::blend_box::default_icon());
+
+    let add_assign_text = if multi_events {
+        "Create new filter and assign to selected events"
+    } else {
+        "Create new filter and assign to selected event"
+    };
+    let add_button = view::tooltip(
+        view::icon_button(view::icons::PLUS)
+            .on_press(message::Message::CreateEmptyFilterAndAssignToSelected),
+        add_assign_text,
+    );
+
+    // Always show the unassign and delete buttons, but only make them active if events are selected.
+    let unassign_button_raw = view::icon_button(view::icons::X);
+    let unassign_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
+        unassign_button_raw.on_press(message::Message::UnassignFilterFromSelectedEvents(
+            nde_filter_id,
+        ))
+    } else {
+        unassign_button_raw
+    };
+    let unassign_button = view::tooltip(
+        unassign_button_active,
+        "Unassign filter from selected events",
+    );
+
+    let delete_button_raw = view::icon_button(view::icons::TRASH);
+    let delete_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
+        delete_button_raw.on_press(message::Message::DeleteFilter(nde_filter_id))
+    } else {
+        delete_button_raw
+    };
+    let delete_button = view::tooltip(delete_button_active, "Delete filter");
+
+    let mut row = iced::widget::Row::with_capacity(10);
+    row = row.push(blend_box);
+    row = row.push(add_button);
+    row = row.push(unassign_button);
+    row = row.push(delete_button);
+
+    if let Some((nde_filter_id, nde_filter)) = nde_filter_data {
+        let name_box = iced::widget::text_input("Filter name", model::Named::name(nde_filter))
+            .on_input(move |name| message::Message::SetFilterName(nde_filter_id, name))
+            .padding(5.0)
+            .width(iced::Length::Fixed(200.0));
+
+        row = row.push(iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)));
+        row = row.push(iced::widget::text("Rename: "));
+        row = row.push(name_box);
+    }
+
+    if let Some(nde_result_or_error) = nde_result_or_error_opt.as_ref() {
+        let error_tooltip = view_error(pane_state, nde_result_or_error);
+
+        row = row.push(iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)));
+        row = row.push(error_tooltip);
+    }
+
+    iced::widget::container(row.spacing(5.0).align_y(iced::Alignment::Center))
+        .padding(5.0)
+        .into()
+}
+
+fn view_non_selected<'a>() -> iced::Element<'a, message::Message> {
+    iced::widget::container(iced::widget::text(
+        "To edit a filter, select exactly one event that has it assigned.",
+    ))
+    .center_x(iced::Length::Fill)
+    .center_y(iced::Length::Fill)
     .into()
 }
 
@@ -682,14 +680,7 @@ fn view_error<'a>(
             color: Some(error_state.color),
         });
 
-    iced::widget::tooltip(
-        error_message,
-        iced::widget::container(iced::widget::text(error_state.tooltip))
-            .padding(10)
-            .style(iced::widget::container::rounded_box),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into()
+    view::tooltip(error_message, error_state.tooltip).into()
 }
 
 fn format_error(

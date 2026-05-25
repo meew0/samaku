@@ -200,22 +200,19 @@ pub enum Message {
     ),
 
     // Create, update, assign, and delete NDE filters.
-    CreateEmptyFilter,
+    CreateEmptyFilterAndAssignToSelected,
     AssignFilterToEvents(subtitle::ExtradataId, HashSet<subtitle::EventIndex>),
     AssignFilterToSelectedEvents(subtitle::ExtradataId),
     UnassignFilterFromEvents(subtitle::ExtradataId, HashSet<subtitle::EventIndex>),
     UnassignFilterFromSelectedEvents(subtitle::ExtradataId),
-    MultiAssignFiltersToEvents(
-        Vec<Option<subtitle::ExtradataId>>,
-        HashSet<subtitle::EventIndex>,
-    ),
+    MultiAssignFiltersToEvents(Vec<(subtitle::EventIndex, Option<subtitle::ExtradataId>)>),
     SetFilterName(subtitle::ExtradataId, String),
     SetFilterGraph(subtitle::ExtradataId, nde::Graph),
     DeleteFilter(subtitle::ExtradataId),
     RestoreFilter(
         subtitle::ExtradataId,
         nde::Filter,
-        Vec<subtitle::EventIndex>,
+        HashSet<subtitle::EventIndex>,
     ),
 
     // Create and update nodes in the specified NDE filter.
@@ -329,7 +326,6 @@ pub enum Pane {
     // Messages for the node editor
     NodeEditorCameraChanged(iced::Point, f32),
     NodeEditorSelectionChanged(Vec<nde::graph::NodeId>),
-    NodeEditorFilterSelected(usize, pane::node_editor::FilterReference),
 
     // Messages for the style editor
     StyleEditorStyleSelected(usize),
