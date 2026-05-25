@@ -1,3 +1,10 @@
+//! Icon characters and the font that should be used to render them.
+//!
+//! The icon font we use is Bootstrap's (see [`resources::BOOTSTRAP_ICONS`]).
+
+/// The icon font that should be used to render the icon characters,
+/// such that they actually show up as icons rather than unrelated
+/// fallback glyphs.
 pub const FONT: iced::Font = iced::Font::with_name("bootstrap-icons");
 
 // https://icons.getbootstrap.com

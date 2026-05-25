@@ -1,3 +1,18 @@
+//! A combo box variant that is more reactive than iced's `combo_box`.
+//!
+//! [`iced::widget::combo_box`] has the disadvantage that it requires wrapping its options in a
+//! special `state` struct, somewhat hindering access to the underlying vector. To get around
+//! this, we have our own widget `BlendBox` that only depends on a reference to a
+//! [`model::NamedListIterable`], that is, a source of an iterator that produces `(id, name)`
+//! pairs.
+//!
+//! The disadvantage of this is a slight performance hit, since it requires iterating through
+//! every item in the iterable to get the filtered names list. However, we are able to retain the
+//! name as a reference all the way into iced, avoiding any allocations on the way.
+//!
+//! The name alludes to Blender's entity selection combo box, which this is kind of
+//! inspired from. We don't have nearly as much functionality, though.
+
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse;
 use iced::advanced::overlay;

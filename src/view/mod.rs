@@ -40,11 +40,15 @@ pub fn frame_coordinates_to_iced(
     point
 }
 
+/// Create a text widget containing the given icon character.
+///
+/// See [`view::icons`] for some icons to use.
 #[must_use]
 pub fn icon<'a>(codepoint: char) -> iced::widget::Text<'a> {
     iced::widget::text(codepoint).font(icons::FONT)
 }
 
+/// Create a button that shows the given icon character.
 #[must_use]
 pub fn icon_button<'a>(codepoint: char) -> iced::widget::Button<'a, message::Message> {
     iced::widget::button(
@@ -54,6 +58,7 @@ pub fn icon_button<'a>(codepoint: char) -> iced::widget::Button<'a, message::Mes
     )
 }
 
+/// Make the given element display a tooltip when hovered.
 #[must_use]
 pub fn tooltip<
     'a,
