@@ -122,6 +122,10 @@ impl Node for InputQuad {
         "Input: Perspective quad"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Input
+    }
+
     fn desired_inputs(&self) -> &[SocketType] {
         &[]
     }

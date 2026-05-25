@@ -72,7 +72,7 @@ pub const SAMAKU_WARNING: Color = Color::from_rgb(
 #[must_use]
 pub fn samaku_theme() -> Theme {
     Theme::custom(
-        "samaku".to_owned(),
+        "samaku",
         Palette {
             background: SAMAKU_BACKGROUND,
             text: SAMAKU_TEXT,

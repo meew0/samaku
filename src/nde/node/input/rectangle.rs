@@ -40,6 +40,10 @@ impl Node for InputRectangle {
         "Input: Rectangle"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Input
+    }
+
     fn desired_inputs(&self) -> &[SocketType] {
         &[]
     }

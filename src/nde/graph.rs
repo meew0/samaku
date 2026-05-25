@@ -215,7 +215,7 @@ impl Graph {
             .first()
             .expect("nde::Graph invariant violated: node 0 missing");
         assert!(
-            node_0.node.is_output(),
+            matches!(node_0.node.category(), node::Category::Output),
             "nde::Graph invariant violated: node 0 is not output node"
         );
 

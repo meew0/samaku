@@ -11,6 +11,10 @@ impl Node for Output {
         "Output"
     }
 
+    fn category(&self) -> super::Category {
+        super::Category::Output
+    }
+
     fn desired_inputs(&self) -> &[SocketType] {
         &[SocketType::AnyEvents]
     }
@@ -26,10 +30,6 @@ impl Node for Output {
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
-    }
-
-    fn is_output(&self) -> bool {
-        true
     }
 }
 

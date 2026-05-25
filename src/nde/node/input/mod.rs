@@ -1,4 +1,4 @@
-use super::{BasicError, Context, Node, Shell, SocketType, SocketValue};
+use super::{BasicError, Category, Context, Node, Shell, SocketType, SocketValue};
 use crate::model::reticule;
 use crate::{message, nde, subtitle};
 
@@ -15,6 +15,10 @@ pub struct InputEvent;
 impl Node for InputEvent {
     fn name(&self) -> &'static str {
         "Input: Event"
+    }
+
+    fn category(&self) -> Category {
+        Category::Input
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
@@ -66,6 +70,10 @@ pub struct InputPosition {
 impl Node for InputPosition {
     fn name(&self) -> &'static str {
         "Input: Position"
+    }
+
+    fn category(&self) -> Category {
+        Category::Input
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
@@ -151,6 +159,10 @@ pub struct InputTags {
 impl Node for InputTags {
     fn name(&self) -> &'static str {
         "Input: Tags"
+    }
+
+    fn category(&self) -> Category {
+        Category::Input
     }
 
     fn desired_inputs(&self) -> &[SocketType] {

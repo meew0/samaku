@@ -369,7 +369,7 @@ fn create_nodes(
         }
 
         let pin_list = iced::widget::column(socket_rows).spacing(4);
-        let content_style = iced_nodegraph::NodeContentStyle::process(&style::samaku_theme());
+        let content_style = node_content_style(node.category());
         let title =
             iced::widget::container(iced::widget::text(node.name())).padding(iced::Padding {
                 top: 4.0,
@@ -747,6 +747,20 @@ impl GraphErrorState {
 
     fn none() -> Self {
         Self::message("", "")
+    }
+}
+
+fn node_content_style(category: nde::node::Category) -> iced_nodegraph::NodeContentStyle {
+    match category {
+        nde::node::Category::Input => {
+            iced_nodegraph::NodeContentStyle::input(&style::samaku_theme())
+        }
+        nde::node::Category::Process => {
+            iced_nodegraph::NodeContentStyle::process(&style::samaku_theme())
+        }
+        nde::node::Category::Output => {
+            iced_nodegraph::NodeContentStyle::output(&style::samaku_theme())
+        }
     }
 }
 

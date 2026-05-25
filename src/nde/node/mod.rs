@@ -211,6 +211,15 @@ pub type Context<'a> = subtitle::compile::Context<'a>;
 #[expect(unused_variables, reason = "trait with default methods")]
 pub trait Node: dyn_clone::DynClone + Debug + Send {
     fn name(&self) -> &'static str;
+
+    /// The logical place of this node in the graph (input, process/intermediate, or output).
+    ///
+    /// Affects primarily the header color, but it may also be ascribed logical value,
+    /// for instance when checking that an output node is present in the graph.
+    fn category(&self) -> Category {
+        Category::Process
+    }
+
     fn desired_inputs(&self) -> &[SocketType];
     fn predicted_outputs(&self) -> &[SocketType];
 
@@ -281,14 +290,17 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     fn content_size(&self) -> iced::Size {
         iced::Size::new(200.0, 75.0)
     }
-
-    fn is_output(&self) -> bool {
-        false
-    }
 }
 
 // Generates an impl of `Clone` for `Box<dyn Node>`, to ensure nodes (and thus NDE filters) are cloneable
 dyn_clone::clone_trait_object!(Node);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Category {
+    Input,
+    Process,
+    Output,
+}
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum BasicError {
