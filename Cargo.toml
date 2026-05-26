@@ -45,7 +45,7 @@ regex = "1.12"
 interavl = "0.6"
 indexmap = "2.14"
 fast-float2 = "0.2"
-nalgebra = "0.34"
+glam = { version = "0.33", features = ["serde"] }
 
 # dtolnay collection
 thiserror = "2.0"

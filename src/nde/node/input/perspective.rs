@@ -2,7 +2,7 @@ use super::{Context, Node, Shell, SocketType, SocketValue};
 use crate::model::reticule;
 use crate::nde::tags::perspective;
 use crate::{message, model, nde, style, subtitle, view};
-use nalgebra::{Vector2, vector};
+use glam::DVec2;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputQuad {
@@ -24,7 +24,7 @@ fn bool_true() -> bool {
 }
 
 /// Returns a mutable reference to quad corner `index` (0 = q0 … 3 = q3).
-fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut Vector2<f64> {
+fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut DVec2 {
     match index {
         0 => &mut quad.q0,
         1 => &mut quad.q1,
@@ -34,12 +34,7 @@ fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut Vector2<f
     }
 }
 
-fn uv_update_corner(
-    c1: &mut Vector2<f64>,
-    c2: &mut Vector2<f64>,
-    new_uv: Vector2<f64>,
-    index: usize,
-) {
+fn uv_update_corner(c1: &mut DVec2, c2: &mut DVec2, new_uv: DVec2, index: usize) {
     match index {
         0 => {
             c1.x = new_uv.x;
@@ -180,7 +175,9 @@ impl Node for InputQuad {
                 self.show_outer = !self.show_outer;
                 if self.show_outer {
                     // Rebuild outer from the current inner using Aegisub's default UV coords.
-                    self.outer = self.inner.outer(vector![0.25, 0.25], vector![0.75, 0.75]);
+                    self.outer = self
+                        .inner
+                        .outer(DVec2::new(0.25, 0.25), DVec2::new(0.75, 0.75));
                 }
             }
             1 => self.lock_inner = !self.lock_inner,
@@ -225,7 +222,7 @@ impl Node for InputQuad {
         new_position: nde::tags::Position,
     ) -> anyhow::Result<nde::tags::Position> {
         let old_position = reticules[index].position;
-        let new_pos_vec = vector![new_position.x, new_position.y];
+        let new_pos_vec = DVec2::new(new_position.x, new_position.y);
 
         if !self.show_outer {
             // Inner-only mode: drag inner corners freely (no UV-rect constraint).
@@ -280,8 +277,8 @@ impl Node for InputQuad {
             let c2 = self.outer.xy_to_uv(self.inner.q2);
             // d1/d2: inverse — UV of outer.q0 and outer.q2 within the inner quad.
             let denom = c2 - c1;
-            let mut d1 = (-c1).component_div(&denom);
-            let mut d2 = (vector![1.0_f64, 1.0_f64] - c1).component_div(&denom);
+            let mut d1 = -c1 / denom;
+            let mut d2 = (DVec2::new(1.0_f64, 1.0_f64) - c1) / denom;
 
             // Move only the axes controlled by the dragged corner.
             let new_uv = self.inner.xy_to_uv(new_pos_vec);
@@ -289,8 +286,8 @@ impl Node for InputQuad {
 
             // Back-compute c1/c2 and recompute all four outer corners.
             let d_denom = d2 - d1;
-            let new_c1 = (-d1).component_div(&d_denom);
-            let new_c2 = (vector![1.0_f64, 1.0_f64] - d1).component_div(&d_denom);
+            let new_c1 = -d1 / d_denom;
+            let new_c2 = (DVec2::new(1.0_f64, 1.0_f64) - d1) / d_denom;
             let new_outer = self.inner.outer(new_c1, new_c2);
             if new_outer.is_convex() {
                 self.outer = new_outer;
@@ -311,7 +308,7 @@ impl Node for InputQuad {
     ) {
         use iced::widget::canvas;
 
-        let to_iced = |corner: &Vector2<f64>| {
+        let to_iced = |corner: &DVec2| {
             view::frame_coordinates_to_iced(corner.x, corner.y, bounds.size(), storage_size)
         };
 
@@ -343,7 +340,7 @@ impl Node for InputQuad {
                 .with_width(1.0)
         };
 
-        let quad_path = |corners: &[&Vector2<f64>; 4]| {
+        let quad_path = |corners: &[&DVec2; 4]| {
             canvas::Path::new(|path| {
                 path.move_to(to_iced(corners[0]));
                 for corner in &corners[1..] {
@@ -382,15 +379,15 @@ impl Node for InputQuad {
                 }
 
                 let grid_path = canvas::Path::new(|builder| {
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![GRID_MIN, uv_t])));
+                    builder.move_to(to_iced(&self.inner.uv_to_xy(DVec2::new(GRID_MIN, uv_t))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_u = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_u, uv_t])));
+                        builder.line_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_u, uv_t))));
                     }
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, GRID_MIN])));
+                    builder.move_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_t, GRID_MIN))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_v = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, uv_v])));
+                        builder.line_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_t, uv_v))));
                     }
                 });
                 canvas_frame.stroke(
@@ -421,8 +418,8 @@ inventory::submit! {
     Shell::new(
         &["Input", "Perspective quad"],
         || Box::new(InputQuad {
-            inner: perspective::Quad::make_rect(vector![200.0, 200.0], vector![300.0, 300.0]),
-            outer: perspective::Quad::make_rect(vector![100.0, 100.0], vector![400.0, 400.0]),
+            inner: perspective::Quad::make_rect(DVec2::new(200.0, 200.0), DVec2::new(300.0, 300.0)),
+            outer: perspective::Quad::make_rect(DVec2::new(100.0, 100.0), DVec2::new(400.0, 400.0)),
             show_outer: true,
             lock_inner: false,
             show_grid: false,
