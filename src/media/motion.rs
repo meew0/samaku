@@ -1,10 +1,87 @@
 pub use mv::MotionModel as Model;
 pub use mv::Point;
 pub use mv::Region;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::model;
 
 use super::bindings::mv;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct TrackId(u64);
+
+#[derive(Debug)]
+pub struct TrackList {
+    map: HashMap<TrackId, Track>,
+    next_id: TrackId,
+}
+
+#[derive(Debug, Clone)]
+pub struct Track {
+    markers: BTreeMap<model::FrameNumber, Marker>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct Marker {
+    region: Region,
+    key_state: KeyState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum KeyState {
+    /// Manually set/edited marker which acts as the source of truth.
+    Key,
+
+    /// Marker tracked by motion tracking from a Key marker.
+    Tracked,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TrackSettings {
+    model: Model,
+    match_mode: MatchMode,
+    pre_pass: bool,
+    normalize: bool,
+    channels: Channels,
+}
+
+impl Default for TrackSettings {
+    fn default() -> Self {
+        Self {
+            model: Model::Translation,
+            match_mode: MatchMode::Key,
+            pre_pass: true,
+            normalize: false,
+            channels: Channels::rgb(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchMode {
+    /// Match region content to that of the key marker.
+    Key,
+
+    /// Match region content to that of the marker in the previous frame.
+    Previous,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Channels {
+    red: bool,
+    green: bool,
+    blue: bool,
+}
+
+impl Channels {
+    fn rgb() -> Self {
+        Self {
+            red: true,
+            green: true,
+            blue: true,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct PatchRequest {
