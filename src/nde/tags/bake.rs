@@ -6,8 +6,8 @@
 use super::{
     Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency,
     Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke, KaraokeEffect,
-    KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove, Rectangle,
-    Resettable, SimpleFade, Transparency, lerp::Lerp,
+    KaraokeOnset, Local, LocalAnimatable, Milliseconds, PositionOrMove, Rectangle, Resettable,
+    SimpleFade, Transparency, lerp::Lerp,
 };
 use crate::nde::Span;
 use crate::subtitle;
@@ -1431,12 +1431,9 @@ fn bake_move(time: TimeContext, global: &mut Global) {
             numerator / delta_t
         };
 
-        let new_x = power * (move_data.final_position.x - move_data.initial_position.x)
-            + move_data.initial_position.x;
-        let new_y = power * (move_data.final_position.y - move_data.initial_position.y)
-            + move_data.initial_position.y;
-
-        global.position = Some(PositionOrMove::Position(Position { x: new_x, y: new_y }));
+        let new_position = power * (move_data.final_position - move_data.initial_position)
+            + move_data.initial_position;
+        global.position = Some(PositionOrMove::Position(new_position));
     }
 }
 
@@ -2246,8 +2243,8 @@ mod tests {
     fn global_move() {
         let global = Global {
             position: Some(PositionOrMove::Move(Move {
-                initial_position: Position { x: 10.0, y: 20.0 },
-                final_position: Position { x: 30.0, y: 60.0 },
+                initial_position: DVec2::new(10.0, 20.0),
+                final_position: DVec2::new(30.0, 60.0),
                 timing: Some(MoveTiming {
                     start_time: Milliseconds(500),
                     end_time: Milliseconds(1000),

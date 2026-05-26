@@ -190,7 +190,7 @@ impl Node for InputQuad {
     fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
         let circle = |radius| reticule::Reticule {
             shape: reticule::Shape::Circle,
-            position: nde::tags::Position::default(),
+            position: DVec2::ZERO,
             radius,
         };
 
@@ -219,8 +219,8 @@ impl Node for InputQuad {
         &mut self,
         reticules: &mut reticule::Reticules,
         index: reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: DVec2,
+    ) -> anyhow::Result<DVec2> {
         let old_position = reticules[index].position;
         let new_pos_vec = DVec2::new(new_position.x, new_position.y);
 

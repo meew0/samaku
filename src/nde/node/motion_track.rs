@@ -9,7 +9,7 @@ use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
-    pub region_center: nde::tags::Position,
+    pub region_center: glam::DVec2,
     pub track: BTreeMap<model::FrameNumber, media::motion::Region>,
 }
 
@@ -42,7 +42,7 @@ impl Node for MotionTrack {
             let frame = frame_rate.ms_to_frame(cloned.start.0);
             if let Some(region) = self.track.get(&frame) {
                 cloned.global_tags.position =
-                    Some(nde::tags::PositionOrMove::Position(nde::tags::Position {
+                    Some(nde::tags::PositionOrMove::Position(glam::DVec2 {
                         x: region.center.x,
                         y: region.center.y,
                     }));
@@ -100,8 +100,8 @@ impl Node for MotionTrack {
         &mut self,
         reticules: &mut reticule::Reticules,
         index: reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: glam::DVec2,
+    ) -> anyhow::Result<glam::DVec2> {
         if index.0 != 0 {
             anyhow::bail!("Reticule index out of range: {index}");
         }
@@ -182,7 +182,7 @@ inventory::submit! {
     Shell::new(
         &["Motion track"],
         || Box::new(MotionTrack {
-            region_center: nde::tags::Position {
+            region_center: glam::DVec2 {
                 x: 100.0,
                 y: 100.0,
             },

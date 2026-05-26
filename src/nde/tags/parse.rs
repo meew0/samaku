@@ -4,7 +4,7 @@ use super::{
     Alignment, Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade,
     DecimalTransparency, Drawing, Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global,
     GlobalAnimatable, HorizontalAlignment, KaraokeEffect, Local, LocalAnimatable, Maybe2D,
-    Milliseconds, Move, MoveTiming, Position, PositionOrMove, Rectangle, Resettable, SimpleFade,
+    Milliseconds, Move, MoveTiming, PositionOrMove, Rectangle, Resettable, SimpleFade,
     Transparency, VerticalAlignment, WrapStyle,
 };
 
@@ -344,11 +344,11 @@ fn parse_tag(tag: &str, global: &mut Global, block: &mut TagBlock) -> bool {
             });
 
             global.position = Some(PositionOrMove::Move(Move {
-                initial_position: Position {
+                initial_position: glam::DVec2 {
                     x: twa.float_arg(0).unwrap(),
                     y: twa.float_arg(1).unwrap(),
                 },
-                final_position: Position {
+                final_position: glam::DVec2 {
                     x: twa.float_arg(2).unwrap(),
                     y: twa.float_arg(3).unwrap(),
                 },
@@ -896,8 +896,8 @@ impl<'a> TagWithArguments<'a> {
         })
     }
 
-    fn position_args(&self) -> Option<Position> {
-        (self.nargs() == 2).then(|| Position {
+    fn position_args(&self) -> Option<glam::DVec2> {
+        (self.nargs() == 2).then(|| glam::DVec2 {
             x: self.float_arg(0).unwrap(),
             y: self.float_arg(1).unwrap(),
         })
@@ -1192,7 +1192,7 @@ mod tests {
         assert_eq!(
             *global,
             Global {
-                position: Some(PositionOrMove::Position(Position { x: 10.0, y: 11.0 })),
+                position: Some(PositionOrMove::Position(glam::DVec2 { x: 10.0, y: 11.0 })),
                 ..Default::default()
             }
         );
@@ -1309,7 +1309,7 @@ mod tests {
         );
         assert_matches!(global.position, Some(PositionOrMove::Position(_)));
         assert_matches!(global.fade, Some(Fade::Simple(_)));
-        assert_eq!(global.origin, Some(Position { x: 1.0, y: 2.0 }));
+        assert_eq!(global.origin, Some(glam::DVec2 { x: 1.0, y: 2.0 }));
         assert_matches!(global.vector_clip, Some(Clip::Inverse(_)));
 
         // These tags SHOULD override their predecessors.
@@ -1475,7 +1475,7 @@ mod tests {
         );
         assert_eq!(
             global.position,
-            Some(PositionOrMove::Position(Position { x: 19.0, y: 20.0 }))
+            Some(PositionOrMove::Position(glam::DVec2 { x: 19.0, y: 20.0 }))
         );
         assert_eq!(
             global.fade,
@@ -1489,7 +1489,7 @@ mod tests {
                 fade_out_end: Milliseconds(3000),
             }))
         );
-        assert_eq!(global.origin, Some(Position { x: 21.0, y: 22.0 }));
+        assert_eq!(global.origin, Some(glam::DVec2 { x: 21.0, y: 22.0 }));
         assert_eq!(block.new_local.animations.len(), 1);
         assert_eq!(
             block.new_local.animations[0],
@@ -1584,8 +1584,8 @@ mod tests {
         assert_eq!(
             global.position,
             Some(PositionOrMove::Move(Move {
-                initial_position: Position { x: 2.0, y: 3.0 },
-                final_position: Position { x: 4.0, y: 5.0 },
+                initial_position: glam::DVec2 { x: 2.0, y: 3.0 },
+                final_position: glam::DVec2 { x: 4.0, y: 5.0 },
                 timing: None,
             }))
         );
@@ -2035,7 +2035,10 @@ mod tests {
             tag_found: true,
         };
 
-        assert_eq!(twa.position_args(), Some(Position { x: 123.0, y: 456.0 }));
+        assert_eq!(
+            twa.position_args(),
+            Some(glam::DVec2 { x: 123.0, y: 456.0 })
+        );
 
         let twa2 = TagWithArguments {
             first_part: "",

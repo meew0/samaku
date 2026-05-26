@@ -284,8 +284,8 @@ impl Span {
 /// Represents the screen-space bounding box of an event.
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingBox {
-    top_left: tags::Position,
-    bottom_right: tags::Position,
+    top_left: glam::DVec2,
+    bottom_right: glam::DVec2,
 }
 
 #[cfg(test)]

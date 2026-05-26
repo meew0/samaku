@@ -1103,8 +1103,8 @@ impl Extradata {
         &mut self,
         reticules: &mut model::reticule::Reticules,
         reticule_index: model::reticule::Index,
-        position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        position: glam::DVec2,
+    ) -> anyhow::Result<glam::DVec2> {
         let node = self.get_node_mut(reticules.source_filter_index, reticules.source_node_index)?;
         node.node
             .reticule_update(reticules, reticule_index, position)

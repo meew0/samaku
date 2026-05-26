@@ -4,7 +4,7 @@
 //! See https://mz.sb/persp for an explanation of the mathematics behind this transformation.
 
 use crate::nde::BoundingBox;
-use crate::nde::tags::{Alignment, Global, Local, Maybe3D, Position, PositionOrMove, Resettable};
+use crate::nde::tags::{Alignment, Global, Local, Maybe3D, PositionOrMove, Resettable};
 use crate::subtitle;
 use glam::{DMat2, DMat3, DVec2, DVec3, swizzles::Vec3Swizzles as _};
 
@@ -263,7 +263,7 @@ pub enum OrgMode {
     /// (no shearing = no `\fax`).
     NoFax,
     /// `\org` is kept at whatever the caller already had.
-    Keep(Position),
+    Keep(DVec2),
 }
 
 /// Calculates the perspective override tags that make a subtitle's base rectangle project onto the given quad.
@@ -683,8 +683,8 @@ mod tests {
         };
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(300.0, 80.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(300.0, 80.0),
         };
         let align = Alignment::try_from_an(5).unwrap();
 
@@ -747,8 +747,8 @@ mod tests {
         };
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(280.0, 70.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(280.0, 70.0),
         };
         let align = Alignment::try_from_an(5).unwrap();
         let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
@@ -782,8 +782,8 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(200.0, 60.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(200.0, 60.0),
         };
         let align = Alignment::try_from_an(7).unwrap();
 
@@ -792,7 +792,7 @@ mod tests {
         let perspective_nofax = quad_to_tags(&quad, OrgMode::NoFax, align, bounding_box, screen_z);
         let perspective_keep = quad_to_tags(
             &quad,
-            OrgMode::Keep(Position::new(400.0, 240.0)),
+            OrgMode::Keep(DVec2::new(400.0, 240.0)),
             align,
             bounding_box,
             screen_z,

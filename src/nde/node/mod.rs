@@ -50,7 +50,7 @@ pub enum SocketValue<'a> {
     LocalTags(Box<super::tags::Local>),
     GlobalTags(Box<super::tags::Global>),
 
-    Position(nde::tags::Position),
+    Position(glam::DVec2),
     Rectangle(nde::tags::Rectangle),
     Quad(nde::tags::perspective::Quad),
 
@@ -269,8 +269,8 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
         &mut self,
         reticules: &mut model::reticule::Reticules,
         index: model::reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: glam::DVec2,
+    ) -> anyhow::Result<glam::DVec2> {
         anyhow::bail!("Node '{}' does not provide any reticules", self.name());
     }
 

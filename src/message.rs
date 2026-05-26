@@ -239,7 +239,7 @@ pub enum Message {
     // Create and update reticules — the controls visible on top of the video when triggered by
     // certain NDE nodes.
     ActivateNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
-    UpdateReticulePosition(model::reticule::Index, nde::tags::Position),
+    UpdateReticulePosition(model::reticule::Index, glam::DVec2),
 
     /// Tell the video playback worker to start motion tracking and sending the results to the
     /// node with the given ID.
