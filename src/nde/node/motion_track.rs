@@ -58,7 +58,7 @@ impl Node for MotionTrack {
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        let initial_point = media::motion::Point {
+        let initial_point = glam::DVec2 {
             x: self.region_center.x,
             y: self.region_center.y,
         };

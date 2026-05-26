@@ -98,23 +98,19 @@ impl Video {
     fn get_frame_internal(
         &self,
         n: model::FrameNumber,
-    ) -> anyhow::Result<(u32, u32, ffms2::Frame)> {
+    ) -> anyhow::Result<(glam::UVec2, ffms2::Frame)> {
         let ffms_frame = self.source.get_frame(n.0)?;
         anyhow::ensure!(
             ffms_frame.pixel_format() == *PIXEL_FORMAT,
             "Frame is not in RGBA format"
         );
 
-        let width: u32 = ffms_frame
-            .width()
+        let size: glam::UVec2 = ffms_frame
+            .size()
             .try_into()
-            .expect("frame width should not be negative");
-        let height: u32 = ffms_frame
-            .height()
-            .try_into()
-            .expect("frame height should not be negative");
+            .expect("frame size should not be negative");
 
-        Ok((width, height, ffms_frame))
+        Ok((size, ffms_frame))
     }
 
     /// Retrieves the `n`th frame and returns it in `iced`'s format.
@@ -123,10 +119,10 @@ impl Video {
         n: model::FrameNumber,
     ) -> anyhow::Result<iced::widget::image::Handle> {
         let instant = std::time::Instant::now();
-        let (width, height, ffms_frame) = self.get_frame_internal(n)?;
+        let (size, ffms_frame) = self.get_frame_internal(n)?;
         let elapsed_obtain = instant.elapsed();
 
-        let out_len = width as usize * height as usize * 4;
+        let out_len = size.x as usize * size.y as usize * 4;
         let mut out = vec![0; out_len];
 
         let instant2 = std::time::Instant::now();
@@ -140,7 +136,7 @@ impl Video {
             "Frame profiling [display]: obtaining frame {n:?} took {elapsed_obtain:.2?}, packing it took {elapsed_copy:.2?}",
         );
 
-        Ok(iced::widget::image::Handle::from_rgba(width, height, out))
+        Ok(iced::widget::image::Handle::from_rgba(size.x, size.y, out))
     }
 
     /// Get a patch (monochrome region) of frame #`n` with the bounds given by the `request`.
@@ -156,59 +152,35 @@ impl Video {
         const GREYSCALE_COEFFICIENTS: [f32; 3] = [0.000_833_373, 0.002_804_71, 0.000_283_14];
 
         let instant = std::time::Instant::now();
-        let (width, height, ffms_frame) = self.get_frame_internal(n).unwrap(); // TODO proper error handling
+        let (size, ffms_frame) = self.get_frame_internal(n).unwrap(); // TODO proper error handling
         let elapsed_obtain = instant.elapsed();
 
         // Fit request parameters into the frame bounds
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "we clamp to >0.0, so it will never be negative"
-        )]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "we clamp to a value that will definitely fit into a u32"
-        )]
-        let (left_within_frame, top_within_frame) = (
-            request.left.clamp(0.0, f64::from(width)).floor() as u32,
-            request.top.clamp(0.0, f64::from(height)).floor() as u32,
-        );
+        let origin_within_frame = request
+            .origin
+            .clamp(glam::DVec2::ZERO, glam::DVec2::from(size))
+            .floor()
+            .as_uvec2();
 
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "we clamp to >0.0, so it will never be negative"
-        )]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "we clamp to a value that will definitely fit into a u32"
-        )]
-        let true_width = request
-            .width
-            .clamp(0.0, f64::from(width - left_within_frame))
-            .ceil() as u32;
-
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "we clamp to >0.0, so it will never be negative"
-        )]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "we clamp to a value that will definitely fit into a u32"
-        )]
-        let true_height = request
-            .height
-            .clamp(0.0, f64::from(height - top_within_frame))
-            .ceil() as u32;
+        let true_size = request
+            .size
+            .clamp(
+                glam::DVec2::ZERO,
+                glam::DVec2::from(size - origin_within_frame),
+            )
+            .ceil()
+            .as_uvec2();
 
         assert!(
-            left_within_frame + true_width <= width,
+            origin_within_frame.x + true_size.x <= size.x,
             "right side of clamped patch request should fit within horizontal bounds"
         );
         assert!(
-            top_within_frame + true_height <= height,
+            origin_within_frame.y + true_size.y <= size.y,
             "bottom side of clamped patch request should fit within vertical bounds"
         );
 
-        let mut out = vec![0.0_f32; true_width as usize * true_height as usize];
+        let mut out = vec![0.0_f32; true_size.x as usize * true_size.y as usize];
 
         let instant2 = std::time::Instant::now();
 
@@ -217,10 +189,10 @@ impl Video {
         ffms_frame.copy_plane(
             0,
             &mut out,
-            Some(true_width as usize),
-            Some(true_height as usize),
-            left_within_frame as isize,
-            top_within_frame as isize,
+            Some(true_size.x as usize),
+            Some(true_size.y as usize),
+            origin_within_frame.x as isize,
+            origin_within_frame.y as isize,
             2,
             0,
             |dst, src| {
@@ -244,10 +216,8 @@ impl Video {
 
         super::motion::PatchResponse {
             data: out,
-            left: left_within_frame,
-            top: top_within_frame,
-            width: true_width,
-            height: true_height,
+            origin: origin_within_frame,
+            size: true_size,
         }
     }
 }
@@ -257,8 +227,8 @@ mod tests {
     use super::*;
 
     fn get_frame_rgba(video: &Video, n: i32) -> Vec<u8> {
-        let (width, height, ffms_frame) = video.get_frame_internal(model::FrameNumber(n)).unwrap();
-        let mut out = vec![0_u8; width as usize * height as usize * 4];
+        let (size, ffms_frame) = video.get_frame_internal(model::FrameNumber(n)).unwrap();
+        let mut out = vec![0_u8; size.x as usize * size.y as usize * 4];
         ffms_frame.copy_plane(0, out.as_mut_slice(), None, None, 0, 0, 2, 2, |dst, src| {
             dst.copy_from_slice(src);
         });

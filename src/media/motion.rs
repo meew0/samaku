@@ -1,5 +1,5 @@
+use glam::{DVec2, UVec2};
 pub use mv::MotionModel as Model;
-pub use mv::Point;
 pub use mv::Region;
 
 use crate::model;
@@ -8,19 +8,15 @@ use super::bindings::mv;
 
 #[derive(Debug, Clone, Copy)]
 pub struct PatchRequest {
-    pub left: f64,
-    pub top: f64,
-    pub width: f64,
-    pub height: f64,
+    pub origin: DVec2,
+    pub size: DVec2,
 }
 
 #[derive(Debug, Clone)]
 pub struct PatchResponse {
     pub data: Vec<f32>,
-    pub left: u32,
-    pub top: u32,
-    pub width: u32,
-    pub height: u32,
+    pub origin: UVec2,
+    pub size: UVec2,
 }
 
 pub struct Tracker<'a, V> {
@@ -82,10 +78,8 @@ impl<'a, V> Tracker<'a, V> {
             .expect("there should be at least one region in the track");
 
         let patch_request = PatchRequest {
-            left: last_region.center.x - self.search_radius,
-            top: last_region.center.y - self.search_radius,
-            width: 2.0 * self.search_radius,
-            height: 2.0 * self.search_radius,
+            origin: last_region.center - self.search_radius,
+            size: DVec2::splat(2.0 * self.search_radius),
         };
 
         let patch_response_1 = (self.patch_provider)(self.video, self.last_frame, patch_request);
@@ -97,25 +91,17 @@ impl<'a, V> Tracker<'a, V> {
 
         let image1 = mv::MonochromeImage::new(
             patch_response_1.data.as_slice(),
-            patch_response_1.width.try_into().unwrap(),
-            patch_response_1.height.try_into().unwrap(),
+            patch_response_1.size.try_into().unwrap(),
         );
         let image2 = mv::MonochromeImage::new(
             patch_response_2.data.as_slice(),
-            patch_response_2.width.try_into().unwrap(),
-            patch_response_2.height.try_into().unwrap(),
+            patch_response_2.size.try_into().unwrap(),
         );
 
         // In theory, the two different patch responses might have different origin points,
         // because the frames might be of a different size.
-        let region1 = last_region.offset(
-            -f64::from(patch_response_1.left),
-            -f64::from(patch_response_1.top),
-        );
-        let predicted_region2 = last_region.offset(
-            -f64::from(patch_response_2.left),
-            -f64::from(patch_response_2.top),
-        );
+        let region1 = last_region.offset(-DVec2::from(patch_response_1.origin));
+        let predicted_region2 = last_region.offset(-DVec2::from(patch_response_2.origin));
 
         let options = mv::TrackRegionOptions {
             direction: mv::TrackRegionDirection::Forward,
@@ -132,10 +118,8 @@ impl<'a, V> Tracker<'a, V> {
 
         match result {
             Some(refined_region2) => {
-                self.track.push(refined_region2.offset(
-                    f64::from(patch_response_2.left),
-                    f64::from(patch_response_2.top),
-                ));
+                self.track
+                    .push(refined_region2.offset(DVec2::from(patch_response_2.origin)));
                 self.last_frame += model::FrameDelta(1);
                 TrackResult::Success
             }
@@ -165,7 +149,7 @@ mod tests {
         let index = video::Video::create_indexer(&path)?.run()?;
         let video = video::Video::load(&path, index).expect("should load video");
 
-        let initial_marker = Region::from_center_and_radius(Point { x: 272.0, y: 81.0 }, 10.0);
+        let initial_marker = Region::from_center_and_radius(DVec2 { x: 272.0, y: 81.0 }, 10.0);
         let mut tracker = Tracker::new(
             &video,
             video::Video::get_libmv_patch,

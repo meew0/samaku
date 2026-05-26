@@ -675,6 +675,13 @@ impl Frame {
         }
     }
 
+    pub(crate) fn size(&self) -> glam::IVec2 {
+        glam::IVec2 {
+            x: self.width(),
+            y: self.height(),
+        }
+    }
+
     pub(crate) fn color_space(&self) -> i32 {
         unsafe { (*self.frame).ColorSpace }
     }
