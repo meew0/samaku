@@ -77,7 +77,11 @@ impl Node for InputRectangle {
             .into()
     }
 
-    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+    fn reticule_activate(
+        &mut self,
+        _active_event: &subtitle::Event<'static>,
+    ) -> Vec<reticule::Reticule> {
+        // TODO start with active event bounds
         let mut reticule_list = vec![
             reticule::Reticule {
                 shape: reticule::Shape::CornerTopLeft,

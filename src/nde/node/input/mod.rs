@@ -109,7 +109,11 @@ impl Node for InputPosition {
             .into()
     }
 
-    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+    fn reticule_activate(
+        &mut self,
+        _active_event: &subtitle::Event<'static>,
+    ) -> Vec<reticule::Reticule> {
+        // TODO start with active event position
         vec![reticule::Reticule {
             shape: reticule::Shape::Cross,
             position: self.value,

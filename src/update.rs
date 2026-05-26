@@ -1242,7 +1242,12 @@ fn update_internal(
                 let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
                 let node_id = nodes[0];
                 let node = &mut filter.graph.nodes[node_id.0];
-                let reticule_list = node.node.reticule_activate();
+                let active_event = global_state
+                    .subtitles
+                    .events
+                    .active_event(&global_state.selected_events)
+                    .expect("active event should exist if node messages are being sent");
+                let reticule_list = node.node.reticule_activate(active_event);
 
                 global_state.reticules = if reticule_list.is_empty() {
                     None
@@ -1328,7 +1333,14 @@ fn update_internal(
             if is_reticule_source {
                 let new_list = {
                     let filter = global_state.subtitles.extradata[filter_index].assert_filter_mut();
-                    filter.graph.nodes[node_index.0].node.reticule_activate()
+                    let active_event = global_state
+                        .subtitles
+                        .events
+                        .active_event(&global_state.selected_events)
+                        .expect("active event should exist if node messages are being sent");
+                    filter.graph.nodes[node_index.0]
+                        .node
+                        .reticule_activate(active_event)
                 };
                 if new_list.is_empty() {
                     global_state.reticules = None;
