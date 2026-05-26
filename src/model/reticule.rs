@@ -59,7 +59,7 @@ impl Reticule {
         size: iced::Size,
         storage_size: subtitle::Resolution,
     ) -> iced::Point {
-        view::frame_coordinates_to_iced(self.position.x, self.position.y, size, storage_size)
+        view::frame_coordinates_to_iced(self.position, size, storage_size)
     }
 
     #[must_use]

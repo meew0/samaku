@@ -125,12 +125,8 @@ impl Node for MotionTrack {
             let (last_frame, _) = self.track.last_key_value().unwrap();
 
             for (frame_number, region) in &self.track {
-                let iced_point = view::frame_coordinates_to_iced(
-                    region.center.x,
-                    region.center.y,
-                    bounds.size(),
-                    storage_size,
-                );
+                let iced_point =
+                    view::frame_coordinates_to_iced(region.center, bounds.size(), storage_size);
 
                 #[expect(
                     clippy::cast_sign_loss,

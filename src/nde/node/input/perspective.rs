@@ -308,22 +308,11 @@ impl Node for InputQuad {
     ) {
         use iced::widget::canvas;
 
-        let to_iced = |corner: &DVec2| {
-            view::frame_coordinates_to_iced(corner.x, corner.y, bounds.size(), storage_size)
-        };
+        let to_iced =
+            |corner: DVec2| view::frame_coordinates_to_iced(corner, bounds.size(), storage_size);
 
-        let inner = [
-            &self.inner.q0,
-            &self.inner.q1,
-            &self.inner.q2,
-            &self.inner.q3,
-        ];
-        let outer = [
-            &self.outer.q0,
-            &self.outer.q1,
-            &self.outer.q2,
-            &self.outer.q3,
-        ];
+        let inner = [self.inner.q0, self.inner.q1, self.inner.q2, self.inner.q3];
+        let outer = [self.outer.q0, self.outer.q1, self.outer.q2, self.outer.q3];
 
         let solid_stroke = canvas::Stroke::default()
             .with_color(style::SAMAKU_PRIMARY)
@@ -340,10 +329,10 @@ impl Node for InputQuad {
                 .with_width(1.0)
         };
 
-        let quad_path = |corners: &[&DVec2; 4]| {
+        let quad_path = |corners: &[DVec2; 4]| {
             canvas::Path::new(|path| {
                 path.move_to(to_iced(corners[0]));
-                for corner in &corners[1..] {
+                for &corner in &corners[1..] {
                     path.line_to(to_iced(corner));
                 }
                 path.close();
@@ -379,15 +368,15 @@ impl Node for InputQuad {
                 }
 
                 let grid_path = canvas::Path::new(|builder| {
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(DVec2::new(GRID_MIN, uv_t))));
+                    builder.move_to(to_iced(self.inner.uv_to_xy(DVec2::new(GRID_MIN, uv_t))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_u = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_u, uv_t))));
+                        builder.line_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_u, uv_t))));
                     }
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_t, GRID_MIN))));
+                    builder.move_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_t, GRID_MIN))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_v = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(DVec2::new(uv_t, uv_v))));
+                        builder.line_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_t, uv_v))));
                     }
                 });
                 canvas_frame.stroke(
