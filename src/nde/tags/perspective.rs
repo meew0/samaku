@@ -202,6 +202,20 @@ impl Quad {
     }
 }
 
+impl std::ops::Index<usize> for Quad {
+    type Output = DVec2;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.q0,
+            1 => &self.q1,
+            2 => &self.q2,
+            3 => &self.q3,
+            _ => panic!("corner index out of range: {index}"),
+        }
+    }
+}
+
 type SerdeQuad = (f64, f64, f64, f64, f64, f64, f64, f64);
 impl From<SerdeQuad> for Quad {
     fn from(value: SerdeQuad) -> Self {
@@ -283,33 +297,12 @@ pub fn quad_to_tags(
     bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Perspective {
-    // Find a parallelogram projecting to the quad. Independent of translation.
-    let diag = quad.q2 - quad.q0;
-    let side2 = quad.q1 - quad.q2;
-    let side3 = quad.q3 - quad.q2;
-    let z_vector = solve_2x2(side2, side3, -diag);
-    let (z1, z3) = (z_vector[0], z_vector[1]);
-
-    let midpoint = quad.midpoint();
-
-    let org = match org_mode {
-        OrgMode::Center => midpoint,
-        OrgMode::Keep(previous) => previous.into(),
-        OrgMode::NoFax => calculate_no_fax_org(quad, z1, z3, screen_z),
-    };
-
-    // Normalize to the chosen `\org`.
-    let q0 = quad.q0 - org;
-    let q1 = quad.q1 - org;
-    let q2 = quad.q2 - org;
-    let q3 = quad.q3 - org;
-
-    // Lift the quad into the reconstructed 3D parallelogram.
-    let r0 = DVec3::new(q0.x, q0.y, screen_z);
-    let r1 = z1 * DVec3::new(q1.x, q1.y, screen_z);
-    let r2 = (z1 + z3 - 1.0) * DVec3::new(q2.x, q2.y, screen_z);
-    let r3 = z3 * DVec3::new(q3.x, q3.y, screen_z);
-    let mut parallelogram = [r0, r1, r2, r3];
+    // Find the world-space parallelogram that would result in the given quad
+    // when projected on the screen, observing from a certain origin point
+    // which depends on `org_mode`. Returns the determined origin point
+    // as well.
+    let (org, mut parallelogram) = lift(quad, org_mode, screen_z);
+    let [r0, r1, _r2, r3] = parallelogram;
 
     // Find the z coordinate of the point projecting to the origin.
     let top_side = r1 - r0;
@@ -353,20 +346,17 @@ pub fn quad_to_tags(
 
     let width = top_edge.length();
     let height = left_edge.y.abs();
-    let (bbox_min, bbox_max): (DVec2, DVec2) = (
-        bounding_box.top_left.into(),
-        bounding_box.bottom_right.into(),
-    );
-    let scale_x = width / (bbox_max.x - bbox_min.x).max(1.0);
-    let scale_y = height / (bbox_max.y - bbox_min.y).max(1.0);
+    let bbox_size = bounding_box.size();
+    let scale_x = width / bbox_size.x.max(1.0);
+    let scale_y = height / bbox_size.y.max(1.0);
     let scale = DVec2::new(scale_x, scale_y);
 
     let shift_v = alignment.vertical.shift_factor();
     let shift_h = alignment.horizontal.shift_factor();
 
     let top_left_corner_xy = parallelogram[0].xy();
-    let pos =
-        org + top_left_corner_xy - bbox_min / scale + DVec2::new(width * shift_h, height * shift_v);
+    let pos = org + top_left_corner_xy - bounding_box.top_left / scale
+        + DVec2::new(width * shift_h, height * shift_v);
 
     Perspective {
         pos,
@@ -377,6 +367,38 @@ pub fn quad_to_tags(
         rot_z,
         raw_fax,
     }
+}
+
+fn lift(quad: &Quad, org_mode: OrgMode, screen_z: f64) -> (DVec2, [DVec3; 4]) {
+    // Find the depth factors `z1`and `z3` that make up
+    // the difference between a 2D quad and a 3D parallelogram.
+    let diag = quad.q2 - quad.q0;
+    let side2 = quad.q1 - quad.q2;
+    let side3 = quad.q3 - quad.q2;
+    let z_vector = solve_2x2(side2, side3, -diag);
+    let (z1, z3) = (z_vector[0], z_vector[1]);
+
+    // Find the origin point from which we observe the world.
+    let org = match org_mode {
+        OrgMode::Center => quad.midpoint(),
+        OrgMode::Keep(previous) => previous,
+        OrgMode::NoFax => calculate_no_fax_org(quad, z1, z3, screen_z),
+    };
+
+    // Normalize to the chosen `\org`.
+    let q0 = quad.q0 - org;
+    let q1 = quad.q1 - org;
+    let q2 = quad.q2 - org;
+    let q3 = quad.q3 - org;
+
+    // Lift the quad into the reconstructed 3D parallelogram.
+    let r0 = DVec3::new(q0.x, q0.y, screen_z);
+    let r1 = z1 * DVec3::new(q1.x, q1.y, screen_z);
+    let r2 = (z1 + z3 - 1.0) * DVec3::new(q2.x, q2.y, screen_z);
+    let r3 = z3 * DVec3::new(q3.x, q3.y, screen_z);
+    let parallelogram = [r0, r1, r2, r3];
+
+    (org, parallelogram)
 }
 
 #[expect(clippy::min_ident_chars, reason = "mathematical identifiers")]
@@ -420,6 +442,33 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> DVec2 {
             quad.q0 - t
         }
     }
+}
+
+/// Calculate the UV aspect ratio the inner quad's points should have in order to preserve the
+/// text aspect ratio after `quad_to_text`.
+#[must_use]
+pub fn calculate_alpha(
+    outer: &Quad,
+    original_scale: DVec2,
+    bounding_box: BoundingBox,
+    screen_z: f64,
+) -> Option<f64> {
+    // We always use `NoFax` here, since the `alpha` calculation is only valid if the parallelogram
+    // is a rectangle.
+    let (_, parallelogram) = lift(outer, OrgMode::NoFax, screen_z);
+
+    let top_edge = parallelogram[1] - parallelogram[0];
+    let left_edge = parallelogram[3] - parallelogram[0];
+
+    let width = top_edge.length();
+    let height = left_edge.length();
+
+    let bbox_size = bounding_box.size();
+
+    let alpha =
+        (original_scale.x / original_scale.y) * (bbox_size.x / bbox_size.y) * (height / width);
+
+    alpha.is_finite().then_some(alpha)
 }
 
 const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
@@ -838,6 +887,10 @@ mod tests {
         assert_float_absolute_eq!(perspective_nofax.pos.y, 133.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.x, 219.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.y, 147.0, 0.1);
+
+        let alpha_opt = calculate_alpha(&quad, DVec2::ONE, bounding_box, screen_z);
+        assert_matches!(alpha_opt, Some(alpha));
+        assert_float_absolute_eq!(alpha, 1.880, 0.001);
     }
 
     #[test]

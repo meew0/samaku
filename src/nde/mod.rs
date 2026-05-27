@@ -288,6 +288,12 @@ pub struct BoundingBox {
     bottom_right: glam::DVec2,
 }
 
+impl BoundingBox {
+    fn size(&self) -> glam::DVec2 {
+        self.bottom_right - self.top_left
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

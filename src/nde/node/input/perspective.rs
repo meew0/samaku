@@ -8,12 +8,17 @@ use glam::DVec2;
 pub struct InputQuad {
     pub inner: perspective::Quad,
     pub outer: perspective::Quad,
+    /// The UV coordinate aspect ratio to lock the inner quad to.
+    pub alpha: Option<f64>,
     /// Whether the outer (ambient plane) quad is shown and its corners are draggable.
     #[serde(default = "bool_true")]
     pub show_outer: bool,
     /// When `show_outer` is true: locks the inner quad so only outer corners can be dragged.
     #[serde(default)]
     pub lock_inner: bool,
+    /// When `show_outer` is true: fixes the inner quad aspect ratio to `alpha`.
+    #[serde(default)]
+    pub fix_alpha: bool,
     /// Whether to draw a perspective grid overlaid on the inner quad, fading outward.
     #[serde(default)]
     pub show_grid: bool,
@@ -109,6 +114,18 @@ impl InputQuad {
             }
         }
     }
+
+    fn calculate_alpha(&self, context: &Context) -> Option<f64> {
+        let active_event = context.source_event?;
+        let nde_event = nde::Event::from_ass_event(active_event);
+        let style = context.get_event_style(&nde_event);
+        let bounding_box = nde::util::measure(&nde_event, style);
+        let original_scale = nde_event.effective_font_scale(style);
+        let screen_z =
+            perspective::rescale_screen_z(context.playback_resolution, context.layout_resolution);
+
+        perspective::calculate_alpha(&self.outer, original_scale, bounding_box, screen_z)
+    }
 }
 
 #[typetag::serde]
@@ -160,7 +177,17 @@ impl Node for InputQuad {
                 message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(2))
             });
 
-        iced::widget::column![show_outer_cb, lock_inner_cb, show_grid_cb]
+        let fix_alpha_cb_raw = iced::widget::checkbox(self.fix_alpha).label("Fix aspect ratio");
+
+        let fix_alpha_cb = if self.alpha.is_some() {
+            fix_alpha_cb_raw.on_toggle(move |_| {
+                message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(3))
+            })
+        } else {
+            fix_alpha_cb_raw
+        };
+
+        iced::widget::column![show_outer_cb, lock_inner_cb, fix_alpha_cb, show_grid_cb]
             .spacing(4.0)
             .width(iced::Length::Fill)
             .into()
@@ -182,12 +209,15 @@ impl Node for InputQuad {
             }
             1 => self.lock_inner = !self.lock_inner,
             2 => self.show_grid = !self.show_grid,
+            3 => self.fix_alpha = !self.fix_alpha,
             _ => anyhow::bail!("Unknown setting index: {index}"),
         }
         Ok(())
     }
 
     fn reticule_activate(&mut self, context: &Context) -> Vec<reticule::Reticule> {
+        self.alpha = self.calculate_alpha(context);
+
         let circle = |radius| reticule::Reticule {
             shape: reticule::Shape::Circle,
             position: DVec2::ZERO,
@@ -240,10 +270,44 @@ impl Node for InputQuad {
                 0..=3 => {
                     // Inner corner drag: maintain UV-rect structure so moving corner i adjusts
                     // only the c1/c2 axes it controls, then all four inner corners are recomputed.
-                    let mut c1 = self.outer.xy_to_uv(self.inner.q0);
-                    let mut c2 = self.outer.xy_to_uv(self.inner.q2);
-                    let new_uv = self.outer.xy_to_uv(new_pos_vec);
-                    uv_update_corner(&mut c1, &mut c2, new_uv, index.0);
+                    let (c1, c2) = if self.fix_alpha
+                        && let Some(alpha) = self.alpha
+                    {
+                        // Restrict the UV coordinate aspect ratio of the inner quad to `alpha`.
+                        // First, find the UV coordinates of the dragged point and the corner opposite that.
+                        let dragged = self.outer.xy_to_uv(new_pos_vec);
+                        let opposite_index = (index.0 + 2) % 4;
+                        let opposite = self.outer.xy_to_uv(self.inner[opposite_index]);
+                        let mut delta = dragged - opposite;
+
+                        // Prevent dragging the point outside the quadrant with the opposite
+                        // point at its center.
+                        let original = self.outer.xy_to_uv(self.inner[index.0]);
+                        let diagonal = original - opposite;
+                        let new_dragged = if delta.signum() == diagonal.signum() {
+                            // Preserve whichever axis changed more relative to its current size.
+                            if delta.x.abs() > alpha * delta.y.abs() {
+                                delta.y = (delta.x.abs() / alpha).copysign(delta.y);
+                            } else {
+                                delta.x = (delta.y.abs() * alpha).copysign(delta.x);
+                            }
+                            opposite + delta
+                        } else {
+                            original
+                        };
+
+                        let c1 = opposite.min(new_dragged);
+                        let c2 = opposite.max(new_dragged);
+                        (c1, c2)
+                    } else {
+                        // Do not restrict the aspect ratio
+                        let mut c1 = self.outer.xy_to_uv(self.inner.q0);
+                        let mut c2 = self.outer.xy_to_uv(self.inner.q2);
+                        let new_uv = self.outer.xy_to_uv(new_pos_vec);
+                        uv_update_corner(&mut c1, &mut c2, new_uv, index.0);
+                        (c1, c2)
+                    };
+
                     let new_inner = self.outer.inner(c1, c2);
                     if new_inner.is_convex() {
                         self.inner = new_inner;
@@ -409,8 +473,10 @@ inventory::submit! {
         || Box::new(InputQuad {
             inner: perspective::Quad::make_rect(DVec2::new(200.0, 200.0), DVec2::new(300.0, 300.0)),
             outer: perspective::Quad::make_rect(DVec2::new(100.0, 100.0), DVec2::new(400.0, 400.0)),
+            alpha: None,
             show_outer: true,
             lock_inner: false,
+            fix_alpha: false,
             show_grid: false,
         })
     )
