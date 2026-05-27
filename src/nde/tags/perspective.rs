@@ -520,8 +520,8 @@ impl Perspective {
             && vector_is_finite(new_shadow);
 
         is_finite.then(|| {
-            global.position = Some(PositionOrMove::Position(self.pos.into()));
-            global.origin = Some(self.org.into());
+            global.position = Some(PositionOrMove::Position(self.pos));
+            global.origin = Some(self.org);
 
             Local {
                 text_rotation: Maybe3D {
@@ -553,10 +553,7 @@ pub fn tags_to_quad(
     bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Quad {
-    let (bbox_min, bbox_max): (DVec2, DVec2) = (
-        bounding_box.top_left.into(),
-        bounding_box.bottom_right.into(),
-    );
+    let (bbox_min, bbox_max): (DVec2, DVec2) = (bounding_box.top_left, bounding_box.bottom_right);
     let text_width = (bbox_max.x - bbox_min.x).max(1.0);
     let text_height = (bbox_max.y - bbox_min.y).max(1.0);
 
@@ -747,7 +744,7 @@ mod tests {
         let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         let rec = quad_to_tags(
             &quad,
-            OrgMode::Keep(tags.org.into()),
+            OrgMode::Keep(tags.org),
             align,
             bounding_box,
             screen_z,

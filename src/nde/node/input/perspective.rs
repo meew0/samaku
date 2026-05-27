@@ -88,8 +88,8 @@ impl InputQuad {
                 4,
                 "expected 4 reticules in inner-only mode"
             );
-            for (i, &corner) in inner.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in inner.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
         } else if !self.lock_inner {
             assert_eq!(
@@ -97,11 +97,11 @@ impl InputQuad {
                 8,
                 "expected 8 reticules in both-quads mode"
             );
-            for (i, &corner) in inner.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in inner.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
-            for (i, &corner) in outer.iter().enumerate() {
-                reticules[i + 4].position = (*corner).into();
+            for (i, &corner) in outer.into_iter().enumerate() {
+                reticules[i + 4].position = corner;
             }
         } else {
             assert_eq!(
@@ -109,8 +109,8 @@ impl InputQuad {
                 4,
                 "expected 4 reticules in outer-only mode"
             );
-            for (i, &corner) in outer.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in outer.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
         }
     }
