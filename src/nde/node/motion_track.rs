@@ -88,10 +88,7 @@ impl Node for MotionTrack {
         }
     }
 
-    fn reticule_activate(
-        &mut self,
-        _active_event: &subtitle::Event<'static>,
-    ) -> Vec<reticule::Reticule> {
+    fn reticule_activate(&mut self, _context: &Context) -> Vec<reticule::Reticule> {
         vec![reticule::Reticule {
             shape: reticule::Shape::Cross,
             position: self.region_center,

@@ -187,10 +187,7 @@ impl Node for InputQuad {
         Ok(())
     }
 
-    fn reticule_activate(
-        &mut self,
-        active_event: &subtitle::Event<'static>,
-    ) -> Vec<reticule::Reticule> {
+    fn reticule_activate(&mut self, context: &Context) -> Vec<reticule::Reticule> {
         let circle = |radius| reticule::Reticule {
             shape: reticule::Shape::Circle,
             position: DVec2::ZERO,

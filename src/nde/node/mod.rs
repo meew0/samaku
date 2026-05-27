@@ -256,13 +256,13 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// reticules in order to activate them, such that they are displayed above the video. If they
     /// are moved, `reticule_update` will later be called.
     ///
-    /// The `active_event` is available in order to calculate reticule positions based on event
+    /// The `context` is available in order to calculate reticule positions based on event
     /// properties (such as the text bounding box). This should be seen more as a convenience
     /// feature than anything that should be relied on for correctness; in general, node behavior
     /// should be independent of the active event (only depend on the event the node is run on).
     fn reticule_activate(
         &mut self,
-        active_event: &subtitle::Event<'static>,
+        context: &subtitle::compile::Context,
     ) -> Vec<model::reticule::Reticule> {
         vec![]
     }

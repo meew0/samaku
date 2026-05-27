@@ -1239,15 +1239,26 @@ fn update_internal(
         }
         Message::ActivateNodes(filter_id, nodes) => {
             if nodes.len() == 1 {
+                let frame_rate = global_state.frame_rate();
+                let layout_resolution = global_state.effective_layout_resolution();
+
                 let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
                 let node_id = nodes[0];
                 let node = &mut filter.graph.nodes[node_id.0];
                 let active_event = global_state
                     .subtitles
                     .events
-                    .active_event(&global_state.selected_events)
-                    .expect("active event should exist if node messages are being sent");
-                let reticule_list = node.node.reticule_activate(active_event);
+                    .active_event(&global_state.selected_events);
+                // We need to construct this manually since we mutably borrow `global_state` above
+                // TODO: refactor this to be more ergonomic?
+                let context = subtitle::compile::Context {
+                    frame_rate,
+                    source_event: active_event,
+                    styles: &global_state.subtitles.styles,
+                    playback_resolution: global_state.subtitles.script_info.playback_resolution,
+                    layout_resolution,
+                };
+                let reticule_list = node.node.reticule_activate(&context);
 
                 global_state.reticules = if reticule_list.is_empty() {
                     None
@@ -1332,15 +1343,25 @@ fn update_internal(
             });
             if is_reticule_source {
                 let new_list = {
+                    let frame_rate = global_state.frame_rate();
+                    let layout_resolution = global_state.effective_layout_resolution();
+
                     let filter = global_state.subtitles.extradata[filter_index].assert_filter_mut();
                     let active_event = global_state
                         .subtitles
                         .events
-                        .active_event(&global_state.selected_events)
-                        .expect("active event should exist if node messages are being sent");
+                        .active_event(&global_state.selected_events);
+                    // We need to construct this manually since we mutably borrow `global_state` above
+                    let context = subtitle::compile::Context {
+                        frame_rate,
+                        source_event: active_event,
+                        styles: &global_state.subtitles.styles,
+                        playback_resolution: global_state.subtitles.script_info.playback_resolution,
+                        layout_resolution,
+                    };
                     filter.graph.nodes[node_index.0]
                         .node
-                        .reticule_activate(active_event)
+                        .reticule_activate(&context)
                 };
                 if new_list.is_empty() {
                     global_state.reticules = None;
