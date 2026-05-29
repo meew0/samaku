@@ -384,6 +384,7 @@ fn make_text_primitive(
     bounds: Size,
     size: iced::Pixels,
     font: Font,
+    shaping: text::Shaping,
 ) -> text::Text<String, Font> {
     text::Text {
         content,
@@ -393,7 +394,7 @@ fn make_text_primitive(
         font,
         align_x: text::Alignment::Center,
         align_y: iced::alignment::Vertical::Center,
-        shaping: text::Shaping::Basic,
+        shaping,
         wrapping: text::Wrapping::None,
     }
 }
@@ -476,7 +477,13 @@ where
 
         if let Mode::Editing { ref text } = state.mode {
             renderer.fill_text(
-                make_text_primitive(format!("{text}|"), bounds.size(), text_size, font),
+                make_text_primitive(
+                    format!("{text}|"),
+                    bounds.size(),
+                    text_size,
+                    font,
+                    text::Shaping::Basic,
+                ),
                 center,
                 style.text_color,
                 bounds,
@@ -491,6 +498,7 @@ where
                     bounds.size(),
                     text_size,
                     font,
+                    text::Shaping::Basic,
                 ),
                 center,
                 style.text_color,
@@ -505,6 +513,7 @@ where
                         arrow_size,
                         text_size,
                         icons::FONT,
+                        text::Shaping::Advanced,
                     ),
                     Point::new(bounds.x + BUTTON_WIDTH / 2.0, center.y),
                     style.icon_color,
@@ -516,6 +525,7 @@ where
                         arrow_size,
                         text_size,
                         icons::FONT,
+                        text::Shaping::Advanced,
                     ),
                     Point::new(bounds.x + bounds.width - BUTTON_WIDTH / 2.0, center.y),
                     style.icon_color,
@@ -570,59 +580,66 @@ where
         let bounds = layout.bounds();
 
         match *event {
-            Event::Mouse(mouse::Event::CursorMoved { position }) => {
-                let is_over = bounds.contains(position);
+            Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                // Use cursor.position() rather than the raw event position:
+                // inside a scrollable, iced translates the `cursor` argument to
+                // content-relative coordinates, while CursorMoved { position }
+                // always carries the raw window/screen coordinate.
+                let is_over = cursor.is_over(bounds);
                 if is_over != state.is_hovered {
                     state.is_hovered = is_over;
                     shell.request_redraw();
                 }
 
-                // Compute whether we should leave Pending and enter Dragging.
-                // Separating the read from the write avoids borrow conflicts.
-                let pending_update = match &state.mode {
-                    &Mode::Pending {
-                        start_x,
-                        start_value,
-                    } => {
-                        let dx = position.x - start_x;
-                        (dx.abs() > DRAG_THRESHOLD).then(|| {
+                if let Some(cursor_pos) = cursor.position() {
+                    // Compute whether we should leave Pending and enter Dragging.
+                    // Separating the read from the write avoids borrow conflicts.
+                    let pending_update = match &state.mode {
+                        &Mode::Pending {
+                            start_x,
+                            start_value,
+                        } => {
+                            let dx = cursor_pos.x - start_x;
+                            (dx.abs() > DRAG_THRESHOLD).then(|| {
+                                let new_value = clamp_and_round(
+                                    T::from_f64(
+                                        f64::from(dx)
+                                            .mul_add(self.drag_speed, start_value.to_f64()),
+                                    ),
+                                    self.min,
+                                    self.max,
+                                    self.decimals,
+                                );
+                                (cursor_pos.x, new_value)
+                            })
+                        }
+                        _ => None,
+                    };
+
+                    if let Some((new_last_x, new_value)) = pending_update {
+                        state.mode = Mode::Dragging { last_x: new_last_x };
+                        if new_value != self.value {
+                            shell.publish((self.on_change)(new_value));
+                        }
+                        shell.request_redraw();
+                    }
+                    if pending_update.is_none()
+                        && let Mode::Dragging { ref mut last_x } = state.mode
+                    {
+                        let dx = cursor_pos.x - *last_x;
+                        *last_x = cursor_pos.x;
+                        if dx != 0.0 {
                             let new_value = clamp_and_round(
                                 T::from_f64(
-                                    f64::from(dx).mul_add(self.drag_speed, start_value.to_f64()),
+                                    f64::from(dx).mul_add(self.drag_speed, self.value.to_f64()),
                                 ),
                                 self.min,
                                 self.max,
                                 self.decimals,
                             );
-                            (position.x, new_value)
-                        })
-                    }
-                    _ => None,
-                };
-
-                if let Some((new_last_x, new_value)) = pending_update {
-                    state.mode = Mode::Dragging { last_x: new_last_x };
-                    if new_value != self.value {
-                        shell.publish((self.on_change)(new_value));
-                    }
-                    shell.request_redraw();
-                }
-                if pending_update.is_none()
-                    && let Mode::Dragging { ref mut last_x } = state.mode
-                {
-                    let dx = position.x - *last_x;
-                    *last_x = position.x;
-                    if dx != 0.0 {
-                        let new_value = clamp_and_round(
-                            T::from_f64(
-                                f64::from(dx).mul_add(self.drag_speed, self.value.to_f64()),
-                            ),
-                            self.min,
-                            self.max,
-                            self.decimals,
-                        );
-                        if new_value != self.value {
-                            shell.publish((self.on_change)(new_value));
+                            if new_value != self.value {
+                                shell.publish((self.on_change)(new_value));
+                            }
                         }
                     }
                 }
