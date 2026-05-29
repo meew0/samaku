@@ -85,6 +85,29 @@ impl Numeric for i64 {
     }
 }
 
+impl Numeric for u8 {
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "value is clamped before conversion"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val.round() as Self
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn format(self, _decimals: u32) -> String {
+        format!("{self}")
+    }
+}
+
 impl Numeric for u32 {
     fn to_f64(self) -> f64 {
         f64::from(self)

@@ -178,10 +178,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
 
     let primary_row = colour_input_row(
         "Primary",
-        &style.primary_colour.red,
-        &style.primary_colour.green,
-        &style.primary_colour.blue,
-        &style.primary_transparency.0,
+        style.primary_colour.red,
+        style.primary_colour.green,
+        style.primary_colour.blue,
+        style.primary_transparency.0,
         move |red| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { red, ..pc }),
         move |green| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { green, ..pc }),
         move |blue| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { blue, ..pc }),
@@ -191,10 +191,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let secondary_row = colour_input_row(
         "Secondary",
-        &style.secondary_colour.red,
-        &style.secondary_colour.green,
-        &style.secondary_colour.blue,
-        &style.secondary_transparency.0,
+        style.secondary_colour.red,
+        style.secondary_colour.green,
+        style.secondary_colour.blue,
+        style.secondary_transparency.0,
         move |red| message::Message::SetStyleSecondaryColour(i, nde::tags::Colour { red, ..sc }),
         move |green| {
             message::Message::SetStyleSecondaryColour(i, nde::tags::Colour { green, ..sc })
@@ -206,10 +206,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let border_colour_row = colour_input_row(
         "Border",
-        &style.border_colour.red,
-        &style.border_colour.green,
-        &style.border_colour.blue,
-        &style.border_transparency.0,
+        style.border_colour.red,
+        style.border_colour.green,
+        style.border_colour.blue,
+        style.border_transparency.0,
         move |red| message::Message::SetStyleBorderColour(i, nde::tags::Colour { red, ..bc }),
         move |green| message::Message::SetStyleBorderColour(i, nde::tags::Colour { green, ..bc }),
         move |blue| message::Message::SetStyleBorderColour(i, nde::tags::Colour { blue, ..bc }),
@@ -219,10 +219,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let shadow_colour_row = colour_input_row(
         "Shadow",
-        &style.shadow_colour.red,
-        &style.shadow_colour.green,
-        &style.shadow_colour.blue,
-        &style.shadow_transparency.0,
+        style.shadow_colour.red,
+        style.shadow_colour.green,
+        style.shadow_colour.blue,
+        style.shadow_transparency.0,
         move |red| message::Message::SetStyleShadowColour(i, nde::tags::Colour { red, ..shc }),
         move |green| message::Message::SetStyleShadowColour(i, nde::tags::Colour { green, ..shc }),
         move |blue| message::Message::SetStyleShadowColour(i, nde::tags::Colour { blue, ..shc }),
@@ -484,11 +484,11 @@ fn labeled_row<'a>(
     reason = "colour rows need separate callbacks per channel"
 )]
 fn colour_input_row<'a>(
-    label: &'a str,
-    red: &'a u8,
-    green: &'a u8,
-    blue: &'a u8,
-    alpha: &'a i32,
+    label: &'static str,
+    red: u8,
+    green: u8,
+    blue: u8,
+    alpha: i32,
     on_red: impl Fn(u8) -> message::Message + Copy + 'static,
     on_green: impl Fn(u8) -> message::Message + Copy + 'static,
     on_blue: impl Fn(u8) -> message::Message + Copy + 'static,
@@ -496,10 +496,10 @@ fn colour_input_row<'a>(
 ) -> iced::Element<'a, message::Message> {
     iced::widget::row![
         iced::widget::text(label).width(COL_LABEL_W),
-        iced_aw::number_input(red, 0..=255_u8, on_red).width(COL_COLOUR_W),
-        iced_aw::number_input(green, 0..=255_u8, on_green).width(COL_COLOUR_W),
-        iced_aw::number_input(blue, 0..=255_u8, on_blue).width(COL_COLOUR_W),
-        iced_aw::number_input(alpha, 0..=255_i32, on_alpha).width(COL_COLOUR_W),
+        view::widget::number_dragger(red, 0..=255_u8, on_red).width(COL_COLOUR_W),
+        view::widget::number_dragger(green, 0..=255_u8, on_green).width(COL_COLOUR_W),
+        view::widget::number_dragger(blue, 0..=255_u8, on_blue).width(COL_COLOUR_W),
+        view::widget::number_dragger(alpha, 0..=255_i32, on_alpha).width(COL_COLOUR_W),
     ]
     .spacing(4)
     .align_y(iced::Alignment::Center)
