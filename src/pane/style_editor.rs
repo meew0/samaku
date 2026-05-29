@@ -259,10 +259,13 @@ fn section_formatting(i: usize, style: &subtitle::Style) -> iced::Element<'_, me
         .label("Strike-out")
         .on_toggle(move |value| message::Message::SetStyleStrikeOut(i, value));
 
-    let scale_x_input = iced_aw::number_input(&style.scale.x, 0.01..=1000.0_f64, move |value| {
-        message::Message::SetStyleScaleX(i, value)
-    })
-    .step(0.01_f64);
+    let scale_x_input =
+        view::widget::NumberDragger::new(style.scale.x, 0.01..=1000.0_f64, move |value| {
+            message::Message::SetStyleScaleX(i, value)
+        })
+        .step(0.01_f64)
+        .drag_speed(0.01_f64)
+        .width(100.0);
     let scale_y_input = iced_aw::number_input(&style.scale.y, 0.01..=1000.0_f64, move |value| {
         message::Message::SetStyleScaleY(i, value)
     })
