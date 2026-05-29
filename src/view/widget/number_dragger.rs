@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::ops::{Add, Sub};
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse;
@@ -7,42 +8,207 @@ use iced::advanced::text;
 use iced::advanced::widget::{self, Widget};
 use iced::advanced::{Clipboard, Shell};
 use iced::keyboard::{self, key};
-use iced::{Background, Border, Color, Element, Event, Length, Point, Rectangle, Shadow, Size};
+use iced::{
+    Background, Border, Color, Element, Event, Font, Length, Point, Rectangle, Shadow, Size,
+};
+
+use crate::view::icons;
 
 const BUTTON_WIDTH: f32 = 20.0;
 const DRAG_THRESHOLD: f32 = 3.0;
 const DEFAULT_HEIGHT: f32 = 24.0;
+
+// ─── Numeric trait ───────────────────────────────────────────────────────────
+
+/// Types that can serve as the value of a [`NumberDragger`].
+pub trait Numeric:
+    Copy
+    + PartialOrd
+    + PartialEq
+    + std::fmt::Display
+    + std::str::FromStr
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + 'static
+{
+    fn to_f64(self) -> f64;
+    fn from_f64(val: f64) -> Self;
+    fn one() -> Self;
+    fn format(self, decimals: u32) -> String;
+}
+
+impl Numeric for i32 {
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "value is clamped before conversion"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val.round() as Self
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn format(self, _decimals: u32) -> String {
+        format!("{self}")
+    }
+}
+
+impl Numeric for i64 {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "acceptable for interactive dragger values"
+    )]
+    fn to_f64(self) -> f64 {
+        self as f64
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "value is clamped before conversion"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val.round() as Self
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn format(self, _decimals: u32) -> String {
+        format!("{self}")
+    }
+}
+
+impl Numeric for u32 {
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "value is clamped before conversion"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val.round() as Self
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn format(self, _decimals: u32) -> String {
+        format!("{self}")
+    }
+}
+
+impl Numeric for u64 {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "acceptable for interactive dragger values"
+    )]
+    fn to_f64(self) -> f64 {
+        self as f64
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "value is clamped before conversion"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val.round() as Self
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn format(self, _decimals: u32) -> String {
+        format!("{self}")
+    }
+}
+
+impl Numeric for f32 {
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "f64-to-f32 narrowing for display values"
+    )]
+    fn from_f64(val: f64) -> Self {
+        val as Self
+    }
+
+    fn one() -> Self {
+        1.0
+    }
+
+    fn format(self, decimals: u32) -> String {
+        format!("{self:.prec$}", prec = decimals as usize)
+    }
+}
+
+impl Numeric for f64 {
+    fn to_f64(self) -> f64 {
+        self
+    }
+
+    fn from_f64(val: f64) -> Self {
+        val
+    }
+
+    fn one() -> Self {
+        1.0
+    }
+
+    fn format(self, decimals: u32) -> String {
+        format!("{self:.prec$}", prec = decimals as usize)
+    }
+}
+
+// ─── Widget struct ────────────────────────────────────────────────────────────
 
 /// A Blender-style numeric drag field.
 ///
 /// Shows the current value; arrows appear on hover to step the value; click-drag in
 /// the centre scrubs proportionally; click-without-dragging opens an editable text
 /// field.  All interaction state is stored in the iced widget tree — the caller only
-/// needs to supply the current `f64` value.
-pub struct NumberDragger<'a, Message, Theme = iced::Theme, Renderer = iced::Renderer>
+/// needs to supply the current numeric value.
+pub struct NumberDragger<'a, T, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
+    T: Numeric,
     Theme: Catalog,
 {
-    value: f64,
-    min: f64,
-    max: f64,
-    step: f64,
+    value: T,
+    min: T,
+    max: T,
+    step: T,
     drag_speed: f64,
     decimals: u32,
-    on_change: Box<dyn Fn(f64) -> Message + 'a>,
+    on_change: Box<dyn Fn(T) -> Message + 'a>,
     width: Length,
     height: f32,
     class: <Theme as Catalog>::Class<'a>,
     _phantom: PhantomData<Renderer>,
 }
 
-impl<'a, Message, Theme, Renderer> NumberDragger<'a, Message, Theme, Renderer>
+impl<'a, T, Message, Theme, Renderer> NumberDragger<'a, T, Message, Theme, Renderer>
 where
+    T: Numeric,
     Theme: Catalog,
 {
-    pub fn new<F: Fn(f64) -> Message + 'a>(
-        value: f64,
-        bounds: std::ops::RangeInclusive<f64>,
+    pub fn new<F: Fn(T) -> Message + 'a>(
+        value: T,
+        bounds: std::ops::RangeInclusive<T>,
         on_change: F,
     ) -> Self {
         let (min, max) = bounds.into_inner();
@@ -50,7 +216,7 @@ where
             value,
             min,
             max,
-            step: 1.0,
+            step: T::one(),
             drag_speed: 1.0,
             decimals: 2,
             on_change: Box::new(on_change),
@@ -62,7 +228,7 @@ where
     }
 
     #[must_use]
-    pub fn step(mut self, step: f64) -> Self {
+    pub fn step(mut self, step: T) -> Self {
         self.step = step;
         self
     }
@@ -88,12 +254,12 @@ where
 
 // ─── Internal widget-tree state ───────────────────────────────────────────────
 
-struct State {
-    mode: Mode,
+struct State<T: Numeric> {
+    mode: Mode<T>,
     is_hovered: bool,
 }
 
-impl Default for State {
+impl<T: Numeric> Default for State<T> {
     fn default() -> Self {
         Self {
             mode: Mode::Idle,
@@ -102,12 +268,12 @@ impl Default for State {
     }
 }
 
-enum Mode {
+enum Mode<T: Numeric> {
     Idle,
     /// Mouse pressed; not yet moved far enough to commit to a drag vs. a plain click.
     Pending {
         start_x: f32,
-        start_value: f64,
+        start_value: T,
     },
     Dragging {
         last_x: f32,
@@ -196,21 +362,24 @@ fn default_style(theme: &iced::Theme, status: Status) -> Style {
 
 // ─── Private helpers ─────────────────────────────────────────────────────────
 
-fn clamp_and_round(value: f64, min: f64, max: f64, decimals: u32) -> f64 {
-    let clamped = value.clamp(min, max);
+fn clamp_and_round<T: Numeric>(value: T, min: T, max: T, decimals: u32) -> T {
+    let clamped = if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    };
+    let raw = clamped.to_f64();
     #[expect(
         clippy::cast_possible_wrap,
         reason = "decimals will not exceed i32::MAX"
     )]
     let factor = 10_f64.powi(decimals as i32);
-    (clamped * factor).round() / factor
+    T::from_f64((raw * factor).round() / factor)
 }
 
-fn format_value(value: f64, decimals: u32) -> String {
-    format!("{:.prec$}", value, prec = decimals as usize)
-}
-
-fn make_text_primitive<Font: Copy>(
+fn make_text_primitive(
     content: String,
     bounds: Size,
     size: iced::Pixels,
@@ -231,19 +400,20 @@ fn make_text_primitive<Font: Copy>(
 
 // ─── Widget implementation ────────────────────────────────────────────────────
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for NumberDragger<'_, Message, Theme, Renderer>
+impl<T, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for NumberDragger<'_, T, Message, Theme, Renderer>
 where
+    T: Numeric,
     Message: Clone,
-    Renderer: text::Renderer,
+    Renderer: text::Renderer<Font = Font>,
     Theme: Catalog,
 {
     fn tag(&self) -> widget::tree::Tag {
-        widget::tree::Tag::of::<State>()
+        widget::tree::Tag::of::<State<T>>()
     }
 
     fn state(&self) -> widget::tree::State {
-        widget::tree::State::new(State::default())
+        widget::tree::State::new(State::<T>::default())
     }
 
     fn children(&self) -> Vec<widget::Tree> {
@@ -275,7 +445,7 @@ where
         _cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        let state = tree.state.downcast_ref::<State>();
+        let state = tree.state.downcast_ref::<State<T>>();
         let bounds = layout.bounds();
 
         let status = if matches!(state.mode, Mode::Editing { .. }) {
@@ -317,7 +487,7 @@ where
 
             renderer.fill_text(
                 make_text_primitive(
-                    format_value(self.value, self.decimals),
+                    self.value.format(self.decimals),
                     bounds.size(),
                     text_size,
                     font,
@@ -330,13 +500,23 @@ where
             if show_arrows {
                 let arrow_size = Size::new(BUTTON_WIDTH, bounds.height);
                 renderer.fill_text(
-                    make_text_primitive("<".to_owned(), arrow_size, text_size, font),
+                    make_text_primitive(
+                        icons::Icon::CaretLeftFill.character().to_string(),
+                        arrow_size,
+                        text_size,
+                        icons::FONT,
+                    ),
                     Point::new(bounds.x + BUTTON_WIDTH / 2.0, center.y),
                     style.icon_color,
                     bounds,
                 );
                 renderer.fill_text(
-                    make_text_primitive(">".to_owned(), arrow_size, text_size, font),
+                    make_text_primitive(
+                        icons::Icon::CaretRightFill.character().to_string(),
+                        arrow_size,
+                        text_size,
+                        icons::FONT,
+                    ),
                     Point::new(bounds.x + bounds.width - BUTTON_WIDTH / 2.0, center.y),
                     style.icon_color,
                     bounds,
@@ -353,7 +533,7 @@ where
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        let state = tree.state.downcast_ref::<State>();
+        let state = tree.state.downcast_ref::<State<T>>();
         let bounds = layout.bounds();
 
         if matches!(state.mode, Mode::Editing { .. }) {
@@ -386,7 +566,7 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let state = tree.state.downcast_mut::<State>();
+        let state = tree.state.downcast_mut::<State<T>>();
         let bounds = layout.bounds();
 
         match *event {
@@ -407,7 +587,9 @@ where
                         let dx = position.x - start_x;
                         (dx.abs() > DRAG_THRESHOLD).then(|| {
                             let new_value = clamp_and_round(
-                                f64::from(dx).mul_add(self.drag_speed, start_value),
+                                T::from_f64(
+                                    f64::from(dx).mul_add(self.drag_speed, start_value.to_f64()),
+                                ),
                                 self.min,
                                 self.max,
                                 self.decimals,
@@ -420,7 +602,7 @@ where
 
                 if let Some((new_last_x, new_value)) = pending_update {
                     state.mode = Mode::Dragging { last_x: new_last_x };
-                    if (new_value - self.value).abs() > f64::EPSILON {
+                    if new_value != self.value {
                         shell.publish((self.on_change)(new_value));
                     }
                     shell.request_redraw();
@@ -432,12 +614,14 @@ where
                     *last_x = position.x;
                     if dx != 0.0 {
                         let new_value = clamp_and_round(
-                            f64::from(dx).mul_add(self.drag_speed, self.value),
+                            T::from_f64(
+                                f64::from(dx).mul_add(self.drag_speed, self.value.to_f64()),
+                            ),
                             self.min,
                             self.max,
                             self.decimals,
                         );
-                        if (new_value - self.value).abs() > f64::EPSILON {
+                        if new_value != self.value {
                             shell.publish((self.on_change)(new_value));
                         }
                     }
@@ -485,11 +669,11 @@ where
                 {
                     // Click outside while editing: commit the entered text
                     let new_value = text
-                        .parse::<f64>()
+                        .parse::<T>()
                         .ok()
                         .map(|val| clamp_and_round(val, self.min, self.max, self.decimals));
                     if let Some(new_val) = new_value
-                        && (new_val - self.value).abs() > f64::EPSILON
+                        && new_val != self.value
                     {
                         shell.publish((self.on_change)(new_val));
                     }
@@ -501,7 +685,7 @@ where
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => match state.mode {
                 Mode::Pending { .. } => {
                     state.mode = Mode::Editing {
-                        text: format_value(self.value, self.decimals),
+                        text: self.value.format(self.decimals),
                     };
                     shell.capture_event();
                     shell.request_redraw();
@@ -525,11 +709,11 @@ where
                     match *key {
                         keyboard::Key::Named(key::Named::Enter) => {
                             let new_value = edit_text
-                                .parse::<f64>()
+                                .parse::<T>()
                                 .ok()
                                 .map(|val| clamp_and_round(val, self.min, self.max, self.decimals));
                             if let Some(new_val) = new_value
-                                && (new_val - self.value).abs() > f64::EPSILON
+                                && new_val != self.value
                             {
                                 shell.publish((self.on_change)(new_val));
                             }
@@ -564,14 +748,15 @@ where
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<NumberDragger<'a, Message, Theme, Renderer>>
+impl<'a, T, Message, Theme, Renderer> From<NumberDragger<'a, T, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
+    T: Numeric,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
-    Renderer: text::Renderer + 'a,
+    Renderer: text::Renderer<Font = Font> + 'a,
 {
-    fn from(widget: NumberDragger<'a, Message, Theme, Renderer>) -> Self {
+    fn from(widget: NumberDragger<'a, T, Message, Theme, Renderer>) -> Self {
         Self::new(widget)
     }
 }
