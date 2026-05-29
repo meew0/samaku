@@ -2,18 +2,23 @@ use super::{Context, Node, Shell, SocketType, SocketValue};
 use crate::model::reticule;
 use crate::nde::tags::perspective;
 use crate::{message, model, nde, style, subtitle, view};
-use nalgebra::{Vector2, vector};
+use glam::DVec2;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputQuad {
     pub inner: perspective::Quad,
     pub outer: perspective::Quad,
+    /// The UV coordinate aspect ratio to lock the inner quad to.
+    pub alpha: Option<f64>,
     /// Whether the outer (ambient plane) quad is shown and its corners are draggable.
     #[serde(default = "bool_true")]
     pub show_outer: bool,
     /// When `show_outer` is true: locks the inner quad so only outer corners can be dragged.
     #[serde(default)]
     pub lock_inner: bool,
+    /// When `show_outer` is true: fixes the inner quad aspect ratio to `alpha`.
+    #[serde(default)]
+    pub fix_alpha: bool,
     /// Whether to draw a perspective grid overlaid on the inner quad, fading outward.
     #[serde(default)]
     pub show_grid: bool,
@@ -24,7 +29,7 @@ fn bool_true() -> bool {
 }
 
 /// Returns a mutable reference to quad corner `index` (0 = q0 … 3 = q3).
-fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut Vector2<f64> {
+fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut DVec2 {
     match index {
         0 => &mut quad.q0,
         1 => &mut quad.q1,
@@ -34,12 +39,7 @@ fn quad_corner_mut(quad: &mut perspective::Quad, index: usize) -> &mut Vector2<f
     }
 }
 
-fn uv_update_corner(
-    c1: &mut Vector2<f64>,
-    c2: &mut Vector2<f64>,
-    new_uv: Vector2<f64>,
-    index: usize,
-) {
+fn uv_update_corner(c1: &mut DVec2, c2: &mut DVec2, new_uv: DVec2, index: usize) {
     match index {
         0 => {
             c1.x = new_uv.x;
@@ -88,8 +88,8 @@ impl InputQuad {
                 4,
                 "expected 4 reticules in inner-only mode"
             );
-            for (i, &corner) in inner.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in inner.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
         } else if !self.lock_inner {
             assert_eq!(
@@ -97,11 +97,11 @@ impl InputQuad {
                 8,
                 "expected 8 reticules in both-quads mode"
             );
-            for (i, &corner) in inner.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in inner.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
-            for (i, &corner) in outer.iter().enumerate() {
-                reticules[i + 4].position = (*corner).into();
+            for (i, &corner) in outer.into_iter().enumerate() {
+                reticules[i + 4].position = corner;
             }
         } else {
             assert_eq!(
@@ -109,10 +109,22 @@ impl InputQuad {
                 4,
                 "expected 4 reticules in outer-only mode"
             );
-            for (i, &corner) in outer.iter().enumerate() {
-                reticules[i].position = (*corner).into();
+            for (i, &corner) in outer.into_iter().enumerate() {
+                reticules[i].position = corner;
             }
         }
+    }
+
+    fn calculate_alpha(&self, context: &Context) -> Option<f64> {
+        let active_event = context.source_event?;
+        let nde_event = nde::Event::from_ass_event(active_event);
+        let style = context.get_event_style(&nde_event);
+        let bounding_box = nde::util::measure(&nde_event, style);
+        let original_scale = nde_event.effective_font_scale(style);
+        let screen_z =
+            perspective::rescale_screen_z(context.playback_resolution, context.layout_resolution);
+
+        perspective::calculate_alpha(&self.outer, original_scale, bounding_box, screen_z)
     }
 }
 
@@ -165,7 +177,17 @@ impl Node for InputQuad {
                 message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(2))
             });
 
-        iced::widget::column![show_outer_cb, lock_inner_cb, show_grid_cb]
+        let fix_alpha_cb_raw = iced::widget::checkbox(self.fix_alpha).label("Fix aspect ratio");
+
+        let fix_alpha_cb = if self.alpha.is_some() {
+            fix_alpha_cb_raw.on_toggle(move |_| {
+                message::Message::Node(filter_index, self_index, message::Node::ToggleSetting(3))
+            })
+        } else {
+            fix_alpha_cb_raw
+        };
+
+        iced::widget::column![show_outer_cb, lock_inner_cb, fix_alpha_cb, show_grid_cb]
             .spacing(4.0)
             .width(iced::Length::Fill)
             .into()
@@ -180,20 +202,25 @@ impl Node for InputQuad {
                 self.show_outer = !self.show_outer;
                 if self.show_outer {
                     // Rebuild outer from the current inner using Aegisub's default UV coords.
-                    self.outer = self.inner.outer(vector![0.25, 0.25], vector![0.75, 0.75]);
+                    self.outer = self
+                        .inner
+                        .outer(DVec2::new(0.25, 0.25), DVec2::new(0.75, 0.75));
                 }
             }
             1 => self.lock_inner = !self.lock_inner,
             2 => self.show_grid = !self.show_grid,
+            3 => self.fix_alpha = !self.fix_alpha,
             _ => anyhow::bail!("Unknown setting index: {index}"),
         }
         Ok(())
     }
 
-    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+    fn reticule_activate(&mut self, context: &Context) -> Vec<reticule::Reticule> {
+        self.alpha = self.calculate_alpha(context);
+
         let circle = |radius| reticule::Reticule {
             shape: reticule::Shape::Circle,
-            position: nde::tags::Position::default(),
+            position: DVec2::ZERO,
             radius,
         };
 
@@ -222,10 +249,10 @@ impl Node for InputQuad {
         &mut self,
         reticules: &mut reticule::Reticules,
         index: reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: DVec2,
+    ) -> anyhow::Result<DVec2> {
         let old_position = reticules[index].position;
-        let new_pos_vec = vector![new_position.x, new_position.y];
+        let new_pos_vec = DVec2::new(new_position.x, new_position.y);
 
         if !self.show_outer {
             // Inner-only mode: drag inner corners freely (no UV-rect constraint).
@@ -243,10 +270,44 @@ impl Node for InputQuad {
                 0..=3 => {
                     // Inner corner drag: maintain UV-rect structure so moving corner i adjusts
                     // only the c1/c2 axes it controls, then all four inner corners are recomputed.
-                    let mut c1 = self.outer.xy_to_uv(self.inner.q0);
-                    let mut c2 = self.outer.xy_to_uv(self.inner.q2);
-                    let new_uv = self.outer.xy_to_uv(new_pos_vec);
-                    uv_update_corner(&mut c1, &mut c2, new_uv, index.0);
+                    let (c1, c2) = if self.fix_alpha
+                        && let Some(alpha) = self.alpha
+                    {
+                        // Restrict the UV coordinate aspect ratio of the inner quad to `alpha`.
+                        // First, find the UV coordinates of the dragged point and the corner opposite that.
+                        let dragged = self.outer.xy_to_uv(new_pos_vec);
+                        let opposite_index = (index.0 + 2) % 4;
+                        let opposite = self.outer.xy_to_uv(self.inner[opposite_index]);
+                        let mut delta = dragged - opposite;
+
+                        // Prevent dragging the point outside the quadrant with the opposite
+                        // point at its center.
+                        let original = self.outer.xy_to_uv(self.inner[index.0]);
+                        let diagonal = original - opposite;
+                        let new_dragged = if delta.signum() == diagonal.signum() {
+                            // Preserve whichever axis changed more relative to its current size.
+                            if delta.x.abs() > alpha * delta.y.abs() {
+                                delta.y = (delta.x.abs() / alpha).copysign(delta.y);
+                            } else {
+                                delta.x = (delta.y.abs() * alpha).copysign(delta.x);
+                            }
+                            opposite + delta
+                        } else {
+                            original
+                        };
+
+                        let c1 = opposite.min(new_dragged);
+                        let c2 = opposite.max(new_dragged);
+                        (c1, c2)
+                    } else {
+                        // Do not restrict the aspect ratio
+                        let mut c1 = self.outer.xy_to_uv(self.inner.q0);
+                        let mut c2 = self.outer.xy_to_uv(self.inner.q2);
+                        let new_uv = self.outer.xy_to_uv(new_pos_vec);
+                        uv_update_corner(&mut c1, &mut c2, new_uv, index.0);
+                        (c1, c2)
+                    };
+
                     let new_inner = self.outer.inner(c1, c2);
                     if new_inner.is_convex() {
                         self.inner = new_inner;
@@ -280,8 +341,8 @@ impl Node for InputQuad {
             let c2 = self.outer.xy_to_uv(self.inner.q2);
             // d1/d2: inverse — UV of outer.q0 and outer.q2 within the inner quad.
             let denom = c2 - c1;
-            let mut d1 = (-c1).component_div(&denom);
-            let mut d2 = (vector![1.0_f64, 1.0_f64] - c1).component_div(&denom);
+            let mut d1 = -c1 / denom;
+            let mut d2 = (DVec2::new(1.0_f64, 1.0_f64) - c1) / denom;
 
             // Move only the axes controlled by the dragged corner.
             let new_uv = self.inner.xy_to_uv(new_pos_vec);
@@ -289,8 +350,8 @@ impl Node for InputQuad {
 
             // Back-compute c1/c2 and recompute all four outer corners.
             let d_denom = d2 - d1;
-            let new_c1 = (-d1).component_div(&d_denom);
-            let new_c2 = (vector![1.0_f64, 1.0_f64] - d1).component_div(&d_denom);
+            let new_c1 = -d1 / d_denom;
+            let new_c2 = (DVec2::new(1.0_f64, 1.0_f64) - d1) / d_denom;
             let new_outer = self.inner.outer(new_c1, new_c2);
             if new_outer.is_convex() {
                 self.outer = new_outer;
@@ -311,22 +372,11 @@ impl Node for InputQuad {
     ) {
         use iced::widget::canvas;
 
-        let to_iced = |corner: &Vector2<f64>| {
-            view::frame_coordinates_to_iced(corner.x, corner.y, bounds.size(), storage_size)
-        };
+        let to_iced =
+            |corner: DVec2| view::frame_coordinates_to_iced(corner, bounds.size(), storage_size);
 
-        let inner = [
-            &self.inner.q0,
-            &self.inner.q1,
-            &self.inner.q2,
-            &self.inner.q3,
-        ];
-        let outer = [
-            &self.outer.q0,
-            &self.outer.q1,
-            &self.outer.q2,
-            &self.outer.q3,
-        ];
+        let inner = [self.inner.q0, self.inner.q1, self.inner.q2, self.inner.q3];
+        let outer = [self.outer.q0, self.outer.q1, self.outer.q2, self.outer.q3];
 
         let solid_stroke = canvas::Stroke::default()
             .with_color(style::SAMAKU_PRIMARY)
@@ -343,10 +393,10 @@ impl Node for InputQuad {
                 .with_width(1.0)
         };
 
-        let quad_path = |corners: &[&Vector2<f64>; 4]| {
+        let quad_path = |corners: &[DVec2; 4]| {
             canvas::Path::new(|path| {
                 path.move_to(to_iced(corners[0]));
-                for corner in &corners[1..] {
+                for &corner in &corners[1..] {
                     path.line_to(to_iced(corner));
                 }
                 path.close();
@@ -382,15 +432,15 @@ impl Node for InputQuad {
                 }
 
                 let grid_path = canvas::Path::new(|builder| {
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![GRID_MIN, uv_t])));
+                    builder.move_to(to_iced(self.inner.uv_to_xy(DVec2::new(GRID_MIN, uv_t))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_u = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_u, uv_t])));
+                        builder.line_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_u, uv_t))));
                     }
-                    builder.move_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, GRID_MIN])));
+                    builder.move_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_t, GRID_MIN))));
                     for samp_idx in 1..=N_SAMPLES {
                         let uv_v = f64::from(samp_idx).mul_add(samp_step, GRID_MIN);
-                        builder.line_to(to_iced(&self.inner.uv_to_xy(vector![uv_t, uv_v])));
+                        builder.line_to(to_iced(self.inner.uv_to_xy(DVec2::new(uv_t, uv_v))));
                     }
                 });
                 canvas_frame.stroke(
@@ -421,10 +471,12 @@ inventory::submit! {
     Shell::new(
         &["Input", "Perspective quad"],
         || Box::new(InputQuad {
-            inner: perspective::Quad::make_rect(vector![200.0, 200.0], vector![300.0, 300.0]),
-            outer: perspective::Quad::make_rect(vector![100.0, 100.0], vector![400.0, 400.0]),
+            inner: perspective::Quad::make_rect(DVec2::new(200.0, 200.0), DVec2::new(300.0, 300.0)),
+            outer: perspective::Quad::make_rect(DVec2::new(100.0, 100.0), DVec2::new(400.0, 400.0)),
+            alpha: None,
             show_outer: true,
             lock_inner: false,
+            fix_alpha: false,
             show_grid: false,
         })
     )

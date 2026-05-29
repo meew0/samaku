@@ -162,7 +162,7 @@ pub struct Global {
     pub position: Option<PositionOrMove>,
     pub rectangle_clip: Option<Clip<Rectangle>>,
     pub vector_clip: Option<Clip<Drawing>>,
-    pub origin: Option<Position>,
+    pub origin: Option<glam::DVec2>,
     pub fade: Option<Fade>,
     pub wrap_style: Resettable<WrapStyle>,
     pub alignment: Resettable<Alignment>,
@@ -748,7 +748,7 @@ pub struct AnimationInterval {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PositionOrMove {
-    Position(Position),
+    Position(glam::DVec2),
     Move(Move),
 }
 
@@ -764,40 +764,14 @@ impl emit::Tag for PositionOrMove {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Position {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Position {
-    #[must_use]
-    pub fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-}
-
-impl emit::Value for Position {
+// We use glam's `DVec2` as a general purpose screen-space vector (point or difference between points)
+// to make mathematics simple.
+impl emit::Value for glam::DVec2 {
     fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
     where
         W: std::fmt::Write,
     {
         write!(sink, "{},{}", self.x, self.y)
-    }
-}
-
-impl From<nalgebra::Vector2<f64>> for Position {
-    fn from(value: nalgebra::Vector2<f64>) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
-
-impl From<Position> for nalgebra::Vector2<f64> {
-    fn from(value: Position) -> Self {
-        nalgebra::Vector2::new(value.x, value.y)
     }
 }
 
@@ -880,8 +854,8 @@ impl lerp::Lerp for Maybe2D {
     }
 }
 
-impl From<nalgebra::Vector2<f64>> for Maybe2D {
-    fn from(vector: nalgebra::Vector2<f64>) -> Self {
+impl From<glam::DVec2> for Maybe2D {
+    fn from(vector: glam::DVec2) -> Self {
         Self {
             x: Resettable::Override(vector.x),
             y: Resettable::Override(vector.y),
@@ -990,38 +964,6 @@ impl lerp::Lerp for Maybe3D {
 
     fn out(self) -> Self::Output {
         self
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Float2D {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Float2D {
-    #[must_use]
-    pub fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-}
-
-impl From<Float2D> for nalgebra::Vector2<f64> {
-    fn from(value: Float2D) -> Self {
-        nalgebra::vector![value.x, value.y]
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Float3D {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-impl From<Float3D> for nalgebra::Vector3<f64> {
-    fn from(value: Float3D) -> Self {
-        nalgebra::vector![value.x, value.y, value.z]
     }
 }
 
@@ -1326,8 +1268,8 @@ impl HorizontalAlignment {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Move {
-    pub initial_position: Position,
-    pub final_position: Position,
+    pub initial_position: glam::DVec2,
+    pub final_position: glam::DVec2,
     pub timing: Option<MoveTiming>,
 }
 
@@ -2196,7 +2138,7 @@ mod tests {
     #[test]
     fn global() -> Result<(), std::fmt::Error> {
         let global = Global {
-            position: Some(PositionOrMove::Position(Position { x: 1.0, y: 2.0 })),
+            position: Some(PositionOrMove::Position(glam::DVec2::new(1.0, 2.0))),
             rectangle_clip: Some(Clip::Inverse(Rectangle {
                 x1: 10,
                 y1: 11,
@@ -2207,7 +2149,7 @@ mod tests {
                 commands: "abc".to_owned(),
                 scale: 1,
             })),
-            origin: Some(Position { x: 3.0, y: 4.0 }),
+            origin: Some(glam::DVec2::new(3.0, 4.0)),
             fade: Some(Fade::Complex(ComplexFade {
                 transparency_before: DecimalTransparency(0),
                 transparency_main: DecimalTransparency(100),

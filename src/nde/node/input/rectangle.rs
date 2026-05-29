@@ -15,19 +15,19 @@ impl InputRectangle {
             "the required number of reticules should be present"
         ); // Elide bounds checks
 
-        reticules[0].position = nde::tags::Position {
+        reticules[0].position = glam::DVec2 {
             x: f64::from(self.value.x1),
             y: f64::from(self.value.y1),
         };
-        reticules[1].position = nde::tags::Position {
+        reticules[1].position = glam::DVec2 {
             x: f64::from(self.value.x2),
             y: f64::from(self.value.y1),
         };
-        reticules[2].position = nde::tags::Position {
+        reticules[2].position = glam::DVec2 {
             x: f64::from(self.value.x1),
             y: f64::from(self.value.y2),
         };
-        reticules[3].position = nde::tags::Position {
+        reticules[3].position = glam::DVec2 {
             x: f64::from(self.value.x2),
             y: f64::from(self.value.y2),
         };
@@ -77,26 +77,27 @@ impl Node for InputRectangle {
             .into()
     }
 
-    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+    fn reticule_activate(&mut self, _context: &Context) -> Vec<reticule::Reticule> {
+        // TODO start with active event bounds
         let mut reticule_list = vec![
             reticule::Reticule {
                 shape: reticule::Shape::CornerTopLeft,
-                position: nde::tags::Position::default(),
+                position: glam::DVec2::ZERO,
                 radius: 15.0,
             },
             reticule::Reticule {
                 shape: reticule::Shape::CornerTopRight,
-                position: nde::tags::Position::default(),
+                position: glam::DVec2::ZERO,
                 radius: 15.0,
             },
             reticule::Reticule {
                 shape: reticule::Shape::CornerBottomLeft,
-                position: nde::tags::Position::default(),
+                position: glam::DVec2::ZERO,
                 radius: 15.0,
             },
             reticule::Reticule {
                 shape: reticule::Shape::CornerBottomRight,
-                position: nde::tags::Position::default(),
+                position: glam::DVec2::ZERO,
                 radius: 15.0,
             },
         ];
@@ -109,8 +110,8 @@ impl Node for InputRectangle {
         &mut self,
         reticules: &mut reticule::Reticules,
         index: reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: glam::DVec2,
+    ) -> anyhow::Result<glam::DVec2> {
         let mut new_value = self.value;
 
         let (x_mut, y_mut) = match index.0 {
@@ -152,7 +153,7 @@ impl Node for InputRectangle {
             self.reticule_update_internal(&mut reticules.list);
         }
 
-        Ok(nde::tags::Position {
+        Ok(glam::DVec2 {
             x: f64::from(old_x),
             y: f64::from(old_y),
         })

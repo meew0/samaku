@@ -48,7 +48,7 @@ impl std::ops::IndexMut<Index> for Reticules {
 #[derive(Debug, Clone)]
 pub struct Reticule {
     pub shape: Shape,
-    pub position: nde::tags::Position,
+    pub position: glam::DVec2,
     pub radius: f32,
 }
 
@@ -59,7 +59,7 @@ impl Reticule {
         size: iced::Size,
         storage_size: subtitle::Resolution,
     ) -> iced::Point {
-        view::frame_coordinates_to_iced(self.position.x, self.position.y, size, storage_size)
+        view::frame_coordinates_to_iced(self.position, size, storage_size)
     }
 
     #[must_use]
@@ -68,13 +68,13 @@ impl Reticule {
         offset: iced::Vector,
         size: iced::Size,
         storage_size: subtitle::Resolution,
-    ) -> nde::tags::Position {
+    ) -> glam::DVec2 {
         let x: f64 = (f64::from(iced_point.x) - f64::from(offset.x)) * f64::from(storage_size.x)
             / f64::from(size.width);
         let y: f64 = (f64::from(iced_point.y) - f64::from(offset.y)) * f64::from(storage_size.y)
             / f64::from(size.height);
 
-        nde::tags::Position { x, y }
+        glam::DVec2 { x, y }
     }
 }
 
@@ -96,7 +96,7 @@ mod tests {
     fn make_reticule(x: f64, y: f64) -> Reticule {
         Reticule {
             shape: Shape::Cross,
-            position: nde::tags::Position { x, y },
+            position: glam::DVec2 { x, y },
             radius: 5.0,
         }
     }
@@ -168,7 +168,7 @@ mod tests {
             width: 1280.0,
             height: 720.0,
         };
-        let original = nde::tags::Position { x: 480.0, y: 270.0 };
+        let original = glam::DVec2 { x: 480.0, y: 270.0 };
         let reticule = make_reticule(original.x, original.y);
         let iced_point = reticule.iced_position(size, storage);
         let back = Reticule::position_from_iced(

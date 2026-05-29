@@ -151,24 +151,24 @@ impl Event {
     }
 
     #[must_use]
-    pub fn effective_border(&self, style: &subtitle::Style) -> tags::Float2D {
+    pub fn effective_border(&self, style: &subtitle::Style) -> glam::DVec2 {
         let x = *self.effective_tag(|local| &local.border.x, &style.border_width);
         let y = *self.effective_tag(|local| &local.border.y, &style.border_width);
-        tags::Float2D { x, y }
+        glam::DVec2::new(x, y)
     }
 
     #[must_use]
-    pub fn effective_shadow(&self, style: &subtitle::Style) -> tags::Float2D {
+    pub fn effective_shadow(&self, style: &subtitle::Style) -> glam::DVec2 {
         let x = *self.effective_tag(|local| &local.shadow.x, &style.shadow_distance);
         let y = *self.effective_tag(|local| &local.shadow.y, &style.shadow_distance);
-        tags::Float2D { x, y }
+        glam::DVec2::new(x, y)
     }
 
     #[must_use]
-    pub fn effective_font_scale(&self, style: &subtitle::Style) -> tags::Float2D {
+    pub fn effective_font_scale(&self, style: &subtitle::Style) -> glam::DVec2 {
         let x = *self.effective_tag(|local| &local.font_scale.x, &style.scale.x);
         let y = *self.effective_tag(|local| &local.font_scale.y, &style.scale.y);
-        tags::Float2D { x, y }
+        glam::DVec2::new(x, y)
     }
 
     #[must_use]
@@ -284,8 +284,14 @@ impl Span {
 /// Represents the screen-space bounding box of an event.
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingBox {
-    top_left: tags::Position,
-    bottom_right: tags::Position,
+    top_left: glam::DVec2,
+    bottom_right: glam::DVec2,
+}
+
+impl BoundingBox {
+    fn size(&self) -> glam::DVec2 {
+        self.bottom_right - self.top_left
+    }
 }
 
 #[cfg(test)]

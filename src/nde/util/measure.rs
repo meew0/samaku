@@ -112,8 +112,8 @@ pub fn measure(event: &nde::Event, style: &subtitle::Style) -> nde::BoundingBox 
     total_height += shadow.y.abs();
 
     nde::BoundingBox {
-        top_left: nde::tags::Position::new(0.0, 0.0),
-        bottom_right: nde::tags::Position::new(total_width, total_height),
+        top_left: glam::DVec2::ZERO,
+        bottom_right: glam::DVec2::new(total_width, total_height),
     }
 }
 

@@ -4,11 +4,9 @@
 //! See https://mz.sb/persp for an explanation of the mathematics behind this transformation.
 
 use crate::nde::BoundingBox;
-use crate::nde::tags::{
-    Alignment, Float2D, Global, Local, Maybe3D, Position, PositionOrMove, Resettable,
-};
+use crate::nde::tags::{Alignment, Global, Local, Maybe3D, PositionOrMove, Resettable};
 use crate::subtitle;
-use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
+use glam::{DMat2, DMat3, DVec2, DVec3, swizzles::Vec3Swizzles as _};
 
 /// A planar quadrilateral, corners ordered counter-clockwise
 /// (`q0` = top-left, `q1` = top-right, `q2` = bottom-right, `q3` = bottom-left;
@@ -16,10 +14,10 @@ use nalgebra::{Matrix2, Rotation3, Vector2, Vector3, vector};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(from = "SerdeQuad", into = "SerdeQuad")]
 pub struct Quad {
-    pub q0: Vector2<f64>,
-    pub q1: Vector2<f64>,
-    pub q2: Vector2<f64>,
-    pub q3: Vector2<f64>,
+    pub q0: DVec2,
+    pub q1: DVec2,
+    pub q2: DVec2,
+    pub q3: DVec2,
 }
 
 impl Quad {
@@ -36,7 +34,7 @@ impl Quad {
 
     /// Calculates the midpoint of a quad, defined as the intersection of its two diagonals.
     #[must_use]
-    pub fn midpoint(&self) -> Vector2<f64> {
+    pub fn midpoint(&self) -> DVec2 {
         let diag1 = self.q2 - self.q0;
         let (alpha, _) = self.diagonal_intersection();
         self.q0 + alpha * diag1
@@ -54,7 +52,7 @@ impl Quad {
     /// Unwrap a quad into its top-left corner and four vectors relative to it.
     #[inline]
     #[must_use]
-    pub fn unwrap(&self) -> (Vector2<f64>, Vector2<f64>, Vector2<f64>, Vector2<f64>) {
+    pub fn unwrap(&self) -> (DVec2, DVec2, DVec2, DVec2) {
         (
             self.q0,
             self.q1 - self.q0,
@@ -65,7 +63,7 @@ impl Quad {
 
     /// Maps a screen-space point `xy` to the quad's bilinear UV coordinates.
     #[must_use]
-    pub fn xy_to_uv(&self, point: Vector2<f64>) -> Vector2<f64> {
+    pub fn xy_to_uv(&self, point: DVec2) -> DVec2 {
         let (k0, k1, k2, k3) = self.unwrap();
         let point_rel = point - k0;
         let (x1, y1, x2, y2, x3, y3, px, py) =
@@ -130,12 +128,12 @@ impl Quad {
                 ),
             );
 
-        vector![uv_u, uv_v]
+        DVec2::new(uv_u, uv_v)
     }
 
     /// Inverse of [`xy_to_uv`]: maps bilinear `(u, v)` coordinates back to screen-space.
     #[must_use]
-    pub fn uv_to_xy(&self, uv: Vector2<f64>) -> Vector2<f64> {
+    pub fn uv_to_xy(&self, uv: DVec2) -> DVec2 {
         let (k0, k1, k2, k3) = self.unwrap();
         let (x1, y1, x2, y2, x3, y3) = (k1.x, k1.y, k2.x, k2.y, k3.x, k3.y);
 
@@ -158,25 +156,25 @@ impl Quad {
             uv_u * y1 * x3.mul_add(y2, -(x2 * y3)),
         ) / denom;
 
-        k0 + vector![px, py]
+        k0 + DVec2::new(px, py)
     }
 
     /// Builds an axis-aligned quad from two opposite corners.
     #[inline]
     #[must_use]
-    pub fn make_rect(top_left: Vector2<f64>, bottom_right: Vector2<f64>) -> Self {
+    pub fn make_rect(top_left: DVec2, bottom_right: DVec2) -> Self {
         Self {
-            q0: vector![top_left.x, top_left.y],
-            q1: vector![bottom_right.x, top_left.y],
-            q2: vector![bottom_right.x, bottom_right.y],
-            q3: vector![top_left.x, bottom_right.y],
+            q0: DVec2::new(top_left.x, top_left.y),
+            q1: DVec2::new(bottom_right.x, top_left.y),
+            q2: DVec2::new(bottom_right.x, bottom_right.y),
+            q3: DVec2::new(top_left.x, bottom_right.y),
         }
     }
 
     /// Calculates an inner quad from a rectangle specified in UV coordinates on the outer (i.e. `self`) quad.
     #[inline]
     #[must_use]
-    pub fn inner(&self, top_left_uv: Vector2<f64>, bottom_right_uv: Vector2<f64>) -> Quad {
+    pub fn inner(&self, top_left_uv: DVec2, bottom_right_uv: DVec2) -> Quad {
         let uv = Quad::make_rect(top_left_uv, bottom_right_uv);
         Quad {
             q0: self.uv_to_xy(uv.q0),
@@ -190,10 +188,10 @@ impl Quad {
     /// UV coordinate corners `top_left_uv` and `bottom_right_uv` within the desired outer quad.
     #[inline]
     #[must_use]
-    pub fn outer(&self, top_left_uv: Vector2<f64>, bottom_right_uv: Vector2<f64>) -> Quad {
+    pub fn outer(&self, top_left_uv: DVec2, bottom_right_uv: DVec2) -> Quad {
         let denom = bottom_right_uv - top_left_uv;
-        let lo = (-top_left_uv).component_div(&denom);
-        let hi = vector![1.0 - top_left_uv.x, 1.0 - top_left_uv.y].component_div(&denom);
+        let lo = -top_left_uv / denom;
+        let hi = DVec2::new(1.0 - top_left_uv.x, 1.0 - top_left_uv.y) / denom;
         let uv_quad = Quad::make_rect(lo, hi);
         Quad {
             q0: self.uv_to_xy(uv_quad.q0),
@@ -204,14 +202,28 @@ impl Quad {
     }
 }
 
+impl std::ops::Index<usize> for Quad {
+    type Output = DVec2;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.q0,
+            1 => &self.q1,
+            2 => &self.q2,
+            3 => &self.q3,
+            _ => panic!("corner index out of range: {index}"),
+        }
+    }
+}
+
 type SerdeQuad = (f64, f64, f64, f64, f64, f64, f64, f64);
 impl From<SerdeQuad> for Quad {
     fn from(value: SerdeQuad) -> Self {
         Quad {
-            q0: vector![value.0, value.1],
-            q1: vector![value.2, value.3],
-            q2: vector![value.4, value.5],
-            q3: vector![value.6, value.7],
+            q0: DVec2::new(value.0, value.1),
+            q1: DVec2::new(value.2, value.3),
+            q2: DVec2::new(value.4, value.5),
+            q3: DVec2::new(value.6, value.7),
         }
     }
 }
@@ -248,11 +260,11 @@ pub fn rescale_screen_z(
 /// `a1 = (a11, a21)`, and `a2 = (a12, a22)`.
 #[inline]
 #[must_use]
-fn solve_2x2(a1: Vector2<f64>, a2: Vector2<f64>, target: Vector2<f64>) -> Vector2<f64> {
-    let matrix = Matrix2::from_columns(&[a1, a2]);
+fn solve_2x2(a1: DVec2, a2: DVec2, target: DVec2) -> DVec2 {
+    let matrix = DMat2::from_cols(a1, a2);
     match matrix.try_inverse() {
         Some(inv) => inv * target,
-        None => vector![f64::NAN, f64::NAN],
+        None => DVec2::new(f64::NAN, f64::NAN),
     }
 }
 
@@ -265,7 +277,7 @@ pub enum OrgMode {
     /// (no shearing = no `\fax`).
     NoFax,
     /// `\org` is kept at whatever the caller already had.
-    Keep(Position),
+    Keep(DVec2),
 }
 
 /// Calculates the perspective override tags that make a subtitle's base rectangle project onto the given quad.
@@ -285,33 +297,12 @@ pub fn quad_to_tags(
     bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Perspective {
-    // Find a parallelogram projecting to the quad. Independent of translation.
-    let diag = quad.q2 - quad.q0;
-    let side2 = quad.q1 - quad.q2;
-    let side3 = quad.q3 - quad.q2;
-    let z_vector = solve_2x2(side2, side3, -diag);
-    let (z1, z3) = (z_vector[0], z_vector[1]);
-
-    let midpoint = quad.midpoint();
-
-    let org = match org_mode {
-        OrgMode::Center => midpoint,
-        OrgMode::Keep(previous) => previous.into(),
-        OrgMode::NoFax => calculate_no_fax_org(quad, z1, z3, screen_z),
-    };
-
-    // Normalize to the chosen `\org`.
-    let q0 = quad.q0 - org;
-    let q1 = quad.q1 - org;
-    let q2 = quad.q2 - org;
-    let q3 = quad.q3 - org;
-
-    // Lift the quad into the reconstructed 3D parallelogram.
-    let r0 = vector![q0.x, q0.y, screen_z];
-    let r1 = z1 * vector![q1.x, q1.y, screen_z];
-    let r2 = (z1 + z3 - 1.0) * vector![q2.x, q2.y, screen_z];
-    let r3 = z3 * vector![q3.x, q3.y, screen_z];
-    let mut parallelogram = [r0, r1, r2, r3];
+    // Find the world-space parallelogram that would result in the given quad
+    // when projected on the screen, observing from a certain origin point
+    // which depends on `org_mode`. Returns the determined origin point
+    // as well.
+    let (org, mut parallelogram) = lift(quad, org_mode, screen_z);
+    let [r0, r1, _r2, r3] = parallelogram;
 
     // Find the z coordinate of the point projecting to the origin.
     let top_side = r1 - r0;
@@ -321,14 +312,13 @@ pub fn quad_to_tags(
     let oz = (r0 + orgla0 * top_side + orgla1 * left_side).z;
 
     // Normalize so the origin has z=screen_z, and move the screen plane to z=0.
-    let z_offset = vector![0.0, 0.0, screen_z];
+    let z_offset = DVec3::new(0.0, 0.0, screen_z);
     for corner in &mut parallelogram {
         *corner = *corner * screen_z / oz - z_offset;
     }
 
     // Find the normal vector of the parallelogram we want to rotate.
-    let normal =
-        (parallelogram[1] - parallelogram[0]).cross(&(parallelogram[3] - parallelogram[0]));
+    let normal = (parallelogram[1] - parallelogram[0]).cross(parallelogram[3] - parallelogram[0]);
 
     // Find the X and Y rotation angles.
     let rot_y = normal.x.atan2(normal.z);
@@ -354,22 +344,19 @@ pub fn quad_to_tags(
     let left_edge = parallelogram[3] - parallelogram[0];
     let raw_fax = left_edge.x / left_edge.y;
 
-    let width = top_edge.norm();
+    let width = top_edge.length();
     let height = left_edge.y.abs();
-    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) = (
-        bounding_box.top_left.into(),
-        bounding_box.bottom_right.into(),
-    );
-    let scale_x = width / (bbox_max.x - bbox_min.x).max(1.0);
-    let scale_y = height / (bbox_max.y - bbox_min.y).max(1.0);
-    let scale = vector![scale_x, scale_y];
+    let bbox_size = bounding_box.size();
+    let scale_x = width / bbox_size.x.max(1.0);
+    let scale_y = height / bbox_size.y.max(1.0);
+    let scale = DVec2::new(scale_x, scale_y);
 
     let shift_v = alignment.vertical.shift_factor();
     let shift_h = alignment.horizontal.shift_factor();
 
     let top_left_corner_xy = parallelogram[0].xy();
-    let pos = org + top_left_corner_xy - bbox_min.component_mul(&scale)
-        + vector![width * shift_h, height * shift_v];
+    let pos = org + top_left_corner_xy - bounding_box.top_left / scale
+        + DVec2::new(width * shift_h, height * shift_v);
 
     Perspective {
         pos,
@@ -382,8 +369,40 @@ pub fn quad_to_tags(
     }
 }
 
+fn lift(quad: &Quad, org_mode: OrgMode, screen_z: f64) -> (DVec2, [DVec3; 4]) {
+    // Find the depth factors `z1`and `z3` that make up
+    // the difference between a 2D quad and a 3D parallelogram.
+    let diag = quad.q2 - quad.q0;
+    let side2 = quad.q1 - quad.q2;
+    let side3 = quad.q3 - quad.q2;
+    let z_vector = solve_2x2(side2, side3, -diag);
+    let (z1, z3) = (z_vector[0], z_vector[1]);
+
+    // Find the origin point from which we observe the world.
+    let org = match org_mode {
+        OrgMode::Center => quad.midpoint(),
+        OrgMode::Keep(previous) => previous,
+        OrgMode::NoFax => calculate_no_fax_org(quad, z1, z3, screen_z),
+    };
+
+    // Normalize to the chosen `\org`.
+    let q0 = quad.q0 - org;
+    let q1 = quad.q1 - org;
+    let q2 = quad.q2 - org;
+    let q3 = quad.q3 - org;
+
+    // Lift the quad into the reconstructed 3D parallelogram.
+    let r0 = DVec3::new(q0.x, q0.y, screen_z);
+    let r1 = z1 * DVec3::new(q1.x, q1.y, screen_z);
+    let r2 = (z1 + z3 - 1.0) * DVec3::new(q2.x, q2.y, screen_z);
+    let r3 = z3 * DVec3::new(q3.x, q3.y, screen_z);
+    let parallelogram = [r0, r1, r2, r3];
+
+    (org, parallelogram)
+}
+
 #[expect(clippy::min_ident_chars, reason = "mathematical identifiers")]
-fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2<f64> {
+fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> DVec2 {
     let v1 = quad.q1 - quad.q0;
     let v3 = quad.q3 - quad.q0;
 
@@ -392,7 +411,7 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
     // a*(x^2 + y^2) - b.x - b.y + c = 0 with these coefficients.
     let a = (1.0 - z1) * (1.0 - z3);
     let b = z1 * v1 + z3 * v3 - z1 * z3 * (v1 + v3);
-    let c = (z1 * z3).mul_add(v1.dot(&v3), (z1 - 1.0) * (z3 - 1.0) * screen_z * screen_z);
+    let c = (z1 * z3).mul_add(v1.dot(v3), (z1 - 1.0) * (z3 - 1.0) * screen_z * screen_z);
 
     // Default t puts \org at the center of the quad; find the valid t
     // closest to it.
@@ -400,23 +419,23 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
 
     if a == 0.0 {
         // Degenerate: the equation cuts out a line (or is trivial).
-        if b.norm_squared() != 0.0 {
-            t += b * ((c - t.dot(&b)) / b.norm_squared());
+        if b.length_squared() != 0.0 {
+            t += b * ((c - t.dot(b)) / b.length_squared());
         }
         quad.q0 - t
     } else {
         // The equation cuts out a circle. Complete the square.
         let circle_center = b / (2.0 * a);
-        let sqradius = (b.norm_squared() / (4.0 * a) - c) / a;
+        let sqradius = (b.length_squared() / (4.0 * a) - c) / a;
         if sqradius <= 0.0 {
             // Very rare: \org is the circle center directly.
             circle_center
         } else {
             let radius = sqradius.sqrt();
             let center2t = t - circle_center;
-            let len = center2t.norm();
+            let len = center2t.length();
             t = if len == 0.0 {
-                circle_center + vector![radius, 0.0]
+                circle_center + DVec2::new(radius, 0.0)
             } else {
                 circle_center + center2t / len * radius
             };
@@ -425,13 +444,40 @@ fn calculate_no_fax_org(quad: &Quad, z1: f64, z3: f64, screen_z: f64) -> Vector2
     }
 }
 
+/// Calculate the UV aspect ratio the inner quad's points should have in order to preserve the
+/// text aspect ratio after `quad_to_text`.
+#[must_use]
+pub fn calculate_alpha(
+    outer: &Quad,
+    original_scale: DVec2,
+    bounding_box: BoundingBox,
+    screen_z: f64,
+) -> Option<f64> {
+    // We always use `NoFax` here, since the `alpha` calculation is only valid if the parallelogram
+    // is a rectangle.
+    let (_, parallelogram) = lift(outer, OrgMode::NoFax, screen_z);
+
+    let top_edge = parallelogram[1] - parallelogram[0];
+    let left_edge = parallelogram[3] - parallelogram[0];
+
+    let width = top_edge.length();
+    let height = left_edge.length();
+
+    let bbox_size = bounding_box.size();
+
+    let alpha =
+        (original_scale.x / original_scale.y) * (bbox_size.x / bbox_size.y) * (height / width);
+
+    alpha.is_finite().then_some(alpha)
+}
+
 const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
 
 #[derive(Debug, Clone)]
 pub struct Perspective {
-    pos: Vector2<f64>,
-    org: Vector2<f64>,
-    scale: Vector2<f64>,
+    pos: DVec2,
+    org: DVec2,
+    scale: DVec2,
     rot_x: f64,
     rot_y: f64,
     rot_z: f64,
@@ -446,9 +492,9 @@ impl Perspective {
     pub fn apply(
         &self,
         global: &mut Global,
-        old_font_scale: Float2D,
-        old_border: Float2D,
-        old_shadow: Float2D,
+        old_font_scale: DVec2,
+        old_border: DVec2,
+        old_shadow: DVec2,
     ) -> Option<Local> {
         let angle_x = self.rot_x * RAD2DEG;
         let angle_y = -self.rot_y * RAD2DEG;
@@ -459,11 +505,9 @@ impl Perspective {
         let fay = 0.0;
 
         // Border and shadow scale with the change in fsc (component-wise).
-        let border_shadow_ratio = new_font_scale.component_div(&old_font_scale.into());
-        let border: Vector2<f64> = old_border.into();
-        let shadow: Vector2<f64> = old_shadow.into();
-        let new_border = border.component_mul(&border_shadow_ratio);
-        let new_shadow = shadow.component_mul(&border_shadow_ratio);
+        let border_shadow_ratio = new_font_scale / old_font_scale;
+        let new_border = old_border * border_shadow_ratio;
+        let new_shadow = old_shadow * border_shadow_ratio;
 
         let is_finite = angle_x.is_finite()
             && angle_y.is_finite()
@@ -476,8 +520,8 @@ impl Perspective {
             && vector_is_finite(new_shadow);
 
         is_finite.then(|| {
-            global.position = Some(PositionOrMove::Position(self.pos.into()));
-            global.origin = Some(self.org.into());
+            global.position = Some(PositionOrMove::Position(self.pos));
+            global.origin = Some(self.org);
 
             Local {
                 text_rotation: Maybe3D {
@@ -485,7 +529,7 @@ impl Perspective {
                     y: Resettable::Override(angle_y),
                     z: Resettable::Override(angle_z),
                 },
-                text_shear: vector![fax, fay].into(),
+                text_shear: DVec2::new(fax, fay).into(),
                 font_scale: new_font_scale.into(),
                 border: new_border.into(),
                 shadow: new_shadow.into(),
@@ -495,7 +539,7 @@ impl Perspective {
     }
 }
 
-fn vector_is_finite(vector: Vector2<f64>) -> bool {
+fn vector_is_finite(vector: DVec2) -> bool {
     vector.x.is_finite() && vector.y.is_finite()
 }
 
@@ -509,10 +553,7 @@ pub fn tags_to_quad(
     bounding_box: BoundingBox,
     screen_z: f64,
 ) -> Quad {
-    let (bbox_min, bbox_max): (Vector2<f64>, Vector2<f64>) = (
-        bounding_box.top_left.into(),
-        bounding_box.bottom_right.into(),
-    );
+    let (bbox_min, bbox_max): (DVec2, DVec2) = (bounding_box.top_left, bounding_box.bottom_right);
     let text_width = (bbox_max.x - bbox_min.x).max(1.0);
     let text_height = (bbox_max.y - bbox_min.y).max(1.0);
 
@@ -522,25 +563,25 @@ pub fn tags_to_quad(
     let fax = perspective.raw_fax * perspective.scale.y / perspective.scale.x;
 
     let rect = Quad::make_rect(bbox_min, bbox_max);
-    let mut out = [Vector2::zeros(); 4];
+    let mut out = [DVec2::ZERO; 4];
 
     for (i, &corner) in [rect.q0, rect.q1, rect.q2, rect.q3].iter().enumerate() {
         let mut point = corner;
 
         // Apply \fax and \fay
-        point = vector![point.y.mul_add(fax, point.x), point.y];
+        point = DVec2::new(point.y.mul_add(fax, point.x), point.y);
 
         // Translate to alignment point
-        point += vector![shift_x, shift_y];
+        point += DVec2::new(shift_x, shift_y);
 
         // Apply scaling
-        point.component_mul_assign(&perspective.scale);
+        point *= perspective.scale;
 
         // Translate relative to origin
         point += perspective.pos - perspective.org;
 
         // Rotate ZXY
-        let mut point_3d = vector![point.x, point.y, 0.0];
+        let mut point_3d = DVec3::new(point.x, point.y, 0.0);
         point_3d = rotate_z(point_3d, perspective.rot_z);
         point_3d = rotate_x(point_3d, -perspective.rot_x);
         point_3d = rotate_y(point_3d, -perspective.rot_y);
@@ -563,22 +604,22 @@ pub fn tags_to_quad(
 // Rotation helpers that exactly match Aegisub's handedness convention
 
 #[inline]
-fn rotate_x(vector: Vector3<f64>, theta: f64) -> Vector3<f64> {
+fn rotate_x(vector: DVec3, theta: f64) -> DVec3 {
     // y' = cos*y - sin*z ; z' = sin*y + cos*z  (standard right-handed X)
-    Rotation3::from_axis_angle(&Vector3::x_axis(), theta) * vector
+    DMat3::from_rotation_x(theta) * vector
 }
 
 #[inline]
-fn rotate_y(vector: Vector3<f64>, theta: f64) -> Vector3<f64> {
+fn rotate_y(vector: DVec3, theta: f64) -> DVec3 {
     // Aegisub: x' = cos*x - sin*z ; z' = sin*x + cos*z.
     // The standard right-handed Y-rotation is x' = cos*x + sin*z, so we negate.
-    Rotation3::from_axis_angle(&Vector3::y_axis(), -theta) * vector
+    DMat3::from_rotation_y(-theta) * vector
 }
 
 #[inline]
-fn rotate_z(vector: Vector3<f64>, theta: f64) -> Vector3<f64> {
+fn rotate_z(vector: DVec3, theta: f64) -> DVec3 {
     // x' = cos*x - sin*y ; y' = sin*x + cos*y  (standard right-handed Z)
-    Rotation3::from_axis_angle(&Vector3::z_axis(), theta) * vector
+    DMat3::from_rotation_z(theta) * vector
 }
 
 #[cfg(test)]
@@ -609,10 +650,10 @@ mod tests {
 
     fn sample_irregular_quad() -> Quad {
         Quad {
-            q0: vector![100.0, 120.0],
-            q1: vector![540.0, 90.0],
-            q2: vector![600.0, 420.0],
-            q3: vector![60.0, 400.0],
+            q0: DVec2::new(100.0, 120.0),
+            q1: DVec2::new(540.0, 90.0),
+            q2: DVec2::new(600.0, 420.0),
+            q3: DVec2::new(60.0, 400.0),
         }
     }
 
@@ -640,7 +681,7 @@ mod tests {
     #[test]
     fn xy_uv_roundtrip() {
         let quad = sample_irregular_quad();
-        let point = vector![333.0, 250.0];
+        let point = DVec2::new(333.0, 250.0);
 
         let round_trip_point = quad.uv_to_xy(quad.xy_to_uv(point));
         assert_float_absolute_eq!(point.x, round_trip_point.x, 1e-9);
@@ -653,10 +694,10 @@ mod tests {
 
         // Self-intersecting “bowtie” ordering is not convex.
         let bowtie = Quad {
-            q0: vector![0.0, 0.0],
-            q1: vector![100.0, 0.0],
-            q2: vector![0.0, 100.0],
-            q3: vector![100.0, 100.0],
+            q0: DVec2::new(0.0, 0.0),
+            q1: DVec2::new(100.0, 0.0),
+            q2: DVec2::new(0.0, 100.0),
+            q3: DVec2::new(100.0, 100.0),
         };
         assert!(!bowtie.is_convex());
     }
@@ -664,8 +705,8 @@ mod tests {
     #[test]
     fn inner_outer_roundtrip() {
         let outer = sample_irregular_quad();
-        let c1 = vector![0.2, 0.15];
-        let c2 = vector![0.8, 0.7];
+        let c1 = DVec2::new(0.2, 0.15);
+        let c2 = DVec2::new(0.8, 0.7);
 
         let inner = outer.inner(c1, c2);
         let outer2 = inner.outer(c1, c2);
@@ -678,18 +719,18 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let tags = Perspective {
-            org: vector![960.0, 540.0],
-            pos: vector![900.0, 500.0],
+            org: DVec2::new(960.0, 540.0),
+            pos: DVec2::new(900.0, 500.0),
             rot_x: 22.0 * DEG2RAD,
             rot_y: 15.0 * DEG2RAD,
             rot_z: -7.0 * DEG2RAD,
             raw_fax: 0.0,
-            scale: vector![1.2, 0.95],
+            scale: DVec2::new(1.2, 0.95),
         };
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(300.0, 80.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(300.0, 80.0),
         };
         let align = Alignment::try_from_an(5).unwrap();
 
@@ -703,7 +744,7 @@ mod tests {
         let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         let rec = quad_to_tags(
             &quad,
-            OrgMode::Keep(tags.org.into()),
+            OrgMode::Keep(tags.org),
             align,
             bounding_box,
             screen_z,
@@ -742,18 +783,18 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let tags = Perspective {
-            org: vector![960.0, 540.0],
-            pos: vector![850.0, 480.0],
+            org: DVec2::new(960.0, 540.0),
+            pos: DVec2::new(850.0, 480.0),
             rot_x: 18.0 * DEG2RAD,
             rot_y: 22.0 * DEG2RAD,
             rot_z: -11.0 * DEG2RAD,
             raw_fax: 0.25,
-            scale: vector![1.1, 0.9],
+            scale: DVec2::new(1.1, 0.9),
         };
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(280.0, 70.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(280.0, 70.0),
         };
         let align = Alignment::try_from_an(5).unwrap();
         let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
@@ -769,10 +810,10 @@ mod tests {
     fn known_values() {
         // Values from https://mz.sb/persp
         let quad = Quad {
-            q0: vector![220.0, 130.0],
-            q1: vector![620.0, 160.0],
-            q2: vector![560.0, 370.0],
-            q3: vector![200.0, 340.0],
+            q0: DVec2::new(220.0, 130.0),
+            q1: DVec2::new(620.0, 160.0),
+            q2: DVec2::new(560.0, 370.0),
+            q3: DVec2::new(200.0, 340.0),
         };
 
         let (alpha, beta) = quad.diagonal_intersection();
@@ -787,8 +828,8 @@ mod tests {
         let screen_z = rescale_screen_z(res, res);
 
         let bounding_box = BoundingBox {
-            top_left: Position::new(0.0, 0.0),
-            bottom_right: Position::new(200.0, 60.0),
+            top_left: DVec2::new(0.0, 0.0),
+            bottom_right: DVec2::new(200.0, 60.0),
         };
         let align = Alignment::try_from_an(7).unwrap();
 
@@ -797,7 +838,7 @@ mod tests {
         let perspective_nofax = quad_to_tags(&quad, OrgMode::NoFax, align, bounding_box, screen_z);
         let perspective_keep = quad_to_tags(
             &quad,
-            OrgMode::Keep(Position::new(400.0, 240.0)),
+            OrgMode::Keep(DVec2::new(400.0, 240.0)),
             align,
             bounding_box,
             screen_z,
@@ -843,6 +884,10 @@ mod tests {
         assert_float_absolute_eq!(perspective_nofax.pos.y, 133.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.x, 219.1, 0.1);
         assert_float_absolute_eq!(perspective_keep.pos.y, 147.0, 0.1);
+
+        let alpha_opt = calculate_alpha(&quad, DVec2::ONE, bounding_box, screen_z);
+        assert_matches!(alpha_opt, Some(alpha));
+        assert_float_absolute_eq!(alpha, 1.880, 0.001);
     }
 
     #[test]
@@ -851,9 +896,9 @@ mod tests {
 
         let mut global = Global::empty();
 
-        let scale = Float2D::new(0.9, 1.19);
-        let shadow = Float2D::new(2.0, 3.0);
-        let border = Float2D::new(4.0, 5.0);
+        let scale = DVec2::new(0.9, 1.19);
+        let shadow = DVec2::new(2.0, 3.0);
+        let border = DVec2::new(4.0, 5.0);
 
         let local = tags.apply(&mut global, scale, border, shadow);
         assert_matches!(local, Some(local));

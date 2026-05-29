@@ -5,12 +5,13 @@
 
 use super::{
     Animation, AnimationInterval, Centiseconds, Clip, Colour, ComplexFade, DecimalTransparency,
-    Fade, Float2D, Float3D, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke,
-    KaraokeEffect, KaraokeOnset, Local, LocalAnimatable, Milliseconds, Position, PositionOrMove,
-    Rectangle, Resettable, SimpleFade, Transparency, lerp::Lerp,
+    Fade, FontEncoding, FontSize, FontSizeDelta, FontWeight, Global, Karaoke, KaraokeEffect,
+    KaraokeOnset, Local, LocalAnimatable, Milliseconds, PositionOrMove, Rectangle, Resettable,
+    SimpleFade, Transparency, lerp::Lerp,
 };
 use crate::nde::Span;
 use crate::subtitle;
+use glam::{DVec2, DVec3};
 
 #[derive(Debug, Clone, Copy)]
 pub struct TimeContext {
@@ -194,19 +195,19 @@ struct RenderContext {
     underline: bool,
     strike_out: bool,
 
-    border: Float2D,
-    shadow: Float2D,
+    border: DVec2,
+    shadow: DVec2,
 
     soften: i32,
     gaussian_blur: f64,
 
     font_name: String,
     font_size: f64,
-    font_scale: Float2D,
+    font_scale: DVec2,
     letter_spacing: f64,
 
-    text_rotation: Float3D,
-    text_shear: Float2D,
+    text_rotation: DVec3,
+    text_shear: DVec2,
 
     font_encoding: FontEncoding,
 
@@ -637,16 +638,16 @@ impl Default for RenderContext {
             font_weight: FontWeight::BoldToggle(false),
             underline: false,
             strike_out: false,
-            border: Float2D::default(),
-            shadow: Float2D::default(),
+            border: DVec2::default(),
+            shadow: DVec2::default(),
             soften: 0,
             gaussian_blur: 0.0,
             font_name: String::new(),
             font_size: 0.0,
-            font_scale: Float2D::default(),
+            font_scale: DVec2::default(),
             letter_spacing: 0.0,
-            text_rotation: Float3D::default(),
-            text_shear: Float2D::default(),
+            text_rotation: DVec3::default(),
+            text_shear: DVec2::default(),
             font_encoding: FontEncoding(0),
             primary_colour: Colour::BLACK,
             secondary_colour: Colour::BLACK,
@@ -1430,12 +1431,9 @@ fn bake_move(time: TimeContext, global: &mut Global) {
             numerator / delta_t
         };
 
-        let new_x = power * (move_data.final_position.x - move_data.initial_position.x)
-            + move_data.initial_position.x;
-        let new_y = power * (move_data.final_position.y - move_data.initial_position.y)
-            + move_data.initial_position.y;
-
-        global.position = Some(PositionOrMove::Position(Position { x: new_x, y: new_y }));
+        let new_position = power * (move_data.final_position - move_data.initial_position)
+            + move_data.initial_position;
+        global.position = Some(PositionOrMove::Position(new_position));
     }
 }
 
@@ -2245,8 +2243,8 @@ mod tests {
     fn global_move() {
         let global = Global {
             position: Some(PositionOrMove::Move(Move {
-                initial_position: Position { x: 10.0, y: 20.0 },
-                final_position: Position { x: 30.0, y: 60.0 },
+                initial_position: DVec2::new(10.0, 20.0),
+                final_position: DVec2::new(30.0, 60.0),
                 timing: Some(MoveTiming {
                     start_time: Milliseconds(500),
                     end_time: Milliseconds(1000),

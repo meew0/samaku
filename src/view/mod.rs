@@ -27,13 +27,12 @@ pub fn separator() -> iced_aw::quad::Quad {
 
 #[must_use]
 pub fn frame_coordinates_to_iced(
-    frame_x: f64,
-    frame_y: f64,
+    frame_point: glam::DVec2,
     size: iced::Size,
     storage_size: subtitle::Resolution,
 ) -> iced::Point {
-    let ui_x: f64 = frame_x * f64::from(size.width) / f64::from(storage_size.x);
-    let ui_y: f64 = frame_y * f64::from(size.height) / f64::from(storage_size.y);
+    let ui_x: f64 = frame_point.x * f64::from(size.width) / f64::from(storage_size.x);
+    let ui_y: f64 = frame_point.y * f64::from(size.height) / f64::from(storage_size.y);
     #[expect(
         clippy::cast_possible_truncation,
         reason = "extreme precision not needed in UI-adjacent code"

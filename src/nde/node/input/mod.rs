@@ -63,7 +63,7 @@ inventory::submit! {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputPosition {
-    pub value: nde::tags::Position,
+    pub value: glam::DVec2,
 }
 
 #[typetag::serde]
@@ -109,7 +109,8 @@ impl Node for InputPosition {
             .into()
     }
 
-    fn reticule_activate(&mut self) -> Vec<reticule::Reticule> {
+    fn reticule_activate(&mut self, _context: &Context) -> Vec<reticule::Reticule> {
+        // TODO start with active event position
         vec![reticule::Reticule {
             shape: reticule::Shape::Cross,
             position: self.value,
@@ -121,8 +122,8 @@ impl Node for InputPosition {
         &mut self,
         reticules: &mut reticule::Reticules,
         index: reticule::Index,
-        new_position: nde::tags::Position,
-    ) -> anyhow::Result<nde::tags::Position> {
+        new_position: glam::DVec2,
+    ) -> anyhow::Result<glam::DVec2> {
         if index.0 != 0 {
             anyhow::bail!("Reticule index out of range: {index}");
         }
@@ -142,7 +143,7 @@ inventory::submit! {
     Shell::new(
         &["Input", "Position"],
         || Box::new(InputPosition {
-            value: nde::tags::Position {
+            value: glam::DVec2 {
                 x: 100.0,
                 y: 100.0,
             }

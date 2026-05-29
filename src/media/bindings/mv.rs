@@ -3,10 +3,10 @@
     reason = "implements more of what mv does for now than is currently used in samaku"
 )]
 
-use std::ffi::CString;
-
+use glam::{DVec2, IVec2};
 use libmv_capi_sys as libmv;
 use libmv_capi_sys::libmv_TrackRegionOptions;
+use std::ffi::CString;
 
 pub(crate) fn init_logging(executable_name: &str) {
     let c_string =
@@ -89,43 +89,21 @@ pub enum MotionModel {
 
 pub(crate) struct MonochromeImage<'a> {
     data: &'a [f32],
-    width: i32,
-    height: i32,
+    size: IVec2,
 }
 
 impl<'a> MonochromeImage<'a> {
-    pub(crate) fn new(data: &'a [f32], width: i32, height: i32) -> Self {
+    pub(crate) fn new(data: &'a [f32], size: IVec2) -> Self {
         let usize_width =
-            usize::try_from(width).expect("MonochromeImage width should not be negative");
+            usize::try_from(size.x).expect("MonochromeImage width should not be negative");
         let usize_height =
-            usize::try_from(height).expect("MonochromeImage height should not be negative");
+            usize::try_from(size.y).expect("MonochromeImage height should not be negative");
         assert_eq!(
             data.len(),
             usize_width * usize_height,
             "the data array should have the correct size"
         );
-        Self {
-            data,
-            width,
-            height,
-        }
-    }
-}
-
-/// Indexed in pixels from the top left, may have fractional precision.
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Point {
-    #[must_use]
-    pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
-        Self {
-            x: self.x + x_offset,
-            y: self.y + y_offset,
-        }
+        Self { data, size }
     }
 }
 
@@ -133,30 +111,30 @@ impl Point {
 /// with four corners and a center.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Region {
-    pub top_left: Point,
-    pub top_right: Point,
-    pub bottom_right: Point,
-    pub bottom_left: Point,
-    pub center: Point,
+    pub top_left: DVec2,
+    pub top_right: DVec2,
+    pub bottom_right: DVec2,
+    pub bottom_left: DVec2,
+    pub center: DVec2,
 }
 
 impl Region {
     #[must_use]
-    pub fn from_center_and_radius(center: Point, radius: f64) -> Self {
+    pub fn from_center_and_radius(center: DVec2, radius: f64) -> Self {
         Self {
-            top_left: Point {
+            top_left: DVec2 {
                 x: center.x - radius,
                 y: center.y - radius,
             },
-            top_right: Point {
+            top_right: DVec2 {
                 x: center.x + radius,
                 y: center.y - radius,
             },
-            bottom_right: Point {
+            bottom_right: DVec2 {
                 x: center.x + radius,
                 y: center.y + radius,
             },
-            bottom_left: Point {
+            bottom_left: DVec2 {
                 x: center.x - radius,
                 y: center.y + radius,
             },
@@ -166,11 +144,11 @@ impl Region {
 
     fn from_float_slices(x: &[f64; 5], y: &[f64; 5]) -> Self {
         Self {
-            top_left: Point { x: x[0], y: y[0] },
-            top_right: Point { x: x[1], y: y[1] },
-            bottom_right: Point { x: x[2], y: y[2] },
-            bottom_left: Point { x: x[3], y: y[3] },
-            center: Point { x: x[4], y: y[4] },
+            top_left: DVec2 { x: x[0], y: y[0] },
+            top_right: DVec2 { x: x[1], y: y[1] },
+            bottom_right: DVec2 { x: x[2], y: y[2] },
+            bottom_left: DVec2 { x: x[3], y: y[3] },
+            center: DVec2 { x: x[4], y: y[4] },
         }
     }
 
@@ -193,13 +171,13 @@ impl Region {
     }
 
     #[must_use]
-    pub fn offset(&self, x_offset: f64, y_offset: f64) -> Self {
+    pub fn offset(&self, offset: DVec2) -> Self {
         Self {
-            top_left: self.top_left.offset(x_offset, y_offset),
-            top_right: self.top_right.offset(x_offset, y_offset),
-            bottom_right: self.bottom_right.offset(x_offset, y_offset),
-            bottom_left: self.bottom_left.offset(x_offset, y_offset),
-            center: self.center.offset(x_offset, y_offset),
+            top_left: self.top_left + offset,
+            top_right: self.top_right + offset,
+            bottom_right: self.bottom_right + offset,
+            bottom_left: self.bottom_left + offset,
+            center: self.center + offset,
         }
     }
 }
@@ -237,11 +215,11 @@ pub(crate) fn track_region(
         libmv::libmv_trackRegion(
             std::ptr::addr_of!(libmv_options),
             image1.data.as_ptr(),
-            image1.width,
-            image1.height,
+            image1.size.x,
+            image1.size.y,
             image2.data.as_ptr(),
-            image2.width,
-            image2.height,
+            image2.size.x,
+            image2.size.y,
             x1.as_ptr(),
             y1.as_ptr(),
             std::ptr::null_mut(), // argument is not used by libmv
@@ -281,16 +259,14 @@ mod tests {
 
         let image1 = MonochromeImage {
             data: i1_data.as_slice(),
-            width: 300,
-            height: 200,
+            size: IVec2::new(300, 200),
         };
         let image2 = MonochromeImage {
             data: i2_data.as_slice(),
-            width: 300,
-            height: 200,
+            size: IVec2::new(300, 200),
         };
 
-        let region1 = Region::from_center_and_radius(Point { x: 100.0, y: 100.0 }, 10.0);
+        let region1 = Region::from_center_and_radius(DVec2 { x: 100.0, y: 100.0 }, 10.0);
         let region2 = region1;
 
         // These appear to be the default settings used by Blender
