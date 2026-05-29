@@ -250,6 +250,16 @@ where
         self.width = width.into();
         self
     }
+
+    #[must_use]
+    pub fn style<F: Fn(&Theme, Status) -> Style + 'a>(mut self, style: F) -> Self
+    where
+        <Theme as Catalog>::Class<'a>: From<StyleFn<'a, Theme>>,
+    {
+        let style_fn: StyleFn<'a, Theme> = Box::new(style);
+        self.class = style_fn.into();
+        self
+    }
 }
 
 impl<Message, Theme, Renderer> NumberDragger<'_, f64, Message, Theme, Renderer>
@@ -334,7 +344,7 @@ impl Catalog for iced::Theme {
     }
 }
 
-fn default_style(theme: &iced::Theme, status: Status) -> Style {
+pub fn default_style(theme: &iced::Theme, status: Status) -> Style {
     let palette = theme.extended_palette();
     match status {
         Status::Active => Style {
