@@ -220,7 +220,7 @@ where
             drag_speed: 1.0,
             decimals: 2,
             on_change: Box::new(on_change),
-            width: Length::Fill,
+            width: Length::Fixed(100.0),
             height: DEFAULT_HEIGHT,
             class: <Theme as Catalog>::default(),
             _phantom: PhantomData,
@@ -248,6 +248,18 @@ where
     #[must_use]
     pub fn width<W: Into<Length>>(mut self, width: W) -> Self {
         self.width = width.into();
+        self
+    }
+}
+
+impl<Message, Theme, Renderer> NumberDragger<'_, f64, Message, Theme, Renderer>
+where
+    Theme: Catalog,
+{
+    #[must_use]
+    pub fn step_and_drag_speed(mut self, value: f64) -> Self {
+        self.step = value;
+        self.drag_speed = value;
         self
     }
 }

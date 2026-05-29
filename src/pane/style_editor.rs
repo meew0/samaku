@@ -145,9 +145,11 @@ fn section_name_font(i: usize, style: &subtitle::Style) -> iced::Element<'_, mes
         .on_input(move |value| message::Message::SetStyleName(i, value));
     let font_input = iced::widget::text_input("Font name", &style.font_name)
         .on_input(move |value| message::Message::SetStyleFontName(i, value));
-    let font_size_input = iced_aw::number_input(&style.font_size, 1.0..=9999.0_f64, move |value| {
-        message::Message::SetStyleFontSize(i, value)
-    });
+    let font_size_input =
+        view::widget::number_dragger(style.font_size, 1.0..=9999.0_f64, move |value| {
+            message::Message::SetStyleFontSize(i, value)
+        })
+        .step_and_drag_speed(0.25_f64);
 
     iced::widget::column![
         section_label("Name & Font"),
@@ -260,25 +262,29 @@ fn section_formatting(i: usize, style: &subtitle::Style) -> iced::Element<'_, me
         .on_toggle(move |value| message::Message::SetStyleStrikeOut(i, value));
 
     let scale_x_input =
-        view::widget::NumberDragger::new(style.scale.x, 0.01..=1000.0_f64, move |value| {
+        view::widget::number_dragger(style.scale.x, 0.01..=1000.0_f64, move |value| {
             message::Message::SetStyleScaleX(i, value)
         })
-        .step(0.01_f64)
-        .drag_speed(0.01_f64)
-        .width(100.0);
-    let scale_y_input = iced_aw::number_input(&style.scale.y, 0.01..=1000.0_f64, move |value| {
-        message::Message::SetStyleScaleY(i, value)
-    })
-    .step(0.01_f64);
-    let spacing_input = iced_aw::number_input(&style.spacing, -1000.0..=1000.0_f64, move |value| {
-        message::Message::SetStyleSpacing(i, value)
-    });
-    let angle_input = iced_aw::number_input(&style.angle.0, 0.0..=360.0_f64, move |value| {
-        message::Message::SetStyleAngle(i, value)
-    });
-    let blur_input = iced_aw::number_input(&style.blur, 0.0..=100.0_f64, move |value| {
+        .step_and_drag_speed(0.01_f64);
+    let scale_y_input =
+        view::widget::number_dragger(style.scale.y, 0.01..=1000.0_f64, move |value| {
+            message::Message::SetStyleScaleY(i, value)
+        })
+        .step_and_drag_speed(0.01_f64);
+    let spacing_input =
+        view::widget::number_dragger(style.spacing, -1000.0..=1000.0_f64, move |value| {
+            message::Message::SetStyleSpacing(i, value)
+        })
+        .step_and_drag_speed(0.1_f64);
+    let angle_input =
+        view::widget::number_dragger(style.angle.0, -360.0..=360.0_f64, move |value| {
+            message::Message::SetStyleAngle(i, value)
+        })
+        .step_and_drag_speed(0.5_f64);
+    let blur_input = view::widget::number_dragger(style.blur, 0.0..=100.0_f64, move |value| {
         message::Message::SetStyleBlur(i, value)
-    });
+    })
+    .step_and_drag_speed(0.05_f64);
 
     iced::widget::column![
         section_label("Formatting"),
@@ -312,13 +318,15 @@ fn section_border_shadow(i: usize, style: &subtitle::Style) -> iced::Element<'_,
             message::Message::SetStyleBorderStyle(i, value)
         });
     let border_width_input =
-        iced_aw::number_input(&style.border_width, 0.0..=1000.0_f64, move |value| {
+        view::widget::number_dragger(style.border_width, 0.0..=1000.0_f64, move |value| {
             message::Message::SetStyleBorderWidth(i, value)
-        });
+        })
+        .step_and_drag_speed(0.1_f64);
     let shadow_dist_input =
-        iced_aw::number_input(&style.shadow_distance, 0.0..=1000.0_f64, move |value| {
+        view::widget::number_dragger(style.shadow_distance, 0.0..=1000.0_f64, move |value| {
             message::Message::SetStyleShadowDistance(i, value)
-        });
+        })
+        .step_and_drag_speed(0.1_f64);
 
     iced::widget::column![
         section_label("Border & Shadow"),
@@ -409,14 +417,16 @@ fn section_positioning(i: usize, style: &subtitle::Style) -> iced::Element<'_, m
     let justify_list = iced::widget::pick_list(JUSTIFY_MODES, Some(style.justify), move |value| {
         message::Message::SetStyleJustify(i, value)
     });
-    let margin_l_input = iced_aw::number_input(&style.margins.left, 0..=9999_i32, move |value| {
-        message::Message::SetStyleMarginLeft(i, value)
-    });
-    let margin_r_input = iced_aw::number_input(&style.margins.right, 0..=9999_i32, move |value| {
-        message::Message::SetStyleMarginRight(i, value)
-    });
+    let margin_l_input =
+        view::widget::number_dragger(style.margins.left, 0..=9999_i32, move |value| {
+            message::Message::SetStyleMarginLeft(i, value)
+        });
+    let margin_r_input =
+        view::widget::number_dragger(style.margins.right, 0..=9999_i32, move |value| {
+            message::Message::SetStyleMarginRight(i, value)
+        });
     let margin_v_input =
-        iced_aw::number_input(&style.margins.vertical, 0..=9999_i32, move |value| {
+        view::widget::number_dragger(style.margins.vertical, 0..=9999_i32, move |value| {
             message::Message::SetStyleMarginVertical(i, value)
         });
 
