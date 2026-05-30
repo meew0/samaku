@@ -163,7 +163,7 @@ pub enum Message {
 
     RestoreEvents(
         Vec<(subtitle::Tombstone, usize, subtitle::Event<'static>)>,
-        model::select::EventSelection,
+        model::select::Selection<subtitle::EventIndex>,
     ),
 
     /// Select the given event if it is not selected, otherwise deselect it.
@@ -171,7 +171,7 @@ pub enum Message {
     GroupSelectEvents(subtitle::EventIndex, subtitle::EventIndex, bool),
     SetEventSelectionSingle(subtitle::EventIndex, bool, Option<subtitle::EventIndex>),
     SelectOnlyEvent(subtitle::EventIndex),
-    SetEventSelection(model::select::EventSelection),
+    SetEventSelection(model::select::Selection<subtitle::EventIndex>),
     DeselectEvents(HashSet<subtitle::EventIndex>, Option<subtitle::EventIndex>),
     SelectAllEvents,
 
@@ -248,6 +248,28 @@ pub enum Message {
         nde::graph::NodeId,
         media::motion::Region,
     ),
+
+    TrackMotionForSelectedTracks(
+        model::FrameNumber,
+        media::motion::Direction,
+        media::motion::Target,
+    ),
+
+    // Motion track management
+    CreateTrack,
+    DeleteTrack(media::motion::TrackId),
+    SetTrackName(media::motion::TrackId, String),
+
+    // Motion track selection
+    ToggleTrackSelection(media::motion::TrackId),
+    SetTrackSelectionSingle(media::motion::TrackId, bool, Option<media::motion::TrackId>),
+    SelectOnlyTrack(media::motion::TrackId),
+    SetTrackSelection(model::select::Selection<media::motion::TrackId>),
+    DeselectTracks(
+        HashSet<media::motion::TrackId>,
+        Option<media::motion::TrackId>,
+    ),
+    SelectAllTracks,
 }
 
 impl Message {
@@ -335,6 +357,7 @@ pub enum Pane {
 
     // Messages for the video
     VideoSetControlsMode(pane::video::ControlsMode),
+    VideoSetLimitToEvent(bool),
 }
 
 /// Messages dispatched to nodes.

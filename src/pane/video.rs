@@ -1,13 +1,17 @@
+use crate::media::motion;
+use crate::{media, message, model, nde, style, subtitle, view};
 use iced::mouse;
 use iced::widget::{Action, canvas};
 use std::cell::RefCell;
-
-use crate::{media, message, model, nde, style, subtitle, view};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
     show_controls: bool,
     controls_mode: ControlsMode,
+    split_at: f32,
+    #[serde(skip)]
+    blend_box_state: view::widget::blend_box::State,
+    limit_to_event: bool,
 }
 
 impl Default for State {
@@ -15,6 +19,9 @@ impl Default for State {
         Self {
             show_controls: true,
             controls_mode: ControlsMode::Reticules,
+            split_at: 0.8,
+            blend_box_state: view::widget::blend_box::State::default(),
+            limit_to_event: true,
         }
     }
 }
@@ -117,11 +124,21 @@ fn view_video<'a>(
         .center_x(iced::Length::Fill)
         .center_y(iced::Length::Fill);
 
+    let split = match pane_state.controls_mode {
+        ControlsMode::Reticules => video_container.into(),
+        ControlsMode::MotionTrack => iced::widget::row![
+            video_container,
+            view::vertical_separator(),
+            view_motion_track_controls(pane_state, self_pane, global_state, frame_number),
+        ]
+        .into(),
+    };
+
     if pane_state.show_controls {
         let bottom_bar = view_bottom_bar(pane_state, self_pane, global_state);
-        iced::widget::column![video_container, bottom_bar].into()
+        iced::widget::column![split, bottom_bar].into()
     } else {
-        video_container.into()
+        split
     }
 }
 
@@ -202,6 +219,207 @@ fn view_reticule_program(
 
 fn view_motion_track_program(_global_state: &crate::Samaku) -> MotionTrackProgram {
     MotionTrackProgram {}
+}
+
+fn view_motion_track_controls<'a>(
+    pane_state: &'a State,
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    frame_number: model::FrameNumber,
+) -> iced::Element<'a, message::Message> {
+    let active_track_id_opt = global_state.selected_tracks.active();
+    let active_track_data_opt = if let Some(active_track_id) = active_track_id_opt
+        && let Some(active_track) = global_state.motion_tracks.get(active_track_id)
+    {
+        Some((active_track_id, active_track))
+    } else {
+        None
+    };
+
+    let mut column = iced::widget::Column::with_capacity(5);
+
+    column = column.push(view_track_selector(
+        pane_state,
+        global_state,
+        active_track_id_opt,
+    ));
+
+    if let Some(active_track_data) = active_track_data_opt {
+        column = column.push(view_track_rename(global_state, active_track_data));
+    }
+
+    if !global_state.selected_tracks.is_empty() {
+        column = column.push(view_track_buttons(
+            pane_state,
+            self_pane,
+            global_state,
+            frame_number,
+        ));
+    }
+
+    column.width(200.0).spacing(10.0).padding(5.0).into()
+}
+
+fn view_track_selector<'a>(
+    pane_state: &'a State,
+    global_state: &'a crate::Samaku,
+    active_track_id_opt: Option<motion::TrackId>,
+) -> iced::Element<'a, message::Message> {
+    let selection = if let Some(active_track_id) = active_track_id_opt
+        && let Some(active_track) = global_state.motion_tracks.get(active_track_id)
+    {
+        Some(model::NamedEntry {
+            id: active_track_id,
+            name: model::Named::name(active_track),
+        })
+    } else {
+        None
+    };
+
+    let controls_spec = view::widget::BlendBoxControls {
+        add_text: "New track",
+        add_message: message::Message::CreateTrack,
+        unassign_text: "",
+        unassign_message: None::<fn(motion::TrackId) -> message::Message>,
+        delete_text: "Delete track",
+        delete_message: Some(message::Message::DeleteTrack),
+        _phantom: std::marker::PhantomData,
+    };
+
+    let placeholder_text = if global_state.selected_tracks.len() > 1 {
+        "Multiple tracks selected"
+    } else {
+        "Select track"
+    };
+
+    view::widget::blend_box_controls(
+        &pane_state.blend_box_state,
+        &global_state.motion_tracks,
+        placeholder_text,
+        selection,
+        message::Message::SelectOnlyTrack,
+        iced::Length::Fill,
+        controls_spec,
+    )
+}
+
+fn view_track_rename<'a>(
+    global_state: &'a crate::Samaku,
+    active_track_data: (motion::TrackId, &'a motion::Track),
+) -> iced::Element<'a, message::Message> {
+    let (active_track_id, active_track) = active_track_data;
+
+    let rename_field = iced::widget::text_input("Track name", model::Named::name(active_track))
+        .on_input(move |value| message::Message::SetTrackName(active_track_id, value));
+
+    iced::widget::column![view::section_label("Rename"), rename_field]
+        .spacing(5.0)
+        .into()
+}
+
+fn view_track_buttons<'a>(
+    pane_state: &'a State,
+    self_pane: super::Pane,
+    global_state: &'a crate::Samaku,
+    frame_number: model::FrameNumber,
+) -> iced::Element<'a, message::Message> {
+    // Check if we should allow tracking backward and forward, if we are limited to the current event.
+    let (mut allow_backward, mut allow_forward) = (true, true);
+    let (mut event_start_frame, mut event_end_frame) = (None, None);
+    if pane_state.limit_to_event
+        && let Some(active_event) = global_state
+            .subtitles
+            .events
+            .active_event(&global_state.selected_events)
+        && let &Some(ref video_metadata) = &global_state.video_metadata
+    {
+        let start_frame = video_metadata.frame_rate.ms_to_frame(active_event.start.0);
+        let end_frame = video_metadata.frame_rate.ms_to_frame(active_event.end().0);
+        (event_start_frame, event_end_frame) = (Some(start_frame), Some(end_frame));
+
+        if frame_number < start_frame || frame_number > end_frame {
+            (allow_backward, allow_forward) = (false, false);
+        } else if frame_number == start_frame {
+            (allow_backward, allow_forward) = (false, true);
+        } else if frame_number == end_frame {
+            (allow_backward, allow_forward) = (true, false);
+        } else {
+            (allow_backward, allow_forward) = (true, true);
+        }
+    }
+
+    let backward_frame = view::tooltip(
+        view::Icon::BoxArrowInLeft
+            .button()
+            .on_press_maybe(allow_backward.then_some(
+                message::Message::TrackMotionForSelectedTracks(
+                    frame_number,
+                    motion::Direction::Backward,
+                    motion::Target::Frame(frame_number - model::FrameDelta(1)),
+                ),
+            ))
+            .width(iced::Length::Fill),
+        "Track backward one frame",
+    );
+    let backward = view::tooltip(
+        view::Icon::ArrowBarLeft
+            .button()
+            .on_press_maybe(allow_backward.then_some(
+                message::Message::TrackMotionForSelectedTracks(
+                    frame_number,
+                    motion::Direction::Backward,
+                    motion::Target::event(pane_state.limit_to_event, event_start_frame),
+                ),
+            ))
+            .width(iced::Length::Fill),
+        "Track backward as far as possible",
+    );
+    let forward = view::tooltip(
+        view::Icon::ArrowBarRight
+            .button()
+            .on_press_maybe(allow_forward.then_some(
+                message::Message::TrackMotionForSelectedTracks(
+                    frame_number,
+                    motion::Direction::Forward,
+                    motion::Target::event(pane_state.limit_to_event, event_end_frame),
+                ),
+            ))
+            .width(iced::Length::Fill),
+        "Track forward as far as possible",
+    );
+    let forward_frame = view::tooltip(
+        view::Icon::BoxArrowInRight
+            .button()
+            .on_press_maybe(allow_forward.then_some(
+                message::Message::TrackMotionForSelectedTracks(
+                    frame_number,
+                    motion::Direction::Forward,
+                    motion::Target::Frame(frame_number + model::FrameDelta(1)),
+                ),
+            ))
+            .width(iced::Length::Fill),
+        "Track forward one frame",
+    );
+
+    let buttons = iced::widget::row![backward_frame, backward, forward, forward_frame].spacing(5.0);
+
+    let limit_checkbox = view::tooltip(
+        iced::widget::checkbox(pane_state.limit_to_event && event_start_frame.is_some())
+            .on_toggle_maybe(event_start_frame.map(move |_| {
+                move |new_value| {
+                    message::Message::Pane(
+                        self_pane,
+                        message::Pane::VideoSetLimitToEvent(new_value),
+                    )
+                }
+            }))
+            .label("Limit to event"),
+        "Limit motion tracking to the currently active event",
+    );
+
+    iced::widget::column![view::section_label("Track"), buttons, limit_checkbox]
+        .spacing(5.0)
+        .into()
 }
 
 pub fn frame_number_text(global_state: &crate::Samaku) -> String {
@@ -569,6 +787,7 @@ impl canvas::Program<message::Message> for MotionTrackProgram {
         _bounds: iced::Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        todo!()
+        // TODO
+        vec![]
     }
 }

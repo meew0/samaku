@@ -112,7 +112,7 @@ impl super::LocalState for State {
 
     fn update_selected_events(
         &mut self,
-        _selected_events: &model::select::EventSelection,
+        _selected_events: &model::select::Selection<subtitle::EventIndex>,
         _events: &subtitle::EventTrack,
     ) {
         // Always unset the node selection if the event selection changed, since we can't easily tell
@@ -578,6 +578,7 @@ fn view_bottom_bar<'a>(
         move |new_selected_filter_id| {
             message::Message::AssignFilterToSelectedEvents(new_selected_filter_id)
         },
+        iced::Length::Fixed(250.0),
         controls_spec,
     );
 

@@ -16,16 +16,91 @@ pub struct TrackList {
     next_id: TrackId,
 }
 
+impl TrackList {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn get(&self, id: TrackId) -> Option<&Track> {
+        self.map.get(&id)
+    }
+
+    #[must_use]
+    pub fn get_mut(&mut self, id: TrackId) -> Option<&mut Track> {
+        self.map.get_mut(&id)
+    }
+
+    pub fn add(&mut self, track: Track) -> TrackId {
+        let id = self.next_id;
+        self.next_id = TrackId(id.0 + 1);
+        self.map.insert(id, track);
+        id
+    }
+}
+
+impl Default for TrackList {
+    fn default() -> Self {
+        Self {
+            map: HashMap::new(),
+            next_id: TrackId(0),
+        }
+    }
+}
+
+impl model::NamedListIterable for TrackList {
+    type Key = TrackId;
+
+    fn iter_named(&self) -> impl Iterator<Item = model::NamedEntry<'_, Self::Key>> {
+        self.map.iter().map(|(&key, value)| model::NamedEntry {
+            id: key,
+            name: &value.name,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Track {
     markers: BTreeMap<model::FrameNumber, Marker>,
+    pub name: String,
+}
+
+impl Track {
+    #[must_use]
+    pub fn new(origin_frame: model::FrameNumber, marker: Marker, name: String) -> Self {
+        let mut markers = BTreeMap::new();
+        markers.insert(origin_frame, marker);
+        Self { markers, name }
+    }
+}
+
+impl model::Named for Track {
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Marker {
     region: Region,
+    offset: DVec2,
     search_area: Patch<DVec2>,
     key_state: KeyState,
+}
+
+impl Default for Marker {
+    fn default() -> Self {
+        Self {
+            region: Region::from_center_and_radius(DVec2::new(100.0, 100.0), 20.0),
+            offset: DVec2::ZERO,
+            search_area: Patch {
+                origin: DVec2::new(50.0, 50.0),
+                size: DVec2::new(100.0, 100.0),
+            },
+            key_state: KeyState::Key,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -80,6 +155,28 @@ impl Channels {
             red: true,
             green: true,
             blue: true,
+        }
+    }
+}
+
+pub type Direction = mv::TrackRegionDirection;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Target {
+    /// Track until the given frame, inclusive.
+    Frame(model::FrameNumber),
+
+    /// Track as far as possible.
+    None,
+}
+
+impl Target {
+    #[must_use]
+    pub fn event(limit_to_event: bool, event_target_frame: Option<model::FrameNumber>) -> Self {
+        if limit_to_event && let Some(target_frame) = event_target_frame {
+            Self::Frame(target_frame)
+        } else {
+            Self::None
         }
     }
 }

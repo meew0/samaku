@@ -59,12 +59,13 @@ pub fn blend_box_controls<
     placeholder: &str,
     selection_opt: Option<model::NamedEntry<L::Key>>,
     on_selected: F1,
+    width: iced::Length,
     controls: BlendBoxControls<L::Key, F2, F3>,
 ) -> iced::Element<'a, message::Message> {
     let mut row = iced::widget::Row::with_capacity(4);
 
     let blend_box = blend_box(state, options, placeholder, selection_opt, on_selected)
-        .width(250.0)
+        .width(width)
         .icon(blend_box::default_icon());
     row = row.push(blend_box);
 

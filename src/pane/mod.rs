@@ -46,7 +46,7 @@ pub trait LocalState {
 
     fn update_selected_events(
         &mut self,
-        _selected_events: &model::select::EventSelection,
+        _selected_events: &model::select::Selection<subtitle::EventIndex>,
         _events: &subtitle::EventTrack,
     ) {
     }

@@ -102,6 +102,7 @@ fn view_selector<'a>(
                 message::Pane::StyleEditorStyleSelected(selection_index),
             )
         },
+        iced::Length::Fixed(250.0),
         controls_spec,
     )
 }
@@ -149,7 +150,7 @@ fn section_name_font(i: usize, style: &subtitle::Style) -> iced::Element<'_, mes
         .step_and_drag_speed(0.25_f64);
 
     iced::widget::column![
-        section_label("Name & Font"),
+        view::section_label("Name & Font"),
         labeled_row("Name", name_input.into()),
         labeled_row("Font", font_input.into()),
         labeled_row("Size", font_size_input.into()),
@@ -229,7 +230,7 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
 
     iced::widget::column![
-        section_label("Colours"),
+        view::section_label("Colours"),
         colour_header,
         primary_row,
         secondary_row,
@@ -284,7 +285,7 @@ fn section_formatting(i: usize, style: &subtitle::Style) -> iced::Element<'_, me
     .step_and_drag_speed(0.05_f64);
 
     iced::widget::column![
-        section_label("Formatting"),
+        view::section_label("Formatting"),
         iced::widget::row![bold_cb, italic_cb, underline_cb, strike_out_cb].spacing(12),
         iced::widget::row![
             iced::widget::text("Scale X").width(COL_LABEL_W),
@@ -326,7 +327,7 @@ fn section_border_shadow(i: usize, style: &subtitle::Style) -> iced::Element<'_,
         .step_and_drag_speed(0.1_f64);
 
     iced::widget::column![
-        section_label("Border & Shadow"),
+        view::section_label("Border & Shadow"),
         labeled_row("Style", border_style_list.into()),
         iced::widget::row![
             iced::widget::text("Width").width(COL_LABEL_W),
@@ -428,7 +429,7 @@ fn section_positioning(i: usize, style: &subtitle::Style) -> iced::Element<'_, m
         });
 
     iced::widget::column![
-        section_label("Positioning"),
+        view::section_label("Positioning"),
         iced::widget::row![
             iced::widget::column![iced::widget::text("Alignment"), alignment_grid(i, style),]
                 .spacing(4),
@@ -457,11 +458,6 @@ fn section_positioning(i: usize, style: &subtitle::Style) -> iced::Element<'_, m
     ]
     .spacing(6)
     .into()
-}
-
-/// Returns a small section header.
-fn section_label(label: &str) -> iced::widget::Text<'_> {
-    iced::widget::text(label).size(13)
 }
 
 /// A labeled row: a fixed-width label on the left followed by any element.

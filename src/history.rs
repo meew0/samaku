@@ -150,7 +150,16 @@ impl History {
             | Message::ConnectNodes(_, _, _)
             | Message::DisconnectNodes(_, _, _)
             | Message::SetNodeConnection(_, _, _)
-            | Message::UpdateReticulePosition(_, _) => {
+            | Message::UpdateReticulePosition(_, _)
+            | Message::CreateTrack
+            | Message::DeleteTrack(_)
+            | Message::SetTrackName(_, _)
+            | Message::TrackMotionForSelectedTracks(_, _, _)
+            | Message::ToggleTrackSelection(_)
+            | Message::SetTrackSelectionSingle(_, _, _)
+            | Message::SelectOnlyTrack(_)
+            | Message::SetTrackSelection(_)
+            | Message::SelectAllTracks => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
                 Key::Record(node, None)
@@ -193,6 +202,7 @@ impl History {
             | Message::TogglePlayback
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
+            | Message::DeselectTracks(_, _)
             | Message::MultiAssignFiltersToEvents(_)
             | Message::ActivateNodes(_, _)
             | Message::TrackMotionForNode(_, _, _)

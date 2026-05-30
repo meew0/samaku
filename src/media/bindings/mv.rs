@@ -59,14 +59,15 @@ pub(crate) struct TrackRegionOptions {
     pub image1_mask: Option<Vec<f32>>,
 }
 
-pub(crate) enum TrackRegionDirection {
+#[derive(Debug, Clone, Copy)]
+pub enum TrackRegionDirection {
     Forward,
     Backward,
 }
 
 impl TrackRegionDirection {
-    fn as_libmv(&self) -> libmv::libmv_TrackRegionDirection {
-        match *self {
+    fn as_libmv(self) -> libmv::libmv_TrackRegionDirection {
+        match self {
             TrackRegionDirection::Forward => {
                 libmv::libmv_TrackRegionDirection_LIBMV_TRACK_REGION_FORWARD
             }

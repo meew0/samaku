@@ -13,6 +13,12 @@ pub fn separator() -> iced::widget::rule::Rule<'static> {
     iced::widget::rule::horizontal(0.5).style(iced::widget::rule::weak)
 }
 
+/// Create a half-pixel thick vertical separator line.
+#[must_use]
+pub fn vertical_separator() -> iced::widget::rule::Rule<'static> {
+    iced::widget::rule::vertical(0.5).style(iced::widget::rule::weak)
+}
+
 #[must_use]
 pub fn frame_coordinates_to_iced(
     frame_point: glam::DVec2,
@@ -47,4 +53,9 @@ pub fn tooltip<
         iced::widget::tooltip::Position::Top,
     )
     .into()
+}
+
+/// Returns a small section header.
+pub fn section_label(label: &str) -> iced::widget::Text<'_> {
+    iced::widget::text(label).size(13)
 }

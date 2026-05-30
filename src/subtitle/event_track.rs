@@ -349,7 +349,7 @@ impl EventTrack {
     #[must_use]
     pub fn active_event(
         &self,
-        selected_events: &model::select::EventSelection,
+        selected_events: &model::select::Selection<EventIndex>,
     ) -> Option<&Event<'static>> {
         selected_events.active().map(|index| &self[index])
     }
@@ -357,7 +357,7 @@ impl EventTrack {
     #[must_use]
     pub fn active_event_mut(
         &mut self,
-        selected_events: &model::select::EventSelection,
+        selected_events: &model::select::Selection<EventIndex>,
     ) -> Option<&mut Event<'static>> {
         selected_events.active().map(|index| &mut self[index])
     }
@@ -365,7 +365,7 @@ impl EventTrack {
     #[must_use]
     pub fn active_nde_filter<'a>(
         &self,
-        selected_events: &model::select::EventSelection,
+        selected_events: &model::select::Selection<EventIndex>,
         extradata: &'a Extradata,
     ) -> Option<&'a nde::Filter> {
         let event = self.active_event(selected_events)?;
@@ -375,7 +375,7 @@ impl EventTrack {
     #[must_use]
     pub fn active_nde_filter_mut<'a>(
         &self,
-        selected_events: &model::select::EventSelection,
+        selected_events: &model::select::Selection<EventIndex>,
         extradata: &'a mut Extradata,
     ) -> Option<&'a mut nde::Filter> {
         let event = self.active_event(selected_events)?;

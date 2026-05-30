@@ -667,7 +667,7 @@ fn update_internal(
             undo.put_no_batch("Add event", Message::DeleteEvents(to_delete));
             undo.override_redo(Message::RestoreEvents(
                 vec![(subtitle::Tombstone::new(new_index), position, new_event)],
-                model::select::EventSelection::default(),
+                model::select::Selection::default(),
             ));
         }
         Message::DeleteEvents(set) => {
@@ -746,7 +746,7 @@ fn update_internal(
             } else {
                 // Select only the group
                 let mut new_selection =
-                    model::select::EventSelection::from_indices(events_to_select.collect());
+                    model::select::Selection::from_indices(events_to_select.collect());
                 new_selection.last = Some(index_2);
                 let old_selection = replace(&mut global_state.selected_events, new_selection);
                 notify_selected_events(global_state);
@@ -789,7 +789,7 @@ fn update_internal(
             // This message does not need to be undone.
         }
         Message::SelectAllEvents => {
-            let new_selection = model::select::EventSelection::from_indices(
+            let new_selection = model::select::Selection::from_indices(
                 global_state.subtitles.events.iter_indices().collect(),
             );
             let old_selection = replace(&mut global_state.selected_events, new_selection);
@@ -1362,6 +1362,54 @@ fn update_internal(
                 }
             }
         }
+        Message::CreateTrack => {
+            let origin_frame = global_state
+                .current_frame()
+                .expect("video should be loaded");
+
+            let marker = media::motion::Marker::default();
+            let track = media::motion::Track::new(origin_frame, marker, "New track".to_owned());
+
+            let new_id = global_state.motion_tracks.add(track);
+
+            global_state.selected_tracks.clear();
+            global_state.selected_tracks.select(new_id);
+        }
+        Message::DeleteTrack(track_id) => {
+            todo!();
+        }
+        Message::SetTrackName(track_id, name) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+                let old_name = replace(&mut track.name, name);
+
+                undo.put_instant("Set track name", Message::SetTrackName(track_id, old_name));
+            };
+        }
+        Message::TrackMotionForSelectedTracks(origin_frame, direction, target) => {
+            todo!();
+        }
+        Message::ToggleTrackSelection(track_id) => {
+            todo!();
+        }
+        Message::SetTrackSelectionSingle(track_id, state, last) => {
+            todo!();
+        }
+        Message::SelectOnlyTrack(track_id) => {
+            let old = global_state.selected_tracks.clear();
+            global_state.selected_tracks.select(track_id);
+            notify_selected_events(global_state);
+
+            undo.put_instant("Select event", Message::SetTrackSelection(old));
+        }
+        Message::SetTrackSelection(new_selected_tracks) => {
+            todo!();
+        }
+        Message::DeselectTracks(to_deselect, old_last) => {
+            todo!();
+        }
+        Message::SelectAllTracks => {
+            todo!();
+        }
     }
 
     iced::Task::none()
@@ -1376,6 +1424,10 @@ pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
             &global_state.subtitles.events,
         );
     }
+}
+
+pub(crate) fn notify_selected_tracks(global_state: &mut super::Samaku) {
+    // TODO, if even necessary?
 }
 
 async fn select_file_and_save(data: String) -> anyhow::Result<()> {
