@@ -24,6 +24,7 @@ pub struct Track {
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Marker {
     region: Region,
+    search_area: Patch<DVec2>,
     key_state: KeyState,
 }
 
@@ -83,22 +84,21 @@ impl Channels {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct PatchRequest {
-    pub origin: DVec2,
-    pub size: DVec2,
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct Patch<V> {
+    pub origin: V,
+    pub size: V,
 }
 
 #[derive(Debug, Clone)]
 pub struct PatchResponse {
     pub data: Vec<f32>,
-    pub origin: UVec2,
-    pub size: UVec2,
+    pub patch: Patch<UVec2>,
 }
 
 pub struct Tracker<'a, V> {
     video: &'a V,
-    patch_provider: fn(&V, model::FrameNumber, PatchRequest) -> PatchResponse,
+    patch_provider: fn(&V, model::FrameNumber, Patch<DVec2>) -> PatchResponse,
     search_radius: f64,
     track: Vec<Region>,
     last_frame: model::FrameNumber,
@@ -114,7 +114,7 @@ impl<'a, V> Tracker<'a, V> {
     /// `track` will be of size `end_frame - start_frame + 1`, if all goes well.
     pub fn new(
         video: &'a V,
-        patch_provider: fn(&V, model::FrameNumber, PatchRequest) -> PatchResponse,
+        patch_provider: fn(&V, model::FrameNumber, Patch<DVec2>) -> PatchResponse,
         initial_marker: Region,
         search_radius: f64,
         start_frame: model::FrameNumber,
@@ -154,7 +154,7 @@ impl<'a, V> Tracker<'a, V> {
             .last()
             .expect("there should be at least one region in the track");
 
-        let patch_request = PatchRequest {
+        let patch_request = Patch {
             origin: last_region.center - self.search_radius,
             size: DVec2::splat(2.0 * self.search_radius),
         };
@@ -168,17 +168,17 @@ impl<'a, V> Tracker<'a, V> {
 
         let image1 = mv::MonochromeImage::new(
             patch_response_1.data.as_slice(),
-            patch_response_1.size.try_into().unwrap(),
+            patch_response_1.patch.size.try_into().unwrap(),
         );
         let image2 = mv::MonochromeImage::new(
             patch_response_2.data.as_slice(),
-            patch_response_2.size.try_into().unwrap(),
+            patch_response_2.patch.size.try_into().unwrap(),
         );
 
         // In theory, the two different patch responses might have different origin points,
         // because the frames might be of a different size.
-        let region1 = last_region.offset(-DVec2::from(patch_response_1.origin));
-        let predicted_region2 = last_region.offset(-DVec2::from(patch_response_2.origin));
+        let region1 = last_region.offset(-DVec2::from(patch_response_1.patch.origin));
+        let predicted_region2 = last_region.offset(-DVec2::from(patch_response_2.patch.origin));
 
         let options = mv::TrackRegionOptions {
             direction: mv::TrackRegionDirection::Forward,
@@ -196,7 +196,7 @@ impl<'a, V> Tracker<'a, V> {
         match result {
             Some(refined_region2) => {
                 self.track
-                    .push(refined_region2.offset(DVec2::from(patch_response_2.origin)));
+                    .push(refined_region2.offset(DVec2::from(patch_response_2.patch.origin)));
                 self.last_frame += model::FrameDelta(1);
                 TrackResult::Success
             }
