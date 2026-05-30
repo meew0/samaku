@@ -1,4 +1,4 @@
-use crate::{message, style, subtitle};
+use crate::{message, subtitle};
 
 pub mod icons;
 pub mod menu;

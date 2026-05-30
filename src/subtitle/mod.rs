@@ -869,7 +869,7 @@ impl Default for ScriptInfo {
 }
 
 /// Represents all data that can be contained within an `.ass` file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct File {
     /// Metadata, containing information like the playback resolution, the YCbCr matrix, etc.
     pub script_info: ScriptInfo,
@@ -938,20 +938,6 @@ impl File {
         };
 
         (new_file, leftover)
-    }
-}
-
-impl Default for File {
-    fn default() -> Self {
-        Self {
-            script_info: ScriptInfo::default(),
-            aegi_metadata: HashMap::new(),
-            attachments: vec![],
-            other_sections: HashMap::new(),
-            styles: StyleList::default(),
-            events: EventTrack::default(),
-            extradata: Extradata::default(),
-        }
     }
 }
 

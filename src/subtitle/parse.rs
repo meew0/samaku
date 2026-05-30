@@ -9,7 +9,7 @@ use smol::stream::StreamExt as _;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
-use crate::{model, project, subtitle};
+use crate::{project, subtitle};
 
 use super::{
     Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,

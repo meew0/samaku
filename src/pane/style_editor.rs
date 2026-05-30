@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{media, message, model, nde, subtitle, view};
 

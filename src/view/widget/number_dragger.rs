@@ -367,6 +367,7 @@ impl Catalog for iced::Theme {
     }
 }
 
+#[must_use]
 pub fn default_style(theme: &iced::Theme, status: Status) -> Style {
     let palette = theme.extended_palette();
     match status {
