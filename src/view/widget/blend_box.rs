@@ -43,11 +43,11 @@ where
     text_input: TextInput<'a, TextInputEvent, Theme, Renderer>,
     font: Option<Renderer::Font>,
     selection: text_input::Value,
-    on_selected: Box<dyn Fn(L::Key) -> Message>,
-    on_option_hovered: Option<Box<HoverFn<L::Key, Message>>>,
+    on_selected: Box<dyn Fn(L::Key) -> Message + 'a>,
+    on_option_hovered: Option<Box<HoverFn<'a, L::Key, Message>>>,
     on_open: Option<Message>,
     on_close: Option<Message>,
-    on_input: Option<Box<dyn Fn(String) -> Message>>,
+    on_input: Option<Box<dyn Fn(String) -> Message + 'a>>,
     padding: Padding,
     size: Option<f32>,
     text_shaping: text::Shaping,
@@ -55,7 +55,7 @@ where
     menu_height: Length,
 }
 
-type HoverFn<K, Message> = dyn Fn(Reference<K>) -> Message;
+type HoverFn<'a, K, Message> = dyn Fn(Reference<K>) -> Message + 'a;
 
 impl<'a, L, Message, Theme, Renderer> BlendBox<'a, L, Message, Theme, Renderer>
 where
@@ -63,7 +63,7 @@ where
     Theme: Catalog,
     Renderer: text::Renderer,
 {
-    pub fn new<F: Fn(L::Key) -> Message + 'static>(
+    pub fn new<F: Fn(L::Key) -> Message + 'a>(
         state: &'a State,
         options: &'a L,
         placeholder: &str,

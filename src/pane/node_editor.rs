@@ -554,7 +554,23 @@ fn view_bottom_bar<'a>(
         "Select filter to assign"
     };
 
-    let blend_box = view::widget::BlendBox::new(
+    let add_assign_text = if multi_events {
+        "Create new filter and assign to selected events"
+    } else {
+        "Create new filter and assign to selected event"
+    };
+
+    let controls_spec = view::widget::BlendBoxControls {
+        add_text: add_assign_text,
+        add_message: message::Message::CreateEmptyFilterAndAssignToSelected,
+        unassign_text: "Unassign filter from selected events",
+        unassign_message: Some(message::Message::UnassignFilterFromSelectedEvents),
+        delete_text: "Delete filter",
+        delete_message: Some(message::Message::DeleteFilter),
+        _phantom: std::marker::PhantomData,
+    };
+
+    let controls = view::widget::blend_box_controls(
         &pane_state.blend_box_state,
         &global_state.subtitles.extradata,
         blend_box_placeholder_text,
@@ -562,49 +578,11 @@ fn view_bottom_bar<'a>(
         move |new_selected_filter_id| {
             message::Message::AssignFilterToSelectedEvents(new_selected_filter_id)
         },
-    )
-    .width(250.0)
-    .icon(view::widget::blend_box::default_icon());
-
-    let add_assign_text = if multi_events {
-        "Create new filter and assign to selected events"
-    } else {
-        "Create new filter and assign to selected event"
-    };
-    let add_button = view::tooltip(
-        view::Icon::Plus
-            .button()
-            .on_press(message::Message::CreateEmptyFilterAndAssignToSelected),
-        add_assign_text,
+        controls_spec,
     );
 
-    // Always show the unassign and delete buttons, but only make them active if events are selected.
-    let unassign_button_raw = view::Icon::X.button();
-    let unassign_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
-        unassign_button_raw.on_press(message::Message::UnassignFilterFromSelectedEvents(
-            nde_filter_id,
-        ))
-    } else {
-        unassign_button_raw
-    };
-    let unassign_button = view::tooltip(
-        unassign_button_active,
-        "Unassign filter from selected events",
-    );
-
-    let delete_button_raw = view::Icon::Trash.button();
-    let delete_button_active = if let Some((nde_filter_id, _)) = nde_filter_data {
-        delete_button_raw.on_press(message::Message::DeleteFilter(nde_filter_id))
-    } else {
-        delete_button_raw
-    };
-    let delete_button = view::tooltip(delete_button_active, "Delete filter");
-
-    let mut row = iced::widget::Row::with_capacity(10);
-    row = row.push(blend_box);
-    row = row.push(add_button);
-    row = row.push(unassign_button);
-    row = row.push(delete_button);
+    let mut row = iced::widget::Row::with_capacity(6);
+    row = row.push(controls);
 
     if let Some((nde_filter_id, nde_filter)) = nde_filter_data {
         let name_box = iced::widget::text_input("Filter name", model::Named::name(nde_filter))
@@ -613,7 +591,7 @@ fn view_bottom_bar<'a>(
             .width(iced::Length::Fixed(200.0));
 
         row = row.push(iced::widget::space::horizontal().width(iced::Length::Fixed(10.0)));
-        row = row.push(iced::widget::text("Rename: "));
+        row = row.push(iced::widget::text("Rename:"));
         row = row.push(name_box);
     }
 

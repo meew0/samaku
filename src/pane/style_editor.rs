@@ -5,6 +5,8 @@ use crate::{media, message, model, nde, subtitle, view};
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct State {
     pub selected_style_index: usize,
+    #[serde(skip)]
+    pub blend_box_state: view::widget::blend_box::State,
     #[serde(skip, default = "default_preview_events")]
     pub preview_events: subtitle::EventTrack,
 }
@@ -16,26 +18,25 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let left_column = left_column(self_pane, global_state, self.selected_style_index);
-        let right_column = right_column(global_state, self.selected_style_index);
-        let preview = preview(
+        let preview = view_preview(
             global_state,
             self.selected_style_index,
             self.preview_events.iter_events(),
         );
+        let selector = view_selector(self, self_pane, global_state, self.selected_style_index);
+        let editor = view_editor(global_state, self.selected_style_index);
 
         let content = iced::widget::column![
             iced::widget::container(preview).center_x(iced::Length::Fill),
-            iced::widget::row![left_column, right_column],
-        ]
-        .spacing(8);
+            view::separator(),
+            iced::widget::container(selector).center_x(iced::Length::Fill),
+            view::separator(),
+            editor,
+        ];
 
         super::View {
             title: iced::widget::text("Style editor").into(),
-            content: iced::widget::scrollable(content)
-                .direction(iced::widget::scrollable::Direction::Vertical(
-                    iced::widget::scrollable::Scrollbar::default(),
-                ))
+            content: iced::widget::container(content)
                 .width(iced::Length::Fill)
                 .height(iced::Length::Fill)
                 .into(),
@@ -52,15 +53,6 @@ impl super::LocalState for State {
 
         iced::Task::none()
     }
-
-    fn update_style_lists(&mut self, styles: &[subtitle::Style], _copy_styles: bool) {
-        // A style might have been deleted, which might cause the style selected in a
-        // style editor pane to no longer exist. In that case, set it to 0 which will
-        // always exist.
-        if self.selected_style_index >= styles.len() {
-            self.selected_style_index = 0;
-        }
-    }
 }
 
 inventory::submit! {
@@ -70,52 +62,51 @@ inventory::submit! {
     )
 }
 
-fn left_column(
+fn view_selector<'a>(
+    pane_state: &'a State,
     self_pane: super::Pane,
-    global_state: &'_ crate::Samaku,
+    global_state: &'a crate::Samaku,
     selected_style_index: usize,
-) -> iced::widget::Column<'_, message::Message> {
+) -> iced::Element<'a, message::Message> {
     let styles = global_state.subtitles.styles.as_slice();
 
-    // We know that this conversion is sound, since we statically assert that `StyleWrapper` and
-    // `Style` have the same size and alignment. However, Rust does not allow us to do this safely,
-    // so we have to use unsafe.
-    let wrapped_styles: &[StyleWrapper] =
-        unsafe { std::slice::from_raw_parts(styles.as_ptr().cast(), styles.len()) };
+    let selected_style = model::NamedEntry {
+        id: selected_style_index,
+        name: styles[selected_style_index].name(),
+    };
 
-    let selection_list = iced_aw::widgets::selection_list_with(
-        wrapped_styles,
-        move |selection_index, _| {
+    let delete_text = if selected_style_index == 0 {
+        "The first style cannot be deleted."
+    } else {
+        "Delete style"
+    };
+
+    let controls_spec = view::widget::BlendBoxControls {
+        add_text: "Create new style",
+        add_message: message::Message::CreateStyle,
+        unassign_text: "",
+        unassign_message: None::<fn(usize) -> message::Message>,
+        delete_text,
+        delete_message: (selected_style_index != 0).then_some(message::Message::DeleteStyle),
+        _phantom: std::marker::PhantomData,
+    };
+
+    view::widget::blend_box_controls(
+        &pane_state.blend_box_state,
+        styles,
+        "Select style",
+        Some(selected_style),
+        move |selection_index| {
             message::Message::Pane(
                 self_pane,
                 message::Pane::StyleEditorStyleSelected(selection_index),
             )
         },
-        14.0,
-        2.0,
-        iced_aw::style::selection_list::primary,
-        Some(selected_style_index),
-        crate::DEFAULT_FONT,
+        controls_spec,
     )
-    .width(iced::Length::Fixed(200.0))
-    .height(iced::Length::Fixed(200.0));
-
-    let create_button = iced::widget::button(iced::widget::text("Create new"))
-        .on_press(message::Message::CreateStyle);
-    let delete_button = iced::widget::button(iced::widget::text("Delete")).on_press_maybe(
-        // Do not allow deleting the first style
-        (selected_style_index != 0).then_some(message::Message::DeleteStyle(selected_style_index)),
-    );
-
-    iced::widget::column![
-        iced::widget::text("Styles").size(20),
-        selection_list,
-        iced::widget::row![create_button, delete_button].spacing(5)
-    ]
-    .spacing(5)
 }
 
-fn right_column(
+fn view_editor(
     global_state: &'_ crate::Samaku,
     selected_style_index: usize,
 ) -> iced::Element<'_, message::Message> {
@@ -137,7 +128,13 @@ fn right_column(
     .padding(iced::Padding::new(8.0))
     .width(iced::Length::Fill);
 
-    inner.into()
+    iced::widget::scrollable(inner)
+        .direction(iced::widget::scrollable::Direction::Vertical(
+            iced::widget::scrollable::Scrollbar::default(),
+        ))
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .into()
 }
 
 fn section_name_font(i: usize, style: &subtitle::Style) -> iced::Element<'_, message::Message> {
@@ -524,7 +521,7 @@ const JUSTIFY_MODES: &[subtitle::JustifyMode] = &[
     subtitle::JustifyMode::Right,
 ];
 
-fn preview<'a, 'b, 'c>(
+fn view_preview<'a, 'b, 'c>(
     global_state: &'a crate::Samaku,
     selected_style_index: usize,
     preview_events: impl Iterator<Item = &'b subtitle::Event<'c>> + 'b,
@@ -603,37 +600,9 @@ impl Default for State {
     fn default() -> Self {
         Self {
             selected_style_index: 0,
+            blend_box_state: view::widget::blend_box::State::default(),
             preview_events: default_preview_events(),
         }
-    }
-}
-
-/// A custom wrapper around `Style` that implements `Display`, `Eq`, and `Hash`,
-/// by only referencing the names. We can do this because `StyleList` guarantees that styles have
-/// unique names.
-#[derive(Clone)]
-struct StyleWrapper(subtitle::Style);
-
-static_assertions::assert_eq_size!(StyleWrapper, subtitle::Style);
-static_assertions::assert_eq_align!(StyleWrapper, subtitle::Style);
-
-impl Display for StyleWrapper {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}", self.0.name())
-    }
-}
-
-impl PartialEq for StyleWrapper {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.name() == other.0.name()
-    }
-}
-
-impl Eq for StyleWrapper {}
-
-impl std::hash::Hash for StyleWrapper {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.name().hash(state);
     }
 }
 
