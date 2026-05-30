@@ -1712,12 +1712,6 @@ name = "glam"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
-
-[[package]]
-name = "glam"
-version = "0.30.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
 dependencies = [
  "bytemuck",
 ]
@@ -2030,12 +2024,12 @@ dependencies = [
 [[package]]
 name = "iced_nodegraph"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e4dd909680a1f668b6cbc0150d5c5c84cbe473c2#e4dd909680a1f668b6cbc0150d5c5c84cbe473c2"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
 dependencies = [
  "bitflags 2.11.1",
  "euclid",
  "iced",
- "iced_sdf_legacy",
+ "iced_sdf",
  "iced_wgpu",
  "iced_widget",
  "rustc-hash 2.1.2",
@@ -2080,16 +2074,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced_sdf_legacy"
+name = "iced_sdf"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e4dd909680a1f668b6cbc0150d5c5c84cbe473c2#e4dd909680a1f668b6cbc0150d5c5c84cbe473c2"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
 dependencies = [
  "bytemuck",
  "encase",
- "glam 0.30.10",
+ "glam 0.25.0",
  "iced",
  "iced_wgpu",
- "smallvec",
  "web-time",
 ]
 

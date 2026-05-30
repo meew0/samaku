@@ -311,7 +311,7 @@ fn create_graph(
             )
         })
         .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
-        //.selection(dbg!(&pane_state.selected_nodes)) // TODO: this method is buggy (if this line is left in, no nodes can be selected at all)
+        .selection(&pane_state.selected_nodes)
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
         .pin_defaults(iced_nodegraph::PinConfig {
             radius: Some(8.0),
