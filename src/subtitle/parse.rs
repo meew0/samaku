@@ -186,7 +186,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         aegi_metadata,
         attachments,
         other_sections: opaque_sections,
-        styles: model::Trace::new(style_list),
+        styles: style_list,
         events,
         extradata,
     };

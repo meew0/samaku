@@ -33,15 +33,7 @@ pub(crate) fn update_direct(
     undo: &mut history::Key,
 ) -> iced::Task<Message> {
     // Run the internal update method, which does the actual updating of global state.
-    let task = update_internal(global_state, message, undo);
-
-    // Check whether certain properties have been modified. If they have, we need to notify
-    // our panes about this, since some of them contain copies of the data in an iced-specific
-    // format, which needs to be kept in sync.
-    let styles_modified = global_state.subtitles.styles.check();
-    notify_style_lists(global_state, styles_modified);
-
-    task
+    update_internal(global_state, message, undo)
 }
 
 /// The internal update method, which actually processes the message and updates global state.
@@ -107,7 +99,6 @@ fn update_internal(
                 *pane_state = pane::State::new(constructor());
 
                 notify_selected_events(global_state);
-                notify_style_lists(global_state, true);
             }
         }
         Message::SetFocusedPaneType(constructor) => {
@@ -117,7 +108,6 @@ fn update_internal(
                 *focused_pane_state = pane::State::new(constructor());
 
                 notify_selected_events(global_state);
-                notify_style_lists(global_state, true);
             }
         }
         Message::Pane(pane, pane_message) => {
@@ -1385,16 +1375,6 @@ pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
             &global_state.selected_events,
             &global_state.subtitles.events,
         );
-    }
-}
-
-/// Notifies all entities (like text editor panes) that keep some internal copy of the
-/// styles list to update their internal representations. If `copy_styles` is false, only the
-/// selected style will be updated.
-pub(crate) fn notify_style_lists(global_state: &mut super::Samaku, copy_styles: bool) {
-    for pane in global_state.panes.panes.values_mut() {
-        pane.local
-            .update_style_lists(global_state.subtitles.styles.as_slice(), copy_styles);
     }
 }
 
