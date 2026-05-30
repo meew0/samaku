@@ -869,7 +869,7 @@ impl Default for ScriptInfo {
 }
 
 /// Represents all data that can be contained within an `.ass` file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct File {
     /// Metadata, containing information like the playback resolution, the YCbCr matrix, etc.
     pub script_info: ScriptInfo,
@@ -888,9 +888,8 @@ pub struct File {
     /// decides to introduce a new section.
     pub other_sections: HashMap<String, Vec<String>>,
 
-    /// Base styles for the events. This is wrapped in a `Trace` because if it gets modified,
-    /// certain iced widgets need to be notified about this.
-    pub styles: model::Trace<StyleList>,
+    /// Base styles for the events.
+    pub styles: StyleList,
 
     /// The events, i.e. the individual subtitle lines.
     pub events: EventTrack,
@@ -933,26 +932,12 @@ impl File {
 
         let new_file = Self {
             events,
-            styles: model::Trace::new(style_list),
+            styles: style_list,
             script_info: opaque.script_info(),
             ..Default::default()
         };
 
         (new_file, leftover)
-    }
-}
-
-impl Default for File {
-    fn default() -> Self {
-        Self {
-            script_info: ScriptInfo::default(),
-            aegi_metadata: HashMap::new(),
-            attachments: vec![],
-            other_sections: HashMap::new(),
-            styles: model::Trace::new(StyleList::default()),
-            events: EventTrack::default(),
-            extradata: Extradata::default(),
-        }
     }
 }
 

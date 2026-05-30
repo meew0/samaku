@@ -1,10 +1,12 @@
-use std::{collections::HashMap, fmt::Display, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{media, message, model, nde, subtitle, view};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct State {
     pub selected_style_index: usize,
+    #[serde(skip)]
+    pub blend_box_state: view::widget::blend_box::State,
     #[serde(skip, default = "default_preview_events")]
     pub preview_events: subtitle::EventTrack,
 }
@@ -16,26 +18,25 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let left_column = left_column(self_pane, global_state, self.selected_style_index);
-        let right_column = right_column(global_state, self.selected_style_index);
-        let preview = preview(
+        let preview = view_preview(
             global_state,
             self.selected_style_index,
             self.preview_events.iter_events(),
         );
+        let selector = view_selector(self, self_pane, global_state, self.selected_style_index);
+        let editor = view_editor(global_state, self.selected_style_index);
 
         let content = iced::widget::column![
             iced::widget::container(preview).center_x(iced::Length::Fill),
-            iced::widget::row![left_column, right_column],
-        ]
-        .spacing(8);
+            view::separator(),
+            iced::widget::container(selector).center_x(iced::Length::Fill),
+            view::separator(),
+            editor,
+        ];
 
         super::View {
             title: iced::widget::text("Style editor").into(),
-            content: iced::widget::scrollable(content)
-                .direction(iced::widget::scrollable::Direction::Vertical(
-                    iced::widget::scrollable::Scrollbar::default(),
-                ))
+            content: iced::widget::container(content)
                 .width(iced::Length::Fill)
                 .height(iced::Length::Fill)
                 .into(),
@@ -52,15 +53,6 @@ impl super::LocalState for State {
 
         iced::Task::none()
     }
-
-    fn update_style_lists(&mut self, styles: &[subtitle::Style], _copy_styles: bool) {
-        // A style might have been deleted, which might cause the style selected in a
-        // style editor pane to no longer exist. In that case, set it to 0 which will
-        // always exist.
-        if self.selected_style_index >= styles.len() {
-            self.selected_style_index = 0;
-        }
-    }
 }
 
 inventory::submit! {
@@ -70,52 +62,51 @@ inventory::submit! {
     )
 }
 
-fn left_column(
+fn view_selector<'a>(
+    pane_state: &'a State,
     self_pane: super::Pane,
-    global_state: &'_ crate::Samaku,
+    global_state: &'a crate::Samaku,
     selected_style_index: usize,
-) -> iced::widget::Column<'_, message::Message> {
+) -> iced::Element<'a, message::Message> {
     let styles = global_state.subtitles.styles.as_slice();
 
-    // We know that this conversion is sound, since we statically assert that `StyleWrapper` and
-    // `Style` have the same size and alignment. However, Rust does not allow us to do this safely,
-    // so we have to use unsafe.
-    let wrapped_styles: &[StyleWrapper] =
-        unsafe { std::slice::from_raw_parts(styles.as_ptr().cast(), styles.len()) };
+    let selected_style = model::NamedEntry {
+        id: selected_style_index,
+        name: styles[selected_style_index].name(),
+    };
 
-    let selection_list = iced_aw::widgets::selection_list_with(
-        wrapped_styles,
-        move |selection_index, _| {
+    let delete_text = if selected_style_index == 0 {
+        "The first style cannot be deleted."
+    } else {
+        "Delete style"
+    };
+
+    let controls_spec = view::widget::BlendBoxControls {
+        add_text: "Create new style",
+        add_message: message::Message::CreateStyle,
+        unassign_text: "",
+        unassign_message: None::<fn(usize) -> message::Message>,
+        delete_text,
+        delete_message: (selected_style_index != 0).then_some(message::Message::DeleteStyle),
+        _phantom: std::marker::PhantomData,
+    };
+
+    view::widget::blend_box_controls(
+        &pane_state.blend_box_state,
+        styles,
+        "Select style",
+        Some(selected_style),
+        move |selection_index| {
             message::Message::Pane(
                 self_pane,
                 message::Pane::StyleEditorStyleSelected(selection_index),
             )
         },
-        14.0,
-        2.0,
-        iced_aw::style::selection_list::primary,
-        Some(selected_style_index),
-        crate::DEFAULT_FONT,
+        controls_spec,
     )
-    .width(iced::Length::Fixed(200.0))
-    .height(iced::Length::Fixed(200.0));
-
-    let create_button = iced::widget::button(iced::widget::text("Create new"))
-        .on_press(message::Message::CreateStyle);
-    let delete_button = iced::widget::button(iced::widget::text("Delete")).on_press_maybe(
-        // Do not allow deleting the first style
-        (selected_style_index != 0).then_some(message::Message::DeleteStyle(selected_style_index)),
-    );
-
-    iced::widget::column![
-        iced::widget::text("Styles").size(20),
-        selection_list,
-        iced::widget::row![create_button, delete_button].spacing(5)
-    ]
-    .spacing(5)
 }
 
-fn right_column(
+fn view_editor(
     global_state: &'_ crate::Samaku,
     selected_style_index: usize,
 ) -> iced::Element<'_, message::Message> {
@@ -137,7 +128,13 @@ fn right_column(
     .padding(iced::Padding::new(8.0))
     .width(iced::Length::Fill);
 
-    inner.into()
+    iced::widget::scrollable(inner)
+        .direction(iced::widget::scrollable::Direction::Vertical(
+            iced::widget::scrollable::Scrollbar::default(),
+        ))
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .into()
 }
 
 fn section_name_font(i: usize, style: &subtitle::Style) -> iced::Element<'_, message::Message> {
@@ -145,9 +142,11 @@ fn section_name_font(i: usize, style: &subtitle::Style) -> iced::Element<'_, mes
         .on_input(move |value| message::Message::SetStyleName(i, value));
     let font_input = iced::widget::text_input("Font name", &style.font_name)
         .on_input(move |value| message::Message::SetStyleFontName(i, value));
-    let font_size_input = iced_aw::number_input(&style.font_size, 1.0..=9999.0_f64, move |value| {
-        message::Message::SetStyleFontSize(i, value)
-    });
+    let font_size_input =
+        view::widget::number_dragger(style.font_size, 1.0..=9999.0_f64, move |value| {
+            message::Message::SetStyleFontSize(i, value)
+        })
+        .step_and_drag_speed(0.25_f64);
 
     iced::widget::column![
         section_label("Name & Font"),
@@ -176,10 +175,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
 
     let primary_row = colour_input_row(
         "Primary",
-        &style.primary_colour.red,
-        &style.primary_colour.green,
-        &style.primary_colour.blue,
-        &style.primary_transparency.0,
+        style.primary_colour.red,
+        style.primary_colour.green,
+        style.primary_colour.blue,
+        style.primary_transparency.0,
         move |red| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { red, ..pc }),
         move |green| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { green, ..pc }),
         move |blue| message::Message::SetStylePrimaryColour(i, nde::tags::Colour { blue, ..pc }),
@@ -189,10 +188,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let secondary_row = colour_input_row(
         "Secondary",
-        &style.secondary_colour.red,
-        &style.secondary_colour.green,
-        &style.secondary_colour.blue,
-        &style.secondary_transparency.0,
+        style.secondary_colour.red,
+        style.secondary_colour.green,
+        style.secondary_colour.blue,
+        style.secondary_transparency.0,
         move |red| message::Message::SetStyleSecondaryColour(i, nde::tags::Colour { red, ..sc }),
         move |green| {
             message::Message::SetStyleSecondaryColour(i, nde::tags::Colour { green, ..sc })
@@ -204,10 +203,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let border_colour_row = colour_input_row(
         "Border",
-        &style.border_colour.red,
-        &style.border_colour.green,
-        &style.border_colour.blue,
-        &style.border_transparency.0,
+        style.border_colour.red,
+        style.border_colour.green,
+        style.border_colour.blue,
+        style.border_transparency.0,
         move |red| message::Message::SetStyleBorderColour(i, nde::tags::Colour { red, ..bc }),
         move |green| message::Message::SetStyleBorderColour(i, nde::tags::Colour { green, ..bc }),
         move |blue| message::Message::SetStyleBorderColour(i, nde::tags::Colour { blue, ..bc }),
@@ -217,10 +216,10 @@ fn section_colours(i: usize, style: &subtitle::Style) -> iced::Element<'_, messa
     );
     let shadow_colour_row = colour_input_row(
         "Shadow",
-        &style.shadow_colour.red,
-        &style.shadow_colour.green,
-        &style.shadow_colour.blue,
-        &style.shadow_transparency.0,
+        style.shadow_colour.red,
+        style.shadow_colour.green,
+        style.shadow_colour.blue,
+        style.shadow_transparency.0,
         move |red| message::Message::SetStyleShadowColour(i, nde::tags::Colour { red, ..shc }),
         move |green| message::Message::SetStyleShadowColour(i, nde::tags::Colour { green, ..shc }),
         move |blue| message::Message::SetStyleShadowColour(i, nde::tags::Colour { blue, ..shc }),
@@ -259,23 +258,30 @@ fn section_formatting(i: usize, style: &subtitle::Style) -> iced::Element<'_, me
         .label("Strike-out")
         .on_toggle(move |value| message::Message::SetStyleStrikeOut(i, value));
 
-    let scale_x_input = iced_aw::number_input(&style.scale.x, 0.01..=1000.0_f64, move |value| {
-        message::Message::SetStyleScaleX(i, value)
-    })
-    .step(0.01_f64);
-    let scale_y_input = iced_aw::number_input(&style.scale.y, 0.01..=1000.0_f64, move |value| {
-        message::Message::SetStyleScaleY(i, value)
-    })
-    .step(0.01_f64);
-    let spacing_input = iced_aw::number_input(&style.spacing, -1000.0..=1000.0_f64, move |value| {
-        message::Message::SetStyleSpacing(i, value)
-    });
-    let angle_input = iced_aw::number_input(&style.angle.0, 0.0..=360.0_f64, move |value| {
-        message::Message::SetStyleAngle(i, value)
-    });
-    let blur_input = iced_aw::number_input(&style.blur, 0.0..=100.0_f64, move |value| {
+    let scale_x_input =
+        view::widget::number_dragger(style.scale.x, 0.01..=1000.0_f64, move |value| {
+            message::Message::SetStyleScaleX(i, value)
+        })
+        .step_and_drag_speed(0.01_f64);
+    let scale_y_input =
+        view::widget::number_dragger(style.scale.y, 0.01..=1000.0_f64, move |value| {
+            message::Message::SetStyleScaleY(i, value)
+        })
+        .step_and_drag_speed(0.01_f64);
+    let spacing_input =
+        view::widget::number_dragger(style.spacing, -1000.0..=1000.0_f64, move |value| {
+            message::Message::SetStyleSpacing(i, value)
+        })
+        .step_and_drag_speed(0.1_f64);
+    let angle_input =
+        view::widget::number_dragger(style.angle.0, -360.0..=360.0_f64, move |value| {
+            message::Message::SetStyleAngle(i, value)
+        })
+        .step_and_drag_speed(0.5_f64);
+    let blur_input = view::widget::number_dragger(style.blur, 0.0..=100.0_f64, move |value| {
         message::Message::SetStyleBlur(i, value)
-    });
+    })
+    .step_and_drag_speed(0.05_f64);
 
     iced::widget::column![
         section_label("Formatting"),
@@ -309,13 +315,15 @@ fn section_border_shadow(i: usize, style: &subtitle::Style) -> iced::Element<'_,
             message::Message::SetStyleBorderStyle(i, value)
         });
     let border_width_input =
-        iced_aw::number_input(&style.border_width, 0.0..=1000.0_f64, move |value| {
+        view::widget::number_dragger(style.border_width, 0.0..=1000.0_f64, move |value| {
             message::Message::SetStyleBorderWidth(i, value)
-        });
+        })
+        .step_and_drag_speed(0.1_f64);
     let shadow_dist_input =
-        iced_aw::number_input(&style.shadow_distance, 0.0..=1000.0_f64, move |value| {
+        view::widget::number_dragger(style.shadow_distance, 0.0..=1000.0_f64, move |value| {
             message::Message::SetStyleShadowDistance(i, value)
-        });
+        })
+        .step_and_drag_speed(0.1_f64);
 
     iced::widget::column![
         section_label("Border & Shadow"),
@@ -406,14 +414,16 @@ fn section_positioning(i: usize, style: &subtitle::Style) -> iced::Element<'_, m
     let justify_list = iced::widget::pick_list(JUSTIFY_MODES, Some(style.justify), move |value| {
         message::Message::SetStyleJustify(i, value)
     });
-    let margin_l_input = iced_aw::number_input(&style.margins.left, 0..=9999_i32, move |value| {
-        message::Message::SetStyleMarginLeft(i, value)
-    });
-    let margin_r_input = iced_aw::number_input(&style.margins.right, 0..=9999_i32, move |value| {
-        message::Message::SetStyleMarginRight(i, value)
-    });
+    let margin_l_input =
+        view::widget::number_dragger(style.margins.left, 0..=9999_i32, move |value| {
+            message::Message::SetStyleMarginLeft(i, value)
+        });
+    let margin_r_input =
+        view::widget::number_dragger(style.margins.right, 0..=9999_i32, move |value| {
+            message::Message::SetStyleMarginRight(i, value)
+        });
     let margin_v_input =
-        iced_aw::number_input(&style.margins.vertical, 0..=9999_i32, move |value| {
+        view::widget::number_dragger(style.margins.vertical, 0..=9999_i32, move |value| {
             message::Message::SetStyleMarginVertical(i, value)
         });
 
@@ -471,11 +481,11 @@ fn labeled_row<'a>(
     reason = "colour rows need separate callbacks per channel"
 )]
 fn colour_input_row<'a>(
-    label: &'a str,
-    red: &'a u8,
-    green: &'a u8,
-    blue: &'a u8,
-    alpha: &'a i32,
+    label: &'static str,
+    red: u8,
+    green: u8,
+    blue: u8,
+    alpha: i32,
     on_red: impl Fn(u8) -> message::Message + Copy + 'static,
     on_green: impl Fn(u8) -> message::Message + Copy + 'static,
     on_blue: impl Fn(u8) -> message::Message + Copy + 'static,
@@ -483,10 +493,10 @@ fn colour_input_row<'a>(
 ) -> iced::Element<'a, message::Message> {
     iced::widget::row![
         iced::widget::text(label).width(COL_LABEL_W),
-        iced_aw::number_input(red, 0..=255_u8, on_red).width(COL_COLOUR_W),
-        iced_aw::number_input(green, 0..=255_u8, on_green).width(COL_COLOUR_W),
-        iced_aw::number_input(blue, 0..=255_u8, on_blue).width(COL_COLOUR_W),
-        iced_aw::number_input(alpha, 0..=255_i32, on_alpha).width(COL_COLOUR_W),
+        view::widget::number_dragger(red, 0..=255_u8, on_red).width(COL_COLOUR_W),
+        view::widget::number_dragger(green, 0..=255_u8, on_green).width(COL_COLOUR_W),
+        view::widget::number_dragger(blue, 0..=255_u8, on_blue).width(COL_COLOUR_W),
+        view::widget::number_dragger(alpha, 0..=255_i32, on_alpha).width(COL_COLOUR_W),
     ]
     .spacing(4)
     .align_y(iced::Alignment::Center)
@@ -511,7 +521,7 @@ const JUSTIFY_MODES: &[subtitle::JustifyMode] = &[
     subtitle::JustifyMode::Right,
 ];
 
-fn preview<'a, 'b, 'c>(
+fn view_preview<'a, 'b, 'c>(
     global_state: &'a crate::Samaku,
     selected_style_index: usize,
     preview_events: impl Iterator<Item = &'b subtitle::Event<'c>> + 'b,
@@ -590,37 +600,9 @@ impl Default for State {
     fn default() -> Self {
         Self {
             selected_style_index: 0,
+            blend_box_state: view::widget::blend_box::State::default(),
             preview_events: default_preview_events(),
         }
-    }
-}
-
-/// A custom wrapper around `Style` that implements `Display`, `Eq`, and `Hash`,
-/// by only referencing the names. We can do this because `StyleList` guarantees that styles have
-/// unique names.
-#[derive(Clone)]
-struct StyleWrapper(subtitle::Style);
-
-static_assertions::assert_eq_size!(StyleWrapper, subtitle::Style);
-static_assertions::assert_eq_align!(StyleWrapper, subtitle::Style);
-
-impl Display for StyleWrapper {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}", self.0.name())
-    }
-}
-
-impl PartialEq for StyleWrapper {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.name() == other.0.name()
-    }
-}
-
-impl Eq for StyleWrapper {}
-
-impl std::hash::Hash for StyleWrapper {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.name().hash(state);
     }
 }
 

@@ -51,7 +51,6 @@ pub trait LocalState {
     ) {
     }
     fn update_filter_names(&mut self, _extradata: &subtitle::Extradata) {}
-    fn update_style_lists(&mut self, _styles: &[subtitle::Style], _copy_styles: bool) {}
 }
 
 /// Visitor pattern implementation for local state types that potentially need custom pane-specific global update behavior.

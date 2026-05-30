@@ -2,7 +2,7 @@
 name = "samaku"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.96"
 description = "Node-based editor for typesetting of ASS subtitles"
 repository = "https://github.com/meew0/samaku"
 readme = "README.md"
@@ -16,15 +16,27 @@ publish = false
 [dependencies]
 
 # GUI
-iced = { version = "0.14.0", features = [
-    "lazy",
-    "image",
+iced = { version = "0.14.0", default-features = false, features = [
+    # Default features
+    "wgpu",
+    # "tiny-skia",
+    "crisp",
+    # "web-colors",
+    "thread-pool",
+    "linux-theme-detection",
+    "x11",
+    "wayland",
+    #
+    # Non-default features
     "advanced",
+    "canvas",
+    "image",
+    "lazy",
     "smol",
     "svg",
 ] }
-iced_aw = { version = "0.14.1", features = ["menu", "selection_list"] }
-iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "e4dd909680a1f668b6cbc0150d5c5c84cbe473c2" }
+iced_aw = { version = "0.14.1", default-features = false, features = ["menu"] }
+iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "b0bf64f3d5423a84de900e152db1cb940f543576" }
 rfd = "0.17.2"
 smol = "2.0"
 

@@ -565,9 +565,9 @@ dependencies = [
 
 [[package]]
 name = "built"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ad8f11f288f48ca24471bbd51ac257aaeaaa07adae295591266b792902ae64"
+checksum = "5c0e531d93d39c34eef561e929e8a7f86d77a5af08aac4f6d6e39976c51858e9"
 
 [[package]]
 name = "bumpalo"
@@ -712,19 +712,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "rand_core 0.10.1",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
-dependencies = [
- "iana-time-zone",
- "js-sys",
- "num-traits",
- "wasm-bindgen",
- "windows-link",
 ]
 
 [[package]]
@@ -1725,12 +1712,6 @@ name = "glam"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
-
-[[package]]
-name = "glam"
-version = "0.30.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
 dependencies = [
  "bytemuck",
 ]
@@ -1921,30 +1902,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iana-time-zone"
-version = "0.1.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
-dependencies = [
- "android_system_properties",
- "core-foundation-sys",
- "iana-time-zone-haiku",
- "js-sys",
- "log",
- "wasm-bindgen",
- "windows-core 0.62.2",
-]
-
-[[package]]
-name = "iana-time-zone-haiku"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "iced"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1968,12 +1925,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59b7f923642b024c415150b70ef84ee5c11626e3b0af73b954d817d573bcd0a4"
 dependencies = [
  "cfg-if",
- "chrono",
  "iced_core",
  "iced_fonts",
  "iced_widget",
- "num-format",
- "num-traits",
  "web-time",
 ]
 
@@ -2070,12 +2024,12 @@ dependencies = [
 [[package]]
 name = "iced_nodegraph"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e4dd909680a1f668b6cbc0150d5c5c84cbe473c2#e4dd909680a1f668b6cbc0150d5c5c84cbe473c2"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
 dependencies = [
  "bitflags 2.11.1",
  "euclid",
  "iced",
- "iced_sdf_legacy",
+ "iced_sdf",
  "iced_wgpu",
  "iced_widget",
  "rustc-hash 2.1.2",
@@ -2120,16 +2074,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced_sdf_legacy"
+name = "iced_sdf"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e4dd909680a1f668b6cbc0150d5c5c84cbe473c2#e4dd909680a1f668b6cbc0150d5c5c84cbe473c2"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
 dependencies = [
  "bytemuck",
  "encase",
- "glam 0.30.10",
+ "glam 0.25.0",
  "iced",
  "iced_wgpu",
- "smallvec",
  "web-time",
 ]
 
@@ -2929,16 +2882,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "num-format"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a652d9771a63711fd3c3deb670acfbe5c30a4072e664d7a3bf5a9e1056ac72c3"
-dependencies = [
- "arrayvec",
- "itoa",
 ]
 
 [[package]]

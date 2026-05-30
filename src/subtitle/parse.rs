@@ -9,7 +9,7 @@ use smol::stream::StreamExt as _;
 use thiserror::Error;
 
 use crate::nde::tags::{Alignment, Colour, Transparency};
-use crate::{model, project, subtitle};
+use crate::{project, subtitle};
 
 use super::{
     Angle, Attachment, AttachmentType, BorderStyle, Duration, Event, EventTrack, EventType,
@@ -186,7 +186,7 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
         aegi_metadata,
         attachments,
         other_sections: opaque_sections,
-        styles: model::Trace::new(style_list),
+        styles: style_list,
         events,
         extradata,
     };

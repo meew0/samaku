@@ -352,42 +352,48 @@ fn active_first_line<'a>(
 fn active_second_line(multi_event: &'_ MultiEvent) -> iced::Element<'_, message::Message> {
     // Numeric controls
     let start_time_control = multi_event.start.tooltip(
-        iced_aw::NumberInput::new(
-            &multi_event.start.primary.0,
-            ..i64::MAX,
+        view::widget::number_dragger(
+            multi_event.start.primary.0,
+            0..=i64::MAX,
             message_fn(multi_event, |edit| {
                 message::Message::MultiEditEventStartTime(edit.map(subtitle::StartTime))
             }),
         )
-        .input_style(|theme, status| iced::widget::text_input::Style {
-            value: multi_event.start.color(),
-            ..iced::widget::text_input::default(theme, status)
+        .drag_speed(10.0_f64)
+        .step(10)
+        .style(|theme, status| view::widget::number_dragger::Style {
+            text_color: multi_event.start.color(),
+            ..view::widget::number_dragger::default_style(theme, status)
         }),
     );
     let duration_control = multi_event.duration.tooltip(
-        iced_aw::NumberInput::new(
-            &multi_event.duration.primary.0,
-            ..i64::MAX,
+        view::widget::number_dragger(
+            multi_event.duration.primary.0,
+            0..=i64::MAX,
             message_fn(multi_event, |edit| {
                 message::Message::MultiEditEventDuration(edit.map(subtitle::Duration))
             }),
         )
-        .input_style(|theme, status| iced::widget::text_input::Style {
-            value: multi_event.duration.color(),
-            ..iced::widget::text_input::default(theme, status)
+        .drag_speed(10.0_f64)
+        .step(10)
+        .style(|theme, status| view::widget::number_dragger::Style {
+            text_color: multi_event.duration.color(),
+            ..view::widget::number_dragger::default_style(theme, status)
         }),
     );
     let layer_control = multi_event.layer_index.tooltip(
-        iced_aw::NumberInput::new(
-            &multi_event.layer_index.primary,
-            ..i32::MAX,
+        view::widget::number_dragger(
+            multi_event.layer_index.primary,
+            0..=i32::MAX,
             message_fn(multi_event, |edit| {
                 message::Message::MultiEditEventLayerIndex(edit)
             }),
         )
-        .input_style(|theme, status| iced::widget::text_input::Style {
-            value: multi_event.layer_index.color(),
-            ..iced::widget::text_input::default(theme, status)
+        .drag_speed(1.0_f64)
+        .step(1)
+        .style(|theme, status| view::widget::number_dragger::Style {
+            text_color: multi_event.layer_index.color(),
+            ..view::widget::number_dragger::default_style(theme, status)
         }),
     );
 

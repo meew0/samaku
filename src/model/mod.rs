@@ -176,6 +176,7 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct NamedEntry<'a, K: Copy> {
     pub id: K,
     pub name: &'a str,

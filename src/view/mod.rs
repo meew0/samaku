@@ -1,4 +1,4 @@
-use crate::{message, style, subtitle};
+use crate::{message, subtitle};
 
 pub mod icons;
 pub mod menu;
@@ -9,20 +9,8 @@ pub use icons::Icon;
 
 /// Create a half-pixel thick horizontal separator line.
 #[must_use]
-pub fn separator() -> iced_aw::quad::Quad {
-    iced_aw::quad::Quad {
-        width: iced::Length::Fill,
-        height: iced::Length::Fixed(0.5),
-        quad_color: iced::Background::Color(
-            style::samaku_theme()
-                .extended_palette()
-                .background
-                .weak
-                .color,
-        ),
-        inner_bounds: iced_aw::widgets::common::InnerBounds::Ratio(1.0, 1.0),
-        ..Default::default()
-    }
+pub fn separator() -> iced::widget::rule::Rule<'static> {
+    iced::widget::rule::horizontal(0.5).style(iced::widget::rule::weak)
 }
 
 #[must_use]
