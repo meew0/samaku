@@ -16,7 +16,18 @@ publish = false
 [dependencies]
 
 # GUI
-iced = { version = "0.14.0", features = [
+iced = { version = "0.14.0", default-features = false, features = [
+    # Default features
+    "wgpu",
+    # "tiny-skia",
+    "crisp",
+    # "web-colors",
+    "thread-pool",
+    "linux-theme-detection",
+    "x11",
+    "wayland",
+    #
+    # Non-default features
     "advanced",
     "canvas",
     "image",
