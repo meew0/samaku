@@ -1385,6 +1385,21 @@ fn update_internal(
                 undo.put_instant("Set track name", Message::SetTrackName(track_id, old_name));
             };
         }
+        Message::SetTrackMarkerCenterCoordinate(axis, track_id, frame, new_value) => {
+            todo!()
+        }
+        Message::SetTrackMarkerOffsetCoordinate(axis, track_id, frame, new_value) => {
+            todo!()
+        }
+        Message::SetTrackMarkerSizeCoordinate(axis, track_id, frame, new_value) => {
+            todo!()
+        }
+        Message::SetTrackMarkerSearchAreaOriginCoordinate(axis, track_id, frame, new_value) => {
+            todo!()
+        }
+        Message::SetTrackMarkerSearchAreaSizeCoordinate(axis, track_id, frame, new_value) => {
+            todo!()
+        }
         Message::TrackMotionForSelectedTracks(origin_frame, direction, target) => {
             todo!();
         }

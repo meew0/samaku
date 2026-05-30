@@ -3,6 +3,7 @@
     reason = "implements more of what mv does for now than is currently used in samaku"
 )]
 
+use crate::media::motion;
 use glam::{DVec2, IVec2};
 use libmv_capi_sys as libmv;
 use libmv_capi_sys::libmv_TrackRegionOptions;
@@ -78,7 +79,7 @@ impl TrackRegionDirection {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MotionModel {
     Translation = 0,
     TranslationRotation = 1,
@@ -86,6 +87,19 @@ pub enum MotionModel {
     TranslationRotationScale = 3,
     Affine = 4,
     Homography = 5,
+}
+
+impl std::fmt::Display for MotionModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MotionModel::Translation => write!(f, "Location"),
+            MotionModel::TranslationRotation => write!(f, "Location & Rotation"),
+            MotionModel::TranslationScale => write!(f, "Location & Scale"),
+            MotionModel::TranslationRotationScale => write!(f, "Location, Rotation, & Scale"),
+            MotionModel::Affine => write!(f, "Affine"),
+            MotionModel::Homography => write!(f, "Perspective"),
+        }
+    }
 }
 
 pub(crate) struct MonochromeImage<'a> {
@@ -180,6 +194,21 @@ impl Region {
             bottom_left: self.bottom_left + offset,
             center: self.center + offset,
         }
+    }
+
+    #[allow(clippy::missing_panics_doc, reason = "will never panic")]
+    pub fn bounding_box(&self) -> motion::Patch<DVec2> {
+        let (x, y) = self.as_float_slices();
+        let origin = DVec2::new(
+            x.into_iter().reduce(f64::min).unwrap(),
+            y.into_iter().reduce(f64::min).unwrap(),
+        );
+        let max_point = DVec2::new(
+            x.into_iter().reduce(f64::min).unwrap(),
+            y.into_iter().reduce(f64::min).unwrap(),
+        );
+        let size = max_point - origin;
+        motion::Patch { origin, size }
     }
 }
 

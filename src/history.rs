@@ -154,6 +154,11 @@ impl History {
             | Message::CreateTrack
             | Message::DeleteTrack(_)
             | Message::SetTrackName(_, _)
+            | Message::SetTrackMarkerCenterCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerOffsetCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSizeCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSearchAreaOriginCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSearchAreaSizeCoordinate(_, _, _, _)
             | Message::TrackMotionForSelectedTracks(_, _, _)
             | Message::ToggleTrackSelection(_)
             | Message::SetTrackSelectionSingle(_, _, _)

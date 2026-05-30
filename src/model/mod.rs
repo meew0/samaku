@@ -181,3 +181,30 @@ pub struct NamedEntry<'a, K: Copy> {
     pub id: K,
     pub name: &'a str,
 }
+
+#[derive(Debug, Clone, Copy)]
+#[expect(clippy::min_ident_chars, reason = "trivial axis names")]
+pub enum Axis {
+    X,
+    Y,
+}
+
+impl std::ops::Index<Axis> for glam::DVec2 {
+    type Output = f64;
+
+    fn index(&self, index: Axis) -> &Self::Output {
+        match index {
+            Axis::X => &self.x,
+            Axis::Y => &self.y,
+        }
+    }
+}
+
+impl std::ops::IndexMut<Axis> for glam::DVec2 {
+    fn index_mut(&mut self, index: Axis) -> &mut Self::Output {
+        match index {
+            Axis::X => &mut self.x,
+            Axis::Y => &mut self.y,
+        }
+    }
+}

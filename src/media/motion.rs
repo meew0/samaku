@@ -73,6 +73,16 @@ impl Track {
         markers.insert(origin_frame, marker);
         Self { markers, name }
     }
+
+    #[must_use]
+    pub fn get_marker(&self, frame_number: model::FrameNumber) -> Option<&Marker> {
+        self.markers.get(&frame_number)
+    }
+
+    #[must_use]
+    pub fn get_marker_mut(&mut self, frame_number: model::FrameNumber) -> Option<&mut Marker> {
+        self.markers.get_mut(&frame_number)
+    }
 }
 
 impl model::Named for Track {
@@ -83,10 +93,10 @@ impl model::Named for Track {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Marker {
-    region: Region,
-    offset: DVec2,
-    search_area: Patch<DVec2>,
-    key_state: KeyState,
+    pub region: Region,
+    pub offset: DVec2,
+    pub search_area: Patch<DVec2>,
+    pub key_state: KeyState,
 }
 
 impl Default for Marker {
@@ -112,13 +122,13 @@ pub enum KeyState {
     Tracked,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct TrackSettings {
-    model: Model,
-    match_mode: MatchMode,
-    pre_pass: bool,
-    normalize: bool,
-    channels: Channels,
+    pub model: Model,
+    pub match_mode: MatchMode,
+    pub pre_pass: bool,
+    pub normalize: bool,
+    pub channels: Channels,
 }
 
 impl Default for TrackSettings {
@@ -133,7 +143,7 @@ impl Default for TrackSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MatchMode {
     /// Match region content to that of the key marker.
     Key,
@@ -142,7 +152,39 @@ pub enum MatchMode {
     Previous,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl std::fmt::Display for MatchMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MatchMode::Key => {
+                write!(f, "Keyframe")
+            }
+            MatchMode::Previous => {
+                write!(f, "Previous frame")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(usize)]
+pub enum Channel {
+    Red = 0,
+    Green = 1,
+    Blue = 2,
+}
+
+impl Channel {
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Channel::Red => "Red",
+            Channel::Green => "Green",
+            Channel::Blue => "Blue",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Channels {
     red: bool,
     green: bool,
@@ -155,6 +197,18 @@ impl Channels {
             red: true,
             green: true,
             blue: true,
+        }
+    }
+}
+
+impl std::ops::Index<Channel> for Channels {
+    type Output = bool;
+
+    fn index(&self, index: Channel) -> &Self::Output {
+        match index {
+            Channel::Red => &self.red,
+            Channel::Green => &self.green,
+            Channel::Blue => &self.blue,
         }
     }
 }

@@ -260,6 +260,23 @@ pub enum Message {
     DeleteTrack(media::motion::TrackId),
     SetTrackName(media::motion::TrackId, String),
 
+    // Motion track editing
+    SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerSearchAreaOriginCoordinate(
+        model::Axis,
+        media::motion::TrackId,
+        model::FrameNumber,
+        f64,
+    ),
+    SetTrackMarkerSearchAreaSizeCoordinate(
+        model::Axis,
+        media::motion::TrackId,
+        model::FrameNumber,
+        f64,
+    ),
+
     // Motion track selection
     ToggleTrackSelection(media::motion::TrackId),
     SetTrackSelectionSingle(media::motion::TrackId, bool, Option<media::motion::TrackId>),
@@ -358,6 +375,10 @@ pub enum Pane {
     // Messages for the video
     VideoSetControlsMode(pane::video::ControlsMode),
     VideoSetLimitToEvent(bool),
+    VideoSetTrackingOption(pane::video::TrackingOption),
+    VideoToggleTrackExpando,
+    VideoToggleTrackSettingsExpando,
+    VideoToggleMarkerSettingsExpando,
 }
 
 /// Messages dispatched to nodes.

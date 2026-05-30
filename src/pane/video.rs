@@ -12,6 +12,10 @@ pub struct State {
     #[serde(skip)]
     blend_box_state: view::widget::blend_box::State,
     limit_to_event: bool,
+    track_settings: motion::TrackSettings,
+    track_expando_open: bool,
+    track_settings_expando_open: bool,
+    marker_settings_expando_open: bool,
 }
 
 impl Default for State {
@@ -22,6 +26,10 @@ impl Default for State {
             split_at: 0.8,
             blend_box_state: view::widget::blend_box::State::default(),
             limit_to_event: true,
+            track_settings: motion::TrackSettings::default(),
+            track_expando_open: true,
+            track_settings_expando_open: false,
+            marker_settings_expando_open: false,
         }
     }
 }
@@ -30,6 +38,15 @@ impl Default for State {
 pub enum ControlsMode {
     Reticules,
     MotionTrack,
+}
+
+#[derive(Debug, Clone)]
+pub enum TrackingOption {
+    Model(motion::Model),
+    MatchMode(motion::MatchMode),
+    PrePass(bool),
+    Normalize(bool),
+    Channel(motion::Channel, bool),
 }
 
 #[typetag::serde(name = "video")]
@@ -64,6 +81,15 @@ impl super::LocalState for State {
         match pane_message {
             message::Pane::VideoSetControlsMode(controls_mode) => {
                 self.controls_mode = controls_mode;
+            }
+            message::Pane::VideoToggleTrackExpando => {
+                self.track_expando_open = !self.track_expando_open;
+            }
+            message::Pane::VideoToggleTrackSettingsExpando => {
+                self.track_settings_expando_open = !self.track_settings_expando_open;
+            }
+            message::Pane::VideoToggleMarkerSettingsExpando => {
+                self.marker_settings_expando_open = !self.marker_settings_expando_open;
             }
             _ => {}
         }
@@ -118,25 +144,31 @@ fn view_video<'a>(
         }
     };
 
-    let scroll = iced::widget::scrollable(image_stack);
+    let video_scroll = iced::widget::scrollable(image_stack);
 
-    let video_container = iced::widget::container(scroll)
+    let video_container = iced::widget::container(video_scroll)
         .center_x(iced::Length::Fill)
         .center_y(iced::Length::Fill);
 
     let split = match pane_state.controls_mode {
         ControlsMode::Reticules => video_container.into(),
-        ControlsMode::MotionTrack => iced::widget::row![
-            video_container,
-            view::vertical_separator(),
-            view_motion_track_controls(pane_state, self_pane, global_state, frame_number),
-        ]
-        .into(),
+        ControlsMode::MotionTrack => {
+            let motion_track_controls =
+                view_motion_track_controls(pane_state, self_pane, global_state, frame_number);
+            let motion_track_scroll = iced::widget::scrollable(motion_track_controls);
+
+            iced::widget::row![
+                video_container,
+                view::vertical_separator(),
+                motion_track_scroll,
+            ]
+            .into()
+        }
     };
 
     if pane_state.show_controls {
         let bottom_bar = view_bottom_bar(pane_state, self_pane, global_state);
-        iced::widget::column![split, bottom_bar].into()
+        iced::widget::column![split, view::separator(), bottom_bar].into()
     } else {
         split
     }
@@ -249,15 +281,40 @@ fn view_motion_track_controls<'a>(
     }
 
     if !global_state.selected_tracks.is_empty() {
-        column = column.push(view_track_buttons(
-            pane_state,
+        let track_buttons = view_track_buttons(pane_state, self_pane, global_state, frame_number);
+        column = column.push(view::expando(
+            pane_state.track_expando_open,
             self_pane,
-            global_state,
-            frame_number,
+            message::Pane::VideoToggleTrackExpando,
+            "Track",
+            track_buttons,
+        ));
+
+        let track_settings = view_track_settings(pane_state, self_pane);
+        column = column.push(view::expando(
+            pane_state.track_settings_expando_open,
+            self_pane,
+            message::Pane::VideoToggleTrackSettingsExpando,
+            "Tracking settings",
+            track_settings,
         ));
     }
 
-    column.width(200.0).spacing(10.0).padding(5.0).into()
+    if let Some(active_track_data) = active_track_data_opt
+        && let Some(active_marker) = active_track_data.1.get_marker(frame_number)
+    {
+        let marker_settings =
+            view_marker_settings(global_state, active_track_data, frame_number, active_marker);
+        column = column.push(view::expando(
+            pane_state.marker_settings_expando_open,
+            self_pane,
+            message::Pane::VideoToggleMarkerSettingsExpando,
+            "Marker settings",
+            marker_settings,
+        ));
+    }
+
+    column.width(200.0).spacing(20.0).padding(5.0).into()
 }
 
 fn view_track_selector<'a>(
@@ -417,9 +474,200 @@ fn view_track_buttons<'a>(
         "Limit motion tracking to the currently active event",
     );
 
-    iced::widget::column![view::section_label("Track"), buttons, limit_checkbox]
+    iced::widget::column![buttons, limit_checkbox]
         .spacing(5.0)
         .into()
+}
+
+fn view_track_settings(
+    pane_state: &State,
+    self_pane: super::Pane,
+) -> iced::Element<'_, message::Message> {
+    const MOTION_MODELS: &[motion::Model] = &[
+        motion::Model::Translation,
+        motion::Model::TranslationRotation,
+        motion::Model::TranslationScale,
+        motion::Model::TranslationRotationScale,
+        motion::Model::Affine,
+        // motion::Model::Homography,
+    ];
+
+    const MATCH_MODES: &[motion::MatchMode] =
+        &[motion::MatchMode::Key, motion::MatchMode::Previous];
+
+    let motion_model_row = iced::widget::row![
+        iced::widget::text("Motion:").width(iced::Length::FillPortion(1)),
+        iced::widget::pick_list(
+            MOTION_MODELS,
+            Some(pane_state.track_settings.model),
+            move |new_model| message::Message::Pane(
+                self_pane,
+                message::Pane::VideoSetTrackingOption(TrackingOption::Model(new_model))
+            )
+        )
+        .width(iced::Length::FillPortion(1)),
+    ]
+    .align_y(iced::Alignment::Center);
+
+    let match_row = iced::widget::row![
+        iced::widget::text("Match:").width(iced::Length::FillPortion(1)),
+        iced::widget::pick_list(
+            MATCH_MODES,
+            Some(pane_state.track_settings.match_mode),
+            move |new_match_mode| message::Message::Pane(
+                self_pane,
+                message::Pane::VideoSetTrackingOption(TrackingOption::MatchMode(new_match_mode))
+            )
+        )
+        .width(iced::Length::FillPortion(1)),
+    ]
+    .align_y(iced::Alignment::Center);
+
+    let pre_pass_cb = view::tooltip(
+        iced::widget::checkbox(pane_state.track_settings.pre_pass)
+            .label("Prepass")
+            .on_toggle(move |new_value| {
+                message::Message::Pane(
+                    self_pane,
+                    message::Pane::VideoSetTrackingOption(TrackingOption::PrePass(new_value)),
+                )
+            }),
+        "Use a brute-force translation only pre-track before refinement [NYI]",
+    );
+
+    let normalize_cb = view::tooltip(
+        iced::widget::checkbox(pane_state.track_settings.normalize)
+            .label("Normalize")
+            .on_toggle(move |new_value| {
+                message::Message::Pane(
+                    self_pane,
+                    message::Pane::VideoSetTrackingOption(TrackingOption::Normalize(new_value)),
+                )
+            }),
+        "Normalize light intensities while tracking (slower) [NYI]",
+    );
+
+    let channels_cbs = [
+        motion::Channel::Red,
+        motion::Channel::Green,
+        motion::Channel::Blue,
+    ]
+    .iter()
+    .map(|&channel| {
+        iced::widget::checkbox(pane_state.track_settings.channels[channel])
+            .label(channel.name())
+            .on_toggle(move |new_value| {
+                message::Message::Pane(
+                    self_pane,
+                    message::Pane::VideoSetTrackingOption(TrackingOption::Channel(
+                        channel, new_value,
+                    )),
+                )
+            })
+            .width(iced::Length::FillPortion(1))
+            .into()
+    })
+    .collect();
+    let channels_row = iced::widget::Row::from_vec(channels_cbs).spacing(5.0);
+
+    iced::widget::column![
+        motion_model_row,
+        match_row,
+        pre_pass_cb,
+        normalize_cb,
+        channels_row,
+    ]
+    .spacing(5.0)
+    .into()
+}
+
+fn view_marker_settings<'a>(
+    global_state: &'a crate::Samaku,
+    active_track_data: (motion::TrackId, &'a motion::Track),
+    frame_number: model::FrameNumber,
+    active_marker: &'a motion::Marker,
+) -> iced::Element<'a, message::Message> {
+    type MessageFn = fn(model::Axis, motion::TrackId, model::FrameNumber, f64) -> message::Message;
+
+    let (active_track_id, active_track) = active_track_data;
+
+    let video_metadata = global_state.video_metadata.as_ref().unwrap();
+    let x_bounds = 0.0..=f64::from(video_metadata.width);
+    let y_bounds = 0.0..=f64::from(video_metadata.height);
+    let (x_bounds_ref, y_bounds_ref) = (&x_bounds, &y_bounds);
+
+    let nd = move |vector: glam::DVec2,
+                   axis: model::Axis,
+                   message_fn: MessageFn,
+                   tooltip: &'static str| {
+        view::tooltip(
+            view::widget::number_dragger(vector[axis], x_bounds_ref.clone(), move |value| {
+                message_fn(axis, active_track_id, frame_number, value)
+            })
+            .width(iced::Length::FillPortion(1)),
+            tooltip,
+        )
+    };
+    let nd_row = move |vector: glam::DVec2,
+                       message_fn: MessageFn,
+                       x_tooltip: &'static str,
+                       y_tooltip: &'static str| {
+        iced::widget::row![
+            nd(vector, model::Axis::X, message_fn, x_tooltip),
+            nd(vector, model::Axis::Y, message_fn, y_tooltip),
+        ]
+        .spacing(5.0)
+    };
+
+    let position_row = nd_row(
+        active_marker.region.center,
+        message::Message::SetTrackMarkerCenterCoordinate,
+        "X coordinate of marker center",
+        "Y coordinate of marker center",
+    );
+
+    let offset_row = nd_row(
+        active_marker.offset,
+        message::Message::SetTrackMarkerOffsetCoordinate,
+        "X coordinate of marker offset",
+        "Y coordinate of marker offset",
+    );
+
+    let bounding_box = active_marker.region.bounding_box();
+    let pattern_area_row = nd_row(
+        bounding_box.size,
+        message::Message::SetTrackMarkerSizeCoordinate,
+        "Width of marker bounding box",
+        "Height of marker bounding box",
+    );
+
+    let search_area_origin_row = nd_row(
+        active_marker.search_area.origin,
+        message::Message::SetTrackMarkerSearchAreaOriginCoordinate,
+        "X coordinate of search area origin",
+        "Y coordinate of search area origin",
+    );
+
+    let search_area_size_row =nd_row(
+        active_marker.search_area.size,
+        message::Message::SetTrackMarkerSearchAreaSizeCoordinate,
+        "Width of search area",
+        "Height of search area",
+    );
+
+    iced::widget::column![
+        "Position:",
+        position_row,
+        "Offset:",
+        offset_row,
+        "Marker area:",
+        pattern_area_row,
+        "Search area:",
+        search_area_origin_row,
+        search_area_size_row
+    ]
+    .spacing(5.0)
+    .into()
 }
 
 pub fn frame_number_text(global_state: &crate::Samaku) -> String {
