@@ -1,5 +1,7 @@
 # samaku
 
+[![Discord Server](https://img.shields.io/discord/1510048036250718379?label=&labelColor=6A7EC2&logo=discord&logoColor=ffffff&color=5865F2)](https://discord.gg/dRhz7gA7Hb)
+
 ![Screenshot](https://github.com/meew0/samaku/blob/master/screenshot.png?raw=true)
 
 samaku is an editor for non-destructive visual typesetting of ASS (Advanced SubStation Alpha) subtitles. It aims to solve the primary problem of Lua macro-based typesetting workflows, where once a sign has been typeset, it is very hard to make even minor changes without redoing the sign entirely. Instead of destructive Lua macros, samaku includes a Blender-like node editor for non-destructive editing, where a node graph corresponds to a chain of transformations that are instantly, automatically rerun when the inputs are changed.
