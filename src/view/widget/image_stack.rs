@@ -234,13 +234,16 @@ pub(super) fn draw<Renderer, Handle>(
         }
     };
 
-    if overall_adjusted_fit.width > layout_bounds.width
-        || overall_adjusted_fit.height > layout_bounds.height
-    {
-        renderer.with_layer(layout_bounds, render);
-    } else {
-        render(renderer);
-    }
+    // This logic counterintuitively made the image go *outside* of the bounds in some cases
+    // when with_layer was used. Not sure why this occurred, but just using plain `render`
+    // works fine. Leaving this in as a note for future me...
+    // if overall_adjusted_fit.width > layout_bounds.width
+    //     || overall_adjusted_fit.height > layout_bounds.height
+    // {
+    //    renderer.with_layer(layout_bounds, render);
+    // } else {
+    render(renderer);
+    // }
 }
 
 impl<Message, Renderer, Handle, Program, Theme> Widget<Message, Theme, Renderer>
