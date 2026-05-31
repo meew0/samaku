@@ -261,6 +261,8 @@ pub enum Message {
     SetTrackName(media::motion::TrackId, String),
 
     // Motion track editing
+    MoveTrackMarkerRegion(media::motion::TrackId, model::FrameNumber, glam::DVec2),
+    SetTrackMarkerRegion(media::motion::TrackId, model::FrameNumber, media::motion::Region),
     SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
     SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
     SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),

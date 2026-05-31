@@ -1383,7 +1383,39 @@ fn update_internal(
                 let old_name = replace(&mut track.name, name);
 
                 undo.put_instant("Set track name", Message::SetTrackName(track_id, old_name));
-            };
+            }
+        }
+        Message::MoveTrackMarkerRegion(track_id, frame, new_center) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let delta = new_center - marker.region.center;
+                marker.region = marker.region.offset(delta);
+                marker.search_area.origin += delta;
+            }
+        }
+        Message::SetTrackMarkerRegion(track_id, frame, new_region) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_bb = marker.region.bounding_box();
+                let pad_left = old_bb.origin.x - marker.search_area.origin.x;
+                let pad_top = old_bb.origin.y - marker.search_area.origin.y;
+                let pad_right = (marker.search_area.origin.x + marker.search_area.size.x)
+                    - (old_bb.origin.x + old_bb.size.x);
+                let pad_bottom = (marker.search_area.origin.y + marker.search_area.size.y)
+                    - (old_bb.origin.y + old_bb.size.y);
+
+                let new_bb = new_region.bounding_box();
+                marker.search_area.origin =
+                    glam::DVec2::new(new_bb.origin.x - pad_left, new_bb.origin.y - pad_top);
+                marker.search_area.size = glam::DVec2::new(
+                    new_bb.size.x + pad_left + pad_right,
+                    new_bb.size.y + pad_top + pad_bottom,
+                );
+
+                marker.region = new_region;
+            }
         }
         Message::SetTrackMarkerCenterCoordinate(axis, track_id, frame, new_value) => {
             todo!()

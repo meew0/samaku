@@ -1,5 +1,6 @@
 use crate::media::motion;
 use crate::{media, message, model, nde, style, subtitle, view};
+use glam::DVec2;
 use iced::mouse;
 use iced::widget::{Action, canvas};
 use std::cell::RefCell;
@@ -139,9 +140,11 @@ fn view_video<'a>(
             view::widget::ImageStack::new(images, view_reticule_program(global_state, storage_size))
                 .into()
         }
-        ControlsMode::MotionTrack => {
-            view::widget::ImageStack::new(images, view_motion_track_program(global_state)).into()
-        }
+        ControlsMode::MotionTrack => view::widget::ImageStack::new(
+            images,
+            view_motion_track_program(global_state, storage_size, frame_number),
+        )
+        .into(),
     };
 
     let video_scroll = iced::widget::scrollable(image_stack);
@@ -249,8 +252,18 @@ fn view_reticule_program(
     }
 }
 
-fn view_motion_track_program(_global_state: &crate::Samaku) -> MotionTrackProgram {
-    MotionTrackProgram {}
+fn view_motion_track_program(
+    global_state: &crate::Samaku,
+    storage_size: subtitle::Resolution,
+    frame_number: model::FrameNumber,
+) -> MotionTrackProgram<'_> {
+    MotionTrackProgram {
+        tracks: global_state.motion_tracks.stab(frame_number),
+        selected_tracks: &global_state.selected_tracks,
+        frame: frame_number,
+        storage_size,
+        modifiers: global_state.modifiers,
+    }
 }
 
 fn view_motion_track_controls<'a>(
@@ -596,7 +609,7 @@ fn view_marker_settings<'a>(
     let y_bounds = 0.0..=f64::from(video_metadata.height);
     let (x_bounds_ref, y_bounds_ref) = (&x_bounds, &y_bounds);
 
-    let nd = move |vector: glam::DVec2,
+    let nd = move |vector: DVec2,
                    axis: model::Axis,
                    message_fn: MessageFn,
                    tooltip: &'static str| {
@@ -608,7 +621,7 @@ fn view_marker_settings<'a>(
             tooltip,
         )
     };
-    let nd_row = move |vector: glam::DVec2,
+    let nd_row = move |vector: DVec2,
                        message_fn: MessageFn,
                        x_tooltip: &'static str,
                        y_tooltip: &'static str| {
@@ -648,7 +661,7 @@ fn view_marker_settings<'a>(
         "Y coordinate of search area origin",
     );
 
-    let search_area_size_row =nd_row(
+    let search_area_size_row = nd_row(
         active_marker.search_area.size,
         message::Message::SetTrackMarkerSearchAreaSizeCoordinate,
         "Width of search area",
@@ -1019,23 +1032,500 @@ fn draw_corner_reticule(
     );
 }
 
-struct MotionTrackProgram;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CornerIndex {
+    TopLeft,
+    TopRight,
+    BottomRight,
+    BottomLeft,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DragTarget {
+    WholeRegion { offset: iced::Vector },
+    Corner(CornerIndex),
+}
+
+struct MotionTrackProgram<'a> {
+    tracks: Vec<(motion::TrackId, &'a motion::Track)>,
+    selected_tracks: &'a model::select::Selection<motion::TrackId>,
+    frame: model::FrameNumber,
+    storage_size: subtitle::Resolution,
+    modifiers: iced::keyboard::Modifiers,
+}
 
 #[derive(Default)]
-struct MotionTrackState;
+struct MotionTrackState {
+    dragging: Option<(motion::TrackId, model::FrameNumber, DragTarget)>,
+}
 
-impl canvas::Program<message::Message> for MotionTrackProgram {
+const CORNER_HIT_RADIUS: f32 = 8.0;
+
+impl MotionTrackProgram<'_> {
+    fn marker_corners(
+        &self,
+        marker: &motion::Marker,
+        bounds: iced::Rectangle,
+    ) -> [iced::Point; 4] {
+        [
+            view::frame_coordinates_to_iced(
+                marker.region.top_left,
+                bounds.size(),
+                self.storage_size,
+            ),
+            view::frame_coordinates_to_iced(
+                marker.region.top_right,
+                bounds.size(),
+                self.storage_size,
+            ),
+            view::frame_coordinates_to_iced(
+                marker.region.bottom_right,
+                bounds.size(),
+                self.storage_size,
+            ),
+            view::frame_coordinates_to_iced(
+                marker.region.bottom_left,
+                bounds.size(),
+                self.storage_size,
+            ),
+        ]
+    }
+
+    fn find_hovered_corner(
+        &self,
+        mouse_position: iced::Point,
+        bounds: iced::Rectangle,
+    ) -> Option<(motion::TrackId, CornerIndex)> {
+        const CORNER_ORDER: [CornerIndex; 4] = [
+            CornerIndex::TopLeft,
+            CornerIndex::TopRight,
+            CornerIndex::BottomRight,
+            CornerIndex::BottomLeft,
+        ];
+        for &(track_id, track) in &self.tracks {
+            if let Some(marker) = track.get_marker(self.frame) {
+                for (corner, &iced_pos) in
+                    CORNER_ORDER.iter().zip(self.marker_corners(marker, bounds).iter())
+                {
+                    if iced_pos.distance(mouse_position) < CORNER_HIT_RADIUS {
+                        return Some((track_id, *corner));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn find_hovered_marker(
+        &self,
+        mouse_position: iced::Point,
+        bounds: iced::Rectangle,
+    ) -> Option<(motion::TrackId, iced::Point)> {
+        for &(track_id, track) in &self.tracks {
+            if let Some(marker) = track.get_marker(self.frame) {
+                let corners = self.marker_corners(marker, bounds);
+                let center = view::frame_coordinates_to_iced(
+                    marker.region.center,
+                    bounds.size(),
+                    self.storage_size,
+                );
+                if point_in_quad(mouse_position, corners) {
+                    return Some((track_id, center));
+                }
+            }
+        }
+        None
+    }
+
+    fn find_track_marker(&self, track_id: motion::TrackId) -> Option<&motion::Marker> {
+        self.tracks
+            .iter()
+            .find(|item| item.0 == track_id)
+            .and_then(|item| item.1.get_marker(self.frame))
+    }
+}
+
+impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
     type State = MotionTrackState;
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: &canvas::Event,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
+    ) -> Option<Action<message::Message>> {
+        if let Some(position) = cursor.position_in(bounds)
+            && let canvas::Event::Mouse(ref mouse_event) = *event
+        {
+            match *mouse_event {
+                mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                    if let Some((track_id, corner)) =
+                        self.find_hovered_corner(position, bounds)
+                    {
+                        state.dragging =
+                            Some((track_id, self.frame, DragTarget::Corner(corner)));
+                        return Some(
+                            Action::publish(message::Message::SelectOnlyTrack(track_id))
+                                .and_capture(),
+                        );
+                    }
+                    if let Some((track_id, center_iced)) =
+                        self.find_hovered_marker(position, bounds)
+                    {
+                        let offset = position - center_iced;
+                        state.dragging = Some((
+                            track_id,
+                            self.frame,
+                            DragTarget::WholeRegion { offset },
+                        ));
+                        return Some(
+                            Action::publish(message::Message::SelectOnlyTrack(track_id))
+                                .and_capture(),
+                        );
+                    }
+                }
+                mouse::Event::CursorMoved { .. } => {
+                    if let Some((track_id, frame, drag_target)) = state.dragging {
+                        match drag_target {
+                            DragTarget::WholeRegion { offset } => {
+                                let new_center = model::reticule::Reticule::position_from_iced(
+                                    position,
+                                    offset,
+                                    bounds.size(),
+                                    self.storage_size,
+                                );
+                                return Some(
+                                    Action::publish(message::Message::MoveTrackMarkerRegion(
+                                        track_id, frame, new_center,
+                                    ))
+                                    .and_capture(),
+                                );
+                            }
+                            DragTarget::Corner(corner) => {
+                                if let Some(marker) = self.find_track_marker(track_id) {
+                                    let frame_pos = model::reticule::Reticule::position_from_iced(
+                                        position,
+                                        iced::Vector { x: 0.0, y: 0.0 },
+                                        bounds.size(),
+                                        self.storage_size,
+                                    );
+                                    let new_region = if self.modifiers.alt() {
+                                        rotation_corner_drag(frame_pos, corner, &marker.region)
+                                    } else {
+                                        scale_corner_drag(
+                                            frame_pos,
+                                            corner,
+                                            &marker.region,
+                                            !self.modifiers.shift(),
+                                        )
+                                    };
+                                    return Some(
+                                        Action::publish(
+                                            message::Message::SetTrackMarkerRegion(
+                                                track_id, frame, new_region,
+                                            ),
+                                        )
+                                        .and_capture(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging.is_some() => {
+                    state.dragging = None;
+                    return Some(Action::capture());
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
 
     fn draw(
         &self,
         _state: &Self::State,
-        _renderer: &iced::Renderer,
+        renderer: &iced::Renderer,
         _theme: &iced::Theme,
-        _bounds: iced::Rectangle,
+        bounds: iced::Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        // TODO
-        vec![]
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        for &(track_id, track) in &self.tracks {
+            let selected = self.selected_tracks.contains(track_id);
+
+            if let Some(marker) = track.get_marker(self.frame) {
+                draw_marker(
+                    &mut frame,
+                    selected,
+                    marker,
+                    bounds.size(),
+                    self.storage_size,
+                );
+            }
+        }
+
+        vec![frame.into_geometry()]
     }
+
+    fn mouse_interaction(
+        &self,
+        state: &Self::State,
+        bounds: iced::Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if state.dragging.is_some() {
+            return mouse::Interaction::Grabbing;
+        }
+
+        if let Some(mouse_position) = cursor.position_in(bounds) {
+            if self.find_hovered_corner(mouse_position, bounds).is_some() {
+                return mouse::Interaction::Crosshair;
+            }
+            if self.find_hovered_marker(mouse_position, bounds).is_some() {
+                return mouse::Interaction::Grab;
+            }
+        }
+
+        mouse::Interaction::None
+    }
+}
+
+fn scale_corner_drag(
+    target: DVec2,
+    corner: CornerIndex,
+    region: &motion::Region,
+    center_fixed: bool,
+) -> motion::Region {
+    let e1 = (region.top_right - region.top_left) * 0.5;
+    let e2 = (region.bottom_left - region.top_left) * 0.5;
+
+    let Some(e1_hat) = e1.try_normalize() else {
+        return *region;
+    };
+    let Some(e2_hat) = e2.try_normalize() else {
+        return *region;
+    };
+
+    let (opposite, s1, s2): (DVec2, f64, f64) = match corner {
+        CornerIndex::TopLeft => (region.bottom_right, -1.0, -1.0),
+        CornerIndex::TopRight => (region.bottom_left, 1.0, -1.0),
+        CornerIndex::BottomRight => (region.top_left, 1.0, 1.0),
+        CornerIndex::BottomLeft => (region.top_right, -1.0, 1.0),
+    };
+
+    // Center-fixed: resize symmetrically around the existing center.
+    // Opposite-fixed (shift): the opposite corner stays in place, center moves.
+    let new_center = if center_fixed {
+        region.center
+    } else {
+        (target + opposite) * 0.5
+    };
+    // Corner = new_center + s1*new_e1 + s2*new_e2 = target
+    // => s1*new_e1 + s2*new_e2 = target - new_center
+    // Solve 2x2: [s1*e1_hat | s2*e2_hat] * [lambda; mu] = rhs
+    let rhs = target - new_center;
+    let col1 = s1 * e1_hat;
+    let col2 = s2 * e2_hat;
+    let det = col1.x.mul_add(col2.y, -(col2.x * col1.y));
+    if det.abs() < 1e-10 {
+        return *region;
+    }
+    let lambda = rhs.x.mul_add(col2.y, -(col2.x * rhs.y)) / det;
+    let mu = col1.x.mul_add(rhs.y, -(rhs.x * col1.y)) / det;
+    let new_e1 = lambda * e1_hat;
+    let new_e2 = mu * e2_hat;
+
+    motion::Region {
+        top_left: new_center - new_e1 - new_e2,
+        top_right: new_center + new_e1 - new_e2,
+        bottom_right: new_center + new_e1 + new_e2,
+        bottom_left: new_center - new_e1 + new_e2,
+        center: new_center,
+    }
+}
+
+fn rotation_corner_drag(
+    target: DVec2,
+    corner: CornerIndex,
+    region: &motion::Region,
+) -> motion::Region {
+    let corner_pos = match corner {
+        CornerIndex::TopLeft => region.top_left,
+        CornerIndex::TopRight => region.top_right,
+        CornerIndex::BottomRight => region.bottom_right,
+        CornerIndex::BottomLeft => region.bottom_left,
+    };
+    let center = region.center;
+    let from = corner_pos - center;
+    let to = target - center;
+    if from.length_squared() < 1e-20 || to.length_squared() < 1e-20 {
+        return *region;
+    }
+    let angle_delta = to.y.atan2(to.x) - from.y.atan2(from.x);
+    let (sin_d, cos_d) = angle_delta.sin_cos();
+    let rot = |point: DVec2| -> DVec2 {
+        let delta = point - center;
+        center + DVec2::new(
+            delta.x.mul_add(cos_d, -(delta.y * sin_d)),
+            delta.x.mul_add(sin_d, delta.y * cos_d),
+        )
+    };
+    motion::Region {
+        top_left: rot(region.top_left),
+        top_right: rot(region.top_right),
+        bottom_right: rot(region.bottom_right),
+        bottom_left: rot(region.bottom_left),
+        center,
+    }
+}
+
+fn point_in_quad(point: iced::Point, corners: [iced::Point; 4]) -> bool {
+    let mut sign: Option<bool> = None;
+    for i in 0..4 {
+        let pa = corners[i];
+        let pb = corners[(i + 1) % 4];
+        let cross = (pb.y - pa.y).mul_add(-(point.x - pa.x), (pb.x - pa.x) * (point.y - pa.y));
+        let positive = cross >= 0.0;
+        match sign {
+            None => sign = Some(positive),
+            Some(new_s) if new_s != positive => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+fn draw_marker(
+    frame: &mut canvas::Frame,
+    selected: bool,
+    marker: &motion::Marker,
+    bounds: iced::Size,
+    storage_size: subtitle::Resolution,
+) {
+    // Search area: dashed outline, only shown when the marker is selected.
+    if selected {
+        let sa = &marker.search_area;
+        let sa_path = canvas::Path::new(|path| {
+            path.move_to(view::frame_coordinates_to_iced(sa.origin, bounds, storage_size));
+            path.line_to(view::frame_coordinates_to_iced(
+                sa.origin + DVec2::new(sa.size.x, 0.0),
+                bounds,
+                storage_size,
+            ));
+            path.line_to(view::frame_coordinates_to_iced(
+                sa.origin + sa.size,
+                bounds,
+                storage_size,
+            ));
+            path.line_to(view::frame_coordinates_to_iced(
+                sa.origin + DVec2::new(0.0, sa.size.y),
+                bounds,
+                storage_size,
+            ));
+            path.close();
+        });
+        let dash_segments = [4.0_f32, 4.0];
+        frame.stroke(
+            &sa_path,
+            canvas::Stroke::default()
+                .with_color(style::SAMAKU_BACKGROUND)
+                .with_width(2.0),
+        );
+        frame.stroke(
+            &sa_path,
+            canvas::Stroke {
+                line_dash: canvas::LineDash {
+                    segments: &dash_segments,
+                    offset: 0,
+                },
+                ..canvas::Stroke::default()
+                    .with_color(style::SAMAKU_TEXT)
+                    .with_width(1.0)
+            },
+        );
+    }
+
+    // Marker quad.
+    let tl = view::frame_coordinates_to_iced(marker.region.top_left, bounds, storage_size);
+    let tr = view::frame_coordinates_to_iced(marker.region.top_right, bounds, storage_size);
+    let br = view::frame_coordinates_to_iced(marker.region.bottom_right, bounds, storage_size);
+    let bl = view::frame_coordinates_to_iced(marker.region.bottom_left, bounds, storage_size);
+
+    let quad = canvas::Path::new(|path| {
+        path.move_to(tl);
+        path.line_to(tr);
+        path.line_to(br);
+        path.line_to(bl);
+        path.close();
+    });
+
+    let (outer_width, inner_width, inner_color) = if selected {
+        (5.0_f32, 3.0_f32, style::SAMAKU_PRIMARY)
+    } else {
+        (4.0_f32, 2.0_f32, style::SAMAKU_TEXT)
+    };
+
+    frame.stroke(
+        &quad,
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_BACKGROUND)
+            .with_width(outer_width),
+    );
+    frame.stroke(
+        &quad,
+        canvas::Stroke::default()
+            .with_color(inner_color)
+            .with_width(inner_width),
+    );
+
+    // Center crosshair: green for Key frames, white/yellow for tracked frames.
+    let center = view::frame_coordinates_to_iced(marker.region.center, bounds, storage_size);
+    draw_marker_center(frame, center, marker.key_state, selected);
+}
+
+fn draw_marker_center(
+    frame: &mut canvas::Frame,
+    center: iced::Point,
+    key_state: motion::KeyState,
+    selected: bool,
+) {
+    let radius = 8.0_f32;
+    let (fill_color, line_color) = match key_state {
+        motion::KeyState::Key => (style::SAMAKU_SUCCESS, style::SAMAKU_SUCCESS),
+        motion::KeyState::Tracked => (style::SAMAKU_TEXT, style::SAMAKU_PRIMARY),
+    };
+    let alpha_factor: f32 = if selected { 0.4 } else { 0.2 };
+
+    let rect_tl = center - iced::Vector::new(radius * 0.5, radius * 0.5);
+    let rect_size = iced::Size::new(radius, radius);
+    frame.fill_rectangle(rect_tl, rect_size, fill_color.scale_alpha(alpha_factor));
+    frame.stroke_rectangle(
+        rect_tl,
+        rect_size,
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_BACKGROUND)
+            .with_width(1.0),
+    );
+
+    let cross = canvas::Path::new(|path| {
+        path.move_to(center + iced::Vector::new(-radius, 0.0));
+        path.line_to(center + iced::Vector::new(radius, 0.0));
+        path.move_to(center + iced::Vector::new(0.0, -radius));
+        path.line_to(center + iced::Vector::new(0.0, radius));
+    });
+    frame.stroke(
+        &cross,
+        canvas::Stroke::default()
+            .with_color(style::SAMAKU_BACKGROUND)
+            .with_width(2.0),
+    );
+    frame.stroke(
+        &cross,
+        canvas::Stroke::default()
+            .with_color(line_color)
+            .with_width(1.0),
+    );
 }

@@ -38,6 +38,17 @@ impl TrackList {
         self.map.insert(id, track);
         id
     }
+
+    #[must_use]
+    pub fn stab(&self, frame: model::FrameNumber) -> Vec<(TrackId, &Track)> {
+        // TODO: optimize this using interavl
+        self.map
+            .iter()
+            .filter_map(|(&id, track)| {
+                (frame >= track.first_frame && frame <= track.last_frame).then_some((id, track))
+            })
+            .collect()
+    }
 }
 
 impl Default for TrackList {
@@ -64,6 +75,8 @@ impl model::NamedListIterable for TrackList {
 pub struct Track {
     markers: BTreeMap<model::FrameNumber, Marker>,
     pub name: String,
+    first_frame: model::FrameNumber,
+    last_frame: model::FrameNumber,
 }
 
 impl Track {
@@ -71,7 +84,12 @@ impl Track {
     pub fn new(origin_frame: model::FrameNumber, marker: Marker, name: String) -> Self {
         let mut markers = BTreeMap::new();
         markers.insert(origin_frame, marker);
-        Self { markers, name }
+        Self {
+            markers,
+            name,
+            first_frame: origin_frame,
+            last_frame: origin_frame,
+        }
     }
 
     #[must_use]

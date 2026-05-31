@@ -204,8 +204,8 @@ impl Region {
             y.into_iter().reduce(f64::min).unwrap(),
         );
         let max_point = DVec2::new(
-            x.into_iter().reduce(f64::min).unwrap(),
-            y.into_iter().reduce(f64::min).unwrap(),
+            x.into_iter().reduce(f64::max).unwrap(),
+            y.into_iter().reduce(f64::max).unwrap(),
         );
         let size = max_point - origin;
         motion::Patch { origin, size }
