@@ -381,6 +381,9 @@ pub enum Pane {
     VideoToggleTrackExpando,
     VideoToggleTrackSettingsExpando,
     VideoToggleMarkerSettingsExpando,
+    VideoZoom(f32, iced::Point),
+    VideoPan(f32, f32),
+    VideoScrolled(iced::widget::scrollable::AbsoluteOffset, iced::Size),
 }
 
 /// Messages dispatched to nodes.

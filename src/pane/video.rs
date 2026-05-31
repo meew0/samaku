@@ -5,6 +5,12 @@ use iced::mouse;
 use iced::widget::{Action, canvas};
 use std::cell::RefCell;
 
+const EXTRA_SCROLL: f32 = 500.0;
+
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct State {
     show_controls: bool,
@@ -17,6 +23,17 @@ pub struct State {
     track_expando_open: bool,
     track_settings_expando_open: bool,
     marker_settings_expando_open: bool,
+    zoom: f32,
+    #[serde(skip, default = "iced::widget::Id::unique")]
+    scroll_id: iced::widget::Id,
+    #[serde(skip)]
+    scroll_offset: iced::widget::scrollable::AbsoluteOffset,
+    #[serde(skip)]
+    scroll_viewport_size: iced::Size,
+    #[serde(skip, default = "default_true")]
+    needs_center_scroll: bool,
+    #[serde(skip)]
+    cached_video_dims: RefCell<Option<(f32, f32)>>,
 }
 
 impl Default for State {
@@ -31,6 +48,12 @@ impl Default for State {
             track_expando_open: true,
             track_settings_expando_open: false,
             marker_settings_expando_open: false,
+            zoom: 1.0,
+            scroll_id: iced::widget::Id::unique(),
+            scroll_offset: iced::widget::scrollable::AbsoluteOffset::default(),
+            scroll_viewport_size: iced::Size::ZERO,
+            needs_center_scroll: true,
+            cached_video_dims: RefCell::new(None),
         }
     }
 }
@@ -92,6 +115,67 @@ impl super::LocalState for State {
             message::Pane::VideoToggleMarkerSettingsExpando => {
                 self.marker_settings_expando_open = !self.marker_settings_expando_open;
             }
+            message::Pane::VideoScrolled(offset, viewport_size) => {
+                self.scroll_offset = offset;
+                self.scroll_viewport_size = viewport_size;
+                // On first render the scrollable reports its initial viewport; use that to center.
+                if self.needs_center_scroll
+                    && viewport_size.width > 0.0
+                    && viewport_size.height > 0.0
+                {
+                    self.needs_center_scroll = false;
+                    let (cx, cy) = if let Some((video_w, video_h)) =
+                        *self.cached_video_dims.borrow()
+                    {
+                        let cx = (EXTRA_SCROLL + (video_w - viewport_size.width) / 2.0).max(0.0);
+                        let cy = (EXTRA_SCROLL + (video_h - viewport_size.height) / 2.0).max(0.0);
+                        (cx, cy)
+                    } else {
+                        (EXTRA_SCROLL, EXTRA_SCROLL)
+                    };
+                    self.scroll_offset = iced::widget::scrollable::AbsoluteOffset { x: cx, y: cy };
+                    return iced::widget::operation::scroll_to(
+                        self.scroll_id.clone(),
+                        iced::widget::scrollable::AbsoluteOffset {
+                            x: Some(cx),
+                            y: Some(cy),
+                        },
+                    );
+                }
+            }
+            message::Pane::VideoPan(dx, dy) => {
+                return iced::widget::operation::scroll_by(
+                    self.scroll_id.clone(),
+                    iced::widget::scrollable::AbsoluteOffset { x: dx, y: dy },
+                );
+            }
+            message::Pane::VideoZoom(step, cursor_pos) => {
+                let old_zoom = self.zoom;
+                let new_zoom = (old_zoom * (1.0 + step)).clamp(0.10, 10.0);
+                self.zoom = new_zoom;
+                let ratio = new_zoom / old_zoom;
+                // cursor_pos is the cursor's position within the canvas (ImageStack bounds).
+                // Keeping that canvas pixel at the same screen position gives this formula
+                // (EXTRA_SCROLL cancels out):
+                //   new_scroll = cursor_canvas * (ratio - 1) + old_scroll
+                let new_x = cursor_pos
+                    .x
+                    .mul_add(ratio - 1.0, self.scroll_offset.x)
+                    .max(0.0);
+                let new_y = cursor_pos
+                    .y
+                    .mul_add(ratio - 1.0, self.scroll_offset.y)
+                    .max(0.0);
+                self.scroll_offset =
+                    iced::widget::scrollable::AbsoluteOffset { x: new_x, y: new_y };
+                return iced::widget::operation::scroll_to(
+                    self.scroll_id.clone(),
+                    iced::widget::scrollable::AbsoluteOffset {
+                        x: Some(new_x),
+                        y: Some(new_y),
+                    },
+                );
+            }
             _ => {}
         }
 
@@ -133,25 +217,69 @@ fn view_video<'a>(
         )
     };
 
+    // Explicit pixel dimensions driven by zoom level (zoom=1.0 = native resolution).
+    // ContentFit::Contain (default) fits the image into the widget; since the widget
+    // has the same aspect ratio as the video, there is no letterboxing.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "precision loss acceptable for rendering"
+    )]
+    let video_w = pane_state.zoom * video_metadata.width as f32;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "precision loss acceptable for rendering"
+    )]
+    let video_h = pane_state.zoom * video_metadata.height as f32;
+
+    // Cache dims so the update handler can compute the centering scroll offset.
+    *pane_state.cached_video_dims.borrow_mut() = Some((video_w, video_h));
+
     // Create the canvas program to run (either reticules from a node, or motion tracking controls)
     // and overlay it onto the images, creating an `ImageStack` widget.
     let image_stack: iced::Element<message::Message> = match pane_state.controls_mode {
-        ControlsMode::Reticules => {
-            view::widget::ImageStack::new(images, view_reticule_program(global_state, storage_size))
-                .into()
-        }
+        ControlsMode::Reticules => view::widget::ImageStack::new(
+            images,
+            view_reticule_program(global_state, storage_size, self_pane),
+        )
+        .set_stack_width(iced::Length::Fixed(video_w))
+        .set_stack_height(iced::Length::Fixed(video_h))
+        .into(),
         ControlsMode::MotionTrack => view::widget::ImageStack::new(
             images,
-            view_motion_track_program(global_state, storage_size, frame_number),
+            view_motion_track_program(global_state, storage_size, frame_number, self_pane),
         )
+        .set_stack_width(iced::Length::Fixed(video_w))
+        .set_stack_height(iced::Length::Fixed(video_h))
         .into(),
     };
 
-    let video_scroll = iced::widget::scrollable(image_stack);
+    // Surround the video with a fixed-size padding region so the user can pan around
+    // even when zoomed out (the video is smaller than the viewport).  The padding is
+    // EXTRA_SCROLL pixels on each side; the image stack is centered inside it.
+    let content_w = 2.0_f32.mul_add(EXTRA_SCROLL, video_w);
+    let content_h = 2.0_f32.mul_add(EXTRA_SCROLL, video_h);
+    let padded_image = iced::widget::container(image_stack)
+        .center_x(iced::Length::Fixed(content_w))
+        .center_y(iced::Length::Fixed(content_h));
+
+    let scroll_id = pane_state.scroll_id.clone();
+    let video_scroll = iced::widget::scrollable(padded_image)
+        .id(scroll_id)
+        .direction(iced::widget::scrollable::Direction::Both {
+            vertical: iced::widget::scrollable::Scrollbar::default(),
+            horizontal: iced::widget::scrollable::Scrollbar::default(),
+        })
+        .on_scroll(move |vp| {
+            message::Message::Pane(
+                self_pane,
+                message::Pane::VideoScrolled(vp.absolute_offset(), vp.bounds().size()),
+            )
+        });
 
     let video_container = iced::widget::container(video_scroll)
-        .center_x(iced::Length::Fill)
-        .center_y(iced::Length::Fill);
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .clip(true);
 
     let split = match pane_state.controls_mode {
         ControlsMode::Reticules => video_container.into(),
@@ -231,6 +359,7 @@ pub fn render_subtitles<'a>(
 fn view_reticule_program(
     global_state: &'_ crate::Samaku,
     storage_size: subtitle::Resolution,
+    pane: super::Pane,
 ) -> ReticuleProgram<'_> {
     let (reticule_list, node) = if let Some(ref reticules) = global_state.reticules {
         let node = global_state
@@ -249,6 +378,7 @@ fn view_reticule_program(
         node,
         storage_size,
         current_frame: global_state.current_frame(),
+        pane,
     }
 }
 
@@ -256,6 +386,7 @@ fn view_motion_track_program(
     global_state: &crate::Samaku,
     storage_size: subtitle::Resolution,
     frame_number: model::FrameNumber,
+    pane: super::Pane,
 ) -> MotionTrackProgram<'_> {
     MotionTrackProgram {
         tracks: global_state.motion_tracks.stab(frame_number),
@@ -263,6 +394,7 @@ fn view_motion_track_program(
         frame: frame_number,
         storage_size,
         modifiers: global_state.modifiers,
+        pane,
     }
 }
 
@@ -609,18 +741,16 @@ fn view_marker_settings<'a>(
     let y_bounds = 0.0..=f64::from(video_metadata.height);
     let (x_bounds_ref, y_bounds_ref) = (&x_bounds, &y_bounds);
 
-    let nd = move |vector: DVec2,
-                   axis: model::Axis,
-                   message_fn: MessageFn,
-                   tooltip: &'static str| {
-        view::tooltip(
-            view::widget::number_dragger(vector[axis], x_bounds_ref.clone(), move |value| {
-                message_fn(axis, active_track_id, frame_number, value)
-            })
-            .width(iced::Length::FillPortion(1)),
-            tooltip,
-        )
-    };
+    let nd =
+        move |vector: DVec2, axis: model::Axis, message_fn: MessageFn, tooltip: &'static str| {
+            view::tooltip(
+                view::widget::number_dragger(vector[axis], x_bounds_ref.clone(), move |value| {
+                    message_fn(axis, active_track_id, frame_number, value)
+                })
+                .width(iced::Length::FillPortion(1)),
+                tooltip,
+            )
+        };
     let nd_row = move |vector: DVec2,
                        message_fn: MessageFn,
                        x_tooltip: &'static str,
@@ -753,17 +883,30 @@ inventory::submit! {
     )
 }
 
+/// Tracks right-click-drag panning state across canvas events.
+#[derive(Default)]
+enum PanDrag {
+    #[default]
+    Inactive,
+    /// Button pressed; waiting for the first CursorMoved to record a position.
+    Started,
+    /// Actively panning; holds the last raw OS cursor position.
+    Active(iced::Point),
+}
+
 struct ReticuleProgram<'a> {
     reticules: &'a [model::reticule::Reticule],
     node: Option<&'a nde::graph::VisualNode>,
     storage_size: subtitle::Resolution,
     current_frame: Option<model::FrameNumber>,
+    pane: super::Pane,
 }
 
 #[derive(Default)]
 struct ReticuleState {
     dragging: Option<model::reticule::Index>,
     drag_offset: iced::Vector,
+    pan_drag: PanDrag,
 }
 
 impl ReticuleProgram<'_> {
@@ -797,6 +940,12 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<message::Message>> {
+        if let Some(action) =
+            handle_zoom_pan_event(&mut state.pan_drag, self.pane, event, cursor, bounds)
+        {
+            return Some(action);
+        }
+
         if let Some(position) = cursor.position_in(bounds)
             && let canvas::Event::Mouse(ref mouse_event) = *event
         {
@@ -877,7 +1026,7 @@ impl canvas::Program<message::Message> for ReticuleProgram<'_> {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if state.dragging.is_some() {
+        if state.dragging.is_some() || !matches!(state.pan_drag, PanDrag::Inactive) {
             return mouse::Interaction::Grabbing;
         }
 
@@ -1052,21 +1201,19 @@ struct MotionTrackProgram<'a> {
     frame: model::FrameNumber,
     storage_size: subtitle::Resolution,
     modifiers: iced::keyboard::Modifiers,
+    pane: super::Pane,
 }
 
 #[derive(Default)]
 struct MotionTrackState {
     dragging: Option<(motion::TrackId, model::FrameNumber, DragTarget)>,
+    pan_drag: PanDrag,
 }
 
 const CORNER_HIT_RADIUS: f32 = 8.0;
 
 impl MotionTrackProgram<'_> {
-    fn marker_corners(
-        &self,
-        marker: &motion::Marker,
-        bounds: iced::Rectangle,
-    ) -> [iced::Point; 4] {
+    fn marker_corners(&self, marker: &motion::Marker, bounds: iced::Rectangle) -> [iced::Point; 4] {
         [
             view::frame_coordinates_to_iced(
                 marker.region.top_left,
@@ -1104,8 +1251,9 @@ impl MotionTrackProgram<'_> {
         ];
         for &(track_id, track) in &self.tracks {
             if let Some(marker) = track.get_marker(self.frame) {
-                for (corner, &iced_pos) in
-                    CORNER_ORDER.iter().zip(self.marker_corners(marker, bounds).iter())
+                for (corner, &iced_pos) in CORNER_ORDER
+                    .iter()
+                    .zip(self.marker_corners(marker, bounds).iter())
                 {
                     if iced_pos.distance(mouse_position) < CORNER_HIT_RADIUS {
                         return Some((track_id, *corner));
@@ -1155,16 +1303,19 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<message::Message>> {
+        if let Some(action) =
+            handle_zoom_pan_event(&mut state.pan_drag, self.pane, event, cursor, bounds)
+        {
+            return Some(action);
+        }
+
         if let Some(position) = cursor.position_in(bounds)
             && let canvas::Event::Mouse(ref mouse_event) = *event
         {
             match *mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
-                    if let Some((track_id, corner)) =
-                        self.find_hovered_corner(position, bounds)
-                    {
-                        state.dragging =
-                            Some((track_id, self.frame, DragTarget::Corner(corner)));
+                    if let Some((track_id, corner)) = self.find_hovered_corner(position, bounds) {
+                        state.dragging = Some((track_id, self.frame, DragTarget::Corner(corner)));
                         return Some(
                             Action::publish(message::Message::SelectOnlyTrack(track_id))
                                 .and_capture(),
@@ -1174,11 +1325,8 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
                         self.find_hovered_marker(position, bounds)
                     {
                         let offset = position - center_iced;
-                        state.dragging = Some((
-                            track_id,
-                            self.frame,
-                            DragTarget::WholeRegion { offset },
-                        ));
+                        state.dragging =
+                            Some((track_id, self.frame, DragTarget::WholeRegion { offset }));
                         return Some(
                             Action::publish(message::Message::SelectOnlyTrack(track_id))
                                 .and_capture(),
@@ -1221,11 +1369,9 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
                                         )
                                     };
                                     return Some(
-                                        Action::publish(
-                                            message::Message::SetTrackMarkerRegion(
-                                                track_id, frame, new_region,
-                                            ),
-                                        )
+                                        Action::publish(message::Message::SetTrackMarkerRegion(
+                                            track_id, frame, new_region,
+                                        ))
                                         .and_capture(),
                                     );
                                 }
@@ -1276,7 +1422,7 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if state.dragging.is_some() {
+        if state.dragging.is_some() || !matches!(state.pan_drag, PanDrag::Inactive) {
             return mouse::Interaction::Grabbing;
         }
 
@@ -1290,6 +1436,70 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
         }
 
         mouse::Interaction::None
+    }
+}
+
+fn handle_zoom_pan_event(
+    pan_drag: &mut PanDrag,
+    pane: super::Pane,
+    event: &canvas::Event,
+    cursor: mouse::Cursor,
+    bounds: iced::Rectangle,
+) -> Option<Action<message::Message>> {
+    let canvas::Event::Mouse(ref mouse_event) = *event else {
+        return None;
+    };
+    match *mouse_event {
+        mouse::Event::WheelScrolled { delta } => {
+            // cursor.position_in(bounds) is correct here: it returns the cursor
+            // coordinate within the canvas, accounting for scroll offset. This is
+            // exactly what VideoZoom needs for the zoom-to-cursor formula.
+            let position = cursor.position_in(bounds)?;
+            let step = match delta {
+                mouse::ScrollDelta::Lines { y, .. } => y * 0.1,
+                mouse::ScrollDelta::Pixels { y, .. } => y / 200.0,
+            };
+            Some(
+                Action::publish(message::Message::Pane(
+                    pane,
+                    message::Pane::VideoZoom(step, position),
+                ))
+                .and_capture(),
+            )
+        }
+        mouse::Event::ButtonPressed(mouse::Button::Right) => {
+            // Guard: only start panning when the cursor is inside the canvas.
+            cursor.position_in(bounds)?;
+            // Raw position will be captured on first CursorMoved.
+            *pan_drag = PanDrag::Started;
+            Some(Action::capture())
+        }
+        mouse::Event::CursorMoved { position } if !matches!(*pan_drag, PanDrag::Inactive) => {
+            // Use the raw OS cursor position from the event (not cursor.position()),
+            // which the scrollable translates by the current scroll offset, causing
+            // the position to change on every scroll_by even when the cursor is still.
+            if let PanDrag::Active(last) = *pan_drag {
+                let delta = position - last;
+                *pan_drag = PanDrag::Active(position);
+                return Some(
+                    Action::publish(message::Message::Pane(
+                        pane,
+                        message::Pane::VideoPan(-delta.x, -delta.y),
+                    ))
+                    .and_capture(),
+                );
+            }
+            // First CursorMoved after button press — record position, no delta yet.
+            *pan_drag = PanDrag::Active(position);
+            Some(Action::capture())
+        }
+        mouse::Event::ButtonReleased(mouse::Button::Right)
+            if !matches!(*pan_drag, PanDrag::Inactive) =>
+        {
+            *pan_drag = PanDrag::Inactive;
+            Some(Action::capture())
+        }
+        _ => None,
     }
 }
 
@@ -1368,10 +1578,11 @@ fn rotation_corner_drag(
     let (sin_d, cos_d) = angle_delta.sin_cos();
     let rot = |point: DVec2| -> DVec2 {
         let delta = point - center;
-        center + DVec2::new(
-            delta.x.mul_add(cos_d, -(delta.y * sin_d)),
-            delta.x.mul_add(sin_d, delta.y * cos_d),
-        )
+        center
+            + DVec2::new(
+                delta.x.mul_add(cos_d, -(delta.y * sin_d)),
+                delta.x.mul_add(sin_d, delta.y * cos_d),
+            )
     };
     motion::Region {
         top_left: rot(region.top_left),
@@ -1409,7 +1620,11 @@ fn draw_marker(
     if selected {
         let sa = &marker.search_area;
         let sa_path = canvas::Path::new(|path| {
-            path.move_to(view::frame_coordinates_to_iced(sa.origin, bounds, storage_size));
+            path.move_to(view::frame_coordinates_to_iced(
+                sa.origin,
+                bounds,
+                storage_size,
+            ));
             path.line_to(view::frame_coordinates_to_iced(
                 sa.origin + DVec2::new(sa.size.x, 0.0),
                 bounds,
