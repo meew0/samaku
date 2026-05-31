@@ -48,7 +48,7 @@ impl Default for State {
             track_expando_open: true,
             track_settings_expando_open: false,
             marker_settings_expando_open: false,
-            zoom: 1.0,
+            zoom: 0.5,
             scroll_id: iced::widget::Id::unique(),
             scroll_offset: iced::widget::scrollable::AbsoluteOffset::default(),
             scroll_viewport_size: iced::Size::ZERO,
@@ -105,6 +105,12 @@ impl super::LocalState for State {
         match pane_message {
             message::Pane::VideoSetControlsMode(controls_mode) => {
                 self.controls_mode = controls_mode;
+                // Since changing controls mode resets the video container,
+                // we need to set the scroll position again.
+                return iced::widget::operation::scroll_to(
+                    self.scroll_id.clone(),
+                    self.scroll_offset,
+                );
             }
             message::Pane::VideoToggleTrackExpando => {
                 self.track_expando_open = !self.track_expando_open;
@@ -274,7 +280,9 @@ fn view_video<'a>(
                 self_pane,
                 message::Pane::VideoScrolled(vp.absolute_offset(), vp.bounds().size()),
             )
-        });
+        })
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill);
 
     let video_container = iced::widget::container(video_scroll)
         .width(iced::Length::Fill)
