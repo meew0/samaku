@@ -1,3 +1,4 @@
+use crate::media;
 use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
 
 pub mod playback;
@@ -14,6 +15,16 @@ pub struct FrameNumber(pub i32);
 /// A difference in counted video frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FrameDelta(pub i32);
+
+impl FrameNumber {
+    #[must_use]
+    pub fn step(self, direction: media::motion::Direction) -> Self {
+        match direction {
+            media::motion::Direction::Forward => Self(self.0 + 1),
+            media::motion::Direction::Backward => Self(self.0 - 1),
+        }
+    }
+}
 
 impl std::fmt::Display for FrameNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

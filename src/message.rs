@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{action, media, model, nde, pane, subtitle};
 
@@ -241,18 +241,16 @@ pub enum Message {
     ActivateNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
     UpdateReticulePosition(model::reticule::Index, glam::DVec2),
 
-    /// Tell the video playback worker to start motion tracking and sending the results to the
-    /// node with the given ID.
-    TrackMotionForNode(
-        subtitle::ExtradataId,
-        nde::graph::NodeId,
-        media::motion::Region,
-    ),
-
+    /// Tell the video playback worker to start motion tracking the selected tracks.
     TrackMotionForSelectedTracks(
         model::FrameNumber,
         media::motion::Direction,
         media::motion::Target,
+        media::motion::TrackSettings,
+    ),
+    MotionTrackUpdate(
+        HashMap<media::motion::TrackId, media::motion::Marker>,
+        model::FrameNumber,
     ),
 
     // Motion track management

@@ -570,6 +570,7 @@ fn view_track_buttons<'a>(
                     frame_number,
                     motion::Direction::Backward,
                     motion::Target::Frame(frame_number - model::FrameDelta(1)),
+                    pane_state.track_settings,
                 ),
             ))
             .width(iced::Length::Fill),
@@ -583,6 +584,7 @@ fn view_track_buttons<'a>(
                     frame_number,
                     motion::Direction::Backward,
                     motion::Target::event(pane_state.limit_to_event, event_start_frame),
+                    pane_state.track_settings,
                 ),
             ))
             .width(iced::Length::Fill),
@@ -596,6 +598,7 @@ fn view_track_buttons<'a>(
                     frame_number,
                     motion::Direction::Forward,
                     motion::Target::event(pane_state.limit_to_event, event_end_frame),
+                    pane_state.track_settings,
                 ),
             ))
             .width(iced::Length::Fill),
@@ -609,6 +612,7 @@ fn view_track_buttons<'a>(
                     frame_number,
                     motion::Direction::Forward,
                     motion::Target::Frame(frame_number + model::FrameDelta(1)),
+                    pane_state.track_settings,
                 ),
             ))
             .width(iced::Length::Fill),

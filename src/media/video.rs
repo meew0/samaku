@@ -146,7 +146,7 @@ impl Video {
     pub fn get_libmv_patch(
         &self,
         n: model::FrameNumber,
-        request: super::motion::Patch<glam::DVec2>,
+        request: &super::motion::Patch<glam::DVec2>,
     ) -> super::motion::PatchResponse {
         // The conversion coefficients used by Blender, divided by 255
         const GREYSCALE_COEFFICIENTS: [f32; 3] = [0.000_833_373, 0.002_804_71, 0.000_283_14];

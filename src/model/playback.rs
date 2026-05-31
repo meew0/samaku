@@ -129,6 +129,29 @@ impl Position {
             / 1000;
         self.set_ticks(ticks.try_into().unwrap_or(0));
     }
+
+    /// Sets the playback position to the given frame.
+    ///
+    /// # Panics
+    /// Panics if the authoritative position lock is poisoned, or on overflow.
+    pub fn set_to_frame(&self, new_value: model::FrameNumber, frame_rate: media::FrameRate) {
+        if self.rate() == 0 {
+            return;
+        }
+
+        // We need to always round up, to cover the event starting on this frame.
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "outside the expected temporal bounds"
+        )]
+        let ms = (1000.0 * f64::from(new_value.0) / f64::from(frame_rate)).ceil() as i64;
+
+        let ticks: i64 = ms
+            .checked_mul(i64::from(self.rate()))
+            .expect("ticks overflow")
+            / 1000;
+        self.set_ticks(ticks.try_into().unwrap_or(0));
+    }
 }
 
 impl Default for Position {
@@ -255,5 +278,26 @@ mod tests {
         let pos = make_position(1000, 1000);
         pos.set_to_event(subtitle::StartTime(-5000));
         assert_eq!(pos.position(), 0);
+    }
+
+    #[test]
+    fn set_to_frame() {
+        let pos = make_position(0, 1000);
+        let frame_rate = media::FrameRate {
+            numerator: 24,
+            denominator: 1,
+        };
+
+        pos.set_to_frame(model::FrameNumber(24), frame_rate);
+        assert_eq!(pos.position(), 1000);
+
+        let pos = make_position(0, 1000);
+        let frame_rate = media::FrameRate {
+            numerator: 24000,
+            denominator: 1001,
+        };
+
+        pos.set_to_frame(model::FrameNumber(13), frame_rate);
+        assert_eq!(pos.position(), 543);
     }
 }

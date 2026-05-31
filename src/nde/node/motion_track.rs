@@ -55,17 +55,15 @@ impl Node for MotionTrack {
 
     fn content<'a>(
         &self,
-        filter_index: subtitle::ExtradataId,
-        self_index: nde::graph::NodeId,
+        _filter_index: subtitle::ExtradataId,
+        _self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
         let initial_point = glam::DVec2 {
             x: self.region_center.x,
             y: self.region_center.y,
         };
-        let initial_region = media::motion::Region::from_center_and_radius(initial_point, 20.0);
-        let track_button = iced::widget::button("Track").on_press(
-            message::Message::TrackMotionForNode(filter_index, self_index, initial_region),
-        );
+        let _initial_region = media::motion::Region::from_center_and_radius(initial_point, 20.0);
+        let track_button = iced::widget::button("Track");
 
         let column = iced::widget::column![
             iced::widget::text(format!("{} frame(s) tracked", self.track.len())),

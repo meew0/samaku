@@ -1,6 +1,7 @@
+use crate::media::motion;
+use crate::{media, message, model};
+use std::collections::HashMap;
 use std::{cell::RefCell, thread};
-
-use crate::{media, message, model, nde, subtitle};
 
 mod cpal_playback;
 mod indexer;
@@ -120,21 +121,21 @@ impl Workers {
             .dispatch(cpal_playback::MessageIn::TryRestart);
     }
 
-    pub fn emit_track_motion_for_node(
+    pub fn emit_track_motion(
         &self,
-        filter_index: subtitle::ExtradataId,
-        node_index: nde::graph::NodeId,
-        initial_region: media::motion::Region,
-        start_frame: model::FrameNumber,
-        end_frame: model::FrameNumber,
+        markers: HashMap<motion::TrackId, motion::Marker>,
+        origin_frame: model::FrameNumber,
+        direction: motion::Direction,
+        target: motion::Target,
+        settings: motion::TrackSettings,
     ) {
         self.video_decoder
-            .dispatch(video_decoder::MessageIn::TrackMotionForNode(
-                filter_index,
-                node_index,
-                initial_region,
-                start_frame,
-                end_frame,
+            .dispatch(video_decoder::MessageIn::TrackMotion(
+                markers,
+                origin_frame,
+                direction,
+                target,
+                settings,
             ));
     }
 

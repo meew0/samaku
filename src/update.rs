@@ -1,11 +1,11 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{action, history, media, message, model, nde, pane, project, subtitle};
+use crate::{action, history, media, model, nde, pane, project, subtitle};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::mem::replace;
 
@@ -1283,40 +1283,6 @@ fn update_internal(
                 }
             }
         }
-        Message::TrackMotionForNode(filter_index, node_index, initial_region) => {
-            if let Some(video_metadata) = global_state.video_metadata.as_ref() {
-                let current_frame = global_state.current_frame().unwrap(); // video is loaded
-
-                // Update the node's cached track to put the marker it requested at the
-                // position of the current frame.
-                // The node can't do this itself, because it does not know the number of
-                // the current frame.
-                let result = global_state
-                    .subtitles
-                    .extradata
-                    .update_node(
-                        filter_index,
-                        node_index,
-                        message::Node::MotionTrackUpdate(current_frame, initial_region),
-                    )
-                    .context("Failed to dispatch message to node");
-                global_state.toasts.anyhow(result);
-
-                if let Some(event) = global_state
-                    .subtitles
-                    .events
-                    .active_event(&global_state.selected_events)
-                {
-                    global_state.workers.emit_track_motion_for_node(
-                        filter_index,
-                        node_index,
-                        initial_region,
-                        current_frame,
-                        video_metadata.frame_rate.ms_to_frame(event.end().0),
-                    );
-                }
-            }
-        }
         Message::Node(filter_index, node_index, node_message) => {
             let result = global_state
                 .subtitles
@@ -1522,8 +1488,38 @@ fn update_internal(
                 );
             }
         }
-        Message::TrackMotionForSelectedTracks(_origin_frame, _direction, _target) => {
-            todo!();
+        Message::TrackMotionForSelectedTracks(origin_frame, direction, target, settings) => {
+            // Find markers present at the current frame for selected tracks
+            let mut markers = HashMap::with_capacity(global_state.selected_tracks.len());
+            for id in &global_state.selected_tracks {
+                if let Some(track) = global_state.motion_tracks.get(id)
+                    && let Some(marker) = track.get_marker(origin_frame)
+                {
+                    markers.insert(id, marker.clone());
+                }
+            }
+
+            global_state.workers.emit_track_motion(
+                markers,
+                origin_frame,
+                direction,
+                target,
+                settings,
+            );
+        }
+        Message::MotionTrackUpdate(markers, current_frame) => {
+            for (track_id, marker) in markers {
+                if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+                    track.set_marker(current_frame, marker);
+                }
+            }
+
+            // Go to the frame that was just tracked
+            global_state
+                .shared
+                .playback_position
+                .set_to_frame(current_frame, global_state.frame_rate());
+            global_state.workers.emit_playback_step();
         }
         Message::ToggleTrackSelection(track_id) => {
             let old_last = global_state.selected_tracks.last;

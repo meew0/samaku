@@ -163,7 +163,6 @@ impl History {
             | Message::SetTrackMarkerSizeCoordinate(_, _, _, _)
             | Message::SetTrackMarkerSearchAreaOriginCoordinate(_, _, _, _)
             | Message::SetTrackMarkerSearchAreaSizeCoordinate(_, _, _, _)
-            | Message::TrackMotionForSelectedTracks(_, _, _)
             | Message::ToggleTrackSelection(_)
             | Message::SetTrackSelectionSingle(_, _, _)
             | Message::SelectOnlyTrack(_)
@@ -213,7 +212,8 @@ impl History {
             | Message::DeselectTracks(_, _)
             | Message::MultiAssignFiltersToEvents(_)
             | Message::ActivateNodes(_, _)
-            | Message::TrackMotionForNode(_, _, _)
+            | Message::TrackMotionForSelectedTracks(_, _, _, _)
+            | Message::MotionTrackUpdate(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
             | Message::VideoIndexed(_, _) => Key::Fail,
