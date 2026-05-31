@@ -1385,52 +1385,101 @@ fn update_internal(
                 undo.put_instant("Set track name", Message::SetTrackName(track_id, old_name));
             }
         }
+        Message::SetTrackMarker(track_id, frame, new_marker) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = replace(marker, new_marker);
+                undo.put_instant(
+                    "Set motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
         Message::MoveTrackMarkerRegion(track_id, frame, new_center) => {
             if let Some(track) = global_state.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
+                let old_center = marker.region.center;
                 let delta = new_center - marker.region.center;
-                marker.region = marker.region.offset(delta);
-                marker.search_area.origin += delta;
+                marker.move_delta(delta);
+                undo.put_instant(
+                    "Move motion track marker",
+                    Message::MoveTrackMarkerRegion(track_id, frame, old_center),
+                );
             }
         }
         Message::SetTrackMarkerRegion(track_id, frame, new_region) => {
             if let Some(track) = global_state.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
-                let old_bb = marker.region.bounding_box();
-                let pad_left = old_bb.origin.x - marker.search_area.origin.x;
-                let pad_top = old_bb.origin.y - marker.search_area.origin.y;
-                let pad_right = (marker.search_area.origin.x + marker.search_area.size.x)
-                    - (old_bb.origin.x + old_bb.size.x);
-                let pad_bottom = (marker.search_area.origin.y + marker.search_area.size.y)
-                    - (old_bb.origin.y + old_bb.size.y);
-
-                let new_bb = new_region.bounding_box();
-                marker.search_area.origin =
-                    glam::DVec2::new(new_bb.origin.x - pad_left, new_bb.origin.y - pad_top);
-                marker.search_area.size = glam::DVec2::new(
-                    new_bb.size.x + pad_left + pad_right,
-                    new_bb.size.y + pad_top + pad_bottom,
+                let old_marker = marker.clone();
+                marker.update_region(new_region);
+                undo.put_instant(
+                    "Update motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
                 );
-
-                marker.region = new_region;
             }
         }
         Message::SetTrackMarkerCenterCoordinate(axis, track_id, frame, new_value) => {
-            todo!()
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_center = marker.region.center;
+                marker.move_delta(axis.vector(new_value - old_center[axis]));
+                undo.put_instant(
+                    "Move motion track marker",
+                    Message::MoveTrackMarkerRegion(track_id, frame, old_center),
+                );
+            }
         }
-        Message::SetTrackMarkerOffsetCoordinate(axis, track_id, frame, new_value) => {
-            todo!()
+        Message::SetTrackMarkerOffsetCoordinate(_axis, _track_id, _frame, _new_value) => {
+            // TODO implement offset tracking
         }
         Message::SetTrackMarkerSizeCoordinate(axis, track_id, frame, new_value) => {
-            todo!()
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let bounding_box = marker.region.bounding_box();
+                let mut new_size = bounding_box.size;
+                new_size[axis] = new_value;
+                marker.update_region(marker.region.scale(new_size / bounding_box.size));
+                undo.put_instant(
+                    "Scale motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
         }
         Message::SetTrackMarkerSearchAreaOriginCoordinate(axis, track_id, frame, new_value) => {
-            todo!()
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let mut new_search_area = marker.search_area;
+                new_search_area.origin[axis] = new_value;
+                marker.update_search_area(new_search_area);
+                undo.put_instant(
+                    "Move motion track search area",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
         }
         Message::SetTrackMarkerSearchAreaSizeCoordinate(axis, track_id, frame, new_value) => {
-            todo!()
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let new_search_area = marker.search_area;
+                let old_value = new_search_area.size[axis];
+                new_search_area.size[axis] = new_value;
+                new_search_area.origin[axis] -= (new_value - old_value) / 2.0;
+                marker.update_search_area(new_search_area);
+                undo.put_instant(
+                    "Resize motion track search area",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
         }
         Message::TrackMotionForSelectedTracks(origin_frame, direction, target) => {
             todo!();

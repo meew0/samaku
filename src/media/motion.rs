@@ -109,12 +109,55 @@ impl model::Named for Track {
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Marker {
     pub region: Region,
     pub offset: DVec2,
     pub search_area: Patch<DVec2>,
     pub key_state: KeyState,
+}
+
+impl Marker {
+    /// Moves the marker by the given delta.
+    /// Moves both the region and the search area.
+    pub fn move_delta(&mut self, delta: DVec2) {
+        self.region = self.region.offset(delta);
+        self.search_area.origin += delta;
+    }
+
+    /// Update the marker region to the given new region.
+    /// Moves and scales the search area so that its border around the region remains the same.
+    pub fn update_region(&mut self, new_region: Region) {
+        // Find the current bounding box and the padding towards the search area
+        let old_bb = self.region.bounding_box();
+        let pad_left = old_bb.origin.x - self.search_area.origin.x;
+        let pad_top = old_bb.origin.y - self.search_area.origin.y;
+        let pad_right = (self.search_area.origin.x + self.search_area.size.x)
+            - (old_bb.origin.x + old_bb.size.x);
+        let pad_bottom = (self.search_area.origin.y + self.search_area.size.y)
+            - (old_bb.origin.y + old_bb.size.y);
+
+        // Find the bounding box of the new region, and adjust the search area accordingly
+        let new_bb = new_region.bounding_box();
+        self.search_area.origin = DVec2::new(new_bb.origin.x - pad_left, new_bb.origin.y - pad_top);
+        self.search_area.size = DVec2::new(
+            new_bb.size.x + pad_left + pad_right,
+            new_bb.size.y + pad_top + pad_bottom,
+        );
+
+        self.region = new_region;
+    }
+
+    /// Update the search area, ensuring it does not go into the bounds of the region.
+    pub fn update_search_area(&mut self, new_search_area: Patch<DVec2>) {
+        let old_bb = self.region.bounding_box();
+        let new_origin = new_search_area.origin.min(old_bb.origin);
+        let new_bottom_right =
+            (new_search_area.origin + new_search_area.size).max(old_bb.origin + old_bb.size);
+
+        self.search_area.origin = new_origin;
+        self.search_area.size = new_bottom_right - new_origin;
+    }
 }
 
 impl Default for Marker {

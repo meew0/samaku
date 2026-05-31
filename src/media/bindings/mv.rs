@@ -196,6 +196,16 @@ impl Region {
         }
     }
 
+    pub fn scale(&self, scale: DVec2) -> Self {
+        Self {
+            top_left: self.center + (self.top_left - self.center) * scale,
+            top_right: self.center + (self.top_right - self.center) * scale,
+            bottom_right: self.center + (self.bottom_right - self.center) * scale,
+            bottom_left: self.center + (self.bottom_left - self.center) * scale,
+            center: self.center,
+        }
+    }
+
     #[expect(clippy::missing_panics_doc, reason = "will never panic")]
     pub fn bounding_box(&self) -> motion::Patch<DVec2> {
         let (x, y) = self.as_float_slices();

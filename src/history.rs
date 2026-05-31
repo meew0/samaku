@@ -154,6 +154,7 @@ impl History {
             | Message::CreateTrack
             | Message::DeleteTrack(_)
             | Message::SetTrackName(_, _)
+            | Message::SetTrackMarker(_, _, _)
             | Message::MoveTrackMarkerRegion(_, _, _)
             | Message::SetTrackMarkerRegion(_, _, _)
             | Message::SetTrackMarkerCenterCoordinate(_, _, _, _)

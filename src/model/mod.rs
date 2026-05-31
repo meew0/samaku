@@ -189,6 +189,15 @@ pub enum Axis {
     Y,
 }
 
+impl Axis {
+    #[must_use]
+    pub fn vector(self, length: f64) -> glam::DVec2 {
+        let mut result = glam::DVec2::ZERO;
+        result[self] = length;
+        result
+    }
+}
+
 impl std::ops::Index<Axis> for glam::DVec2 {
     type Output = f64;
 
