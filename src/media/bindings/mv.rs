@@ -196,6 +196,7 @@ impl Region {
         }
     }
 
+    #[must_use]
     pub fn scale(&self, scale: DVec2) -> Self {
         Self {
             top_left: self.center + (self.top_left - self.center) * scale,

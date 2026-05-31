@@ -1470,7 +1470,7 @@ fn update_internal(
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = marker.clone();
-                let new_search_area = marker.search_area;
+                let mut new_search_area = marker.search_area;
                 let old_value = new_search_area.size[axis];
                 new_search_area.size[axis] = new_value;
                 new_search_area.origin[axis] -= (new_value - old_value) / 2.0;
