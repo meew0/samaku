@@ -2024,17 +2024,28 @@ dependencies = [
 [[package]]
 name = "iced_nodegraph"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e67ff1c53b282086f54260e1a65d20c44e991523#e67ff1c53b282086f54260e1a65d20c44e991523"
 dependencies = [
  "bitflags 2.11.1",
  "euclid",
  "iced",
+ "iced_nodegraph_macros",
  "iced_sdf",
  "iced_wgpu",
  "iced_widget",
  "rustc-hash 2.1.2",
  "thiserror 2.0.18",
  "web-time",
+]
+
+[[package]]
+name = "iced_nodegraph_macros"
+version = "0.1.0"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e67ff1c53b282086f54260e1a65d20c44e991523#e67ff1c53b282086f54260e1a65d20c44e991523"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2076,7 +2087,7 @@ dependencies = [
 [[package]]
 name = "iced_sdf"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=b0bf64f3d5423a84de900e152db1cb940f543576#b0bf64f3d5423a84de900e152db1cb940f543576"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=e67ff1c53b282086f54260e1a65d20c44e991523#e67ff1c53b282086f54260e1a65d20c44e991523"
 dependencies = [
  "bytemuck",
  "encase",

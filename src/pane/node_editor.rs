@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::sync::LazyLock;
 
@@ -313,10 +313,6 @@ fn create_graph(
         .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
         .selection(&pane_state.selected_nodes)
         .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
-        .pin_defaults(iced_nodegraph::PinConfig {
-            radius: Some(8.0),
-            ..iced_nodegraph::PinConfig::default()
-        })
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
 
@@ -348,6 +344,7 @@ fn create_nodes(
         // and create rows containing appropriately-styled sockets.
         let mut socket_rows: Vec<iced::Element<'_, message::Message>> =
             Vec::with_capacity(socket_row_count);
+        let mut pin_style_lookup = HashMap::new();
         for row_num in 0..socket_row_count {
             let socket_id = SocketId(row_num);
             let (in_socket, out_socket) =
@@ -364,7 +361,7 @@ fn create_nodes(
                     unreachable!();
                 };
 
-            let row = make_pin_row(socket_id, in_socket, out_socket);
+            let row = make_pin_row(socket_id, in_socket, out_socket, &mut pin_style_lookup);
             socket_rows.push(row);
         }
 
@@ -392,21 +389,39 @@ fn create_nodes(
         .width(200.0)
         .into();
 
-        let node_border_colour = match *nde_result_or_error {
+        let (node_outline_color, node_outline_width) = match *nde_result_or_error {
             Ok(ref nde_result) => match nde_result.intermediates.get(node_index) {
-                Some(&NodeState::Inactive) => style::SAMAKU_INACTIVE,
-                Some(&NodeState::Active(_)) => style::SAMAKU_PRIMARY,
-                Some(&NodeState::Error(_)) => style::SAMAKU_DESTRUCTIVE,
+                Some(&NodeState::Inactive) => (style::SAMAKU_INACTIVE, 0.0),
+                Some(&NodeState::Active(_)) => (style::SAMAKU_PRIMARY, 1.0),
+                Some(&NodeState::Error(_)) => (style::SAMAKU_DESTRUCTIVE, 1.0),
                 None => panic!("intermediate node not found"),
             },
             Err(_) => {
                 // If there was an error, make all nodes appear red
-                style::SAMAKU_DESTRUCTIVE
+                (style::SAMAKU_DESTRUCTIVE, 1.0)
             }
         };
 
-        let node_style = iced_nodegraph::NodeConfig::new().border_color(node_border_colour);
-        graph.push_node_styled(node_id, visual_node.position, node_element, node_style);
+        graph.push_node(
+            iced_nodegraph::node(node_id, visual_node.position, node_element)
+                .style(move |theme, status| {
+                    iced_nodegraph::default_node_style(theme, status)
+                        .border_outline_color(node_outline_color)
+                        .border_outline_width(node_outline_width)
+                        .resolve(&iced_nodegraph::NodeStyle::from_theme(theme))
+                })
+                .pin_style(move |theme, pin_info, status| {
+                    if let Some(style_values) = pin_style_lookup.get(pin_info.pin_id()) {
+                        iced_nodegraph::default_pin_style(theme, status)
+                            .color(style_values.color)
+                            .shape(style_values.shape)
+                            .radius(12.0)
+                            .resolve(&iced_nodegraph::PinStyle::from_theme(theme))
+                    } else {
+                        iced_nodegraph::resolved_pin_style(theme, status)
+                    }
+                }),
+        );
     }
 }
 
@@ -507,18 +522,23 @@ fn create_connections(
     nde_filter: &nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
-    let color = match *nde_result_or_error {
-        Ok(_) => style::SAMAKU_PRIMARY,
-        Err(_) => style::SAMAKU_DESTRUCTIVE,
+    let (outline_color, outline_width) = match *nde_result_or_error {
+        Ok(_) => (style::SAMAKU_PRIMARY, 0.0),
+        Err(_) => (style::SAMAKU_DESTRUCTIVE, 1.0),
     };
-
-    let edge_config = iced_nodegraph::EdgeConfig::new().solid_color(color);
 
     for (next, previous) in &nde_filter.graph.connections {
         let from =
             iced_nodegraph::PinRef::new(previous.node_index, PinId::output(previous.socket_index));
         let to = iced_nodegraph::PinRef::new(next.node_index, PinId::input(next.socket_index));
-        graph.push_edge_styled(from, to, edge_config.clone());
+        graph.push_edge(
+            iced_nodegraph::edge(from, to).style(move |theme, status, _, _| {
+                iced_nodegraph::default_edge_style(theme, status)
+                    .border_outline_color(outline_color)
+                    .border_outline_width(outline_width)
+                    .resolve(&iced_nodegraph::EdgeStyle::from_theme(theme))
+            }),
+        );
     }
 }
 
@@ -746,63 +766,32 @@ fn make_pin<'a>(
     role: &SocketRole,
     socket_id: SocketId,
     socket_type: nde::node::SocketType,
+    pin_style_lookup: &mut HashMap<PinId, PinStyleValues>,
 ) -> iced_nodegraph::NodePin<'a, PinId, message::Message, iced::Theme, iced::Renderer> {
-    const BLOB_RADIUS: f32 = 7.0;
-
-    // The style of the blob is not determined by a style sheet, but by properties of the `Socket`
-    // itself.
-    let (_blob_border_radius, blob_color, label) = match socket_type {
-        nde::node::SocketType::IndividualEvent => (0.0, iced::Color::from_rgb(1.0, 1.0, 1.0), ""),
-        nde::node::SocketType::MultipleEvents | nde::node::SocketType::AnyEvents => {
-            (0.0, style::SAMAKU_PRIMARY, "")
-        }
-        nde::node::SocketType::LocalTags => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(1.0, 1.0, 1.0),
-            "Local tags",
-        ),
-        nde::node::SocketType::GlobalTags => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(0.5, 0.5, 0.5),
-            "Global tags",
-        ),
-        nde::node::SocketType::Position => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(0.09, 0.81, 0.48),
-            "Position",
-        ),
-        nde::node::SocketType::Rectangle => (
-            BLOB_RADIUS,
-            iced::Color::from_rgb(0.19, 0.90, 0.90),
-            "Rectangle",
-        ),
-        nde::node::SocketType::Quad => {
-            (BLOB_RADIUS, iced::Color::from_rgb(0.73, 0.38, 0.76), "Quad")
-        }
-    };
-
-    // TODO: figure out how to apply shape/border radius, and size
+    let (style_values, label) = pin_properties(socket_type);
+    let pin_id = (role.pin_id_func)(socket_id);
+    pin_style_lookup.insert(pin_id, style_values);
 
     iced_nodegraph::node_pin(
         role.side,
-        (role.pin_id_func)(socket_id),
+        pin_id,
         iced::widget::text(label).style(|_| iced::widget::text::Style {
             color: Some(style::SAMAKU_TEXT),
         }),
     )
     .direction(role.direction)
-    .color(blob_color)
 }
 
 fn make_pin_row<'a>(
     socket_id: SocketId,
     in_socket: Option<nde::node::SocketType>,
     out_socket: Option<nde::node::SocketType>,
+    pin_style_lookup: &mut HashMap<PinId, PinStyleValues>,
 ) -> iced::Element<'a, message::Message> {
-    let in_pin_option =
-        in_socket.map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
-    let out_pin_option =
-        out_socket.map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
+    let in_pin_option = in_socket
+        .map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type, pin_style_lookup));
+    let out_pin_option = out_socket
+        .map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type, pin_style_lookup));
 
     if let Some(in_pin) = in_pin_option {
         if let Some(out_pin) = out_pin_option {
@@ -835,6 +824,52 @@ fn make_pin_row<'a>(
             iced::widget::container("").width(iced::Length::Fill).into()
         }
     }
+}
+
+// Find pin properties for a given socket type
+fn pin_properties(socket_type: nde::node::SocketType) -> (PinStyleValues, &'static str) {
+    use iced_nodegraph::PinShape;
+
+    let (shape, color, label) = match socket_type {
+        nde::node::SocketType::IndividualEvent => {
+            (PinShape::Square, iced::Color::from_rgb(1.0, 1.0, 1.0), "")
+        }
+        nde::node::SocketType::MultipleEvents | nde::node::SocketType::AnyEvents => {
+            (PinShape::Square, style::SAMAKU_PRIMARY, "")
+        }
+        nde::node::SocketType::LocalTags => (
+            PinShape::Circle,
+            iced::Color::from_rgb(1.0, 1.0, 1.0),
+            "Local tags",
+        ),
+        nde::node::SocketType::GlobalTags => (
+            PinShape::Circle,
+            iced::Color::from_rgb(0.5, 0.5, 0.5),
+            "Global tags",
+        ),
+        nde::node::SocketType::Position => (
+            PinShape::Circle,
+            iced::Color::from_rgb(0.09, 0.81, 0.48),
+            "Position",
+        ),
+        nde::node::SocketType::Rectangle => (
+            PinShape::Circle,
+            iced::Color::from_rgb(0.19, 0.90, 0.90),
+            "Rectangle",
+        ),
+        nde::node::SocketType::Quad => (
+            PinShape::Circle,
+            iced::Color::from_rgb(0.73, 0.38, 0.76),
+            "Quad",
+        ),
+    };
+
+    (PinStyleValues { shape, color }, label)
+}
+
+struct PinStyleValues {
+    shape: iced_nodegraph::PinShape,
+    color: iced::Color,
 }
 
 fn menu_item(
