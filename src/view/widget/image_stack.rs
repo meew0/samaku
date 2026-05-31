@@ -282,7 +282,7 @@ where
         _style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _viewport: &Rectangle,
+        viewport: &Rectangle,
     ) {
         draw(
             renderer,
@@ -294,8 +294,14 @@ where
 
         let bounds = layout.bounds();
 
+        // Intersect with the viewport (which is bounded by the enclosing pane/scrollable) so
+        // that the canvas geometry layer can never escape the visible clip region.  Without this,
+        // when the widget is inside a scrollable and the content is larger than the pane, the
+        // un-clipped `bounds` can extend outside the pane, causing geometry to render there.
+        let canvas_clip = bounds.intersection(viewport).unwrap_or(bounds);
+
         let state = tree.state.downcast_ref::<Program::State>();
-        renderer.with_layer(bounds, |layer_renderer| {
+        renderer.with_layer(canvas_clip, |layer_renderer| {
             layer_renderer.with_translation(
                 Vector::new(bounds.x, bounds.y),
                 |translated_layer_renderer| {
