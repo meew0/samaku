@@ -1349,110 +1349,10 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
 
         if let Some(position) = cursor.position_in(bounds)
             && let canvas::Event::Mouse(ref mouse_event) = *event
+            && let Some(action) =
+                motion_track_mouse_event(self, state, bounds, position, mouse_event)
         {
-            match *mouse_event {
-                mouse::Event::ButtonPressed(mouse::Button::Left) => {
-                    if let Some((track_id, corner)) = self.find_hovered_corner(position, bounds) {
-                        state.dragging = Some(Dragging {
-                            track_id,
-                            frame_number: self.frame,
-                            target: DragTarget::Corner(corner),
-                            initial_point: position,
-                        });
-                        return Some(Action::capture());
-                    }
-                    if let Some((track_id, center_iced)) =
-                        self.find_hovered_marker(position, bounds)
-                    {
-                        let offset = position - center_iced;
-                        state.dragging = Some(Dragging {
-                            track_id,
-                            frame_number: self.frame,
-                            target: DragTarget::WholeRegion { offset },
-                            initial_point: position,
-                        });
-                        return Some(Action::capture());
-                    }
-                }
-                mouse::Event::CursorMoved { .. } => {
-                    if let Some(dragging) = state.dragging.as_ref() {
-                        match dragging.target {
-                            DragTarget::WholeRegion { offset } => {
-                                let new_center = model::reticule::Reticule::position_from_iced(
-                                    position,
-                                    offset,
-                                    bounds.size(),
-                                    self.storage_size,
-                                );
-                                return Some(
-                                    Action::publish(message::Message::MoveTrackMarkerRegion(
-                                        dragging.track_id,
-                                        dragging.frame_number,
-                                        new_center,
-                                    ))
-                                    .and_capture(),
-                                );
-                            }
-                            DragTarget::Corner(corner) => {
-                                if let Some(marker) = self.find_track_marker(dragging.track_id) {
-                                    let frame_pos = model::reticule::Reticule::position_from_iced(
-                                        position,
-                                        iced::Vector { x: 0.0, y: 0.0 },
-                                        bounds.size(),
-                                        self.storage_size,
-                                    );
-                                    let new_region = if self.modifiers.alt() {
-                                        rotation_corner_drag(frame_pos, corner, &marker.region)
-                                    } else {
-                                        scale_corner_drag(
-                                            frame_pos,
-                                            corner,
-                                            &marker.region,
-                                            !self.modifiers.shift(),
-                                        )
-                                    };
-                                    return Some(
-                                        Action::publish(message::Message::SetTrackMarkerRegion(
-                                            dragging.track_id,
-                                            dragging.frame_number,
-                                            new_region,
-                                        ))
-                                        .and_capture(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                mouse::Event::ButtonReleased(mouse::Button::Left) => {
-                    if let Some(dragging) = state.dragging.take() {
-                        // Check if the marker was actually dragged
-                        if position == dragging.initial_point {
-                            if self.modifiers.control() {
-                                // ctrl-select
-                                return Some(
-                                    Action::publish(message::Message::ToggleTrackSelection(
-                                        dragging.track_id,
-                                    ))
-                                    .and_capture(),
-                                );
-                            } else if self.selected_tracks.contains(dragging.track_id) {
-                                // Do nothing since the clicked track is already selected
-                            } else {
-                                // non ctrl-select, select only the clicked track
-                                return Some(
-                                    Action::publish(message::Message::SelectOnlyTrack(
-                                        dragging.track_id,
-                                    ))
-                                    .and_capture(),
-                                );
-                            };
-                        }
-                        return Some(Action::capture());
-                    }
-                }
-                _ => {}
-            }
+            return Some(action);
         }
 
         None
@@ -1505,6 +1405,116 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
 
         mouse::Interaction::None
     }
+}
+
+fn motion_track_mouse_event(
+    program: &MotionTrackProgram,
+    state: &mut MotionTrackState,
+    bounds: iced::Rectangle,
+    position: iced::Point,
+    mouse_event: &mouse::Event,
+) -> Option<Action<message::Message>> {
+    match *mouse_event {
+        mouse::Event::ButtonPressed(mouse::Button::Left) => {
+            if let Some((track_id, corner)) = program.find_hovered_corner(position, bounds) {
+                state.dragging = Some(Dragging {
+                    track_id,
+                    frame_number: program.frame,
+                    target: DragTarget::Corner(corner),
+                    initial_point: position,
+                });
+                return Some(Action::capture());
+            }
+            if let Some((track_id, center_iced)) = program.find_hovered_marker(position, bounds) {
+                let offset = position - center_iced;
+                state.dragging = Some(Dragging {
+                    track_id,
+                    frame_number: program.frame,
+                    target: DragTarget::WholeRegion { offset },
+                    initial_point: position,
+                });
+                return Some(Action::capture());
+            }
+        }
+        mouse::Event::CursorMoved { .. } => {
+            if let Some(dragging) = state.dragging.as_ref() {
+                match dragging.target {
+                    DragTarget::WholeRegion { offset } => {
+                        let new_center = model::reticule::Reticule::position_from_iced(
+                            position,
+                            offset,
+                            bounds.size(),
+                            program.storage_size,
+                        );
+                        return Some(
+                            Action::publish(message::Message::MoveTrackMarkerRegion(
+                                dragging.track_id,
+                                dragging.frame_number,
+                                new_center,
+                            ))
+                            .and_capture(),
+                        );
+                    }
+                    DragTarget::Corner(corner) => {
+                        if let Some(marker) = program.find_track_marker(dragging.track_id) {
+                            let frame_pos = model::reticule::Reticule::position_from_iced(
+                                position,
+                                iced::Vector { x: 0.0, y: 0.0 },
+                                bounds.size(),
+                                program.storage_size,
+                            );
+                            let new_region = if program.modifiers.alt() {
+                                rotation_corner_drag(frame_pos, corner, &marker.region)
+                            } else {
+                                scale_corner_drag(
+                                    frame_pos,
+                                    corner,
+                                    &marker.region,
+                                    !program.modifiers.shift(),
+                                )
+                            };
+                            return Some(
+                                Action::publish(message::Message::SetTrackMarkerRegion(
+                                    dragging.track_id,
+                                    dragging.frame_number,
+                                    new_region,
+                                ))
+                                .and_capture(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        mouse::Event::ButtonReleased(mouse::Button::Left) => {
+            if let Some(dragging) = state.dragging.take() {
+                // Check if the marker was actually dragged
+                if position == dragging.initial_point {
+                    if program.modifiers.control() {
+                        // ctrl-select
+                        return Some(
+                            Action::publish(message::Message::ToggleTrackSelection(
+                                dragging.track_id,
+                            ))
+                            .and_capture(),
+                        );
+                    } else if program.selected_tracks.contains(dragging.track_id) {
+                        // Do nothing since the clicked track is already selected
+                    } else {
+                        // non ctrl-select, select only the clicked track
+                        return Some(
+                            Action::publish(message::Message::SelectOnlyTrack(dragging.track_id))
+                                .and_capture(),
+                        );
+                    }
+                }
+                return Some(Action::capture());
+            }
+        }
+        _ => {}
+    }
+
+    None
 }
 
 fn handle_zoom_pan_event(
