@@ -772,8 +772,8 @@ fn view_marker_settings<'a>(
     let offset_row = nd_row(
         active_marker.offset,
         message::Message::SetTrackMarkerOffsetCoordinate,
-        "X coordinate of marker offset",
-        "Y coordinate of marker offset",
+        "X coordinate of marker offset [NYI]",
+        "Y coordinate of marker offset [NYI]",
     );
 
     let bounding_box = active_marker.region.bounding_box();
