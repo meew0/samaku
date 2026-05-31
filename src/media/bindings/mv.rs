@@ -196,7 +196,7 @@ impl Region {
         }
     }
 
-    #[allow(clippy::missing_panics_doc, reason = "will never panic")]
+    #[expect(clippy::missing_panics_doc, reason = "will never panic")]
     pub fn bounding_box(&self) -> motion::Patch<DVec2> {
         let (x, y) = self.as_float_slices();
         let origin = DVec2::new(
