@@ -500,7 +500,7 @@ pub struct Samaku {
 
     /// The tracks containing motion tracking markers at different timepoints.
     pub motion_tracks: media::motion::TrackList,
-    
+
     /// Currently selected motion tracks.
     pub selected_tracks: model::select::Selection<media::motion::TrackId>,
 }

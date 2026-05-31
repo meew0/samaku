@@ -53,12 +53,7 @@ impl<T: Debug + Copy + Eq + Hash> Selection<T> {
         self.len() == 0
     }
 
-    pub fn set_single(
-        &mut self,
-        index: T,
-        state: bool,
-        last: Option<T>,
-    ) -> (bool, Option<T>) {
+    pub fn set_single(&mut self, index: T, state: bool, last: Option<T>) -> (bool, Option<T>) {
         let old_state = self.contains(index);
         let old_last = self.last;
 
@@ -85,10 +80,7 @@ impl<T: Debug + Copy + Eq + Hash> Selection<T> {
 
     /// Selects the given items.
     /// Returns a set of items that were actually selected, and the previous last item.
-    pub fn select_all<I: Iterator<Item = T>>(
-        &mut self,
-        indices: I,
-    ) -> (HashSet<T>, Option<T>) {
+    pub fn select_all<I: Iterator<Item = T>>(&mut self, indices: I) -> (HashSet<T>, Option<T>) {
         let mut selected = if let (_, Some(len)) = indices.size_hint() {
             self.indices.reserve(len);
             HashSet::with_capacity(len)
@@ -169,7 +161,7 @@ impl<T: Debug + Copy + Eq + Hash> Selection<T> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item =T> {
+    pub fn iter(&self) -> impl Iterator<Item = T> {
         <&Self as IntoIterator>::into_iter(self)
     }
 }
@@ -181,7 +173,7 @@ impl<T: Debug + Copy + Eq + Hash> Default for Selection<T> {
             last: None,
         }
     }
-} 
+}
 
 impl<'a, T: Debug + Copy + Eq + Hash> IntoIterator for &'a Selection<T> {
     type Item = T;
