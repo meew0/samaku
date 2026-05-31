@@ -152,7 +152,8 @@ impl History {
             | Message::SetNodeConnection(_, _, _)
             | Message::UpdateReticulePosition(_, _)
             | Message::CreateTrack
-            | Message::DeleteTrack(_)
+            | Message::DeleteTracks(_)
+            | Message::RestoreTracks(_, _)
             | Message::SetTrackName(_, _)
             | Message::SetTrackMarker(_, _, _)
             | Message::MoveTrackMarkerRegion(_, _, _)
@@ -166,8 +167,7 @@ impl History {
             | Message::ToggleTrackSelection(_)
             | Message::SetTrackSelectionSingle(_, _, _)
             | Message::SelectOnlyTrack(_)
-            | Message::SetTrackSelection(_)
-            | Message::SelectAllTracks => {
+            | Message::SetTrackSelection(_) => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
                 Key::Record(node, None)

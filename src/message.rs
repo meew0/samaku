@@ -257,7 +257,11 @@ pub enum Message {
 
     // Motion track management
     CreateTrack,
-    DeleteTrack(media::motion::TrackId),
+    DeleteTracks(HashSet<media::motion::TrackId>),
+    RestoreTracks(
+        Vec<(media::motion::TrackId, media::motion::Track)>,
+        model::select::Selection<media::motion::TrackId>,
+    ),
     SetTrackName(media::motion::TrackId, String),
 
     // Motion track editing
@@ -297,7 +301,6 @@ pub enum Message {
         HashSet<media::motion::TrackId>,
         Option<media::motion::TrackId>,
     ),
-    SelectAllTracks,
 }
 
 impl Message {

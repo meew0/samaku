@@ -4,6 +4,7 @@ use glam::DVec2;
 use iced::mouse;
 use iced::widget::{Action, canvas};
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 const EXTRA_SCROLL: f32 = 500.0;
 
@@ -430,7 +431,7 @@ fn view_motion_track_controls<'a>(
     ));
 
     if let Some(active_track_data) = active_track_data_opt {
-        column = column.push(view_track_rename(global_state, active_track_data));
+        column = column.push(view_track_rename(active_track_data));
     }
 
     if !global_state.selected_tracks.is_empty() {
@@ -492,7 +493,11 @@ fn view_track_selector<'a>(
         unassign_text: "",
         unassign_message: None::<fn(motion::TrackId) -> message::Message>,
         delete_text: "Delete track",
-        delete_message: Some(message::Message::DeleteTrack),
+        delete_message: Some(|track| {
+            let mut set = HashSet::new();
+            set.insert(track);
+            message::Message::DeleteTracks(set)
+        }),
         _phantom: std::marker::PhantomData,
     };
 
@@ -513,10 +518,9 @@ fn view_track_selector<'a>(
     )
 }
 
-fn view_track_rename<'a>(
-    global_state: &'a crate::Samaku,
-    active_track_data: (motion::TrackId, &'a motion::Track),
-) -> iced::Element<'a, message::Message> {
+fn view_track_rename(
+    active_track_data: (motion::TrackId, &motion::Track),
+) -> iced::Element<'_, message::Message> {
     let (active_track_id, active_track) = active_track_data;
 
     let rename_field = iced::widget::text_input("Track name", model::Named::name(active_track))
@@ -742,30 +746,45 @@ fn view_marker_settings<'a>(
 ) -> iced::Element<'a, message::Message> {
     type MessageFn = fn(model::Axis, motion::TrackId, model::FrameNumber, f64) -> message::Message;
 
-    let (active_track_id, active_track) = active_track_data;
+    let (active_track_id, _) = active_track_data;
 
     let video_metadata = global_state.video_metadata.as_ref().unwrap();
     let x_bounds = 0.0..=f64::from(video_metadata.width);
     let y_bounds = 0.0..=f64::from(video_metadata.height);
     let (x_bounds_ref, y_bounds_ref) = (&x_bounds, &y_bounds);
 
-    let nd =
-        move |vector: DVec2, axis: model::Axis, message_fn: MessageFn, tooltip: &'static str| {
-            view::tooltip(
-                view::widget::number_dragger(vector[axis], x_bounds_ref.clone(), move |value| {
-                    message_fn(axis, active_track_id, frame_number, value)
-                })
-                .width(iced::Length::FillPortion(1)),
-                tooltip,
-            )
-        };
+    let nd = move |vector: DVec2,
+                   axis: model::Axis,
+                   bounds: std::ops::RangeInclusive<f64>,
+                   message_fn: MessageFn,
+                   tooltip: &'static str| {
+        view::tooltip(
+            view::widget::number_dragger(vector[axis], bounds, move |value| {
+                message_fn(axis, active_track_id, frame_number, value)
+            })
+            .width(iced::Length::FillPortion(1)),
+            tooltip,
+        )
+    };
     let nd_row = move |vector: DVec2,
                        message_fn: MessageFn,
                        x_tooltip: &'static str,
                        y_tooltip: &'static str| {
         iced::widget::row![
-            nd(vector, model::Axis::X, message_fn, x_tooltip),
-            nd(vector, model::Axis::Y, message_fn, y_tooltip),
+            nd(
+                vector,
+                model::Axis::X,
+                x_bounds_ref.clone(),
+                message_fn,
+                x_tooltip
+            ),
+            nd(
+                vector,
+                model::Axis::Y,
+                y_bounds_ref.clone(),
+                message_fn,
+                y_tooltip
+            ),
         ]
         .spacing(5.0)
     };

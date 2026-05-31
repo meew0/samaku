@@ -39,6 +39,14 @@ impl TrackList {
         id
     }
 
+    pub fn remove(&mut self, id: TrackId) -> Option<Track> {
+        self.map.remove(&id)
+    }
+
+    pub fn restore(&mut self, id: TrackId, track: Track) {
+        self.map.insert(id, track);
+    }
+
     #[must_use]
     pub fn stab(&self, frame: model::FrameNumber) -> Vec<(TrackId, &Track)> {
         // TODO: optimize this using interavl

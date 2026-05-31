@@ -61,7 +61,7 @@ pub fn section_label(label: &str) -> iced::widget::Text<'_> {
     iced::widget::text(label).size(13)
 }
 
-/// Element that can be opened and closed, to reveal some content inside
+/// Element that can be opened and closed, to reveal some content inside.
 pub fn expando<'a, E: Into<iced::Element<'a, message::Message>>>(
     open: bool,
     self_pane: crate::pane::Pane,
