@@ -1233,8 +1233,15 @@ struct MotionTrackProgram<'a> {
 
 #[derive(Default)]
 struct MotionTrackState {
-    dragging: Option<(motion::TrackId, model::FrameNumber, DragTarget)>,
+    dragging: Option<Dragging>,
     pan_drag: PanDrag,
+}
+
+struct Dragging {
+    track_id: motion::TrackId,
+    frame_number: model::FrameNumber,
+    target: DragTarget,
+    initial_point: iced::Point,
 }
 
 const CORNER_HIT_RADIUS: f32 = 8.0;
@@ -1342,27 +1349,30 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
             match *mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     if let Some((track_id, corner)) = self.find_hovered_corner(position, bounds) {
-                        state.dragging = Some((track_id, self.frame, DragTarget::Corner(corner)));
-                        return Some(
-                            Action::publish(message::Message::SelectOnlyTrack(track_id))
-                                .and_capture(),
-                        );
+                        state.dragging = Some(Dragging {
+                            track_id,
+                            frame_number: self.frame,
+                            target: DragTarget::Corner(corner),
+                            initial_point: position,
+                        });
+                        return Some(Action::capture());
                     }
                     if let Some((track_id, center_iced)) =
                         self.find_hovered_marker(position, bounds)
                     {
                         let offset = position - center_iced;
-                        state.dragging =
-                            Some((track_id, self.frame, DragTarget::WholeRegion { offset }));
-                        return Some(
-                            Action::publish(message::Message::SelectOnlyTrack(track_id))
-                                .and_capture(),
-                        );
+                        state.dragging = Some(Dragging {
+                            track_id,
+                            frame_number: self.frame,
+                            target: DragTarget::WholeRegion { offset },
+                            initial_point: position,
+                        });
+                        return Some(Action::capture());
                     }
                 }
                 mouse::Event::CursorMoved { .. } => {
-                    if let Some((track_id, frame, drag_target)) = state.dragging {
-                        match drag_target {
+                    if let Some(dragging) = state.dragging.as_ref() {
+                        match dragging.target {
                             DragTarget::WholeRegion { offset } => {
                                 let new_center = model::reticule::Reticule::position_from_iced(
                                     position,
@@ -1372,13 +1382,15 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
                                 );
                                 return Some(
                                     Action::publish(message::Message::MoveTrackMarkerRegion(
-                                        track_id, frame, new_center,
+                                        dragging.track_id,
+                                        dragging.frame_number,
+                                        new_center,
                                     ))
                                     .and_capture(),
                                 );
                             }
                             DragTarget::Corner(corner) => {
-                                if let Some(marker) = self.find_track_marker(track_id) {
+                                if let Some(marker) = self.find_track_marker(dragging.track_id) {
                                     let frame_pos = model::reticule::Reticule::position_from_iced(
                                         position,
                                         iced::Vector { x: 0.0, y: 0.0 },
@@ -1397,7 +1409,9 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
                                     };
                                     return Some(
                                         Action::publish(message::Message::SetTrackMarkerRegion(
-                                            track_id, frame, new_region,
+                                            dragging.track_id,
+                                            dragging.frame_number,
+                                            new_region,
                                         ))
                                         .and_capture(),
                                     );
@@ -1406,9 +1420,32 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
                         }
                     }
                 }
-                mouse::Event::ButtonReleased(mouse::Button::Left) if state.dragging.is_some() => {
-                    state.dragging = None;
-                    return Some(Action::capture());
+                mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                    if let Some(dragging) = state.dragging.take() {
+                        // Check if the marker was actually dragged
+                        if position == dragging.initial_point {
+                            if self.modifiers.control() {
+                                // ctrl-select
+                                return Some(
+                                    Action::publish(message::Message::ToggleTrackSelection(
+                                        dragging.track_id,
+                                    ))
+                                    .and_capture(),
+                                );
+                            } else if self.selected_tracks.contains(dragging.track_id) {
+                                // Do nothing since the clicked track is already selected
+                            } else {
+                                // non ctrl-select, select only the clicked track
+                                return Some(
+                                    Action::publish(message::Message::SelectOnlyTrack(
+                                        dragging.track_id,
+                                    ))
+                                    .and_capture(),
+                                );
+                            };
+                        }
+                        return Some(Action::capture());
+                    }
                 }
                 _ => {}
             }
