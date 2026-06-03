@@ -155,7 +155,8 @@ impl Node for InputQuad {
     }
 
     fn content<'a>(
-        &self,
+        &'a self,
+        _global_state: &'a crate::Samaku,
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {

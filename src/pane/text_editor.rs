@@ -81,7 +81,7 @@ impl super::LocalState for State {
 
     fn update_selected_events(
         &mut self,
-        selected_events: &model::select::EventSelection,
+        selected_events: &model::select::Selection<subtitle::EventIndex>,
         event_track: &subtitle::EventTrack,
     ) {
         if selected_events.is_empty() {

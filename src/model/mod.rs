@@ -1,3 +1,4 @@
+use crate::media;
 use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
 
 pub mod playback;
@@ -14,6 +15,16 @@ pub struct FrameNumber(pub i32);
 /// A difference in counted video frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FrameDelta(pub i32);
+
+impl FrameNumber {
+    #[must_use]
+    pub fn step(self, direction: media::motion::Direction) -> Self {
+        match direction {
+            media::motion::Direction::Forward => Self(self.0 + 1),
+            media::motion::Direction::Backward => Self(self.0 - 1),
+        }
+    }
+}
 
 impl std::fmt::Display for FrameNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -180,4 +191,40 @@ where
 pub struct NamedEntry<'a, K: Copy> {
     pub id: K,
     pub name: &'a str,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[expect(clippy::min_ident_chars, reason = "trivial axis names")]
+pub enum Axis {
+    X,
+    Y,
+}
+
+impl Axis {
+    #[must_use]
+    pub fn vector(self, length: f64) -> glam::DVec2 {
+        let mut result = glam::DVec2::ZERO;
+        result[self] = length;
+        result
+    }
+}
+
+impl std::ops::Index<Axis> for glam::DVec2 {
+    type Output = f64;
+
+    fn index(&self, index: Axis) -> &Self::Output {
+        match index {
+            Axis::X => &self.x,
+            Axis::Y => &self.y,
+        }
+    }
+}
+
+impl std::ops::IndexMut<Axis> for glam::DVec2 {
+    fn index_mut(&mut self, index: Axis) -> &mut Self::Output {
+        match index {
+            Axis::X => &mut self.x,
+            Axis::Y => &mut self.y,
+        }
+    }
 }

@@ -4,6 +4,7 @@
     reason = "iced's pane grid uses `a` and `b` consistently and it makes sense to use these as well here"
 )]
 
+use crate::subtitle::EventIndex;
 use crate::{action, config, message, model, pane};
 use anyhow::Context as _;
 use iced::widget::pane_grid;
@@ -67,7 +68,7 @@ pub const METADATA_KEY: &str = "Samaku Project Metadata";
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Project<'a> {
     pane_layout: PaneLayout<'a>,
-    selected_events: Cow<'a, model::select::EventSelection>,
+    selected_events: Cow<'a, model::select::Selection<EventIndex>>,
     properties: Cow<'a, Properties>,
 }
 

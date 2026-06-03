@@ -13,6 +13,12 @@ pub fn separator() -> iced::widget::rule::Rule<'static> {
     iced::widget::rule::horizontal(0.5).style(iced::widget::rule::weak)
 }
 
+/// Create a half-pixel thick vertical separator line.
+#[must_use]
+pub fn vertical_separator() -> iced::widget::rule::Rule<'static> {
+    iced::widget::rule::vertical(0.5).style(iced::widget::rule::weak)
+}
+
 #[must_use]
 pub fn frame_coordinates_to_iced(
     frame_point: glam::DVec2,
@@ -47,4 +53,43 @@ pub fn tooltip<
         iced::widget::tooltip::Position::Top,
     )
     .into()
+}
+
+/// Returns a small section header.
+#[must_use]
+pub fn section_label(label: &str) -> iced::widget::Text<'_> {
+    iced::widget::text(label).size(13)
+}
+
+/// Element that can be opened and closed, to reveal some content inside.
+pub fn expando<'a, E: Into<iced::Element<'a, message::Message>>>(
+    open: bool,
+    self_pane: crate::pane::Pane,
+    toggle_pane_message: message::Pane,
+    header: &'a str,
+    content: E,
+) -> iced::Element<'a, message::Message> {
+    let chevron = if open {
+        Icon::ChevronDown
+    } else {
+        Icon::ChevronRight
+    };
+
+    let header_element = iced::widget::mouse_area(
+        iced::widget::row![chevron.text().size(11.0), section_label(header),]
+            .align_y(iced::Alignment::Center)
+            .spacing(5.0),
+    )
+    .on_press(message::Message::Pane(self_pane, toggle_pane_message))
+    .interaction(iced::mouse::Interaction::Pointer);
+
+    let content_element = content.into();
+
+    if open {
+        iced::widget::column![header_element, content_element]
+            .spacing(5.0)
+            .into()
+    } else {
+        header_element.into()
+    }
 }

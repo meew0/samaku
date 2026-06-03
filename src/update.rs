@@ -1,11 +1,11 @@
 //! Global update logic: update the global state ([`Samaku`] object) based on an incoming message.
 
 use crate::message::Message;
-use crate::{action, history, media, message, model, nde, pane, project, subtitle};
+use crate::{action, history, media, model, nde, pane, project, subtitle};
 use anyhow::Context as _;
 use smol::io::AsyncBufReadExt as _;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::mem::replace;
 
@@ -296,12 +296,9 @@ fn update_internal(
         }
         Message::ExportSubtitleFile => {
             let mut data = String::new();
-            subtitle::emit(
-                &mut data,
-                &global_state.subtitles,
-                Some(global_state.compile_context(None)),
-            )
-            .expect("subtitle::emit() failed"); // should never happen
+            let context = subtitle::compile::context!(global_state, None);
+            subtitle::emit(&mut data, &global_state.subtitles, Some(context))
+                .expect("subtitle::emit() failed"); // should never happen
 
             if global_state.video_metadata.is_none() {
                 global_state.toasts.push(model::toast::Toast::message(
@@ -667,7 +664,7 @@ fn update_internal(
             undo.put_no_batch("Add event", Message::DeleteEvents(to_delete));
             undo.override_redo(Message::RestoreEvents(
                 vec![(subtitle::Tombstone::new(new_index), position, new_event)],
-                model::select::EventSelection::default(),
+                model::select::Selection::default(),
             ));
         }
         Message::DeleteEvents(set) => {
@@ -746,7 +743,7 @@ fn update_internal(
             } else {
                 // Select only the group
                 let mut new_selection =
-                    model::select::EventSelection::from_indices(events_to_select.collect());
+                    model::select::Selection::from_indices(events_to_select.collect());
                 new_selection.last = Some(index_2);
                 let old_selection = replace(&mut global_state.selected_events, new_selection);
                 notify_selected_events(global_state);
@@ -789,7 +786,7 @@ fn update_internal(
             // This message does not need to be undone.
         }
         Message::SelectAllEvents => {
-            let new_selection = model::select::EventSelection::from_indices(
+            let new_selection = model::select::Selection::from_indices(
                 global_state.subtitles.events.iter_indices().collect(),
             );
             let old_selection = replace(&mut global_state.selected_events, new_selection);
@@ -1229,8 +1226,7 @@ fn update_internal(
         }
         Message::ActivateNodes(filter_id, nodes) => {
             if nodes.len() == 1 {
-                let frame_rate = global_state.frame_rate();
-                let layout_resolution = global_state.effective_layout_resolution();
+                let mut context = subtitle::compile::context!(global_state, None);
 
                 let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
                 let node_id = nodes[0];
@@ -1239,15 +1235,8 @@ fn update_internal(
                     .subtitles
                     .events
                     .active_event(&global_state.selected_events);
-                // We need to construct this manually since we mutably borrow `global_state` above
-                // TODO: refactor this to be more ergonomic?
-                let context = subtitle::compile::Context {
-                    frame_rate,
-                    source_event: active_event,
-                    styles: &global_state.subtitles.styles,
-                    playback_resolution: global_state.subtitles.script_info.playback_resolution,
-                    layout_resolution,
-                };
+                context.source_event = active_event;
+
                 let reticule_list = node.node.reticule_activate(&context);
 
                 global_state.reticules = if reticule_list.is_empty() {
@@ -1283,40 +1272,6 @@ fn update_internal(
                 }
             }
         }
-        Message::TrackMotionForNode(filter_index, node_index, initial_region) => {
-            if let Some(video_metadata) = global_state.video_metadata.as_ref() {
-                let current_frame = global_state.current_frame().unwrap(); // video is loaded
-
-                // Update the node's cached track to put the marker it requested at the
-                // position of the current frame.
-                // The node can't do this itself, because it does not know the number of
-                // the current frame.
-                let result = global_state
-                    .subtitles
-                    .extradata
-                    .update_node(
-                        filter_index,
-                        node_index,
-                        message::Node::MotionTrackUpdate(current_frame, initial_region),
-                    )
-                    .context("Failed to dispatch message to node");
-                global_state.toasts.anyhow(result);
-
-                if let Some(event) = global_state
-                    .subtitles
-                    .events
-                    .active_event(&global_state.selected_events)
-                {
-                    global_state.workers.emit_track_motion_for_node(
-                        filter_index,
-                        node_index,
-                        initial_region,
-                        current_frame,
-                        video_metadata.frame_rate.ms_to_frame(event.end().0),
-                    );
-                }
-            }
-        }
         Message::Node(filter_index, node_index, node_message) => {
             let result = global_state
                 .subtitles
@@ -1333,22 +1288,13 @@ fn update_internal(
             });
             if is_reticule_source {
                 let new_list = {
-                    let frame_rate = global_state.frame_rate();
-                    let layout_resolution = global_state.effective_layout_resolution();
-
+                    let mut context = subtitle::compile::context!(global_state, None);
                     let filter = global_state.subtitles.extradata[filter_index].assert_filter_mut();
                     let active_event = global_state
                         .subtitles
                         .events
                         .active_event(&global_state.selected_events);
-                    // We need to construct this manually since we mutably borrow `global_state` above
-                    let context = subtitle::compile::Context {
-                        frame_rate,
-                        source_event: active_event,
-                        styles: &global_state.subtitles.styles,
-                        playback_resolution: global_state.subtitles.script_info.playback_resolution,
-                        layout_resolution,
-                    };
+                    context.source_event = active_event;
                     filter.graph.nodes[node_index.0]
                         .node
                         .reticule_activate(&context)
@@ -1361,6 +1307,248 @@ fn update_internal(
                     // Reticules were already cleared concurrently; nothing to update.
                 }
             }
+        }
+        Message::CreateTrack => {
+            let origin_frame = global_state
+                .current_frame()
+                .expect("video should be loaded");
+
+            let marker = media::motion::Marker::default();
+            let track = media::motion::Track::new(origin_frame, marker, "New track".to_owned());
+            let track_copy = track.clone();
+
+            let new_id = global_state.motion_tracks.add(track);
+
+            let old_selected = global_state.selected_tracks.clear();
+            global_state.selected_tracks.select(new_id);
+
+            let mut to_delete = HashSet::new();
+            to_delete.insert(new_id);
+
+            undo.put_no_batch("Create motion track", Message::DeleteTracks(to_delete));
+            undo.put_no_batch(
+                "Create motion track",
+                Message::SetTrackSelection(old_selected),
+            );
+            undo.override_redo(Message::RestoreTracks(
+                vec![(new_id, track_copy)],
+                global_state.selected_tracks.clone(),
+            ));
+        }
+        Message::DeleteTracks(track_ids) => {
+            let old_selected = global_state
+                .selected_tracks
+                .deselect_all(track_ids.iter().copied());
+            let restore = track_ids
+                .iter()
+                .filter_map(|&id| {
+                    global_state
+                        .motion_tracks
+                        .remove(id)
+                        .map(|track| (id, track))
+                })
+                .collect();
+            undo.put_no_batch(
+                "Delete tracks",
+                Message::RestoreTracks(restore, old_selected),
+            );
+        }
+        Message::RestoreTracks(restore, old_selected) => {
+            let mut restored = HashSet::with_capacity(restore.len());
+            for (track_id, track) in restore {
+                global_state.motion_tracks.restore(track_id, track);
+                restored.insert(track_id);
+            }
+            global_state.selected_tracks.select_from(&old_selected);
+            undo.put_no_batch("Restore tracks", Message::DeleteTracks(restored));
+        }
+        Message::SetTrackName(track_id, name) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+                let old_name = replace(&mut track.name, name);
+
+                undo.put_instant(
+                    "Set motion track name",
+                    Message::SetTrackName(track_id, old_name),
+                );
+            }
+        }
+        Message::SetTrackMarker(track_id, frame, new_marker) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = replace(marker, new_marker);
+                undo.put_instant(
+                    "Set motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
+        Message::MoveTrackMarkerRegion(track_id, frame, new_center) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_center = marker.region.center;
+                let delta = new_center - marker.region.center;
+                marker.move_delta(delta);
+                undo.put_instant(
+                    "Move motion track marker",
+                    Message::MoveTrackMarkerRegion(track_id, frame, old_center),
+                );
+            }
+        }
+        Message::SetTrackMarkerRegion(track_id, frame, new_region) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                marker.update_region(new_region);
+                undo.put_instant(
+                    "Update motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
+        Message::SetTrackMarkerCenterCoordinate(axis, track_id, frame, new_value) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_center = marker.region.center;
+                marker.move_delta(axis.vector(new_value - old_center[axis]));
+                undo.put_instant(
+                    "Move motion track marker",
+                    Message::MoveTrackMarkerRegion(track_id, frame, old_center),
+                );
+            }
+        }
+        Message::SetTrackMarkerOffsetCoordinate(_axis, _track_id, _frame, _new_value) => {
+            // TODO implement offset tracking
+        }
+        Message::SetTrackMarkerSizeCoordinate(axis, track_id, frame, new_value) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let bounding_box = marker.region.bounding_box();
+                let mut new_size = bounding_box.size;
+                new_size[axis] = new_value;
+                marker.update_region(marker.region.scale(new_size / bounding_box.size));
+                undo.put_instant(
+                    "Scale motion track marker",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
+        Message::SetTrackMarkerSearchAreaOriginCoordinate(axis, track_id, frame, new_value) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let mut new_search_area = marker.search_area;
+                new_search_area.origin[axis] = new_value;
+                marker.update_search_area(new_search_area);
+                undo.put_instant(
+                    "Move motion track search area",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
+        Message::SetTrackMarkerSearchAreaSizeCoordinate(axis, track_id, frame, new_value) => {
+            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+                && let Some(marker) = track.get_marker_mut(frame)
+            {
+                let old_marker = marker.clone();
+                let mut new_search_area = marker.search_area;
+                let old_value = new_search_area.size[axis];
+                new_search_area.size[axis] = new_value;
+                new_search_area.origin[axis] -= (new_value - old_value) / 2.0;
+                marker.update_search_area(new_search_area);
+                undo.put_instant(
+                    "Resize motion track search area",
+                    Message::SetTrackMarker(track_id, frame, old_marker),
+                );
+            }
+        }
+        Message::TrackMotionForSelectedTracks(origin_frame, direction, target, settings) => {
+            // Find markers present at the current frame for selected tracks
+            let mut markers = HashMap::with_capacity(global_state.selected_tracks.len());
+            for id in &global_state.selected_tracks {
+                if let Some(track) = global_state.motion_tracks.get(id)
+                    && let Some(marker) = track.get_marker(origin_frame)
+                {
+                    markers.insert(id, marker.clone());
+                }
+            }
+
+            global_state.workers.emit_track_motion(
+                markers,
+                origin_frame,
+                direction,
+                target,
+                settings,
+            );
+        }
+        Message::MotionTrackUpdate(markers, current_frame) => {
+            for (track_id, marker) in markers {
+                if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+                    track.set_marker(current_frame, marker);
+                }
+            }
+
+            // Go to the frame that was just tracked
+            global_state
+                .shared
+                .playback_position
+                .set_to_frame(current_frame, global_state.frame_rate());
+            global_state.workers.emit_playback_step();
+        }
+        Message::ToggleTrackSelection(track_id) => {
+            let old_last = global_state.selected_tracks.last;
+            let previously_selected = if global_state.selected_tracks.contains(track_id) {
+                global_state.selected_tracks.deselect(track_id);
+                true
+            } else {
+                global_state.selected_tracks.select(track_id);
+                false
+            };
+
+            undo.put_incremental(
+                "Toggle motion track selection",
+                Message::SetTrackSelectionSingle(track_id, previously_selected, old_last),
+            );
+            undo.override_redo(Message::SetTrackSelectionSingle(
+                track_id,
+                !previously_selected,
+                global_state.selected_tracks.last,
+            ));
+        }
+        Message::SetTrackSelectionSingle(track_id, state, last) => {
+            let (old_state, old_last) = global_state
+                .selected_tracks
+                .set_single(track_id, state, last);
+
+            undo.put_instant(
+                "Set motion track selection (single)",
+                Message::SetTrackSelectionSingle(track_id, old_state, old_last),
+            );
+        }
+        Message::SelectOnlyTrack(track_id) => {
+            let old = global_state.selected_tracks.clear();
+            global_state.selected_tracks.select(track_id);
+            notify_selected_events(global_state);
+
+            undo.put_instant("Select motion track", Message::SetTrackSelection(old));
+        }
+        Message::SetTrackSelection(new_selected_tracks) => {
+            let old = replace(&mut global_state.selected_tracks, new_selected_tracks);
+            undo.put_instant("Select motion tracks", Message::SetTrackSelection(old));
+        }
+        Message::DeselectTracks(to_deselect, old_last) => {
+            global_state
+                .selected_tracks
+                .deselect_all(to_deselect.into_iter());
+            global_state.selected_tracks.last = old_last;
+
+            // no undo
         }
     }
 

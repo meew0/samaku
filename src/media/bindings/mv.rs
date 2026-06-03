@@ -3,6 +3,7 @@
     reason = "implements more of what mv does for now than is currently used in samaku"
 )]
 
+use crate::media::motion;
 use glam::{DVec2, IVec2};
 use libmv_capi_sys as libmv;
 use libmv_capi_sys::libmv_TrackRegionOptions;
@@ -59,14 +60,15 @@ pub(crate) struct TrackRegionOptions {
     pub image1_mask: Option<Vec<f32>>,
 }
 
-pub(crate) enum TrackRegionDirection {
+#[derive(Debug, Clone, Copy)]
+pub enum TrackRegionDirection {
     Forward,
     Backward,
 }
 
 impl TrackRegionDirection {
-    fn as_libmv(&self) -> libmv::libmv_TrackRegionDirection {
-        match *self {
+    fn as_libmv(self) -> libmv::libmv_TrackRegionDirection {
+        match self {
             TrackRegionDirection::Forward => {
                 libmv::libmv_TrackRegionDirection_LIBMV_TRACK_REGION_FORWARD
             }
@@ -77,7 +79,7 @@ impl TrackRegionDirection {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MotionModel {
     Translation = 0,
     TranslationRotation = 1,
@@ -85,6 +87,19 @@ pub enum MotionModel {
     TranslationRotationScale = 3,
     Affine = 4,
     Homography = 5,
+}
+
+impl std::fmt::Display for MotionModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MotionModel::Translation => write!(f, "Location"),
+            MotionModel::TranslationRotation => write!(f, "Location & Rotation"),
+            MotionModel::TranslationScale => write!(f, "Location & Scale"),
+            MotionModel::TranslationRotationScale => write!(f, "Location, Rotation, & Scale"),
+            MotionModel::Affine => write!(f, "Affine"),
+            MotionModel::Homography => write!(f, "Perspective"),
+        }
+    }
 }
 
 pub(crate) struct MonochromeImage<'a> {
@@ -179,6 +194,32 @@ impl Region {
             bottom_left: self.bottom_left + offset,
             center: self.center + offset,
         }
+    }
+
+    #[must_use]
+    pub fn scale(&self, scale: DVec2) -> Self {
+        Self {
+            top_left: self.center + (self.top_left - self.center) * scale,
+            top_right: self.center + (self.top_right - self.center) * scale,
+            bottom_right: self.center + (self.bottom_right - self.center) * scale,
+            bottom_left: self.center + (self.bottom_left - self.center) * scale,
+            center: self.center,
+        }
+    }
+
+    #[expect(clippy::missing_panics_doc, reason = "will never panic")]
+    pub fn bounding_box(&self) -> motion::Patch<DVec2> {
+        let (x, y) = self.as_float_slices();
+        let origin = DVec2::new(
+            x.into_iter().reduce(f64::min).unwrap(),
+            y.into_iter().reduce(f64::min).unwrap(),
+        );
+        let max_point = DVec2::new(
+            x.into_iter().reduce(f64::max).unwrap(),
+            y.into_iter().reduce(f64::max).unwrap(),
+        );
+        let size = max_point - origin;
+        motion::Patch { origin, size }
     }
 }
 

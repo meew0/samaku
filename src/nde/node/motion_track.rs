@@ -1,16 +1,12 @@
-use crate::{media, message, model, nde, style, subtitle, view};
-use iced::Rectangle;
-use iced::mouse::Cursor;
-use iced::widget::canvas;
-use model::reticule;
-use std::collections::BTreeMap;
-
 use super::{Context, Node, Shell, SocketType, SocketValue};
+use crate::media::motion;
+use crate::{message, model, nde, subtitle, view};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MotionTrack {
-    pub region_center: glam::DVec2,
-    pub track: BTreeMap<model::FrameNumber, media::motion::Region>,
+    pub track_id: Option<motion::TrackId>,
+    #[serde(skip)]
+    pub blend_box_state: view::widget::blend_box::State,
 }
 
 #[typetag::serde]
@@ -37,15 +33,22 @@ impl Node for MotionTrack {
 
         let mut new_events: Vec<nde::Event> = vec![];
 
+        let Some(track_id) = self.track_id else {
+            anyhow::bail!("No motion track selected");
+        };
+        let Some(tracks) = context.motion_tracks else {
+            anyhow::bail!("Missing motion tracks in compile context");
+        };
+        let Some(track) = tracks.get(track_id) else {
+            anyhow::bail!("Invalid motion track ID");
+        };
+
         for event in events {
             let mut cloned = event.clone();
             let frame = frame_rate.ms_to_frame(cloned.start.0);
-            if let Some(region) = self.track.get(&frame) {
+            if let Some(marker) = track.get_marker(frame) {
                 cloned.global_tags.position =
-                    Some(nde::tags::PositionOrMove::Position(glam::DVec2 {
-                        x: region.center.x,
-                        y: region.center.y,
-                    }));
+                    Some(nde::tags::PositionOrMove::Position(marker.region.center));
             }
             new_events.push(cloned);
         }
@@ -54,23 +57,46 @@ impl Node for MotionTrack {
     }
 
     fn content<'a>(
-        &self,
+        &'a self,
+        global_state: &'a crate::Samaku,
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        let initial_point = glam::DVec2 {
-            x: self.region_center.x,
-            y: self.region_center.y,
+        let (text, selection) = if let Some(track_id) = self.track_id {
+            if let Some(track) = global_state.motion_tracks.get(track_id) {
+                let count = track.count();
+                let s_str = if count == 1 { "" } else { "s" };
+                let selection = model::NamedEntry {
+                    id: track_id,
+                    name: model::Named::name(track),
+                };
+
+                (
+                    iced::widget::text(format!("{count} frame{s_str} tracked")),
+                    Some(selection),
+                )
+            } else {
+                (iced::widget::text("Invalid track"), None)
+            }
+        } else {
+            (iced::widget::text("No track selected"), None)
         };
-        let initial_region = media::motion::Region::from_center_and_radius(initial_point, 20.0);
-        let track_button = iced::widget::button("Track").on_press(
-            message::Message::TrackMotionForNode(filter_index, self_index, initial_region),
+
+        let track_button = view::widget::blend_box(
+            &self.blend_box_state,
+            &global_state.motion_tracks,
+            "Motion track",
+            selection,
+            move |new_selection| {
+                message::Message::Node(
+                    filter_index,
+                    self_index,
+                    message::Node::MotionTrackSelect(new_selection),
+                )
+            },
         );
 
-        let column = iced::widget::column![
-            iced::widget::text(format!("{} frame(s) tracked", self.track.len())),
-            track_button,
-        ];
+        let column = iced::widget::column![text, track_button];
 
         column
             .spacing(4.0)
@@ -80,92 +106,11 @@ impl Node for MotionTrack {
     }
 
     fn update(&mut self, message: message::Node) -> anyhow::Result<()> {
-        if let message::Node::MotionTrackUpdate(relative_frame, region) = message {
-            self.track.insert(relative_frame, region);
+        if let message::Node::MotionTrackSelect(new_selection) = message {
+            self.track_id = Some(new_selection);
             Ok(())
         } else {
-            anyhow::bail!("Invalid message type, expected MotionTrackUpdate");
-        }
-    }
-
-    fn reticule_activate(&mut self, _context: &Context) -> Vec<reticule::Reticule> {
-        vec![reticule::Reticule {
-            shape: reticule::Shape::Cross,
-            position: self.region_center,
-            radius: 15.0,
-        }]
-    }
-
-    fn reticule_update(
-        &mut self,
-        reticules: &mut reticule::Reticules,
-        index: reticule::Index,
-        new_position: glam::DVec2,
-    ) -> anyhow::Result<glam::DVec2> {
-        if index.0 != 0 {
-            anyhow::bail!("Reticule index out of range: {index}");
-        }
-
-        let old_position = std::mem::replace(&mut reticules[index].position, new_position);
-        self.region_center = new_position;
-
-        Ok(old_position)
-    }
-
-    fn draw_reticule_base_layer(
-        &self,
-        canvas_frame: &mut canvas::Frame,
-        bounds: Rectangle,
-        storage_size: subtitle::Resolution,
-        current_frame: Option<model::FrameNumber>,
-        _cursor: Cursor,
-    ) {
-        if !self.track.is_empty() {
-            let (first_frame, _) = self.track.first_key_value().unwrap();
-            let (last_frame, _) = self.track.last_key_value().unwrap();
-
-            for (frame_number, region) in &self.track {
-                let iced_point =
-                    view::frame_coordinates_to_iced(region.center, bounds.size(), storage_size);
-
-                #[expect(
-                    clippy::cast_sign_loss,
-                    reason = "frame numbers should not be negative"
-                )]
-                let (red, green, blue) = colorous::VIRIDIS
-                    .eval_rational(
-                        (frame_number.0 - first_frame.0) as usize,
-                        (last_frame.0 - first_frame.0) as usize + 1_usize,
-                    )
-                    .as_tuple();
-                let iced_color = iced::Color::from_rgb8(red, green, blue);
-
-                let circle = canvas::Path::circle(iced_point, 3.0_f32);
-
-                if current_frame == Some(*frame_number) {
-                    // Highlight the current frame with another yellow-orange border.
-                    canvas_frame.stroke(
-                        &circle,
-                        canvas::Stroke::default()
-                            .with_color(iced::Color::WHITE)
-                            .with_width(9.0_f32),
-                    );
-                    canvas_frame.stroke(
-                        &circle,
-                        canvas::Stroke::default()
-                            .with_color(style::SAMAKU_PRIMARY)
-                            .with_width(6.0_f32),
-                    );
-                }
-
-                canvas_frame.stroke(
-                    &circle,
-                    canvas::Stroke::default()
-                        .with_color(iced::Color::WHITE)
-                        .with_width(3.0_f32),
-                );
-                canvas_frame.fill(&circle, iced_color);
-            }
+            anyhow::bail!("Invalid message type, expected MotionTrackSelect");
         }
     }
 
@@ -178,11 +123,6 @@ inventory::submit! {
     Shell::new(
         &["Motion track"],
         || Box::new(MotionTrack {
-            region_center: glam::DVec2 {
-                x: 100.0,
-                y: 100.0,
-            },
-            track: BTreeMap::new(),
-        })
+        track_id: None,blend_box_state: view::widget::blend_box::State::default(),})
     )
 }

@@ -27,6 +27,7 @@ pub struct Context<'a> {
     pub frame_rate: media::FrameRate,
     pub source_event: Option<&'a super::Event<'static>>,
     pub styles: &'a super::StyleList,
+    pub motion_tracks: Option<&'a media::motion::TrackList>,
 
     /// The `PlayRes` defined in the ASS file header,
     /// or the video resolution, if none is defined.
@@ -44,6 +45,24 @@ impl Context<'_> {
         self.styles.get(event.style_index)
     }
 }
+
+/// Utility macro to construct a `Context` based on global state
+/// without borrowing everything at once (to allow simultaneously
+/// mutably borrowing other parts of the same global state).
+macro_rules! context {
+    ($global_state:expr, $source_event:expr) => {
+        subtitle::compile::Context {
+            frame_rate: $global_state.frame_rate(),
+            source_event: $source_event,
+            styles: &$global_state.subtitles.styles,
+            motion_tracks: Some(&$global_state.motion_tracks),
+            playback_resolution: $global_state.subtitles.script_info.playback_resolution,
+            layout_resolution: $global_state.effective_layout_resolution(),
+        }
+    };
+}
+
+pub(crate) use context;
 
 /// Applies the given `filter` to the given `event`, and returns the resulting events plus certain
 /// intermediate values. The `counter` is counted up for every created event and used as its read
@@ -179,6 +198,7 @@ mod tests {
             },
             source_event: Some(&event),
             styles: &style_list,
+            motion_tracks: None,
             playback_resolution: Resolution::FULL_HD,
             layout_resolution: Resolution::FULL_HD,
         };

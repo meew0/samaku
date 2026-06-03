@@ -150,7 +150,23 @@ impl History {
             | Message::ConnectNodes(_, _, _)
             | Message::DisconnectNodes(_, _, _)
             | Message::SetNodeConnection(_, _, _)
-            | Message::UpdateReticulePosition(_, _) => {
+            | Message::UpdateReticulePosition(_, _)
+            | Message::CreateTrack
+            | Message::DeleteTracks(_)
+            | Message::RestoreTracks(_, _)
+            | Message::SetTrackName(_, _)
+            | Message::SetTrackMarker(_, _, _)
+            | Message::MoveTrackMarkerRegion(_, _, _)
+            | Message::SetTrackMarkerRegion(_, _, _)
+            | Message::SetTrackMarkerCenterCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerOffsetCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSizeCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSearchAreaOriginCoordinate(_, _, _, _)
+            | Message::SetTrackMarkerSearchAreaSizeCoordinate(_, _, _, _)
+            | Message::ToggleTrackSelection(_)
+            | Message::SetTrackSelectionSingle(_, _, _)
+            | Message::SelectOnlyTrack(_)
+            | Message::SetTrackSelection(_) => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
                 Key::Record(node, None)
@@ -193,9 +209,11 @@ impl History {
             | Message::TogglePlayback
             | Message::Playing(_)
             | Message::DeselectEvents(_, _)
+            | Message::DeselectTracks(_, _)
             | Message::MultiAssignFiltersToEvents(_)
             | Message::ActivateNodes(_, _)
-            | Message::TrackMotionForNode(_, _, _)
+            | Message::TrackMotionForSelectedTracks(_, _, _, _)
+            | Message::MotionTrackUpdate(_, _)
             | Message::ModifiersChanged(_)
             | Message::UpdateToastProgress(_, _)
             | Message::VideoIndexed(_, _) => Key::Fail,

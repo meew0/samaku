@@ -478,7 +478,7 @@ pub struct Samaku {
     pub subtitles: subtitle::File,
 
     /// The set of events, identified by index, that are currently selected.
-    pub selected_events: model::select::EventSelection,
+    pub selected_events: model::select::Selection<subtitle::EventIndex>,
 
     /// Project properties, that is, data not stored elsewhere that conceptually belongs to a “Samaku project”,
     /// for example, paths to linked media files etc.
@@ -497,6 +497,12 @@ pub struct Samaku {
     /// Control widgets that are shown over the video, in order to allow quick setting of positions
     /// and the like.
     pub reticules: Option<model::reticule::Reticules>,
+
+    /// The tracks containing motion tracking markers at different timepoints.
+    pub motion_tracks: media::motion::TrackList,
+
+    /// Currently selected motion tracks.
+    pub selected_tracks: model::select::Selection<media::motion::TrackId>,
 }
 
 /// Data that needs to be shared with workers.
@@ -556,20 +562,6 @@ impl Samaku {
             }
         } else {
             self.subtitles.script_info.playback_resolution
-        }
-    }
-
-    /// Create a context for compilation.
-    pub fn compile_context<'a>(
-        &'a self,
-        source_event: Option<&'a subtitle::Event<'static>>,
-    ) -> subtitle::compile::Context<'a> {
-        subtitle::compile::Context {
-            frame_rate: self.frame_rate(),
-            source_event,
-            styles: &self.subtitles.styles,
-            playback_resolution: self.subtitles.script_info.playback_resolution,
-            layout_resolution: self.effective_layout_resolution(),
         }
     }
 
@@ -769,7 +761,7 @@ impl Default for Samaku {
             actual_frame: None,
             video_metadata: None,
             subtitles: subtitle::File::default(),
-            selected_events: model::select::EventSelection::default(),
+            selected_events: model::select::Selection::default(),
             project_properties: project::Properties::default(),
             shared: shared_state,
             view: RefCell::new(ViewState {
@@ -777,6 +769,8 @@ impl Default for Samaku {
             }),
             playing: false,
             reticules: None,
+            motion_tracks: media::motion::TrackList::new(),
+            selected_tracks: model::select::Selection::default(),
             history: history::History::new(),
         }
     }

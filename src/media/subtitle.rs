@@ -453,6 +453,7 @@ mod tests {
             frame_rate: FRAME_RATE,
             source_event: None,
             styles: &style_list,
+            motion_tracks: None,
             playback_resolution: opaque_track.script_info().playback_resolution,
             layout_resolution: opaque_track.script_info().playback_resolution, // just use the PlayRes here, doesn't matter at all
         };

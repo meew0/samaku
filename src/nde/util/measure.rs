@@ -102,8 +102,8 @@ pub fn measure(event: &nde::Event, style: &subtitle::Style) -> nde::BoundingBox 
 
     // \bord / \xbord / \ybord: outline extends equally outward on all sides.
     let border = event.effective_border(style);
-    total_width = 2.0f64.mul_add(border.x, total_width);
-    total_height = 2.0f64.mul_add(border.y, total_height);
+    total_width = 2.0_f64.mul_add(border.x, total_width);
+    total_height = 2.0_f64.mul_add(border.y, total_height);
 
     // \shad / \xshad / \yshad: shadow is displaced to one side; the bounding box
     // grows by the absolute displacement in each axis regardless of sign.

@@ -1,6 +1,6 @@
 use iced::widget::pane_grid;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{action, media, model, nde, pane, subtitle};
 
@@ -163,7 +163,7 @@ pub enum Message {
 
     RestoreEvents(
         Vec<(subtitle::Tombstone, usize, subtitle::Event<'static>)>,
-        model::select::EventSelection,
+        model::select::Selection<subtitle::EventIndex>,
     ),
 
     /// Select the given event if it is not selected, otherwise deselect it.
@@ -171,7 +171,7 @@ pub enum Message {
     GroupSelectEvents(subtitle::EventIndex, subtitle::EventIndex, bool),
     SetEventSelectionSingle(subtitle::EventIndex, bool, Option<subtitle::EventIndex>),
     SelectOnlyEvent(subtitle::EventIndex),
-    SetEventSelection(model::select::EventSelection),
+    SetEventSelection(model::select::Selection<subtitle::EventIndex>),
     DeselectEvents(HashSet<subtitle::EventIndex>, Option<subtitle::EventIndex>),
     SelectAllEvents,
 
@@ -241,12 +241,63 @@ pub enum Message {
     ActivateNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
     UpdateReticulePosition(model::reticule::Index, glam::DVec2),
 
-    /// Tell the video playback worker to start motion tracking and sending the results to the
-    /// node with the given ID.
-    TrackMotionForNode(
-        subtitle::ExtradataId,
-        nde::graph::NodeId,
+    /// Tell the video playback worker to start motion tracking the selected tracks.
+    TrackMotionForSelectedTracks(
+        model::FrameNumber,
+        media::motion::Direction,
+        media::motion::Target,
+        media::motion::TrackSettings,
+    ),
+    MotionTrackUpdate(
+        HashMap<media::motion::TrackId, media::motion::Marker>,
+        model::FrameNumber,
+    ),
+
+    // Motion track management
+    CreateTrack,
+    DeleteTracks(HashSet<media::motion::TrackId>),
+    RestoreTracks(
+        Vec<(media::motion::TrackId, media::motion::Track)>,
+        model::select::Selection<media::motion::TrackId>,
+    ),
+    SetTrackName(media::motion::TrackId, String),
+
+    // Motion track editing
+    SetTrackMarker(
+        media::motion::TrackId,
+        model::FrameNumber,
+        media::motion::Marker,
+    ),
+    MoveTrackMarkerRegion(media::motion::TrackId, model::FrameNumber, glam::DVec2),
+    SetTrackMarkerRegion(
+        media::motion::TrackId,
+        model::FrameNumber,
         media::motion::Region,
+    ),
+    SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerSearchAreaOriginCoordinate(
+        model::Axis,
+        media::motion::TrackId,
+        model::FrameNumber,
+        f64,
+    ),
+    SetTrackMarkerSearchAreaSizeCoordinate(
+        model::Axis,
+        media::motion::TrackId,
+        model::FrameNumber,
+        f64,
+    ),
+
+    // Motion track selection
+    ToggleTrackSelection(media::motion::TrackId),
+    SetTrackSelectionSingle(media::motion::TrackId, bool, Option<media::motion::TrackId>),
+    SelectOnlyTrack(media::motion::TrackId),
+    SetTrackSelection(model::select::Selection<media::motion::TrackId>),
+    DeselectTracks(
+        HashSet<media::motion::TrackId>,
+        Option<media::motion::TrackId>,
     ),
 }
 
@@ -335,13 +386,21 @@ pub enum Pane {
 
     // Messages for the video
     VideoSetControlsMode(pane::video::ControlsMode),
+    VideoSetLimitToEvent(bool),
+    VideoSetTrackingOption(pane::video::TrackingOption),
+    VideoToggleTrackExpando,
+    VideoToggleTrackSettingsExpando,
+    VideoToggleMarkerSettingsExpando,
+    VideoZoom(f32, iced::Point),
+    VideoPan(f32, f32),
+    VideoScrolled(iced::widget::scrollable::AbsoluteOffset, iced::Size),
 }
 
 /// Messages dispatched to nodes.
 #[derive(Debug, Clone)]
 pub enum Node {
-    /// A new marker is available for the currently running motion track.
-    MotionTrackUpdate(model::FrameNumber, media::motion::Region),
+    /// A motion track has been selected.
+    MotionTrackSelect(media::motion::TrackId),
 
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),

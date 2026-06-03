@@ -14,8 +14,16 @@ pub const FONT: iced::Font = iced::Font::with_name("bootstrap-icons");
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
     // https://icons.getbootstrap.com
+    ArrowBarLeft = 0xf113,
+    ArrowBarRight = 0xf114,
+    BoxArrowInLeft = 0xf1bd,
+    BoxArrowInRight = 0xf1be,
+    CaretLeft = 0xf230,
     CaretLeftFill = 0xf22d,
+    CaretRight = 0xf234,
     CaretRightFill = 0xf231,
+    ChevronDown = 0xf282,
+    ChevronRight = 0xf285,
     Dash = 0xf2ea,
     List = 0xf479,
     Pause = 0xf4c4,
