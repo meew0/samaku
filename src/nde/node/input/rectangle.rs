@@ -61,7 +61,8 @@ impl Node for InputRectangle {
     }
 
     fn content<'a>(
-        &self,
+        &'a self,
+        _global_state: &'a crate::Samaku,
         _filter_index: subtitle::ExtradataId,
         _self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {

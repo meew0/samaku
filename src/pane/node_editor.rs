@@ -228,22 +228,22 @@ type NodeGraph<'a> = iced_nodegraph::NodeGraph<
     iced::Renderer,
 >;
 
-fn view_filter<'a, 'b>(
+fn view_filter<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
     pane_state: &'a State,
     active_event: &'a subtitle::Event<'static>,
     nde_filter_id: subtitle::ExtradataId,
-    nde_filter: &'b nde::Filter,
+    nde_filter: &'a nde::Filter,
 ) -> (
     iced::Element<'a, message::Message>,
-    Result<NdeResult<'a, 'b>, NdeError>,
+    Result<NdeResult<'a, 'a>, NdeError>,
 ) {
     // Before doing much of anything else, we need to run the NDE filter —
     // not to get the output events, but for the intermediate state,
     // which lets us determine what style to draw nodes in, as well as provide
     // precise information of what types sockets contain
-    let context = global_state.compile_context(Some(active_event));
+    let context = subtitle::compile::context!(global_state, Some(active_event));
     let nde_result_or_error = subtitle::compile::nde(&nde_filter.graph, &context);
 
     // Create the (empty) node graph
@@ -251,7 +251,13 @@ fn view_filter<'a, 'b>(
 
     // Create `node_editor` nodes with sockets for each of the nodes in the filter,
     // and append them to the content
-    create_nodes(&mut graph, nde_filter_id, nde_filter, &nde_result_or_error);
+    create_nodes(
+        global_state,
+        &mut graph,
+        nde_filter_id,
+        nde_filter,
+        &nde_result_or_error,
+    );
     create_connections(&mut graph, nde_filter, &nde_result_or_error);
 
     (view_graph(nde_filter_id, graph), nde_result_or_error)
@@ -323,10 +329,11 @@ fn create_graph(
     Box::new(graph)
 }
 
-fn create_nodes(
-    graph: &mut NodeGraph,
+fn create_nodes<'a>(
+    global_state: &'a crate::Samaku,
+    graph: &mut NodeGraph<'a>,
     nde_filter_id: subtitle::ExtradataId,
-    nde_filter: &nde::Filter,
+    nde_filter: &'a nde::Filter,
     nde_result_or_error: &Result<NdeResult, NdeError>,
 ) {
     // Convert NDE graph nodes into `iced_node_editor` nodes
@@ -385,8 +392,12 @@ fn create_nodes(
         );
         let node_element: iced::Element<'_, message::Message> = iced::widget::column![
             title_bar,
-            iced::widget::container(visual_node.node.content(nde_filter_id, node_id))
-                .padding([10, 12]),
+            iced::widget::container(
+                visual_node
+                    .node
+                    .content(global_state, nde_filter_id, node_id)
+            )
+            .padding([10, 12]),
             iced::widget::container(pin_list).padding([10, 12])
         ]
         .width(200.0)

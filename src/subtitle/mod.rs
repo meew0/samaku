@@ -1432,6 +1432,7 @@ mod tests {
             },
             source_event: None,
             styles: &style_list,
+            motion_tracks: None,
             playback_resolution: Resolution::FULL_HD,
             layout_resolution: Resolution::FULL_HD,
         };
@@ -1469,6 +1470,7 @@ mod tests {
             },
             source_event: None,
             styles: &style_list,
+            motion_tracks: None,
             playback_resolution: Resolution::FULL_HD,
             layout_resolution: Resolution::FULL_HD,
         };

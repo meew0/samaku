@@ -212,7 +212,7 @@ fn view_video<'a>(
             y: 0,
         }]
     } else {
-        let context = global_state.compile_context(None);
+        let context = subtitle::compile::context!(global_state, None);
         render_subtitles(
             &global_state.subtitles,
             context,

@@ -296,12 +296,9 @@ fn update_internal(
         }
         Message::ExportSubtitleFile => {
             let mut data = String::new();
-            subtitle::emit(
-                &mut data,
-                &global_state.subtitles,
-                Some(global_state.compile_context(None)),
-            )
-            .expect("subtitle::emit() failed"); // should never happen
+            let context = subtitle::compile::context!(global_state, None);
+            subtitle::emit(&mut data, &global_state.subtitles, Some(context))
+                .expect("subtitle::emit() failed"); // should never happen
 
             if global_state.video_metadata.is_none() {
                 global_state.toasts.push(model::toast::Toast::message(
@@ -1229,8 +1226,7 @@ fn update_internal(
         }
         Message::ActivateNodes(filter_id, nodes) => {
             if nodes.len() == 1 {
-                let frame_rate = global_state.frame_rate();
-                let layout_resolution = global_state.effective_layout_resolution();
+                let mut context = subtitle::compile::context!(global_state, None);
 
                 let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
                 let node_id = nodes[0];
@@ -1239,15 +1235,8 @@ fn update_internal(
                     .subtitles
                     .events
                     .active_event(&global_state.selected_events);
-                // We need to construct this manually since we mutably borrow `global_state` above
-                // TODO: refactor this to be more ergonomic?
-                let context = subtitle::compile::Context {
-                    frame_rate,
-                    source_event: active_event,
-                    styles: &global_state.subtitles.styles,
-                    playback_resolution: global_state.subtitles.script_info.playback_resolution,
-                    layout_resolution,
-                };
+                context.source_event = active_event;
+
                 let reticule_list = node.node.reticule_activate(&context);
 
                 global_state.reticules = if reticule_list.is_empty() {
@@ -1299,22 +1288,13 @@ fn update_internal(
             });
             if is_reticule_source {
                 let new_list = {
-                    let frame_rate = global_state.frame_rate();
-                    let layout_resolution = global_state.effective_layout_resolution();
-
+                    let mut context = subtitle::compile::context!(global_state, None);
                     let filter = global_state.subtitles.extradata[filter_index].assert_filter_mut();
                     let active_event = global_state
                         .subtitles
                         .events
                         .active_event(&global_state.selected_events);
-                    // We need to construct this manually since we mutably borrow `global_state` above
-                    let context = subtitle::compile::Context {
-                        frame_rate,
-                        source_event: active_event,
-                        styles: &global_state.subtitles.styles,
-                        playback_resolution: global_state.subtitles.script_info.playback_resolution,
-                        layout_resolution,
-                    };
+                    context.source_event = active_event;
                     filter.graph.nodes[node_index.0]
                         .node
                         .reticule_activate(&context)

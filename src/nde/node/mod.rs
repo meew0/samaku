@@ -240,7 +240,8 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
     fn content<'a>(
-        &self,
+        &'a self,
+        global_state: &'a crate::Samaku,
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {

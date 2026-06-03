@@ -93,7 +93,8 @@ impl Node for InputPosition {
     }
 
     fn content<'a>(
-        &self,
+        &'a self,
+        _global_state: &'a crate::Samaku,
         _filter_index: subtitle::ExtradataId,
         _self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
@@ -203,7 +204,8 @@ impl Node for InputTags {
     }
 
     fn content<'a>(
-        &self,
+        &'a self,
+        _global_state: &'a crate::Samaku,
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {

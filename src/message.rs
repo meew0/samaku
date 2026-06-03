@@ -399,8 +399,8 @@ pub enum Pane {
 /// Messages dispatched to nodes.
 #[derive(Debug, Clone)]
 pub enum Node {
-    /// A new marker is available for the currently running motion track.
-    MotionTrackUpdate(model::FrameNumber, media::motion::Region),
+    /// A motion track has been selected.
+    MotionTrackSelect(media::motion::TrackId),
 
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),

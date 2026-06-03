@@ -120,6 +120,11 @@ impl Track {
             self.first_frame = frame_number;
         }
     }
+
+    #[must_use]
+    pub fn count(&self) -> usize {
+        self.markers.len()
+    }
 }
 
 impl model::Named for Track {

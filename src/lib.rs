@@ -565,20 +565,6 @@ impl Samaku {
         }
     }
 
-    /// Create a context for compilation.
-    pub fn compile_context<'a>(
-        &'a self,
-        source_event: Option<&'a subtitle::Event<'static>>,
-    ) -> subtitle::compile::Context<'a> {
-        subtitle::compile::Context {
-            frame_rate: self.frame_rate(),
-            source_event,
-            styles: &self.subtitles.styles,
-            playback_resolution: self.subtitles.script_info.playback_resolution,
-            layout_resolution: self.effective_layout_resolution(),
-        }
-    }
-
     /// Get the best guess for the number of the currently displayed frame. Returns `None` if no
     /// video is loaded.
     pub fn current_frame(&self) -> Option<model::FrameNumber> {
