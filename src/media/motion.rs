@@ -125,6 +125,24 @@ impl Track {
     pub fn count(&self) -> usize {
         self.markers.len()
     }
+
+    #[must_use]
+    #[inline]
+    pub fn first_frame(&self) -> model::FrameNumber {
+        self.first_frame
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn last_frame(&self) -> model::FrameNumber {
+        self.last_frame
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (model::FrameNumber, &Marker)> {
+        self.markers
+            .iter()
+            .map(|(&frame_number, marker)| (frame_number, marker))
+    }
 }
 
 impl model::Named for Track {

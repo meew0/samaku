@@ -1367,17 +1367,14 @@ impl canvas::Program<message::Message> for MotionTrackProgram<'_> {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
+
         for &(track_id, track) in &self.tracks {
+            draw_base_layer(&mut frame, track, self.frame, bounds, self.storage_size);
+
             let selected = self.selected_tracks.contains(track_id);
 
             if let Some(marker) = track.get_marker(self.frame) {
-                draw_marker(
-                    &mut frame,
-                    selected,
-                    marker,
-                    bounds.size(),
-                    self.storage_size,
-                );
+                draw_marker(&mut frame, selected, marker, bounds, self.storage_size);
             }
         }
 
@@ -1691,31 +1688,33 @@ fn draw_marker(
     frame: &mut canvas::Frame,
     selected: bool,
     marker: &motion::Marker,
-    bounds: iced::Size,
+    bounds: iced::Rectangle,
     storage_size: subtitle::Resolution,
 ) {
+    let bounds_size = bounds.size();
+
     // Search area: dashed outline, only shown when the marker is selected.
     if selected {
         let sa = &marker.search_area;
         let sa_path = canvas::Path::new(|path| {
             path.move_to(view::frame_coordinates_to_iced(
                 sa.origin,
-                bounds,
+                bounds_size,
                 storage_size,
             ));
             path.line_to(view::frame_coordinates_to_iced(
                 sa.origin + DVec2::new(sa.size.x, 0.0),
-                bounds,
+                bounds_size,
                 storage_size,
             ));
             path.line_to(view::frame_coordinates_to_iced(
                 sa.origin + sa.size,
-                bounds,
+                bounds_size,
                 storage_size,
             ));
             path.line_to(view::frame_coordinates_to_iced(
                 sa.origin + DVec2::new(0.0, sa.size.y),
-                bounds,
+                bounds_size,
                 storage_size,
             ));
             path.close();
@@ -1742,10 +1741,10 @@ fn draw_marker(
     }
 
     // Marker quad.
-    let tl = view::frame_coordinates_to_iced(marker.region.top_left, bounds, storage_size);
-    let tr = view::frame_coordinates_to_iced(marker.region.top_right, bounds, storage_size);
-    let br = view::frame_coordinates_to_iced(marker.region.bottom_right, bounds, storage_size);
-    let bl = view::frame_coordinates_to_iced(marker.region.bottom_left, bounds, storage_size);
+    let tl = view::frame_coordinates_to_iced(marker.region.top_left, bounds_size, storage_size);
+    let tr = view::frame_coordinates_to_iced(marker.region.top_right, bounds_size, storage_size);
+    let br = view::frame_coordinates_to_iced(marker.region.bottom_right, bounds_size, storage_size);
+    let bl = view::frame_coordinates_to_iced(marker.region.bottom_left, bounds_size, storage_size);
 
     let quad = canvas::Path::new(|path| {
         path.move_to(tl);
@@ -1775,7 +1774,7 @@ fn draw_marker(
     );
 
     // Center crosshair: green for Key frames, white/yellow for tracked frames.
-    let center = view::frame_coordinates_to_iced(marker.region.center, bounds, storage_size);
+    let center = view::frame_coordinates_to_iced(marker.region.center, bounds_size, storage_size);
     draw_marker_center(frame, center, marker.key_state, selected);
 }
 
@@ -1821,4 +1820,60 @@ fn draw_marker_center(
             .with_color(line_color)
             .with_width(1.0),
     );
+}
+
+fn draw_base_layer(
+    canvas_frame: &mut canvas::Frame,
+    track: &motion::Track,
+    current_frame: model::FrameNumber,
+    bounds: iced::Rectangle,
+    storage_size: subtitle::Resolution,
+) {
+    let bounds_size = bounds.size();
+
+    // should always be the case
+    if track.count() > 0 {
+        for (frame_number, marker) in track.iter() {
+            let iced_point =
+                view::frame_coordinates_to_iced(marker.region.center, bounds_size, storage_size);
+
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "frame numbers should not be negative"
+            )]
+            let (red, green, blue) = colorous::VIRIDIS
+                .eval_rational(
+                    (frame_number.0 - track.first_frame().0) as usize,
+                    (track.last_frame().0 - track.first_frame().0) as usize + 1_usize,
+                )
+                .as_tuple();
+            let iced_color = iced::Color::from_rgb8(red, green, blue);
+
+            let circle = canvas::Path::circle(iced_point, 3.0_f32);
+
+            if current_frame == frame_number {
+                // Highlight the current frame with another yellow-orange border.
+                canvas_frame.stroke(
+                    &circle,
+                    canvas::Stroke::default()
+                        .with_color(iced::Color::WHITE)
+                        .with_width(9.0_f32),
+                );
+                canvas_frame.stroke(
+                    &circle,
+                    canvas::Stroke::default()
+                        .with_color(style::SAMAKU_PRIMARY)
+                        .with_width(6.0_f32),
+                );
+            }
+
+            canvas_frame.stroke(
+                &circle,
+                canvas::Stroke::default()
+                    .with_color(iced::Color::WHITE)
+                    .with_width(3.0_f32),
+            );
+            canvas_frame.fill(&circle, iced_color);
+        }
+    }
 }
