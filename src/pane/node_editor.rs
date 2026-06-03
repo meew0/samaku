@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::sync::LazyLock;
 
@@ -222,6 +222,7 @@ type NodeGraph<'a> = iced_nodegraph::NodeGraph<
     'a,
     NodeId,
     PinId,
+    PinStyleValues,
     usize,
     message::Message,
     iced::Theme,
@@ -344,7 +345,6 @@ fn create_nodes(
         // and create rows containing appropriately-styled sockets.
         let mut socket_rows: Vec<iced::Element<'_, message::Message>> =
             Vec::with_capacity(socket_row_count);
-        let mut pin_style_lookup = HashMap::new();
         for row_num in 0..socket_row_count {
             let socket_id = SocketId(row_num);
             let (in_socket, out_socket) =
@@ -361,7 +361,7 @@ fn create_nodes(
                     unreachable!();
                 };
 
-            let row = make_pin_row(socket_id, in_socket, out_socket, &mut pin_style_lookup);
+            let row = make_pin_row(socket_id, in_socket, out_socket);
             socket_rows.push(row);
         }
 
@@ -378,7 +378,6 @@ fn create_nodes(
             title,
             content_style.title_background,
             content_style.corner_radius,
-            content_style.border_width,
         );
         let node_element: iced::Element<'_, message::Message> = iced::widget::column![
             title_bar,
@@ -408,19 +407,20 @@ fn create_nodes(
                     iced_nodegraph::default_node_style(theme, status)
                         .border_outline_color(node_outline_color)
                         .border_outline_width(node_outline_width)
-                        .resolve(&iced_nodegraph::NodeStyle::from_theme(theme))
+                        .resolve()
                 })
-                .pin_style(move |theme, pin_info, status| {
-                    if let Some(style_values) = pin_style_lookup.get(pin_info.pin_id()) {
+                .pin_style(
+                    move |theme,
+                          pin_info: &iced_nodegraph::PinInfo<PinId, PinStyleValues>,
+                          _other_pin_info,
+                          status| {
                         iced_nodegraph::default_pin_style(theme, status)
-                            .color(style_values.color)
-                            .shape(style_values.shape)
+                            .color(pin_info.info().color)
+                            .shape(pin_info.info().shape)
                             .radius(12.0)
-                            .resolve(&iced_nodegraph::PinStyle::from_theme(theme))
-                    } else {
-                        iced_nodegraph::resolved_pin_style(theme, status)
-                    }
-                }),
+                            .resolve()
+                    },
+                ),
         );
     }
 }
@@ -536,7 +536,7 @@ fn create_connections(
                 iced_nodegraph::default_edge_style(theme, status)
                     .border_outline_color(outline_color)
                     .border_outline_width(outline_width)
-                    .resolve(&iced_nodegraph::EdgeStyle::from_theme(theme))
+                    .resolve()
             }),
         );
     }
@@ -766,11 +766,10 @@ fn make_pin<'a>(
     role: &SocketRole,
     socket_id: SocketId,
     socket_type: nde::node::SocketType,
-    pin_style_lookup: &mut HashMap<PinId, PinStyleValues>,
-) -> iced_nodegraph::NodePin<'a, PinId, message::Message, iced::Theme, iced::Renderer> {
+) -> iced_nodegraph::NodePin<'a, PinId, PinStyleValues, message::Message, iced::Theme, iced::Renderer>
+{
     let (style_values, label) = pin_properties(socket_type);
     let pin_id = (role.pin_id_func)(socket_id);
-    pin_style_lookup.insert(pin_id, style_values);
 
     iced_nodegraph::node_pin(
         role.side,
@@ -780,18 +779,18 @@ fn make_pin<'a>(
         }),
     )
     .direction(role.direction)
+    .info(style_values)
 }
 
 fn make_pin_row<'a>(
     socket_id: SocketId,
     in_socket: Option<nde::node::SocketType>,
     out_socket: Option<nde::node::SocketType>,
-    pin_style_lookup: &mut HashMap<PinId, PinStyleValues>,
 ) -> iced::Element<'a, message::Message> {
-    let in_pin_option = in_socket
-        .map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type, pin_style_lookup));
-    let out_pin_option = out_socket
-        .map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type, pin_style_lookup));
+    let in_pin_option =
+        in_socket.map(|socket_type| make_pin(&SocketRole::IN, socket_id, socket_type));
+    let out_pin_option =
+        out_socket.map(|socket_type| make_pin(&SocketRole::OUT, socket_id, socket_type));
 
     if let Some(in_pin) = in_pin_option {
         if let Some(out_pin) = out_pin_option {
@@ -867,6 +866,7 @@ fn pin_properties(socket_type: nde::node::SocketType) -> (PinStyleValues, &'stat
     (PinStyleValues { shape, color }, label)
 }
 
+#[derive(Debug, Clone)]
 struct PinStyleValues {
     shape: iced_nodegraph::PinShape,
     color: iced::Color,
