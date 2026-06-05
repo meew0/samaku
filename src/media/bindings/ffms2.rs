@@ -3,7 +3,7 @@
     reason = "implements more of what ffms2 does for now than is currently used in samaku"
 )]
 
-use crate::model;
+use crate::{model, subtitle};
 use ffms2_sys as ffms2;
 use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
@@ -537,6 +537,16 @@ pub struct FrameRate {
 }
 
 impl FrameRate {
+    pub const F24: FrameRate = FrameRate {
+        numerator: 24,
+        denominator: 1,
+    };
+
+    pub const F23_976: FrameRate = FrameRate {
+        numerator: 24000,
+        denominator: 1001,
+    };
+
     /// Get the number of the closest frame before the given time point in milliseconds.
     ///
     /// # Panics
@@ -560,6 +570,29 @@ impl FrameRate {
         )
     }
 
+    /// Get the number of the closest frame *after* the given time point in milliseconds.
+    ///
+    /// # Panics
+    /// Panics if the resulting frame number would not fit into an `i32`.
+    #[must_use]
+    pub(crate) fn ms_to_frame_after(&self, ass_ms: i64) -> model::FrameNumber {
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "denominator is guaranteed to be smaller than i64 max"
+        )]
+        let denominator = 1000 * self.denominator as i64;
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "numerator is guaranteed to be smaller than i64 max"
+        )]
+        let numerator = (ass_ms * self.numerator as i64) + denominator - 1;
+        model::FrameNumber(
+            (numerator / denominator)
+                .try_into()
+                .expect("overflow while converting time to frame number"),
+        )
+    }
+
     #[must_use]
     pub(crate) fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
         #[expect(
@@ -573,6 +606,21 @@ impl FrameRate {
         )]
         let result = inv_numerator / self.numerator as i64;
         result
+    }
+
+    pub(crate) fn ass_time_to_frame(&self, ass_time: subtitle::StartTime) -> model::FrameNumber {
+        self.ms_to_frame(ass_time.0)
+    }
+
+    pub(crate) fn ass_time_to_frame_after(
+        &self,
+        ass_time: subtitle::StartTime,
+    ) -> model::FrameNumber {
+        self.ms_to_frame_after(ass_time.0)
+    }
+
+    pub(crate) fn frame_to_ass_time(&self, frame: model::FrameNumber) -> subtitle::StartTime {
+        subtitle::StartTime(self.frame_to_ms(frame))
     }
 
     #[must_use]

@@ -117,7 +117,7 @@ impl InputQuad {
 
     fn calculate_alpha(&self, context: &Context) -> Option<f64> {
         let active_event = context.source_event?;
-        let nde_event = nde::Event::from_ass_event(active_event);
+        let nde_event = nde::Event::from_ass_event(active_event, context.frame_rate);
         let style = context.get_event_style(&nde_event);
         let bounding_box = nde::util::measure(&nde_event, style);
         let original_scale = nde_event.effective_font_scale(style);

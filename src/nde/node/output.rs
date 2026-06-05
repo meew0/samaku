@@ -1,5 +1,3 @@
-use crate::nde;
-
 use super::{Context, Node, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -26,9 +24,10 @@ impl Node for Output {
     fn run(
         &'_ self,
         inputs: &[&SocketValue],
-        _context: &Context,
+        context: &Context,
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        let compiled = inputs[0].map_events_into(nde::Event::to_ass_event)?;
+        let compiled =
+            inputs[0].map_events_into(|nde_event| nde_event.to_ass_event(context.frame_rate))?;
         Ok(vec![SocketValue::CompiledEvents(compiled)])
     }
 }

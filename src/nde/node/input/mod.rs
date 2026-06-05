@@ -38,18 +38,7 @@ impl Node for InputEvent {
             return Err(BasicError::MissingInput.into());
         };
 
-        let (global, spans) = nde::tags::parse(&source_event.text);
-
-        let event = nde::Event {
-            start: source_event.start,
-            duration: source_event.duration,
-            layer_index: source_event.layer_index,
-            style_index: source_event.style_index,
-            margins: source_event.margins,
-            global_tags: *global,
-            overrides: nde::tags::Local::empty(),
-            text: spans,
-        };
+        let event = nde::Event::from_ass_event(source_event, context.frame_rate);
         Ok(vec![SocketValue::IndividualEvent(Box::new(event))])
     }
 }

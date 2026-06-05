@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::nde::tags::{FontSize, FontWeight, Resettable};
-use crate::{model, subtitle};
+use crate::{media, model, subtitle};
 pub use graph::Graph;
 pub use node::Node;
 
@@ -30,8 +30,8 @@ impl model::Named for Filter {
 /// in parsed form, i.e. as global tags and a vector of tag/content spans.
 #[derive(Debug, Clone)]
 pub struct Event {
-    pub start: subtitle::StartTime,
-    pub duration: subtitle::Duration,
+    pub start: model::FrameNumber,
+    pub duration: model::FrameDelta,
     pub layer_index: i32,
     pub style_index: usize,
     pub margins: subtitle::Margins,
@@ -51,12 +51,16 @@ pub struct Event {
 
 impl Event {
     #[must_use]
-    pub fn from_ass_event(ass_event: &subtitle::Event) -> Self {
+    pub fn from_ass_event(ass_event: &subtitle::Event, frame_rate: media::FrameRate) -> Self {
         let (global, spans) = tags::parse(&ass_event.text);
 
+        let start_frame = frame_rate.ass_time_to_frame(ass_event.start);
+        let end_frame = frame_rate.ass_time_to_frame_after(ass_event.start + ass_event.duration);
+        let frame_count = end_frame - start_frame;
+
         Self {
-            start: ass_event.start,
-            duration: ass_event.duration,
+            start: start_frame,
+            duration: frame_count,
             layer_index: ass_event.layer_index,
             style_index: ass_event.style_index,
             margins: ass_event.margins,
@@ -67,7 +71,7 @@ impl Event {
     }
 
     #[must_use]
-    pub fn to_ass_event(&self) -> subtitle::Event<'static> {
+    pub fn to_ass_event(&self, frame_rate: media::FrameRate) -> subtitle::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
@@ -89,9 +93,12 @@ impl Event {
 
         let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
+        let start = frame_rate.frame_to_ass_time(self.start);
+        let duration = frame_rate.frame_to_ass_time(self.start + self.duration) - start;
+
         subtitle::Event {
-            start: self.start,
-            duration: self.duration,
+            start,
+            duration,
             layer_index: self.layer_index,
             style_index: self.style_index,
             margins: self.margins,
@@ -104,16 +111,11 @@ impl Event {
     }
 
     #[must_use]
-    pub fn make_static(
-        &self,
-        time_point: subtitle::StartTime,
-        static_duration: subtitle::Duration,
-    ) -> Event {
+    pub fn make_static(&self, start: model::FrameNumber, duration: model::FrameDelta) -> Event {
         // TODO: take care of animations and the like
         Event {
-            start: time_point,
-            duration: static_duration,
-
+            start,
+            duration,
             layer_index: self.layer_index,
             style_index: self.style_index,
             margins: self.margins,

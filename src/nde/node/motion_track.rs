@@ -29,8 +29,6 @@ impl Node for MotionTrack {
         context: &Context,
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
         super::retrieve!(inputs[0], &SocketValue::MultipleEvents(ref events));
-        let frame_rate = context.frame_rate;
-
         let mut new_events: Vec<nde::Event> = vec![];
 
         let Some(track_id) = self.track_id else {
@@ -45,8 +43,7 @@ impl Node for MotionTrack {
 
         for event in events {
             let mut cloned = event.clone();
-            let frame = frame_rate.ms_to_frame(cloned.start.0);
-            if let Some(marker) = track.get_marker(frame) {
+            if let Some(marker) = track.get_marker(cloned.start) {
                 cloned.global_tags.position =
                     Some(nde::tags::PositionOrMove::Position(marker.region.center));
             }
@@ -123,6 +120,8 @@ inventory::submit! {
     Shell::new(
         &["Motion track"],
         || Box::new(MotionTrack {
-        track_id: None,blend_box_state: view::widget::blend_box::State::default(),})
+            track_id: None,
+            blend_box_state: view::widget::blend_box::State::default(),
+        })
     )
 }

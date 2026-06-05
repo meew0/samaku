@@ -1,4 +1,4 @@
-use crate::{model, nde, subtitle};
+use crate::{model, nde};
 
 use super::{Context, Node, Shell, SocketType, SocketValue};
 
@@ -22,29 +22,19 @@ impl Node for SplitFrameByFrame {
     fn run(
         &'_ self,
         inputs: &[&SocketValue],
-        context: &Context,
+        _context: &Context,
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
+        const ONE: model::FrameDelta = model::FrameDelta(1);
+
         super::retrieve!(inputs[0], &SocketValue::IndividualEvent(ref event));
-        let frame_rate = context.frame_rate;
 
         let mut res: Vec<nde::Event> = vec![];
-        let mut frame = frame_rate.ms_to_frame(event.start.0);
-        let end = event.start.0 + event.duration.0;
-        let static_duration = subtitle::Duration(frame_rate.frame_time_ms());
+        let mut frame = event.start;
+        let end = event.start + event.duration;
 
-        loop {
-            let static_start = frame_rate.frame_to_ms(frame);
-
-            if static_start < event.start.0 {
-                continue;
-            }
-            if static_start > end {
-                break;
-            }
-
-            res.push(event.make_static(subtitle::StartTime(static_start), static_duration));
-
-            frame += model::FrameDelta(1);
+        while frame < end {
+            res.push(event.make_static(frame, ONE));
+            frame += ONE;
         }
 
         Ok(vec![SocketValue::MultipleEvents(res)])

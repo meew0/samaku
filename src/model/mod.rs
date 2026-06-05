@@ -60,6 +60,14 @@ impl SubAssign<FrameDelta> for FrameNumber {
     }
 }
 
+impl Sub<FrameNumber> for FrameNumber {
+    type Output = FrameDelta;
+
+    fn sub(self, rhs: FrameNumber) -> Self::Output {
+        FrameDelta(self.0 - rhs.0)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub enum CancellationState {
     #[default]
