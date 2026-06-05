@@ -960,3 +960,81 @@ impl InternalError {
         &raw mut self.error_info
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_timing_24() {
+        let frame_rate = FrameRate::F24;
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
+            model::FrameNumber(0)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
+            model::FrameNumber(0)
+        );
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
+            model::FrameNumber(0)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
+            model::FrameNumber(1)
+        );
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(999)),
+            model::FrameNumber(23)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(999)),
+            model::FrameNumber(24)
+        );
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
+            model::FrameNumber(24)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
+            model::FrameNumber(24)
+        );
+    }
+
+    #[test]
+    fn frame_timing_23_976() {
+        let frame_rate = FrameRate::F23_976;
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
+            model::FrameNumber(0)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
+            model::FrameNumber(0)
+        );
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
+            model::FrameNumber(0)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
+            model::FrameNumber(1)
+        );
+
+        assert_eq!(
+            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
+            model::FrameNumber(23)
+        );
+        assert_eq!(
+            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
+            model::FrameNumber(24)
+        );
+    }
+}

@@ -30,7 +30,12 @@ impl model::Named for Filter {
 /// in parsed form, i.e. as global tags and a vector of tag/content spans.
 #[derive(Debug, Clone)]
 pub struct Event {
+    /// The first frame on which this event should be displayed.
     pub start: model::FrameNumber,
+
+    /// The number of frames that this event should be displayed for.
+    /// The frame `start + duration` will be the first frame on which this event
+    /// will not be displayed anymore.
     pub duration: model::FrameDelta,
     pub layer_index: i32,
     pub style_index: usize,
