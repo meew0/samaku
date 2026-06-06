@@ -83,7 +83,7 @@ pub enum TimeMode {
     EndInclusive,
 }
 
-/// Errors that can arise while building a [`Framerate`] from timecodes.
+/// Errors that can arise while building a [`Rate`] from timecodes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FramerateError {
     /// Fewer than two timecodes were supplied.
@@ -176,7 +176,7 @@ const MAX_EPS: i64 = 8;
 /// The interface is inspired by Aegisub's `agi::vfr::Framerate`, although the
 /// implementation is more or less custom.
 #[derive(Clone, Debug)]
-pub struct Framerate {
+pub struct Rate {
     /// Exact start time, in milliseconds, of every frame.
     timecodes: Vec<i64>,
 
@@ -193,7 +193,7 @@ pub struct Framerate {
 
 const DEFAULT_DENOMINATOR: i64 = 1_000_000_000;
 
-impl Framerate {
+impl Rate {
     /// Build a framerate from a `Vec` of per-frame start times in
     /// milliseconds. Frame 0 is shifted to time 0 (matching Aegisub's
     /// `normalize_timecodes`). The input must be monotonically non-decreasing
@@ -240,7 +240,7 @@ impl Framerate {
 
         let segments = Self::build_segments(&timecodes);
 
-        Ok(Framerate {
+        Ok(Rate {
             timecodes,
             segments,
             numerator,
@@ -430,7 +430,7 @@ impl Framerate {
             eps: 0,
         }];
 
-        Ok(Framerate {
+        Ok(Rate {
             timecodes,
             segments,
             numerator,
@@ -447,7 +447,7 @@ impl Framerate {
         #[expect(clippy::cast_precision_loss, reason = "unavoidable")]
         #[expect(clippy::cast_possible_truncation, reason = "unavoidable")]
         let numerator = (fps * denominator as f64) as i64;
-        Framerate::cfr(numerator, denominator)
+        Rate::cfr(numerator, denominator)
     }
 
     /// 24 frames per second.
@@ -675,7 +675,7 @@ impl Framerate {
 }
 
 struct FrameIterator<'a> {
-    frame_rate: &'a Framerate,
+    frame_rate: &'a Rate,
     current: Number,
 }
 
@@ -768,7 +768,7 @@ mod tests {
 
     #[test]
     fn frame_timing_24() {
-        let frame_rate = Framerate::f24();
+        let frame_rate = Rate::f24();
 
         // Equivalent behavior to the old CFR-only `FrameRate`:
         // `ass_time_to_frame` ^= `frame_at_time(..., Exact)`
@@ -812,7 +812,7 @@ mod tests {
 
     #[test]
     fn frame_timing_23_976() {
-        let frame_rate = Framerate::cfr(24000, 1001).unwrap();
+        let frame_rate = Rate::cfr(24000, 1001).unwrap();
 
         assert_eq!(
             frame_rate.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
@@ -845,15 +845,15 @@ mod tests {
     #[test]
     fn rejects_degenerate_input() {
         assert_eq!(
-            Framerate::from_timecodes(vec![5_i64]).unwrap_err(),
+            Rate::from_timecodes(vec![5_i64]).unwrap_err(),
             FramerateError::TooFewTimecodes
         );
         assert_eq!(
-            Framerate::from_timecodes(vec![0_i64, 100, 50]).unwrap_err(),
+            Rate::from_timecodes(vec![0_i64, 100, 50]).unwrap_err(),
             FramerateError::NotSorted
         );
         assert_eq!(
-            Framerate::from_timecodes(vec![10_i64, 10, 10]).unwrap_err(),
+            Rate::from_timecodes(vec![10_i64, 10, 10]).unwrap_err(),
             FramerateError::AllIdentical
         );
     }
@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn normalizes_to_zero() {
         // A table that doesn't start at 0 should be shifted.
-        let fr = Framerate::from_timecodes(vec![100_i64, 142, 184, 226]).unwrap();
+        let fr = Rate::from_timecodes(vec![100_i64, 142, 184, 226]).unwrap();
         assert_eq!(
             fr.time_at_frame(Number(0), TimeMode::Exact),
             subtitle::StartTime(0)
@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn exact_roundtrip_cfr_24fps() {
         let timecodes = cfr_timecodes(24000.0 / 1001.0, 5000);
-        let framerate = Framerate::from_timecodes_iter(timecodes.iter().copied()).unwrap();
+        let framerate = Rate::from_timecodes_iter(timecodes.iter().copied()).unwrap();
 
         // Frame -> time -> frame must be the identity for every in-range frame.
         for (frame_index, timecode) in timecodes.iter().enumerate() {
@@ -893,7 +893,7 @@ mod tests {
     #[test]
     fn agrees_with_binary_search_cfr() {
         let tc = cfr_timecodes(24000.0 / 1001.0, 3000);
-        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
+        let fr = Rate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
 
@@ -915,7 +915,7 @@ mod tests {
             (24000.0 / 1001.0, 1200),
             (60000.0 / 1001.0, 300),
         ]);
-        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
+        let fr = Rate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
 
@@ -942,7 +942,7 @@ mod tests {
         //   START: frame 0 = [-999, 0]
         //   END:   frame 0 = [1, 1000]
         let tc: Vec<i64> = (0..10).map(|frame| frame * 1000).collect();
-        let fr = Framerate::from_timecodes(tc).unwrap();
+        let fr = Rate::from_timecodes(tc).unwrap();
 
         // EXACT
         assert_eq!(
@@ -998,7 +998,7 @@ mod tests {
         // against the reference EXACT on VFR data.
         let tc = vfr_timecodes(&[(24000.0 / 1001.0, 400), (30000.0 / 1001.0, 400)]);
         let last = *tc.last().unwrap();
-        let fr = Framerate::from_timecodes(tc).unwrap();
+        let fr = Rate::from_timecodes(tc).unwrap();
         for ms in -500..=(last + 500) {
             let exact_prev = fr.frame_at_time(subtitle::StartTime(ms - 1), TimeMode::Exact);
             let time = subtitle::StartTime(ms);
@@ -1015,7 +1015,7 @@ mod tests {
         // With clean 1 FPS data, START time of a frame is the midpoint rounding
         // between prev and cur exact times; END between cur and next.
         let tc: Vec<i64> = (0..5).map(|frame| frame * 1000).collect();
-        let fr = Framerate::from_timecodes(tc).unwrap();
+        let fr = Rate::from_timecodes(tc).unwrap();
         // Exact times are 0,1000,2000,3000,4000.
         // START of frame 2: prev=1000, cur=2000 -> 1000 + (1000+1)/2 = 1500.
         let frame = Number(2);
@@ -1035,7 +1035,7 @@ mod tests {
         // Aegisub guarantees: TimeAtFrame outside the range is monotonic and
         // round-trips through FrameAtTime back to the original frame.
         let tc = cfr_timecodes(24000.0 / 1001.0, 200);
-        let fr = Framerate::from_timecodes(tc).unwrap();
+        let fr = Rate::from_timecodes(tc).unwrap();
         let n = fr.len() as i32;
 
         let mut prev_t = subtitle::StartTime(i64::MIN);
@@ -1072,7 +1072,7 @@ mod tests {
         // frames). The lookup must still return *a* valid frame and the
         // builder must not panic.
         let tc = vec![0_i64, 33, 33, 33, 66, 100, 133];
-        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
+        let fr = Rate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
         for ms in -50..=200 {
@@ -1094,7 +1094,7 @@ mod tests {
             (24000.0 / 1001.0, 40_000),
         ];
         let tc = vfr_timecodes(&runs);
-        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
+        let fr = Rate::from_timecodes_iter(tc.iter().copied()).unwrap();
         assert_eq!(fr.len(), 100_000);
         assert!(
             fr.segment_count() <= 6,
@@ -1122,7 +1122,7 @@ mod tests {
     fn segment_model_actually_compresses() {
         // Pure CFR is a single line: ideally one segment for the whole table.
         let tc = cfr_timecodes(24000.0 / 1001.0, 10000);
-        let fr = Framerate::from_timecodes(tc).unwrap();
+        let fr = Rate::from_timecodes(tc).unwrap();
         // Round-off in CFR timecodes (the +0.5 rounding) introduces a bounded
         // sawtooth, so we may get a few segments, but it must be tiny relative
         // to the 10k frames.
@@ -1136,27 +1136,27 @@ mod tests {
     #[test]
     fn cfr_rejects_bad_timebase() {
         assert_eq!(
-            Framerate::cfr(0, 1).unwrap_err(),
+            Rate::cfr(0, 1).unwrap_err(),
             FramerateError::InvalidTimebase
         );
         assert_eq!(
-            Framerate::cfr(24, 0).unwrap_err(),
+            Rate::cfr(24, 0).unwrap_err(),
             FramerateError::InvalidTimebase
         );
         assert_eq!(
-            Framerate::cfr(-24, 1).unwrap_err(),
+            Rate::cfr(-24, 1).unwrap_err(),
             FramerateError::InvalidTimebase
         );
-        Framerate::cfr_fps(f64::NAN).unwrap_err();
-        Framerate::cfr_fps(0.0).unwrap_err();
-        Framerate::cfr_fps(-5.0).unwrap_err();
-        Framerate::cfr_fps(1001.0).unwrap_err();
+        Rate::cfr_fps(f64::NAN).unwrap_err();
+        Rate::cfr_fps(0.0).unwrap_err();
+        Rate::cfr_fps(-5.0).unwrap_err();
+        Rate::cfr_fps(1001.0).unwrap_err();
     }
 
     #[test]
     fn cfr_basic_properties() {
         // 25 fps exactly: numerator 25e9, denominator 1e9.
-        let fr = Framerate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
+        let fr = Rate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
         assert!((fr.fps() - 25.0).abs() < 1e-9);
         assert_eq!(fr.segment_count(), 1);
 
@@ -1198,7 +1198,7 @@ mod tests {
         // Exact integer-ms framerate (1000/25 = 40 ms) round-trips cleanly for a
         // wide frame range, including well past where an i32 ms stamp would have
         // overflowed (frame 6e7 at 40 ms = 2.4e9 ms > i32::MAX).
-        let fr = Framerate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
+        let fr = Rate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
         for &frame_n in &[0_i32, 1, 100, 1_000_000, 60_000_000, 100_000_000] {
             let frame = Number(frame_n);
             let time = fr.time_at_frame(frame, TimeMode::Exact);
@@ -1217,7 +1217,7 @@ mod tests {
     #[test]
     fn cfr_start_end_semantics() {
         // 1 FPS CFR: same interval semantics as the timecode-built 1 FPS case.
-        let fr = Framerate::cfr(DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
+        let fr = Rate::cfr(DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
         assert_eq!(
             fr.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
             Number(0)
@@ -1263,7 +1263,7 @@ mod tests {
         // Verify correct behavior with extremely long videos
         let big = subtitle::StartTime(i64::from(i32::MAX) + 1_000_000); // ~2.148e9 ms
         let tc = [0_i64, big.0 / 2, big.0];
-        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
+        let fr = Rate::from_timecodes_iter(tc.iter().copied()).unwrap();
         // The final timecode must survive storage intact (no i32 truncation).
         assert_eq!(fr.time_at_frame(Number(2), TimeMode::Exact), big);
         // And a lookup at that time returns the final frame.

@@ -2,8 +2,8 @@ pub use audio::Audio;
 pub use audio::Properties as AudioProperties;
 pub use frame::{
     Delta as FrameDelta,
-    Framerate as FrameRate,
     Number as FrameNumber,
+    Rate as FrameRate,
     TimeMode,
     UNLOADED_FRAMERATE,
     util as frame_util, // primarily for test/benchmark purposes
