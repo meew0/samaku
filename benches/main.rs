@@ -1,6 +1,7 @@
 mod event_track;
 mod measure;
 mod nde;
+mod vfr;
 
 use criterion::{criterion_group, criterion_main};
 
@@ -14,4 +15,5 @@ criterion_group!(
     event_track::benchmark_update,
 );
 criterion_group!(measure, measure::benchmark_measure);
-criterion_main!(event_track, measure, nde);
+criterion_group!(vfr, vfr::benchmark_vfr);
+criterion_main!(event_track, measure, nde, vfr);
