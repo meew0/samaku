@@ -3,7 +3,7 @@
     reason = "implements more of what ffms2 does for now than is currently used in samaku"
 )]
 
-use crate::{model, subtitle};
+use crate::model;
 use ffms2_sys as ffms2;
 use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
@@ -444,16 +444,14 @@ impl VideoSource {
         let internal_properties = unsafe { &*video_prop };
 
         VideoProperties {
-            frame_rate: FrameRate {
-                numerator: internal_properties
-                    .FPSNumerator
-                    .try_into()
-                    .expect("negative framerate numerator"),
-                denominator: internal_properties
-                    .FPSDenominator
-                    .try_into()
-                    .expect("negative framerate denominator"),
-            },
+            spec_fps_numerator: internal_properties
+                .FPSNumerator
+                .try_into()
+                .expect("negative framerate numerator"),
+            spec_fps_denominator: internal_properties
+                .FPSDenominator
+                .try_into()
+                .expect("negative framerate denominator"),
             num_frames: internal_properties.NumFrames,
             sar_numerator: internal_properties.SARNum,
             sar_denominator: internal_properties.SARDen,
@@ -521,148 +519,14 @@ impl VideoSource {
 
 #[derive(Debug, Clone)]
 pub(crate) struct VideoProperties {
-    pub frame_rate: FrameRate,
+    pub spec_fps_numerator: u32,
+    pub spec_fps_denominator: u32,
     pub num_frames: i32,
     pub sar_numerator: i32,
     pub sar_denominator: i32,
     pub first_time: f64,
     pub last_time: f64,
     pub last_end_time: f64,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct FrameRate {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl FrameRate {
-    pub const F24: FrameRate = FrameRate {
-        numerator: 24,
-        denominator: 1,
-    };
-
-    pub const F23_976: FrameRate = FrameRate {
-        numerator: 24000,
-        denominator: 1001,
-    };
-
-    /// Get the number of the closest frame before the given time point in milliseconds.
-    ///
-    /// # Panics
-    /// Panics if the resulting frame number would not fit into an `i32`.
-    #[must_use]
-    pub(crate) fn ms_to_frame(&self, ass_ms: i64) -> model::FrameNumber {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let numerator = ass_ms * self.numerator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let denominator = 1000 * self.denominator as i64;
-        model::FrameNumber(
-            (numerator / denominator)
-                .try_into()
-                .expect("overflow while converting time to frame number"),
-        )
-    }
-
-    /// Get the number of the closest frame *after* the given time point in milliseconds.
-    ///
-    /// # Panics
-    /// Panics if the resulting frame number would not fit into an `i32`.
-    #[must_use]
-    pub(crate) fn ms_to_frame_after(&self, ass_ms: i64) -> model::FrameNumber {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let denominator = 1000 * self.denominator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let numerator = (ass_ms * self.numerator as i64) + denominator - 1;
-        model::FrameNumber(
-            (numerator / denominator)
-                .try_into()
-                .expect("overflow while converting time to frame number"),
-        )
-    }
-
-    #[must_use]
-    pub(crate) fn frame_to_ms(&self, frame: model::FrameNumber) -> i64 {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let result = inv_numerator / self.numerator as i64;
-        result
-    }
-
-    pub(crate) fn ass_time_to_frame(&self, ass_time: subtitle::StartTime) -> model::FrameNumber {
-        self.ms_to_frame(ass_time.0)
-    }
-
-    pub(crate) fn ass_time_to_frame_after(
-        &self,
-        ass_time: subtitle::StartTime,
-    ) -> model::FrameNumber {
-        self.ms_to_frame_after(ass_time.0)
-    }
-
-    pub(crate) fn frame_to_ass_time(&self, frame: model::FrameNumber) -> subtitle::StartTime {
-        subtitle::StartTime(self.frame_to_ms(frame))
-    }
-
-    #[must_use]
-    pub(crate) fn frame_time_ms(&self) -> i64 {
-        self.frame_to_ms(model::FrameNumber(1))
-    }
-
-    pub(crate) fn iter_from(
-        &self,
-        frame: model::FrameNumber,
-    ) -> impl Iterator<Item = (model::FrameNumber, i64)> {
-        FrameIterator {
-            frame_rate: self,
-            current: frame,
-        }
-    }
-}
-
-impl From<FrameRate> for f64 {
-    /// Convert the frame rate to a floating-point value by dividing the numerator by the
-    /// denominator. May lose precision for very large numerators/denominators.
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "amount of precision loss is acceptable in this case"
-    )]
-    fn from(value: FrameRate) -> Self {
-        value.numerator as f64 / value.denominator as f64
-    }
-}
-
-struct FrameIterator<'a> {
-    frame_rate: &'a FrameRate,
-    current: model::FrameNumber,
-}
-
-impl Iterator for FrameIterator<'_> {
-    type Item = (model::FrameNumber, i64);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.current += model::FrameDelta(1);
-        Some((self.current, self.frame_rate.frame_to_ms(self.current)))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -958,83 +822,5 @@ impl InternalError {
 
     pub(crate) fn as_mut_ptr(&mut self) -> *mut ffms2::FFMS_ErrorInfo {
         &raw mut self.error_info
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn frame_timing_24() {
-        let frame_rate = FrameRate::F24;
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
-            model::FrameNumber(0)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
-            model::FrameNumber(0)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
-            model::FrameNumber(0)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
-            model::FrameNumber(1)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(999)),
-            model::FrameNumber(23)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(999)),
-            model::FrameNumber(24)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
-            model::FrameNumber(24)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
-            model::FrameNumber(24)
-        );
-    }
-
-    #[test]
-    fn frame_timing_23_976() {
-        let frame_rate = FrameRate::F23_976;
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
-            model::FrameNumber(0)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
-            model::FrameNumber(0)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
-            model::FrameNumber(0)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
-            model::FrameNumber(1)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
-            model::FrameNumber(23)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
-            model::FrameNumber(24)
-        );
     }
 }

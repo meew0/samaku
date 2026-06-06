@@ -2,7 +2,7 @@ pub use ass::Image;
 use std::cell::RefCell;
 
 use crate::nde::tags::Colour;
-use crate::{model, resources, subtitle, view};
+use crate::{resources, subtitle, view};
 
 use super::bindings::ass;
 
@@ -155,8 +155,8 @@ impl Renderer {
         &mut self,
         subtitles: &OpaqueTrack,
         base: iced::widget::image::Handle,
-        frame: model::FrameNumber,
-        frame_rate: super::video::FrameRate,
+        frame: super::FrameNumber,
+        frame_rate: super::FrameRate,
         frame_size: subtitle::Resolution,
         storage_size: subtitle::Resolution,
     ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {

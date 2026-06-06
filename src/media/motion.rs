@@ -48,7 +48,7 @@ impl TrackList {
     }
 
     #[must_use]
-    pub fn stab(&self, frame: model::FrameNumber) -> Vec<(TrackId, &Track)> {
+    pub fn stab(&self, frame: super::FrameNumber) -> Vec<(TrackId, &Track)> {
         // TODO: optimize this using interavl
         self.map
             .iter()
@@ -81,15 +81,15 @@ impl model::NamedListIterable for TrackList {
 
 #[derive(Debug, Clone)]
 pub struct Track {
-    markers: BTreeMap<model::FrameNumber, Marker>,
+    markers: BTreeMap<super::FrameNumber, Marker>,
     pub name: String,
-    first_frame: model::FrameNumber,
-    last_frame: model::FrameNumber,
+    first_frame: super::FrameNumber,
+    last_frame: super::FrameNumber,
 }
 
 impl Track {
     #[must_use]
-    pub fn new(origin_frame: model::FrameNumber, marker: Marker, name: String) -> Self {
+    pub fn new(origin_frame: super::FrameNumber, marker: Marker, name: String) -> Self {
         let mut markers = BTreeMap::new();
         markers.insert(origin_frame, marker);
         Self {
@@ -101,16 +101,16 @@ impl Track {
     }
 
     #[must_use]
-    pub fn get_marker(&self, frame_number: model::FrameNumber) -> Option<&Marker> {
+    pub fn get_marker(&self, frame_number: super::FrameNumber) -> Option<&Marker> {
         self.markers.get(&frame_number)
     }
 
     #[must_use]
-    pub fn get_marker_mut(&mut self, frame_number: model::FrameNumber) -> Option<&mut Marker> {
+    pub fn get_marker_mut(&mut self, frame_number: super::FrameNumber) -> Option<&mut Marker> {
         self.markers.get_mut(&frame_number)
     }
 
-    pub fn set_marker(&mut self, frame_number: model::FrameNumber, marker: Marker) {
+    pub fn set_marker(&mut self, frame_number: super::FrameNumber, marker: Marker) {
         self.markers.insert(frame_number, marker);
 
         if frame_number > self.last_frame {
@@ -128,17 +128,17 @@ impl Track {
 
     #[must_use]
     #[inline]
-    pub fn first_frame(&self) -> model::FrameNumber {
+    pub fn first_frame(&self) -> super::FrameNumber {
         self.first_frame
     }
 
     #[must_use]
     #[inline]
-    pub fn last_frame(&self) -> model::FrameNumber {
+    pub fn last_frame(&self) -> super::FrameNumber {
         self.last_frame
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (model::FrameNumber, &Marker)> {
+    pub fn iter(&self) -> impl Iterator<Item = (super::FrameNumber, &Marker)> {
         self.markers
             .iter()
             .map(|(&frame_number, marker)| (frame_number, marker))
@@ -336,7 +336,7 @@ pub type Direction = mv::TrackRegionDirection;
 #[derive(Debug, Clone, Copy)]
 pub enum Target {
     /// Track until the given frame, inclusive.
-    Frame(model::FrameNumber),
+    Frame(super::FrameNumber),
 
     /// Track as far as possible.
     None,
@@ -344,7 +344,7 @@ pub enum Target {
 
 impl Target {
     #[must_use]
-    pub fn event(limit_to_event: bool, event_target_frame: Option<model::FrameNumber>) -> Self {
+    pub fn event(limit_to_event: bool, event_target_frame: Option<super::FrameNumber>) -> Self {
         if limit_to_event && let Some(target_frame) = event_target_frame {
             Self::Frame(target_frame)
         } else {
@@ -367,9 +367,9 @@ pub struct PatchResponse {
 
 pub struct Tracker<'a, V> {
     pub video: &'a V,
-    pub patch_provider: fn(&V, model::FrameNumber, &Patch<DVec2>) -> PatchResponse,
+    pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> PatchResponse,
     pub markers: HashMap<TrackId, Marker>,
-    pub current_frame: model::FrameNumber,
+    pub current_frame: super::FrameNumber,
     pub direction: Direction,
     pub target: Target,
     pub settings: TrackSettings,
@@ -465,14 +465,14 @@ pub enum TrackResult {
 
 #[cfg(test)]
 mod tests {
-    use super::super::video;
     use super::*;
+    use crate::media::{self, video};
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
     #[test]
     fn motion_track() -> anyhow::Result<()> {
-        crate::media::init();
+        media::init();
 
         let path = crate::test_utils::test_file("test_files/cube_av1.mkv");
 
@@ -489,8 +489,8 @@ mod tests {
             video: &video,
             patch_provider: video::Video::get_libmv_patch,
             markers,
-            current_frame: model::FrameNumber(0),
-            target: Target::Frame(model::FrameNumber(99)),
+            current_frame: media::FrameNumber(0),
+            target: Target::Frame(media::FrameNumber(99)),
             direction: Direction::Forward,
             settings: TrackSettings {
                 model: Model::Translation,

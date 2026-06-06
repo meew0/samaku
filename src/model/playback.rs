@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicU32, AtomicU64, Ordering},
 };
 
-use crate::{media, model, subtitle};
+use crate::{media, subtitle};
 
 /// Atomically interior-mutable playback position.
 ///
@@ -63,11 +63,11 @@ impl Position {
     ///
     /// # Panics
     /// Panics if the frame number does not fit into a 32-bit signed integer.
-    pub fn current_frame(&self, frame_rate: media::FrameRate) -> model::FrameNumber {
+    pub fn current_frame(&self, frame_rate: media::FrameRate) -> media::FrameNumber {
         let numerator = self.position() * frame_rate.numerator;
         let denominator = frame_rate.denominator * u64::from(self.rate());
 
-        model::FrameNumber(
+        media::FrameNumber(
             (numerator / denominator)
                 .try_into()
                 .expect("frame number overflow"),
@@ -98,7 +98,7 @@ impl Position {
         self.add_ticks(delta_ticks);
     }
 
-    pub fn add_frames(&self, delta_frames: model::FrameDelta, frame_rate: media::FrameRate) {
+    pub fn add_frames(&self, delta_frames: media::FrameDelta, frame_rate: media::FrameRate) {
         self.add_seconds(f64::from(delta_frames.0) / f64::from(frame_rate));
     }
 
@@ -134,7 +134,7 @@ impl Position {
     ///
     /// # Panics
     /// Panics if the authoritative position lock is poisoned, or on overflow.
-    pub fn set_to_frame(&self, new_value: model::FrameNumber, frame_rate: media::FrameRate) {
+    pub fn set_to_frame(&self, new_value: media::FrameNumber, frame_rate: media::FrameRate) {
         if self.rate() == 0 {
             return;
         }
@@ -215,26 +215,26 @@ mod tests {
         // 1 second → frame 24
         assert_eq!(
             make_position(1000, 1000).current_frame(frame_rate),
-            model::FrameNumber(24)
+            media::FrameNumber(24)
         );
         // 0 ticks → frame 0
         assert_eq!(
             make_position(0, 1000).current_frame(frame_rate),
-            model::FrameNumber(0)
+            media::FrameNumber(0)
         );
         // 500 ms → frame 12
         assert_eq!(
             make_position(500, 1000).current_frame(frame_rate),
-            model::FrameNumber(12)
+            media::FrameNumber(12)
         );
         // Rounds down: one tick less than a full frame
         assert_eq!(
             make_position(41, 1000).current_frame(frame_rate),
-            model::FrameNumber(0)
+            media::FrameNumber(0)
         );
         assert_eq!(
             make_position(42, 1000).current_frame(frame_rate),
-            model::FrameNumber(1)
+            media::FrameNumber(1)
         );
     }
 
@@ -288,7 +288,7 @@ mod tests {
             denominator: 1,
         };
 
-        pos.set_to_frame(model::FrameNumber(24), frame_rate);
+        pos.set_to_frame(media::FrameNumber(24), frame_rate);
         assert_eq!(pos.position(), 1000);
 
         let pos = make_position(0, 1000);
@@ -297,7 +297,7 @@ mod tests {
             denominator: 1001,
         };
 
-        pos.set_to_frame(model::FrameNumber(13), frame_rate);
+        pos.set_to_frame(media::FrameNumber(13), frame_rate);
         assert_eq!(pos.position(), 543);
     }
 }

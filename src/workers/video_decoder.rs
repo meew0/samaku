@@ -1,5 +1,5 @@
 use crate::media::motion;
-use crate::{media, message, model};
+use crate::{media, message};
 use std::collections::HashMap;
 use std::{sync::Arc, thread};
 
@@ -9,7 +9,7 @@ pub(super) enum MessageIn {
     LoadVideo(std::path::PathBuf, media::Index),
     TrackMotion(
         HashMap<motion::TrackId, motion::Marker>,
-        model::FrameNumber,
+        media::FrameNumber,
         motion::Direction,
         motion::Target,
         motion::TrackSettings,
@@ -32,7 +32,7 @@ pub(super) fn spawn(
         .name("samaku_video_decoder".to_owned())
         .spawn(move || {
             let mut video_opt: Option<media::Video> = None;
-            let mut last_frame = model::FrameNumber(-1);
+            let mut last_frame = media::FrameNumber(-1);
 
             let mut tracker_opt: Option<motion::Tracker<media::Video>> = None;
 

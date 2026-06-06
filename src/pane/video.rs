@@ -196,7 +196,7 @@ fn view_video<'a>(
     global_state: &'a crate::Samaku,
     video_metadata: &'a media::VideoMetadata,
     video_frame: &'a iced::widget::image::Handle,
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
 ) -> iced::Element<'a, message::Message> {
     let storage_size = subtitle::Resolution {
         x: video_metadata.width,
@@ -319,7 +319,7 @@ pub fn render_subtitles<'a>(
     mut context: subtitle::compile::Context<'a>,
     video_metadata: &media::VideoMetadata,
     storage_size: subtitle::Resolution,
-    num_frame: model::FrameNumber,
+    num_frame: media::FrameNumber,
     handle: &iced::widget::image::Handle,
     view_state_cell: &RefCell<crate::ViewState>,
 ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
@@ -394,7 +394,7 @@ fn view_reticule_program(
 fn view_motion_track_program(
     global_state: &crate::Samaku,
     storage_size: subtitle::Resolution,
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
     pane: super::Pane,
 ) -> MotionTrackProgram<'_> {
     MotionTrackProgram {
@@ -411,7 +411,7 @@ fn view_motion_track_controls<'a>(
     pane_state: &'a State,
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
 ) -> iced::Element<'a, message::Message> {
     let active_track_id_opt = global_state.selected_tracks.active();
     let active_track_data_opt = if let Some(active_track_id) = active_track_id_opt
@@ -535,7 +535,7 @@ fn view_track_buttons<'a>(
     pane_state: &'a State,
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
 ) -> iced::Element<'a, message::Message> {
     // Check if we should allow tracking backward and forward, if we are limited to the current event.
     let (mut allow_backward, mut allow_forward) = (true, true);
@@ -569,7 +569,7 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Backward,
-                    motion::Target::Frame(frame_number - model::FrameDelta(1)),
+                    motion::Target::Frame(frame_number - media::FrameDelta(1)),
                     pane_state.track_settings,
                 ),
             ))
@@ -611,7 +611,7 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Forward,
-                    motion::Target::Frame(frame_number + model::FrameDelta(1)),
+                    motion::Target::Frame(frame_number + media::FrameDelta(1)),
                     pane_state.track_settings,
                 ),
             ))
@@ -745,10 +745,10 @@ fn view_track_settings(
 fn view_marker_settings<'a>(
     global_state: &'a crate::Samaku,
     active_track_data: (motion::TrackId, &'a motion::Track),
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
     active_marker: &'a motion::Marker,
 ) -> iced::Element<'a, message::Message> {
-    type MessageFn = fn(model::Axis, motion::TrackId, model::FrameNumber, f64) -> message::Message;
+    type MessageFn = fn(model::Axis, motion::TrackId, media::FrameNumber, f64) -> message::Message;
 
     let (active_track_id, _) = active_track_data;
 
@@ -929,7 +929,7 @@ struct ReticuleProgram<'a> {
     reticules: &'a [model::reticule::Reticule],
     node: Option<&'a nde::graph::VisualNode>,
     storage_size: subtitle::Resolution,
-    current_frame: Option<model::FrameNumber>,
+    current_frame: Option<media::FrameNumber>,
     pane: super::Pane,
 }
 
@@ -1229,7 +1229,7 @@ enum DragTarget {
 struct MotionTrackProgram<'a> {
     tracks: Vec<(motion::TrackId, &'a motion::Track)>,
     selected_tracks: &'a model::select::Selection<motion::TrackId>,
-    frame: model::FrameNumber,
+    frame: media::FrameNumber,
     storage_size: subtitle::Resolution,
     modifiers: iced::keyboard::Modifiers,
     pane: super::Pane,
@@ -1243,7 +1243,7 @@ struct MotionTrackState {
 
 struct Dragging {
     track_id: motion::TrackId,
-    frame_number: model::FrameNumber,
+    frame_number: media::FrameNumber,
     target: DragTarget,
     initial_point: iced::Point,
 }
@@ -1825,7 +1825,7 @@ fn draw_marker_center(
 fn draw_base_layer(
     canvas_frame: &mut canvas::Frame,
     track: &motion::Track,
-    current_frame: model::FrameNumber,
+    current_frame: media::FrameNumber,
     bounds: iced::Rectangle,
     storage_size: subtitle::Resolution,
 ) {

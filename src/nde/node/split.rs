@@ -1,4 +1,4 @@
-use crate::{model, nde};
+use crate::{media, nde};
 
 use super::{Context, Node, Shell, SocketType, SocketValue};
 
@@ -24,7 +24,7 @@ impl Node for SplitFrameByFrame {
         inputs: &[&SocketValue],
         _context: &Context,
     ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        const ONE: model::FrameDelta = model::FrameDelta(1);
+        const ONE: media::FrameDelta = media::FrameDelta(1);
 
         super::retrieve!(inputs[0], &SocketValue::IndividualEvent(ref event));
 

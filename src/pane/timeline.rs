@@ -1,5 +1,5 @@
 use crate::media::FrameRate;
-use crate::{message, model, pane, style, subtitle, view};
+use crate::{media, message, pane, style, subtitle, view};
 use iced::keyboard::Modifiers;
 use iced::widget::{Action, canvas};
 use iced::{Renderer, Theme, keyboard, mouse};
@@ -641,7 +641,7 @@ fn draw_frame_ticks(
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
     let (left_bound, right_bound) = frame_tick_bounds(position, video_bounds);
-    let first_frame = model::FrameNumber(frame_rate.ms_to_frame(left_bound).0.max(0));
+    let first_frame = media::FrameNumber(frame_rate.ms_to_frame(left_bound).0.max(0));
 
     // Draw frame ticks from left to right.
     for (frame_number, time_ms) in frame_rate.iter_from(first_frame) {

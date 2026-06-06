@@ -31,12 +31,12 @@ impl model::Named for Filter {
 #[derive(Debug, Clone)]
 pub struct Event {
     /// The first frame on which this event should be displayed.
-    pub start: model::FrameNumber,
+    pub start: media::FrameNumber,
 
     /// The number of frames that this event should be displayed for.
     /// The frame `start + duration` will be the first frame on which this event
     /// will not be displayed anymore.
-    pub duration: model::FrameDelta,
+    pub duration: media::FrameDelta,
     pub layer_index: i32,
     pub style_index: usize,
     pub margins: subtitle::Margins,
@@ -116,7 +116,7 @@ impl Event {
     }
 
     #[must_use]
-    pub fn make_static(&self, start: model::FrameNumber, duration: model::FrameDelta) -> Event {
+    pub fn make_static(&self, start: media::FrameNumber, duration: media::FrameDelta) -> Event {
         // TODO: take care of animations and the like
         Event {
             start,

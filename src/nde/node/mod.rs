@@ -19,7 +19,7 @@ pub use positioning::SetPosition;
 pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
-use crate::{message, model, nde, subtitle};
+use crate::{media, message, model, nde, subtitle};
 
 mod clip;
 mod gradient;
@@ -290,7 +290,7 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
         canvas_frame: &mut iced::widget::canvas::Frame,
         bounds: iced::Rectangle,
         storage_size: subtitle::Resolution,
-        current_frame: Option<model::FrameNumber>,
+        current_frame: Option<media::FrameNumber>,
         cursor: iced::mouse::Cursor,
     ) {
     }

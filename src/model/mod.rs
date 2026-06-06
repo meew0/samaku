@@ -1,72 +1,9 @@
-use crate::media;
-use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
+use std::ops::{Deref, DerefMut};
 
 pub mod playback;
 pub mod reticule;
 pub mod select;
 pub mod toast;
-
-/// Identifies a video frame by number.
-#[derive(
-    Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub struct FrameNumber(pub i32);
-
-/// A difference in counted video frames.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct FrameDelta(pub i32);
-
-impl FrameNumber {
-    #[must_use]
-    pub fn step(self, direction: media::motion::Direction) -> Self {
-        match direction {
-            media::motion::Direction::Forward => Self(self.0 + 1),
-            media::motion::Direction::Backward => Self(self.0 - 1),
-        }
-    }
-}
-
-impl std::fmt::Display for FrameNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Add<FrameDelta> for FrameNumber {
-    type Output = FrameNumber;
-
-    fn add(self, rhs: FrameDelta) -> Self::Output {
-        FrameNumber(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign<FrameDelta> for FrameNumber {
-    fn add_assign(&mut self, rhs: FrameDelta) {
-        self.0 += rhs.0;
-    }
-}
-
-impl Sub<FrameDelta> for FrameNumber {
-    type Output = FrameNumber;
-
-    fn sub(self, rhs: FrameDelta) -> Self::Output {
-        FrameNumber(self.0 - rhs.0)
-    }
-}
-
-impl SubAssign<FrameDelta> for FrameNumber {
-    fn sub_assign(&mut self, rhs: FrameDelta) {
-        self.0 -= rhs.0;
-    }
-}
-
-impl Sub<FrameNumber> for FrameNumber {
-    type Output = FrameDelta;
-
-    fn sub(self, rhs: FrameNumber) -> Self::Output {
-        FrameDelta(self.0 - rhs.0)
-    }
-}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub enum CancellationState {

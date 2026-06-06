@@ -1,18 +1,17 @@
-pub use super::bindings::ffms2::FrameRate;
 use anyhow::Context as _;
 use std::path::Path;
 
-use crate::{model, subtitle};
+use crate::subtitle;
 
 use super::bindings::ffms2;
 use super::index;
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    pub frame_rate: FrameRate,
+    pub frame_rate: super::FrameRate,
     pub width: i32,
     pub height: i32,
-    pub num_frames: model::FrameNumber,
+    pub num_frames: super::FrameNumber,
     pub duration: subtitle::Duration,
 }
 
@@ -53,7 +52,11 @@ impl Video {
         let width = first_frame.width();
         let height = first_frame.height();
 
-        let frame_rate = source.properties.frame_rate;
+        // TODO change types to u32
+        let frame_rate = super::FrameRate {
+            numerator: u64::from(source.properties.spec_fps_numerator),
+            denominator: u64::from(source.properties.spec_fps_denominator),
+        };
         println!("Frame rate: {frame_rate:?}");
 
         // TODO: keyframes and timecodes
@@ -89,7 +92,7 @@ impl Video {
                 frame_rate,
                 width,
                 height,
-                num_frames: model::FrameNumber(num_frames),
+                num_frames: super::FrameNumber(num_frames),
                 duration,
             },
         })
@@ -97,7 +100,7 @@ impl Video {
 
     fn get_frame_internal(
         &self,
-        n: model::FrameNumber,
+        n: super::FrameNumber,
     ) -> anyhow::Result<(glam::UVec2, ffms2::Frame)> {
         let ffms_frame = self.source.get_frame(n.0)?;
         anyhow::ensure!(
@@ -116,7 +119,7 @@ impl Video {
     /// Retrieves the `n`th frame and returns it in `iced`'s format.
     pub fn get_iced_frame(
         &self,
-        n: model::FrameNumber,
+        n: super::FrameNumber,
     ) -> anyhow::Result<iced::widget::image::Handle> {
         let instant = std::time::Instant::now();
         let (size, ffms_frame) = self.get_frame_internal(n)?;
@@ -145,7 +148,7 @@ impl Video {
     /// Panics if the frame could not be obtained.
     pub fn get_libmv_patch(
         &self,
-        n: model::FrameNumber,
+        n: super::FrameNumber,
         request: &super::motion::Patch<glam::DVec2>,
     ) -> super::motion::PatchResponse {
         // The conversion coefficients used by Blender, divided by 255
@@ -227,9 +230,10 @@ impl Video {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media;
 
     fn get_frame_rgba(video: &Video, n: i32) -> Vec<u8> {
-        let (size, ffms_frame) = video.get_frame_internal(model::FrameNumber(n)).unwrap();
+        let (size, ffms_frame) = video.get_frame_internal(media::FrameNumber(n)).unwrap();
         let mut out = vec![0_u8; size.x as usize * size.y as usize * 4];
         ffms_frame.copy_plane(0, out.as_mut_slice(), None, None, 0, 0, 2, 2, |dst, src| {
             dst.copy_from_slice(src);
@@ -250,7 +254,7 @@ mod tests {
 
     #[test]
     fn cube_h264_metadata_and_colors() -> anyhow::Result<()> {
-        crate::media::init();
+        media::init();
 
         let path =
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_files/cube_h264.mkv");
@@ -262,7 +266,7 @@ mod tests {
         assert_eq!(video.metadata.height, 200, "unexpected height");
         assert_eq!(
             video.metadata.num_frames,
-            model::FrameNumber(100),
+            media::FrameNumber(100),
             "unexpected frame count"
         );
 

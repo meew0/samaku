@@ -1,7 +1,7 @@
 use super::{Context, Node, Shell, SocketType, SocketValue};
 use crate::model::reticule;
 use crate::nde::tags::perspective;
-use crate::{message, model, nde, style, subtitle, view};
+use crate::{media, message, nde, style, subtitle, view};
 use glam::DVec2;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -368,7 +368,7 @@ impl Node for InputQuad {
         canvas_frame: &mut iced::widget::canvas::Frame,
         bounds: iced::Rectangle,
         storage_size: subtitle::Resolution,
-        _current_frame: Option<model::FrameNumber>,
+        _current_frame: Option<media::FrameNumber>,
         _cursor: iced::mouse::Cursor,
     ) {
         use iced::widget::canvas;

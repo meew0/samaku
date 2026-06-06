@@ -124,7 +124,7 @@ impl Workers {
     pub fn emit_track_motion(
         &self,
         markers: HashMap<motion::TrackId, motion::Marker>,
-        origin_frame: model::FrameNumber,
+        origin_frame: media::FrameNumber,
         direction: motion::Direction,
         target: motion::Target,
         settings: motion::TrackSettings,

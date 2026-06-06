@@ -1,4 +1,4 @@
-use crate::model;
+use crate::media;
 use crate::{message::Message, pane};
 use iced::keyboard::Event;
 use iced::{
@@ -41,8 +41,8 @@ pub(crate) fn handle_shortcut(
         Key::Character("n") => Some(Message::SelectAudioFile),
         Key::Character("o") => Some(Message::OpenSubtitleFile),
         Key::Character("s") => Some(Message::SaveSubtitleFile),
-        Key::Character(",") => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(-1))),
-        Key::Character(".") => Some(Message::PlaybackAdvanceFrames(model::FrameDelta(1))),
+        Key::Character(",") => Some(Message::PlaybackAdvanceFrames(media::FrameDelta(-1))),
+        Key::Character(".") => Some(Message::PlaybackAdvanceFrames(media::FrameDelta(1))),
         Key::Named(Named::ArrowLeft) => Some(Message::PlaybackAdvanceSeconds(-1.0)),
         Key::Named(Named::ArrowRight) => Some(Message::PlaybackAdvanceSeconds(1.0)),
         Key::Named(Named::Space) => Some(Message::TogglePlayback),

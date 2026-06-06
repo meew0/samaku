@@ -89,7 +89,7 @@ pub enum Message {
     VideoLoaded(Box<media::VideoMetadata>),
 
     /// A video frame has been decoded and is available to be displayed.
-    VideoFrameAvailable(model::FrameNumber, iced::widget::image::Handle),
+    VideoFrameAvailable(media::FrameNumber, iced::widget::image::Handle),
 
     /// An audio file has been selected and should be loaded.
     AudioFileSelected(std::path::PathBuf),
@@ -112,7 +112,7 @@ pub enum Message {
     PlaybackStep,
 
     // Change the playback state in the given way.
-    PlaybackAdvanceFrames(model::FrameDelta),
+    PlaybackAdvanceFrames(media::FrameDelta),
     PlaybackAdvanceSeconds(f64),
     PlaybackSetPosition(subtitle::StartTime),
     TogglePlayback,
@@ -243,14 +243,14 @@ pub enum Message {
 
     /// Tell the video playback worker to start motion tracking the selected tracks.
     TrackMotionForSelectedTracks(
-        model::FrameNumber,
+        media::FrameNumber,
         media::motion::Direction,
         media::motion::Target,
         media::motion::TrackSettings,
     ),
     MotionTrackUpdate(
         HashMap<media::motion::TrackId, media::motion::Marker>,
-        model::FrameNumber,
+        media::FrameNumber,
     ),
 
     // Motion track management
@@ -265,28 +265,28 @@ pub enum Message {
     // Motion track editing
     SetTrackMarker(
         media::motion::TrackId,
-        model::FrameNumber,
+        media::FrameNumber,
         media::motion::Marker,
     ),
-    MoveTrackMarkerRegion(media::motion::TrackId, model::FrameNumber, glam::DVec2),
+    MoveTrackMarkerRegion(media::motion::TrackId, media::FrameNumber, glam::DVec2),
     SetTrackMarkerRegion(
         media::motion::TrackId,
-        model::FrameNumber,
+        media::FrameNumber,
         media::motion::Region,
     ),
-    SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
-    SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
-    SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, model::FrameNumber, f64),
+    SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
+    SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
+    SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
     SetTrackMarkerSearchAreaOriginCoordinate(
         model::Axis,
         media::motion::TrackId,
-        model::FrameNumber,
+        media::FrameNumber,
         f64,
     ),
     SetTrackMarkerSearchAreaSizeCoordinate(
         model::Axis,
         media::motion::TrackId,
-        model::FrameNumber,
+        media::FrameNumber,
         f64,
     ),
 

@@ -562,7 +562,7 @@ where
         view_state.subtitle_renderer.render_subtitles_onto_base(
             &ass,
             TRANSPARENT_IMAGE.clone(),
-            model::FrameNumber(0_i32),
+            media::FrameNumber(0_i32),
             media::FrameRate {
                 numerator: 24,
                 denominator: 1,
