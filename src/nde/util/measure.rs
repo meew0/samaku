@@ -234,7 +234,7 @@ mod tests {
         let event_track = track.to_event_track();
         let (_, ass_event) = event_track.get_nth(0).unwrap();
         let style = &track.styles()[ass_event.style_index];
-        let nde_event = nde::Event::from_ass_event(ass_event, media::FrameRate::F24);
+        let nde_event = nde::Event::from_ass_event(ass_event, &media::FrameRate::f24());
 
         let cosmic_bb = measure(&nde_event, style);
         println!(
@@ -249,10 +249,16 @@ mod tests {
         // reports the ink bounding box).
         let mut x_min = i32::MAX;
         let mut x_max = i32::MIN;
-        renderer.render_subtitles_with_callback(&track, 1000, frame, frame, &mut |img| {
-            x_min = x_min.min(img.metadata.dst_x);
-            x_max = x_max.max(img.metadata.dst_x + img.metadata.w);
-        });
+        renderer.render_subtitles_with_callback(
+            &track,
+            subtitle::StartTime(1000),
+            frame,
+            frame,
+            &mut |img| {
+                x_min = x_min.min(img.metadata.dst_x);
+                x_max = x_max.max(img.metadata.dst_x + img.metadata.w);
+            },
+        );
 
         assert!(x_max > x_min, "no images were rendered");
 

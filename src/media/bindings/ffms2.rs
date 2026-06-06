@@ -390,6 +390,7 @@ pub(crate) struct VideoSource {
     video_source: *mut ffms2::FFMS_VideoSource,
     pub properties: VideoProperties,
     track: *mut ffms2::FFMS_Track,
+    track_time_base: TimeBase,
     error: RefCell<InternalError>,
 }
 
@@ -422,6 +423,7 @@ impl VideoSource {
         } else {
             let properties = Self::get_video_properties(video_source);
             let track = unsafe { ffms2::FFMS_GetTrackFromVideo(video_source) };
+            let track_time_base = Self::get_track_time_base(track);
 
             // as far as I can tell, `GetTrackFromVideo` should never fail
             assert!(
@@ -434,6 +436,7 @@ impl VideoSource {
                 video_source,
                 properties,
                 track,
+                track_time_base,
                 error: error_cell,
             })
         }
@@ -458,6 +461,16 @@ impl VideoSource {
             first_time: internal_properties.FirstTime,
             last_time: internal_properties.LastTime,
             last_end_time: internal_properties.LastEndTime,
+        }
+    }
+
+    fn get_track_time_base(track: *mut ffms2::FFMS_Track) -> TimeBase {
+        let time_base_ptr = unsafe { ffms2::FFMS_GetTimeBase(track) };
+        let time_base_internal = unsafe { *time_base_ptr };
+
+        TimeBase {
+            numerator: time_base_internal.Num,
+            denominator: time_base_internal.Den,
         }
     }
 
@@ -515,6 +528,56 @@ impl VideoSource {
             Ok(())
         }
     }
+
+    /// Return a list of frame timings (in milliseconds).
+    pub(crate) fn timecodes(&self) -> Result<Vec<i64>, FfmsError> {
+        let num_frames = self
+            .properties
+            .num_frames
+            .try_into()
+            .expect("negative frame count");
+        let mut result = Vec::with_capacity(num_frames);
+
+        let numerator = self.track_time_base.numerator;
+        let denominator = self.track_time_base.denominator;
+        if numerator < 1 || denominator < 1 {
+            return Err(FfmsError {
+                main_type: ErrorType::Bindings,
+                subtype: ErrorType::Unsupported,
+                message: format!("invalid numerator/denominator: {numerator}/{denominator}"),
+            });
+        }
+
+        for frame_n in 0..self.properties.num_frames {
+            if let Some(frame_info) = self.get_frame_info(frame_n) {
+                let Some(num) = frame_info.pts.checked_mul(numerator) else {
+                    return Err(FfmsError {
+                        main_type: ErrorType::Bindings,
+                        subtype: ErrorType::Unsupported,
+                        message: format!(
+                            "overflow while calculating frame timing of frame {frame_n} (pts = {}, numerator = {numerator}, denominator = {denominator})",
+                            frame_info.pts
+                        ),
+                    });
+                };
+
+                // Rounded integer division
+                let quotient = num / denominator;
+                let remainder = num % denominator;
+                let ms = quotient + i64::from(remainder << 1 >= denominator);
+
+                result.push(ms);
+            } else {
+                return Err(FfmsError {
+                    main_type: ErrorType::Bindings,
+                    subtype: ErrorType::Unsupported,
+                    message: format!("error while reading frame info of frame {frame_n}"),
+                });
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -527,6 +590,11 @@ pub(crate) struct VideoProperties {
     pub first_time: f64,
     pub last_time: f64,
     pub last_end_time: f64,
+}
+
+struct TimeBase {
+    numerator: i64,
+    denominator: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

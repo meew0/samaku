@@ -304,7 +304,7 @@ fn update_internal(
                 global_state.toasts.push(model::toast::Toast::message(
                     model::toast::Status::Primary,
                     "Warning".to_owned(),
-                    format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", f64::from(global_state.frame_rate())),
+                    format!("Exporting subtitles requires a loaded video for exact results. (Assuming {} fps)", global_state.frame_rate().fps()),
                 ));
             }
 
@@ -322,7 +322,7 @@ fn update_internal(
                 global_state
                     .shared
                     .playback_position
-                    .add_frames(delta_frames, video_metadata.frame_rate);
+                    .add_frames(delta_frames, &video_metadata.frame_rate);
             }
             global_state.workers.emit_playback_step();
         }

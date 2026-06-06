@@ -25,7 +25,7 @@ impl super::LocalState for State {
             frame_rate: global_state
                 .video_metadata
                 .as_ref()
-                .map(|video_metadata| video_metadata.frame_rate),
+                .map(|video_metadata| &video_metadata.frame_rate),
             video_bounds: VideoBounds {
                 start: video_start,
                 end: video_start
@@ -150,10 +150,10 @@ impl Default for Position {
     }
 }
 
-struct CanvasData {
+struct CanvasData<'a> {
     pane: super::Pane,
     position: Position,
-    frame_rate: Option<FrameRate>,
+    frame_rate: Option<&'a FrameRate>,
     playback_position: subtitle::StartTime,
     video_bounds: VideoBounds,
     events: Vec<EventReference>,
@@ -234,7 +234,7 @@ enum EventDragAction {
     Right,
 }
 
-impl canvas::Program<message::Message> for CanvasData {
+impl canvas::Program<message::Message> for CanvasData<'_> {
     type State = CanvasState;
 
     fn update(
@@ -396,7 +396,7 @@ impl canvas::Program<message::Message> for CanvasData {
     }
 }
 
-impl CanvasData {
+impl CanvasData<'_> {
     fn calculate_zoom(
         &self,
         bounds: iced::Rectangle,
@@ -551,10 +551,16 @@ fn seconds_tick_positions(
     ticks
 }
 
-fn frame_tick_bounds(position: Position, video_bounds: VideoBounds) -> (i64, i64) {
+fn frame_tick_bounds(
+    position: Position,
+    video_bounds: VideoBounds,
+) -> (subtitle::StartTime, subtitle::StartTime) {
     let left_bound = position.left.0.max(video_bounds.start.0);
     let right_bound = position.right.0.min(video_bounds.end.0);
-    (left_bound, right_bound)
+    (
+        subtitle::StartTime(left_bound),
+        subtitle::StartTime(right_bound),
+    )
 }
 
 fn draw_background(
@@ -637,19 +643,24 @@ fn draw_frame_ticks(
     frame: &mut canvas::Frame<Renderer>,
     video_bounds: VideoBounds,
     position: Position,
-    frame_rate: FrameRate,
+    frame_rate: &FrameRate,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
     let (left_bound, right_bound) = frame_tick_bounds(position, video_bounds);
-    let first_frame = media::FrameNumber(frame_rate.ms_to_frame(left_bound).0.max(0));
+    let first_frame = media::FrameNumber(
+        frame_rate
+            .frame_at_time(left_bound, media::TimeMode::Exact)
+            .0
+            .max(0),
+    );
 
     // Draw frame ticks from left to right.
-    for (frame_number, time_ms) in frame_rate.iter_from(first_frame) {
-        if time_ms >= right_bound {
+    for (frame_number, time) in frame_rate.iter_from(first_frame) {
+        if time >= right_bound {
             break;
         }
 
-        let tick_x = position.time_delta(subtitle::StartTime(time_ms)) * pixel_per_ms;
+        let tick_x = position.time_delta(time) * pixel_per_ms;
 
         frame.fill_rectangle(
             iced::Point::new(tick_x, 30.0),
@@ -1028,12 +1039,18 @@ mod tests {
         // Viewport fully inside video → bounds match viewport
         let pos = make_position(3000, 5000);
         let bounds = make_bounds(2000, 7000);
-        assert_eq!(frame_tick_bounds(pos, bounds), (3000, 5000));
+        assert_eq!(
+            frame_tick_bounds(pos, bounds),
+            (subtitle::StartTime(3000), subtitle::StartTime(5000))
+        );
 
         // Viewport encompasses video → bounds match video
         let pos = make_position(0, 10000);
         let bounds = make_bounds(2000, 7000);
-        assert_eq!(frame_tick_bounds(pos, bounds), (2000, 7000));
+        assert_eq!(
+            frame_tick_bounds(pos, bounds),
+            (subtitle::StartTime(2000), subtitle::StartTime(7000))
+        );
 
         // Video entirely to the right → left_bound > right_bound, so no frames drawn
         let pos = make_position(0, 1000);

@@ -1,7 +1,7 @@
+use crate::{media, subtitle};
 use std::cmp::Ordering;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
-
-use crate::subtitle;
+use std::sync::LazyLock;
 
 /// Identifies a video frame by number.
 #[derive(
@@ -65,117 +65,7 @@ impl Sub<Number> for Number {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Rate {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl Rate {
-    pub const F24: Rate = Rate {
-        numerator: 24,
-        denominator: 1,
-    };
-
-    pub const F23_976: Rate = Rate {
-        numerator: 24000,
-        denominator: 1001,
-    };
-
-    /// Get the number of the closest frame before the given time point in milliseconds.
-    ///
-    /// # Panics
-    /// Panics if the resulting frame number would not fit into an `i32`.
-    #[must_use]
-    pub(crate) fn ms_to_frame(&self, ass_ms: i64) -> Number {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let numerator = ass_ms * self.numerator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let denominator = 1000 * self.denominator as i64;
-        Number(
-            (numerator / denominator)
-                .try_into()
-                .expect("overflow while converting time to frame number"),
-        )
-    }
-
-    /// Get the number of the closest frame *after* the given time point in milliseconds.
-    ///
-    /// # Panics
-    /// Panics if the resulting frame number would not fit into an `i32`.
-    #[must_use]
-    pub(crate) fn ms_to_frame_after(&self, ass_ms: i64) -> Number {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let denominator = 1000 * self.denominator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let numerator = (ass_ms * self.numerator as i64) + denominator - 1;
-        Number(
-            (numerator / denominator)
-                .try_into()
-                .expect("overflow while converting time to frame number"),
-        )
-    }
-
-    #[must_use]
-    pub(crate) fn frame_to_ms(&self, frame: Number) -> i64 {
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "denominator is guaranteed to be smaller than i64 max"
-        )]
-        let inv_numerator = i64::from(frame.0 * 1000) * self.denominator as i64;
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "numerator is guaranteed to be smaller than i64 max"
-        )]
-        let result = inv_numerator / self.numerator as i64;
-        result
-    }
-
-    pub(crate) fn ass_time_to_frame(&self, ass_time: subtitle::StartTime) -> Number {
-        self.ms_to_frame(ass_time.0)
-    }
-
-    pub(crate) fn ass_time_to_frame_after(&self, ass_time: subtitle::StartTime) -> Number {
-        self.ms_to_frame_after(ass_time.0)
-    }
-
-    pub(crate) fn frame_to_ass_time(&self, frame: Number) -> subtitle::StartTime {
-        subtitle::StartTime(self.frame_to_ms(frame))
-    }
-
-    pub(crate) fn iter_from(&self, frame: Number) -> impl Iterator<Item = (Number, i64)> {
-        FrameIterator {
-            frame_rate: self,
-            current: frame,
-        }
-    }
-}
-
-impl From<Rate> for f64 {
-    /// Convert the frame rate to a floating-point value by dividing the numerator by the
-    /// denominator. May lose precision for very large numerators/denominators.
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "amount of precision loss is acceptable in this case"
-    )]
-    fn from(value: Rate) -> Self {
-        value.numerator as f64 / value.denominator as f64
-    }
-}
-
-/// Frame-to-time interpretation mode.
+/// Frame-time conversion interpretation mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TimeMode {
     /// Use the actual frame times. With 1 FPS video, frame 0 is `[0, 999]` ms.
@@ -188,8 +78,9 @@ pub enum TimeMode {
 
     /// End-of-event rule: an event is last visible on the last frame whose
     /// start time is `<` the event's end time.
+    /// Note that it is interpreted as the frame *on which* the event is last visible (inclusive).
     /// With 1 FPS, frame 0 is `[1, 1000]` ms.
-    End,
+    EndInclusive,
 }
 
 /// Errors that can arise while building a [`Framerate`] from timecodes.
@@ -281,6 +172,9 @@ const MAX_EPS: i64 = 8;
 /// against the real timecodes, which remain ground truth. The model only ever
 /// *narrows* the search window; it never decides the answer on its own, so the
 /// result is bit-for-bit identical to a binary search over the full table.
+///
+/// The interface is inspired by Aegisub's `agi::vfr::Framerate`, although the
+/// implementation is more or less custom.
 #[derive(Clone, Debug)]
 pub struct Framerate {
     /// Exact start time, in milliseconds, of every frame.
@@ -300,19 +194,14 @@ pub struct Framerate {
 const DEFAULT_DENOMINATOR: i64 = 1_000_000_000;
 
 impl Framerate {
-    /// Build a framerate from an iterator of per-frame start times in
+    /// Build a framerate from a `Vec` of per-frame start times in
     /// milliseconds. Frame 0 is shifted to time 0 (matching Aegisub's
     /// `normalize_timecodes`). The input must be monotonically non-decreasing
     /// and contain at least two distinct values.
     ///
     /// # Panics
     /// Panics on certain overflow conditions.
-    pub fn from_timecodes<I>(iter: I) -> Result<Self, FramerateError>
-    where
-        I: IntoIterator<Item = i64>,
-    {
-        let mut timecodes: Vec<i64> = iter.into_iter().collect();
-
+    pub fn from_timecodes(mut timecodes: Vec<i64>) -> Result<Self, FramerateError> {
         if timecodes.len() <= 1 {
             return Err(FramerateError::TooFewTimecodes);
         }
@@ -357,6 +246,15 @@ impl Framerate {
             numerator,
             denominator,
         })
+    }
+
+    /// Same as `from_timecodes`, but takes an iterator instead.
+    pub fn from_timecodes_iter<I>(iter: I) -> Result<Self, FramerateError>
+    where
+        I: IntoIterator<Item = i64>,
+    {
+        let timecodes: Vec<i64> = iter.into_iter().collect();
+        Self::from_timecodes(timecodes)
     }
 
     /// Greedy piecewise-linear segmentation in a single **O(n)** pass using the
@@ -552,6 +450,16 @@ impl Framerate {
         Framerate::cfr(numerator, denominator)
     }
 
+    /// 24 frames per second.
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "will never panic because constants are specified"
+    )]
+    #[must_use]
+    pub fn f24() -> Self {
+        Self::cfr(DEFAULT_DENOMINATOR * 24, DEFAULT_DENOMINATOR).unwrap()
+    }
+
     #[must_use]
     pub fn numerator(&self) -> i64 {
         self.numerator
@@ -589,12 +497,16 @@ impl Framerate {
 
     /// Frame visible at time `ms` (milliseconds) under the given [`TimeMode`] interpretation.
     #[must_use]
-    pub fn frame_at_time(&self, ms: i64, mode: TimeMode) -> i32 {
-        match mode {
+    pub fn frame_at_time(&self, time: subtitle::StartTime, mode: TimeMode) -> Number {
+        let ms = time.0;
+
+        let frame = match mode {
             TimeMode::Start => self.frame_at_time_exact(ms - 1) + 1,
-            TimeMode::End => self.frame_at_time_exact(ms - 1),
+            TimeMode::EndInclusive => self.frame_at_time_exact(ms - 1),
             TimeMode::Exact => self.frame_at_time_exact(ms),
-        }
+        };
+
+        Number(frame)
     }
 
     /// EXACT-mode frame lookup: find the last frame whose start time
@@ -702,21 +614,23 @@ impl Framerate {
 
     /// Time (ms) at the start/within the range of a frame, under the mode.
     #[must_use]
-    pub fn time_at_frame(&self, frame: i32, mode: TimeMode) -> i64 {
-        match mode {
+    pub fn time_at_frame(&self, frame: Number, mode: TimeMode) -> subtitle::StartTime {
+        let ms = match mode {
             TimeMode::Start => {
-                let prev = self.time_at_frame_exact(frame - 1);
-                let cur = self.time_at_frame_exact(frame);
+                let prev = self.time_at_frame_exact(frame.0 - 1);
+                let cur = self.time_at_frame_exact(frame.0);
                 // +1 so two frames 1 ms apart round up, matching Aegisub.
                 prev + (cur - prev + 1) / 2
             }
-            TimeMode::End => {
-                let cur = self.time_at_frame_exact(frame);
-                let next = self.time_at_frame_exact(frame + 1);
+            TimeMode::EndInclusive => {
+                let cur = self.time_at_frame_exact(frame.0);
+                let next = self.time_at_frame_exact(frame.0 + 1);
                 cur + (next - cur + 1) / 2
             }
-            TimeMode::Exact => self.time_at_frame_exact(frame),
-        }
+            TimeMode::Exact => self.time_at_frame_exact(frame.0),
+        };
+
+        subtitle::StartTime(ms)
     }
 
     /// Retrieve the given frame's time, or extrapolate if necessary.
@@ -751,21 +665,33 @@ impl Framerate {
         let frame_ms = self.timecodes[frame as usize];
         frame_ms
     }
+
+    pub fn iter_from(&self, frame: Number) -> impl Iterator<Item = (Number, subtitle::StartTime)> {
+        FrameIterator {
+            frame_rate: self,
+            current: frame,
+        }
+    }
 }
 
 struct FrameIterator<'a> {
-    frame_rate: &'a Rate,
+    frame_rate: &'a Framerate,
     current: Number,
 }
 
 impl Iterator for FrameIterator<'_> {
-    type Item = (Number, i64);
+    type Item = (Number, subtitle::StartTime);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.current += Delta(1);
-        Some((self.current, self.frame_rate.frame_to_ms(self.current)))
+        Some((
+            self.current,
+            self.frame_rate.time_at_frame(self.current, TimeMode::Exact),
+        ))
     }
 }
+
+pub static UNLOADED_FRAMERATE: LazyLock<media::FrameRate> = LazyLock::new(media::FrameRate::f24);
 
 #[expect(
     clippy::cast_possible_truncation,
@@ -842,73 +768,76 @@ mod tests {
 
     #[test]
     fn frame_timing_24() {
-        let frame_rate = Rate::F24;
+        let frame_rate = Framerate::f24();
+
+        // Equivalent behavior to the old CFR-only `FrameRate`:
+        // `ass_time_to_frame` ^= `frame_at_time(..., Exact)`
+        // `ass_time_to_frame_after` ^= `frame_at_time(..., EndInclusive) + Delta(1)`
+        assert_eq!(
+            frame_rate.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            frame_rate.frame_at_time(subtitle::StartTime(0), TimeMode::EndInclusive) + Delta(1),
+            Number(0)
+        );
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
+            frame_rate.frame_at_time(subtitle::StartTime(1), TimeMode::Exact),
             Number(0)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
-            Number(0)
-        );
-
-        assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
-            Number(0)
-        );
-        assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
+            frame_rate.frame_at_time(subtitle::StartTime(1), TimeMode::EndInclusive) + Delta(1),
             Number(1)
         );
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(999)),
+            frame_rate.frame_at_time(subtitle::StartTime(999), TimeMode::Exact),
             Number(23)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(999)),
+            frame_rate.frame_at_time(subtitle::StartTime(999), TimeMode::EndInclusive) + Delta(1),
             Number(24)
         );
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
+            frame_rate.frame_at_time(subtitle::StartTime(1000), TimeMode::Exact),
             Number(24)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
+            frame_rate.frame_at_time(subtitle::StartTime(1000), TimeMode::EndInclusive) + Delta(1),
             Number(24)
         );
     }
 
     #[test]
     fn frame_timing_23_976() {
-        let frame_rate = Rate::F23_976;
+        let frame_rate = Framerate::cfr(24000, 1001).unwrap();
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(0)),
+            frame_rate.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
             Number(0)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(0)),
+            frame_rate.frame_at_time(subtitle::StartTime(0), TimeMode::EndInclusive) + Delta(1),
             Number(0)
         );
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1)),
+            frame_rate.frame_at_time(subtitle::StartTime(1), TimeMode::Exact),
             Number(0)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1)),
+            frame_rate.frame_at_time(subtitle::StartTime(1), TimeMode::EndInclusive) + Delta(1),
             Number(1)
         );
 
         assert_eq!(
-            frame_rate.ass_time_to_frame(subtitle::StartTime(1000)),
+            frame_rate.frame_at_time(subtitle::StartTime(1000), TimeMode::Exact),
             Number(23)
         );
         assert_eq!(
-            frame_rate.ass_time_to_frame_after(subtitle::StartTime(1000)),
+            frame_rate.frame_at_time(subtitle::StartTime(1000), TimeMode::EndInclusive) + Delta(1),
             Number(24)
         );
     }
@@ -933,20 +862,26 @@ mod tests {
     fn normalizes_to_zero() {
         // A table that doesn't start at 0 should be shifted.
         let fr = Framerate::from_timecodes(vec![100_i64, 142, 184, 226]).unwrap();
-        assert_eq!(fr.time_at_frame(0, TimeMode::Exact), 0);
-        assert_eq!(fr.time_at_frame(1, TimeMode::Exact), 42);
+        assert_eq!(
+            fr.time_at_frame(Number(0), TimeMode::Exact),
+            subtitle::StartTime(0)
+        );
+        assert_eq!(
+            fr.time_at_frame(Number(1), TimeMode::Exact),
+            subtitle::StartTime(42)
+        );
     }
 
     #[test]
     fn exact_roundtrip_cfr_24fps() {
         let timecodes = cfr_timecodes(24000.0 / 1001.0, 5000);
-        let framerate = Framerate::from_timecodes(timecodes.iter().copied()).unwrap();
+        let framerate = Framerate::from_timecodes_iter(timecodes.iter().copied()).unwrap();
 
         // Frame -> time -> frame must be the identity for every in-range frame.
         for (frame_index, timecode) in timecodes.iter().enumerate() {
-            let frame = frame_index as i32;
+            let frame = Number(frame_index as i32);
             let time = framerate.time_at_frame(frame, TimeMode::Exact);
-            assert_eq!(time, *timecode, "time_at_frame({frame})");
+            assert_eq!(time.0, *timecode, "time_at_frame({frame})");
             assert_eq!(
                 framerate.frame_at_time(time, TimeMode::Exact),
                 frame,
@@ -958,16 +893,16 @@ mod tests {
     #[test]
     fn agrees_with_binary_search_cfr() {
         let tc = cfr_timecodes(24000.0 / 1001.0, 3000);
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
+        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
 
         // Sweep every ms across the whole range plus generous out-of-range tails.
         let last = *tc64.last().unwrap();
         for ms in -2000..=(last + 2000) {
-            let got = fr.frame_at_time(ms, TimeMode::Exact);
+            let got = fr.frame_at_time(subtitle::StartTime(ms), TimeMode::Exact);
             let want = ref_frame_at_exact(tc64, num, den, ms);
-            assert_eq!(got, want, "EXACT mismatch at ms={ms}");
+            assert_eq!(got.0, want, "EXACT mismatch at ms={ms}");
         }
     }
 
@@ -980,15 +915,15 @@ mod tests {
             (24000.0 / 1001.0, 1200),
             (60000.0 / 1001.0, 300),
         ]);
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
+        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
 
         let last = *tc64.last().unwrap();
         for ms in -1000..=(last + 1000) {
-            let got = fr.frame_at_time(ms, TimeMode::Exact);
+            let got = fr.frame_at_time(subtitle::StartTime(ms), TimeMode::Exact);
             let want = ref_frame_at_exact(tc64, num, den, ms);
-            assert_eq!(got, want, "EXACT VFR mismatch at ms={ms}");
+            assert_eq!(got.0, want, "EXACT VFR mismatch at ms={ms}");
         }
 
         // The whole point: the segment count should be small (one per CFR run,
@@ -1010,20 +945,50 @@ mod tests {
         let fr = Framerate::from_timecodes(tc).unwrap();
 
         // EXACT
-        assert_eq!(fr.frame_at_time(0, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(999, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::Exact), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(999), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::Exact),
+            Number(1)
+        );
 
         // START: first frame whose start <= line start; frame 0 covers [-999, 0].
-        assert_eq!(fr.frame_at_time(0, TimeMode::Start), 0);
-        assert_eq!(fr.frame_at_time(-999, TimeMode::Start), 0);
-        assert_eq!(fr.frame_at_time(1, TimeMode::Start), 1);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::Start), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(0), TimeMode::Start),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(-999), TimeMode::Start),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1), TimeMode::Start),
+            Number(1)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::Start),
+            Number(1)
+        );
 
         // END: frame 0 covers [1, 1000].
-        assert_eq!(fr.frame_at_time(1, TimeMode::End), 0);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::End), 0);
-        assert_eq!(fr.frame_at_time(1001, TimeMode::End), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1), TimeMode::EndInclusive),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::EndInclusive),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1001), TimeMode::EndInclusive),
+            Number(1)
+        );
     }
 
     #[test]
@@ -1032,12 +997,16 @@ mod tests {
         // End(ms) = Exact(ms-1) must hold for all ms by construction; verify
         // against the reference EXACT on VFR data.
         let tc = vfr_timecodes(&[(24000.0 / 1001.0, 400), (30000.0 / 1001.0, 400)]);
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
         let last = *tc.last().unwrap();
+        let fr = Framerate::from_timecodes(tc).unwrap();
         for ms in -500..=(last + 500) {
-            let exact_prev = fr.frame_at_time(ms - 1, TimeMode::Exact);
-            assert_eq!(fr.frame_at_time(ms, TimeMode::Start), exact_prev + 1);
-            assert_eq!(fr.frame_at_time(ms, TimeMode::End), exact_prev);
+            let exact_prev = fr.frame_at_time(subtitle::StartTime(ms - 1), TimeMode::Exact);
+            let time = subtitle::StartTime(ms);
+            assert_eq!(
+                fr.frame_at_time(time, TimeMode::Start),
+                exact_prev + Delta(1)
+            );
+            assert_eq!(fr.frame_at_time(time, TimeMode::EndInclusive), exact_prev);
         }
     }
 
@@ -1049,9 +1018,16 @@ mod tests {
         let fr = Framerate::from_timecodes(tc).unwrap();
         // Exact times are 0,1000,2000,3000,4000.
         // START of frame 2: prev=1000, cur=2000 -> 1000 + (1000+1)/2 = 1500.
-        assert_eq!(fr.time_at_frame(2, TimeMode::Start), 1500);
+        let frame = Number(2);
+        assert_eq!(
+            fr.time_at_frame(frame, TimeMode::Start),
+            subtitle::StartTime(1500)
+        );
         // END of frame 2: cur=2000, next=3000 -> 2000 + (1000+1)/2 = 2500.
-        assert_eq!(fr.time_at_frame(2, TimeMode::End), 2500);
+        assert_eq!(
+            fr.time_at_frame(frame, TimeMode::EndInclusive),
+            subtitle::StartTime(2500)
+        );
     }
 
     #[test]
@@ -1062,8 +1038,9 @@ mod tests {
         let fr = Framerate::from_timecodes(tc).unwrap();
         let n = fr.len() as i32;
 
-        let mut prev_t = i64::MIN;
-        for frame in n..(n + 500) {
+        let mut prev_t = subtitle::StartTime(i64::MIN);
+        for frame_n in n..(n + 500) {
+            let frame = Number(frame_n);
             let time = fr.time_at_frame(frame, TimeMode::Exact);
             assert!(
                 time > prev_t,
@@ -1078,7 +1055,8 @@ mod tests {
         }
 
         // Negative frames likewise.
-        for frame in -300..0 {
+        for frame_n in -300..0 {
+            let frame = Number(frame_n);
             let time = fr.time_at_frame(frame, TimeMode::Exact);
             assert_eq!(
                 fr.frame_at_time(time, TimeMode::Exact),
@@ -1094,13 +1072,13 @@ mod tests {
         // frames). The lookup must still return *a* valid frame and the
         // builder must not panic.
         let tc = vec![0_i64, 33, 33, 33, 66, 100, 133];
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
+        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
         let tc64: &[i64] = &tc;
         let (num, den) = (fr.numerator, fr.denominator);
         for ms in -50..=200 {
-            let got = fr.frame_at_time(ms, TimeMode::Exact);
+            let got = fr.frame_at_time(subtitle::StartTime(ms), TimeMode::Exact);
             let want = ref_frame_at_exact(tc64, num, den, ms);
-            assert_eq!(got, want, "coincident mismatch at ms={ms}");
+            assert_eq!(got.0, want, "coincident mismatch at ms={ms}");
         }
     }
 
@@ -1116,7 +1094,7 @@ mod tests {
             (24000.0 / 1001.0, 40_000),
         ];
         let tc = vfr_timecodes(&runs);
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
+        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
         assert_eq!(fr.len(), 100_000);
         assert!(
             fr.segment_count() <= 6,
@@ -1132,7 +1110,7 @@ mod tests {
             let center = tc64[boundary as usize];
             for ms in (center - 100)..=(center + 100) {
                 assert_eq!(
-                    fr.frame_at_time(ms, TimeMode::Exact),
+                    fr.frame_at_time(subtitle::StartTime(ms), TimeMode::Exact).0,
                     ref_frame_at_exact(tc64, num, den, ms),
                     "boundary mismatch near frame {boundary} at ms={ms}"
                 );
@@ -1183,15 +1161,36 @@ mod tests {
         assert_eq!(fr.segment_count(), 1);
 
         // EXACT frame at frame n is exactly 40*n ms (1000/25), truncating.
-        assert_eq!(fr.time_at_frame(0, TimeMode::Exact), 0);
-        assert_eq!(fr.time_at_frame(1, TimeMode::Exact), 40);
-        assert_eq!(fr.time_at_frame(25, TimeMode::Exact), 1000);
+        assert_eq!(
+            fr.time_at_frame(Number(0), TimeMode::Exact),
+            subtitle::StartTime(0)
+        );
+        assert_eq!(
+            fr.time_at_frame(Number(1), TimeMode::Exact),
+            subtitle::StartTime(40)
+        );
+        assert_eq!(
+            fr.time_at_frame(Number(25), TimeMode::Exact),
+            subtitle::StartTime(1000)
+        );
 
         // FrameAtTime EXACT: last frame whose start <= ms.
-        assert_eq!(fr.frame_at_time(0, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(39, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(40, TimeMode::Exact), 1);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::Exact), 25);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(39), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(40), TimeMode::Exact),
+            Number(1)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::Exact),
+            Number(25)
+        );
     }
 
     #[test]
@@ -1200,10 +1199,11 @@ mod tests {
         // wide frame range, including well past where an i32 ms stamp would have
         // overflowed (frame 6e7 at 40 ms = 2.4e9 ms > i32::MAX).
         let fr = Framerate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
-        for &frame in &[0_i32, 1, 100, 1_000_000, 60_000_000, 100_000_000] {
+        for &frame_n in &[0_i32, 1, 100, 1_000_000, 60_000_000, 100_000_000] {
+            let frame = Number(frame_n);
             let time = fr.time_at_frame(frame, TimeMode::Exact);
             assert!(
-                time > i64::from(i32::MAX) || frame < 53_687_092,
+                time > subtitle::StartTime(i64::from(i32::MAX)) || frame_n < 53_687_092,
                 "sanity: large frames should exceed i32 ms range"
             );
             assert_eq!(
@@ -1218,29 +1218,59 @@ mod tests {
     fn cfr_start_end_semantics() {
         // 1 FPS CFR: same interval semantics as the timecode-built 1 FPS case.
         let fr = Framerate::cfr(DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
-        assert_eq!(fr.frame_at_time(0, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(999, TimeMode::Exact), 0);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::Exact), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(0), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(999), TimeMode::Exact),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::Exact),
+            Number(1)
+        );
 
-        assert_eq!(fr.frame_at_time(0, TimeMode::Start), 0);
-        assert_eq!(fr.frame_at_time(-999, TimeMode::Start), 0);
-        assert_eq!(fr.frame_at_time(1, TimeMode::Start), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(0), TimeMode::Start),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(-999), TimeMode::Start),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1), TimeMode::Start),
+            Number(1)
+        );
 
-        assert_eq!(fr.frame_at_time(1, TimeMode::End), 0);
-        assert_eq!(fr.frame_at_time(1000, TimeMode::End), 0);
-        assert_eq!(fr.frame_at_time(1001, TimeMode::End), 1);
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1), TimeMode::EndInclusive),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1000), TimeMode::EndInclusive),
+            Number(0)
+        );
+        assert_eq!(
+            fr.frame_at_time(subtitle::StartTime(1001), TimeMode::EndInclusive),
+            Number(1)
+        );
     }
 
     #[test]
     fn i64_supports_pathologically_long_video() {
         // Verify correct behavior with extremely long videos
-        let big = i64::from(i32::MAX) + 1_000_000; // ~2.148e9 ms
-        let tc = [0_i64, big / 2, big];
-        let fr = Framerate::from_timecodes(tc.iter().copied()).unwrap();
+        let big = subtitle::StartTime(i64::from(i32::MAX) + 1_000_000); // ~2.148e9 ms
+        let tc = [0_i64, big.0 / 2, big.0];
+        let fr = Framerate::from_timecodes_iter(tc.iter().copied()).unwrap();
         // The final timecode must survive storage intact (no i32 truncation).
-        assert_eq!(fr.time_at_frame(2, TimeMode::Exact), big);
+        assert_eq!(fr.time_at_frame(Number(2), TimeMode::Exact), big);
         // And a lookup at that time returns the final frame.
-        assert_eq!(fr.frame_at_time(big, TimeMode::Exact), 2);
-        assert_eq!(fr.frame_at_time(big - 1, TimeMode::Exact), 1);
+        assert_eq!(fr.frame_at_time(big, TimeMode::Exact), Number(2));
+        assert_eq!(
+            fr.frame_at_time(big - subtitle::Duration(1), TimeMode::Exact),
+            Number(1)
+        );
     }
 }

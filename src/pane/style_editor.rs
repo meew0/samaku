@@ -563,10 +563,7 @@ where
             &ass,
             TRANSPARENT_IMAGE.clone(),
             media::FrameNumber(0_i32),
-            media::FrameRate {
-                numerator: 24,
-                denominator: 1,
-            },
+            &media::FrameRate::f24(),
             frame_size,
             frame_size,
         )

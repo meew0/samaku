@@ -60,18 +60,8 @@ impl Position {
 
     /// Converts the playback position into a frame number (rounding down) using the given frame
     /// rate. Avoids floating point imprecisions where possible.
-    ///
-    /// # Panics
-    /// Panics if the frame number does not fit into a 32-bit signed integer.
-    pub fn current_frame(&self, frame_rate: media::FrameRate) -> media::FrameNumber {
-        let numerator = self.position() * frame_rate.numerator;
-        let denominator = frame_rate.denominator * u64::from(self.rate());
-
-        media::FrameNumber(
-            (numerator / denominator)
-                .try_into()
-                .expect("frame number overflow"),
-        )
+    pub fn current_frame(&self, frame_rate: &media::FrameRate) -> media::FrameNumber {
+        frame_rate.frame_at_time(self.subtitle_time(), media::TimeMode::Exact)
     }
 
     /// Adds the given `delta` number of ticks to the playback state. May be negative.
@@ -98,8 +88,10 @@ impl Position {
         self.add_ticks(delta_ticks);
     }
 
-    pub fn add_frames(&self, delta_frames: media::FrameDelta, frame_rate: media::FrameRate) {
-        self.add_seconds(f64::from(delta_frames.0) / f64::from(frame_rate));
+    pub fn add_frames(&self, delta_frames: media::FrameDelta, frame_rate: &media::FrameRate) {
+        let current_frame = self.current_frame(frame_rate);
+        let target_frame = current_frame + delta_frames;
+        self.set_to_frame(target_frame, frame_rate);
     }
 
     /// Sets the playback position to the given value in ticks.
@@ -134,23 +126,19 @@ impl Position {
     ///
     /// # Panics
     /// Panics if the authoritative position lock is poisoned, or on overflow.
-    pub fn set_to_frame(&self, new_value: media::FrameNumber, frame_rate: media::FrameRate) {
+    pub fn set_to_frame(&self, new_value: media::FrameNumber, frame_rate: &media::FrameRate) {
         if self.rate() == 0 {
             return;
         }
 
-        // We need to always round up, to cover the event starting on this frame.
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "outside the expected temporal bounds"
-        )]
-        let ms = (1000.0 * f64::from(new_value.0) / f64::from(frame_rate)).ceil() as i64;
-
-        let ticks: i64 = ms
+        let target_ms = frame_rate
+            .time_at_frame(new_value, media::TimeMode::Exact)
+            .0;
+        let target_ticks: i64 = target_ms
             .checked_mul(i64::from(self.rate()))
             .expect("ticks overflow")
             / 1000;
-        self.set_ticks(ticks.try_into().unwrap_or(0));
+        self.set_ticks(target_ticks.try_into().unwrap_or(0));
     }
 }
 
@@ -184,7 +172,7 @@ mod tests {
 
     #[test]
     fn seconds_normal() {
-        assert!((make_position(0, 1000).seconds()).abs() < 0.0001); // should equal zero
+        assert!(make_position(0, 1000).seconds().abs() < 0.0001); // should equal zero
         assert!((make_position(1000, 1000).seconds() - 1.0).abs() < 0.0001);
         assert!((make_position(500, 1000).seconds() - 0.5).abs() < 0.0001);
         assert!((make_position(3000, 1000).seconds() - 3.0).abs() < 0.0001);
@@ -208,32 +196,30 @@ mod tests {
 
     #[test]
     fn current_frame_24fps() {
-        let frame_rate = media::FrameRate {
-            numerator: 24,
-            denominator: 1,
-        };
+        let frame_rate = media::FrameRate::f24();
+
         // 1 second → frame 24
         assert_eq!(
-            make_position(1000, 1000).current_frame(frame_rate),
+            make_position(1000, 1000).current_frame(&frame_rate),
             media::FrameNumber(24)
         );
         // 0 ticks → frame 0
         assert_eq!(
-            make_position(0, 1000).current_frame(frame_rate),
+            make_position(0, 1000).current_frame(&frame_rate),
             media::FrameNumber(0)
         );
         // 500 ms → frame 12
         assert_eq!(
-            make_position(500, 1000).current_frame(frame_rate),
+            make_position(500, 1000).current_frame(&frame_rate),
             media::FrameNumber(12)
         );
         // Rounds down: one tick less than a full frame
         assert_eq!(
-            make_position(41, 1000).current_frame(frame_rate),
+            make_position(41, 1000).current_frame(&frame_rate),
             media::FrameNumber(0)
         );
         assert_eq!(
-            make_position(42, 1000).current_frame(frame_rate),
+            make_position(42, 1000).current_frame(&frame_rate),
             media::FrameNumber(1)
         );
     }
@@ -283,21 +269,15 @@ mod tests {
     #[test]
     fn set_to_frame() {
         let pos = make_position(0, 1000);
-        let frame_rate = media::FrameRate {
-            numerator: 24,
-            denominator: 1,
-        };
+        let frame_rate = media::FrameRate::f24();
 
-        pos.set_to_frame(media::FrameNumber(24), frame_rate);
+        pos.set_to_frame(media::FrameNumber(24), &frame_rate);
         assert_eq!(pos.position(), 1000);
 
         let pos = make_position(0, 1000);
-        let frame_rate = media::FrameRate {
-            numerator: 24000,
-            denominator: 1001,
-        };
+        let frame_rate = media::FrameRate::cfr(24000, 1001).unwrap();
 
-        pos.set_to_frame(media::FrameNumber(13), frame_rate);
-        assert_eq!(pos.position(), 543);
+        pos.set_to_frame(media::FrameNumber(13), &frame_rate);
+        assert_eq!(pos.position(), 542);
     }
 }

@@ -96,12 +96,12 @@ fn run_comparison<
         );
 
         'inner: for now_offset in (0..event.duration.0).step_by(100) {
-            let now = event.start.0 + now_offset;
+            let now = event.start + subtitle::Duration(now_offset);
 
             let time = nde::tags::bake::TimeContext {
                 start: event.start,
                 duration: event.duration,
-                now: subtitle::StartTime(now),
+                now,
             };
 
             let indirect = round_trip_fn(time, event, &styles, playback_resolution);

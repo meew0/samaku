@@ -24,7 +24,7 @@ pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
 /// Also specifies some utility methods.
 #[derive(Clone)]
 pub struct Context<'a> {
-    pub frame_rate: media::FrameRate,
+    pub frame_rate: &'a media::FrameRate,
     pub source_event: Option<&'a super::Event<'static>>,
     pub styles: &'a super::StyleList,
     pub motion_tracks: Option<&'a media::motion::TrackList>,
@@ -52,7 +52,11 @@ impl Context<'_> {
 macro_rules! context {
     ($global_state:expr, $source_event:expr) => {
         subtitle::compile::Context {
-            frame_rate: $global_state.frame_rate(),
+            frame_rate: if let &Some(ref video_metadata) = &$global_state.video_metadata {
+                &video_metadata.frame_rate
+            } else {
+                &*crate::media::UNLOADED_FRAMERATE
+            },
             source_event: $source_event,
             styles: &$global_state.subtitles.styles,
             motion_tracks: Some(&$global_state.motion_tracks),
@@ -192,10 +196,7 @@ mod tests {
 
         let style_list = StyleList::new();
         let context = Context {
-            frame_rate: media::FrameRate {
-                numerator: 24,
-                denominator: 1,
-            },
+            frame_rate: &media::FrameRate::f24(),
             source_event: Some(&event),
             styles: &style_list,
             motion_tracks: None,

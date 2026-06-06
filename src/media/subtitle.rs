@@ -156,11 +156,11 @@ impl Renderer {
         subtitles: &OpaqueTrack,
         base: iced::widget::image::Handle,
         frame: super::FrameNumber,
-        frame_rate: super::FrameRate,
+        frame_rate: &super::FrameRate,
         frame_size: subtitle::Resolution,
         storage_size: subtitle::Resolution,
     ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
-        let now = frame_rate.frame_to_ms(frame);
+        let now = frame_rate.time_at_frame(frame, super::TimeMode::Exact);
 
         let mut result: Vec<view::widget::StackedImage<iced::widget::image::Handle>> = vec![];
         result.push(view::widget::StackedImage {
@@ -183,7 +183,7 @@ impl Renderer {
     pub fn render_subtitles_with_callback<F: FnMut(&Image)>(
         &mut self,
         subtitles: &OpaqueTrack,
-        now: i64,
+        time: subtitle::StartTime,
         frame_size: subtitle::Resolution,
         storage_size: subtitle::Resolution,
         callback: &mut F,
@@ -192,6 +192,7 @@ impl Renderer {
         self.internal
             .set_storage_size(storage_size.x, storage_size.y);
 
+        let now = time.0;
         self.internal
             .render_frame(&subtitles.internal, now, callback);
     }
@@ -280,10 +281,6 @@ mod tests {
     fn style_colours() {
         const ASS_FILE: &str = include_str!("../../test_files/style_colours.ass");
         const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 108 };
-        const FRAME_RATE: media::FrameRate = media::FrameRate {
-            numerator: 24,
-            denominator: 1,
-        };
 
         // Expected colours
         const WHITE: Colour = Colour {
@@ -377,7 +374,7 @@ mod tests {
         let mut colours: Vec<u32> = vec![];
         renderer.render_subtitles_with_callback(
             &opaque_track,
-            1000,
+            StartTime(1000),
             FRAME_SIZE,
             FRAME_SIZE,
             &mut |image| colours.push(image.metadata.color),
@@ -402,7 +399,7 @@ mod tests {
         colours.clear();
         renderer.render_subtitles_with_callback(
             &opaque_track,
-            3000,
+            StartTime(3000),
             FRAME_SIZE,
             FRAME_SIZE,
             &mut |image| colours.push(image.metadata.color),
@@ -450,7 +447,7 @@ mod tests {
 
         let (style_list, _) = subtitle::StyleList::from_vec(styles.clone());
         let mut context = subtitle::compile::Context {
-            frame_rate: FRAME_RATE,
+            frame_rate: &media::FrameRate::f24(),
             source_event: None,
             styles: &style_list,
             motion_tracks: None,
@@ -475,7 +472,7 @@ mod tests {
         colours.clear();
         renderer.render_subtitles_with_callback(
             &opaque2,
-            1000,
+            StartTime(1000),
             FRAME_SIZE,
             FRAME_SIZE,
             &mut |image| colours.push(image.metadata.color),
@@ -496,7 +493,7 @@ mod tests {
         colours.clear();
         renderer.render_subtitles_with_callback(
             &opaque2,
-            3000,
+            StartTime(3000),
             FRAME_SIZE,
             FRAME_SIZE,
             &mut |image| colours.push(image.metadata.color),
@@ -558,7 +555,7 @@ mod tests {
             let mut min_y = i32::MAX;
             renderer.render_subtitles_with_callback(
                 &track,
-                1000,
+                StartTime(1000),
                 FRAME_SIZE,
                 FRAME_SIZE,
                 &mut |image| {

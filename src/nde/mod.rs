@@ -56,11 +56,14 @@ pub struct Event {
 
 impl Event {
     #[must_use]
-    pub fn from_ass_event(ass_event: &subtitle::Event, frame_rate: media::FrameRate) -> Self {
+    pub fn from_ass_event(ass_event: &subtitle::Event, frame_rate: &media::FrameRate) -> Self {
         let (global, spans) = tags::parse(&ass_event.text);
 
-        let start_frame = frame_rate.ass_time_to_frame(ass_event.start);
-        let end_frame = frame_rate.ass_time_to_frame_after(ass_event.start + ass_event.duration);
+        let start_frame = frame_rate.frame_at_time(ass_event.start, media::TimeMode::Start);
+        let end_frame = frame_rate.frame_at_time(
+            ass_event.start + ass_event.duration,
+            media::TimeMode::EndInclusive,
+        ) + media::FrameDelta(1);
         let frame_count = end_frame - start_frame;
 
         Self {
@@ -76,7 +79,7 @@ impl Event {
     }
 
     #[must_use]
-    pub fn to_ass_event(&self, frame_rate: media::FrameRate) -> subtitle::Event<'static> {
+    pub fn to_ass_event(&self, frame_rate: &media::FrameRate) -> subtitle::Event<'static> {
         let mut cloned_spans: Vec<Span> = vec![];
 
         for (i, element) in self.text.iter().enumerate() {
@@ -98,8 +101,10 @@ impl Event {
 
         let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
-        let start = frame_rate.frame_to_ass_time(self.start);
-        let duration = frame_rate.frame_to_ass_time(self.start + self.duration) - start;
+        let start = frame_rate.time_at_frame(self.start, media::TimeMode::Start);
+        let duration = frame_rate
+            .time_at_frame(self.start + self.duration, media::TimeMode::EndInclusive)
+            - start;
 
         subtitle::Event {
             start,

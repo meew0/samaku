@@ -81,7 +81,7 @@ pub(super) fn spawn(
                             // decode the new frame
                             if let Some(ref video) = video_opt {
                                 let new_frame =
-                                    playback_position.current_frame(video.metadata.frame_rate);
+                                    playback_position.current_frame(&video.metadata.frame_rate);
                                 if new_frame != last_frame {
                                     last_frame = new_frame;
                                     match video.get_iced_frame(new_frame) {

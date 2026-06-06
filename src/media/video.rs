@@ -52,12 +52,16 @@ impl Video {
         let width = first_frame.width();
         let height = first_frame.height();
 
-        // TODO change types to u32
-        let frame_rate = super::FrameRate {
-            numerator: u64::from(source.properties.spec_fps_numerator),
-            denominator: u64::from(source.properties.spec_fps_denominator),
-        };
-        println!("Frame rate: {frame_rate:?}");
+        let timecodes = source.timecodes().context("Failed to get timecodes")?;
+        let frame_rate = super::FrameRate::from_timecodes(timecodes)
+            .context("Failed to get frame rate from timecodes")?;
+        println!(
+            "Number of segments: {}, average FPS: {} / {} over {} frame(s)",
+            frame_rate.segment_count(),
+            frame_rate.numerator(),
+            frame_rate.denominator(),
+            frame_rate.len()
+        );
 
         // TODO: keyframes and timecodes
         // println!("num_kf: {num_kf}, num_tc: {num_tc}, has_audio: {has_audio}");
@@ -270,6 +274,8 @@ mod tests {
             "unexpected frame count"
         );
 
+        assert_eq!(video.metadata.frame_rate.segment_count(), 1);
+
         let first = get_frame_rgba(&video, 0);
         let middle = get_frame_rgba(&video, 49);
         let last = get_frame_rgba(&video, 99);
@@ -308,6 +314,27 @@ mod tests {
         assert!(
             !is_red(red, green),
             "last frame M2 should be grey, got red={red} green={green}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn vfr() -> anyhow::Result<()> {
+        media::init();
+
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_files/vfrtest.mkv");
+
+        let index = Video::create_indexer(&path)?.run()?;
+        let video = Video::load(&path, index).expect("should load video");
+
+        let frame_rate = &video.metadata.frame_rate;
+        assert_eq!(frame_rate.segment_count(), 3);
+
+        assert_eq!(
+            frame_rate.time_at_frame(media::FrameNumber(101), media::TimeMode::Exact),
+            subtitle::StartTime(1708)
         );
 
         Ok(())

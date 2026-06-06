@@ -539,14 +539,11 @@ pub struct ViewState {
 /// Utility methods for global state.
 impl Samaku {
     /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
-    pub fn frame_rate(&self) -> media::FrameRate {
+    pub fn frame_rate(&self) -> &media::FrameRate {
         if let Some(video_metadata) = self.video_metadata.as_ref() {
-            video_metadata.frame_rate
+            &video_metadata.frame_rate
         } else {
-            media::FrameRate {
-                numerator: 24,
-                denominator: 1,
-            }
+            &media::UNLOADED_FRAMERATE
         }
     }
 
@@ -573,7 +570,7 @@ impl Samaku {
             None => self.video_metadata.as_ref().map(|metadata| {
                 self.shared
                     .playback_position
-                    .current_frame(metadata.frame_rate)
+                    .current_frame(&metadata.frame_rate)
             }),
         }
     }

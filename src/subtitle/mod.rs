@@ -248,6 +248,12 @@ impl Sub<StartTime> for StartTime {
     }
 }
 
+impl std::fmt::Display for StartTime {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{} ms", self.0)
+    }
+}
+
 /// The duration for which an element is shown, in milliseconds.
 #[derive(
     Debug,
@@ -1426,10 +1432,7 @@ mod tests {
 
         let style_list = StyleList::new();
         let context = compile::Context {
-            frame_rate: media::FrameRate {
-                numerator: 24,
-                denominator: 1,
-            },
+            frame_rate: &media::FrameRate::f24(),
             source_event: None,
             styles: &style_list,
             motion_tracks: None,
@@ -1464,10 +1467,7 @@ mod tests {
 
         let style_list = StyleList::new();
         let mut context = compile::Context {
-            frame_rate: media::FrameRate {
-                numerator: 24,
-                denominator: 1,
-            },
+            frame_rate: &media::FrameRate::f24(),
             source_event: None,
             styles: &style_list,
             motion_tracks: None,

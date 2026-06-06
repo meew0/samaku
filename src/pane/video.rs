@@ -324,11 +324,13 @@ pub fn render_subtitles<'a>(
     view_state_cell: &RefCell<crate::ViewState>,
 ) -> Vec<view::widget::StackedImage<iced::widget::image::Handle>> {
     let instant = std::time::Instant::now();
-    let current_frame_time = video_metadata.frame_rate.frame_to_ms(num_frame);
+    let current_frame_time = video_metadata
+        .frame_rate
+        .time_at_frame(num_frame, media::TimeMode::Exact);
     let compiled = subtitles.events.compile_range(
         &subtitles.extradata,
         &mut context,
-        subtitle::StartTime(current_frame_time).stab(),
+        current_frame_time.stab(),
     );
     let elapsed_compile = instant.elapsed();
 
@@ -347,7 +349,7 @@ pub fn render_subtitles<'a>(
             &ass,
             handle.clone(),
             num_frame,
-            video_metadata.frame_rate,
+            &video_metadata.frame_rate,
             storage_size, // TODO use the actual frame size here (maybe with responsive?)
             storage_size,
         )
@@ -547,8 +549,13 @@ fn view_track_buttons<'a>(
             .active_event(&global_state.selected_events)
         && let &Some(ref video_metadata) = &global_state.video_metadata
     {
-        let start_frame = video_metadata.frame_rate.ms_to_frame(active_event.start.0);
-        let end_frame = video_metadata.frame_rate.ms_to_frame(active_event.end().0);
+        let start_frame = video_metadata
+            .frame_rate
+            .frame_at_time(active_event.start, media::TimeMode::Start);
+        // For this purpose, we want the last frame on which the event is still visible.
+        let end_frame = video_metadata
+            .frame_rate
+            .frame_at_time(active_event.end(), media::TimeMode::EndInclusive);
         (event_start_frame, event_end_frame) = (Some(start_frame), Some(end_frame));
 
         if frame_number < start_frame || frame_number > end_frame {
@@ -849,7 +856,7 @@ pub fn frame_number_text(global_state: &crate::Samaku) -> String {
         let frame_number = global_state
             .shared
             .playback_position
-            .current_frame(metadata.frame_rate)
+            .current_frame(&metadata.frame_rate)
             .0;
         format!("{frame_number}")
     } else {
