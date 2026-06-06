@@ -263,10 +263,12 @@ impl Default for TrackSettings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MatchMode {
-    /// Match region content to that of the key marker.
+    /// Match region content to that of the marker from which tracking is started:
+    /// the region content the marker is matched to stays the same along the entire track.
     Key,
 
-    /// Match region content to that of the marker in the previous frame.
+    /// Match region content to that of the marker in the previous frame:
+    /// the matched region changes successively over the tracking process.
     Previous,
 }
 
@@ -310,6 +312,26 @@ pub struct Channels {
 }
 
 impl Channels {
+    /// Try to set the given channel to the given value,
+    /// ensuring one channel remains on at all times.
+    pub fn try_set(&mut self, channel: Channel, value: bool) -> bool {
+        if value {
+            self[channel] = true;
+            true
+        } else {
+            // Make sure at least one channel remains on
+            let all = self.red && self.green && self.blue;
+            let xor = self.red ^ self.green ^ self.blue;
+            let exactly_one = xor && !all;
+            if exactly_one && self[channel] {
+                false
+            } else {
+                self[channel] = false;
+                true
+            }
+        }
+    }
+
     fn rgb() -> Self {
         Self {
             red: true,
@@ -327,6 +349,16 @@ impl std::ops::Index<Channel> for Channels {
             Channel::Red => &self.red,
             Channel::Green => &self.green,
             Channel::Blue => &self.blue,
+        }
+    }
+}
+
+impl std::ops::IndexMut<Channel> for Channels {
+    fn index_mut(&mut self, index: Channel) -> &mut Self::Output {
+        match index {
+            Channel::Red => &mut self.red,
+            Channel::Green => &mut self.green,
+            Channel::Blue => &mut self.blue,
         }
     }
 }
@@ -369,6 +401,7 @@ pub struct Tracker<'a, V> {
     pub video: &'a V,
     pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> PatchResponse,
     pub markers: HashMap<TrackId, Marker>,
+    pub origin_frame: super::FrameNumber,
     pub current_frame: super::FrameNumber,
     pub direction: Direction,
     pub target: Target,
@@ -398,8 +431,13 @@ impl<V> Tracker<'_, V> {
         // then keep the markers that tracked successfully.
         self.markers.retain(|_, marker| {
             // TODO: implement TrackSettings stuff
+            let match_frame = match self.settings.match_mode {
+                MatchMode::Key => self.origin_frame,
+                MatchMode::Previous => self.current_frame,
+            };
+
             let patch_response1 =
-                (self.patch_provider)(self.video, self.current_frame, &marker.search_area);
+                (self.patch_provider)(self.video, match_frame, &marker.search_area);
             let patch_response2 =
                 (self.patch_provider)(self.video, next_frame, &marker.search_area);
 
@@ -489,6 +527,7 @@ mod tests {
             video: &video,
             patch_provider: video::Video::get_libmv_patch,
             markers,
+            origin_frame: media::FrameNumber(0),
             current_frame: media::FrameNumber(0),
             target: Target::Frame(media::FrameNumber(99)),
             direction: Direction::Forward,
@@ -517,5 +556,32 @@ mod tests {
         assert_float_absolute_eq!(last_marker.region.center.y, 81.0, 2.0);
 
         Ok(())
+    }
+
+    #[test]
+    fn channels_try_set() {
+        let mut channels = Channels {
+            red: false,
+            green: true,
+            blue: false,
+        };
+
+        channels.try_set(Channel::Green, false);
+
+        assert!(!channels.red);
+        assert!(channels.green);
+        assert!(!channels.blue);
+
+        channels.try_set(Channel::Red, true);
+        assert!(channels.red);
+
+        channels.try_set(Channel::Green, false);
+        assert!(!channels.green);
+
+        let mut channels = Channels::rgb();
+        channels.try_set(Channel::Blue, false);
+        assert!(channels.red);
+        assert!(channels.green);
+        assert!(!channels.blue);
     }
 }

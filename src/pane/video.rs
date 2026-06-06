@@ -183,6 +183,23 @@ impl super::LocalState for State {
                     },
                 );
             }
+            message::Pane::VideoSetTrackingOption(option) => match option {
+                TrackingOption::Model(model) => {
+                    self.track_settings.model = model;
+                }
+                TrackingOption::MatchMode(match_mode) => {
+                    self.track_settings.match_mode = match_mode;
+                }
+                TrackingOption::PrePass(pre_pass) => {
+                    self.track_settings.pre_pass = pre_pass;
+                }
+                TrackingOption::Normalize(normalize) => {
+                    self.track_settings.normalize = normalize;
+                }
+                TrackingOption::Channel(channel, value) => {
+                    self.track_settings.channels.try_set(channel, value);
+                }
+            },
             _ => {}
         }
 

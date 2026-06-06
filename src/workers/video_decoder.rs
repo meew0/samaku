@@ -126,6 +126,7 @@ pub(super) fn spawn(
                                 tracker_opt = Some(motion::Tracker {
                                     video,
                                     patch_provider: media::Video::get_libmv_patch,
+                                    origin_frame,
                                     current_frame: origin_frame,
                                     markers,
                                     direction,
