@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Only keep the latest run per branch/PR; cancel superseded ones.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ffms2 MSVC release used for the Windows builds (see WINDOWS_BUILD.md).
+  FFMS2_VERSION: "5.0"
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }}, ${{ matrix.profile }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        profile: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-linux-deps
+
+      - name: Set up Windows dependencies
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-windows-deps
+        with:
+          ffms2-version: ${{ env.FFMS2_VERSION }}
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: build-${{ matrix.profile }}
+
+      - name: Build
+        shell: bash
+        run: cargo build --locked ${{ matrix.profile == 'release' && '--release' || '' }}
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-linux-deps
+
+      - name: Set up Windows dependencies
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-windows-deps
+        with:
+          ffms2-version: ${{ env.FFMS2_VERSION }}
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: test
+
+      - name: Run tests
+        shell: bash
+        run: cargo test --locked
+
+  clippy:
+    name: Clippy (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Linux dependencies
+        uses: ./.github/actions/setup-linux-deps
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+          cache-key: clippy
+
+      - name: Run clippy
+        # `-- -D warnings` denies lints only for samaku's own crates, not the
+        # (potentially warning-emitting) dependency tree.
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+  fmt:
+    name: Rustfmt (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Formatting needs neither the native libraries nor a full build, so it
+      # only sets up the toolchain.
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
+          cache-key: fmt
+
+      - name: Check formatting
+        run: cargo fmt --all --check

@@ -1,0 +1,78 @@
+name: Set up Windows build dependencies
+description: >-
+  Installs libass via the runner's preinstalled vcpkg, downloads the official
+  ffms2 MSVC binaries, and exports the environment variables and DLL search path
+  that the build scripts (and test binaries) need. Automates the manual steps in
+  WINDOWS_BUILD.md. CMake and the MSVC toolchain (used by the bundled libmv and
+  the linker) are already present on GitHub-hosted Windows runners.
+
+inputs:
+  ffms2-version:
+    description: ffms2 release tag to download the MSVC binaries for.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # vcpkg builds libass and its dependency tree (freetype, fribidi, harfbuzz,
+    # ...) from source, which is slow; cache the resulting binary packages so
+    # only the first run pays that cost.
+    - name: Configure vcpkg binary cache
+      shell: pwsh
+      run: |
+        $cache = Join-Path $env:GITHUB_WORKSPACE "vcpkg-binary-cache"
+        New-Item -ItemType Directory -Force -Path $cache | Out-Null
+        "VCPKG_DEFAULT_BINARY_CACHE=$cache" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Restore vcpkg binary cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+        key: vcpkg-libass-x64-windows-v1
+
+    - name: Install libass via vcpkg
+      shell: pwsh
+      run: vcpkg install libass:x64-windows
+
+    - name: Download and unpack ffms2 MSVC binaries
+      shell: pwsh
+      run: |
+        $ver = "${{ inputs.ffms2-version }}"
+        $name = "ffms2-$ver-msvc"
+        $archive = "$name.7z"
+        Invoke-WebRequest `
+          -Uri "https://github.com/FFMS/ffms2/releases/download/$ver/$archive" `
+          -OutFile $archive
+        7z x $archive
+        # Rearrange into the deps/ffms2/{include,lib} layout the build expects.
+        New-Item -ItemType Directory -Force -Path deps\ffms2 | Out-Null
+        Copy-Item "$name\include" deps\ffms2\include -Recurse -Force
+        New-Item -ItemType Directory -Force -Path deps\ffms2\lib | Out-Null
+        Copy-Item "$name\x64\*" deps\ffms2\lib -Force
+
+    - name: Export build environment
+      shell: pwsh
+      run: |
+        $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows"
+        $deps = Join-Path $env:GITHUB_WORKSPACE "deps\ffms2"
+
+        # Point the ffms2-sys and libass-sys build scripts at the headers and
+        # import libraries (replaces the local .cargo/config.toml from the docs).
+        @(
+          "FFMS_INCLUDE_DIR=$deps\include"
+          "FFMS_LIB_DIR=$deps\lib"
+          "LIBASS_INCLUDE_DIR=$vcpkg\include"
+          "LIBASS_LIB_DIR=$vcpkg\lib"
+        ) | Out-File -FilePath $env:GITHUB_ENV -Append
+
+        # bindgen needs libclang; the runner ships LLVM but does not set this.
+        if (Test-Path "C:\Program Files\LLVM\bin\libclang.dll") {
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+        }
+
+        # ass.dll (+ its vcpkg dependencies) and ffms2.dll are loaded at runtime,
+        # so they must be on PATH for the built binaries and test executables.
+        @(
+          "$vcpkg\bin"
+          "$deps\lib"
+        ) | Out-File -FilePath $env:GITHUB_PATH -Append

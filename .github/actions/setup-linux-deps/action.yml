@@ -1,0 +1,22 @@
+name: Set up Linux build dependencies
+description: >-
+  Installs the native libraries samaku links against (libass, ffms2) plus the
+  toolchain its build scripts need (cmake for the bundled libmv, libclang for
+  bindgen) from the distribution package manager. Mirrors the "Linux" section of
+  README.md but uses apt instead of building from source.
+
+runs:
+  using: composite
+  steps:
+    - name: Install system libraries
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          libass-dev \
+          libffms2-dev \
+          libasound2-dev \
+          libgtk-3-dev \
+          libclang-dev \
+          cmake \
+          pkg-config
