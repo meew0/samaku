@@ -353,6 +353,7 @@
     )
 )]
 
+use std::borrow::Cow;
 // These following 3 crates are only used in benchmarks.
 // We need to import them here to suppress the relevant clippy warnings.
 #[cfg(test)]
@@ -422,11 +423,17 @@ pub mod workers;
     reason = "main function doesn't need error documentation"
 )]
 pub fn run() -> iced::Result {
+    let fonts: Vec<Cow<'static, [u8]>> = resources::BARLOW_VARIANTS
+        .iter()
+        .chain(std::iter::once(&resources::BOOTSTRAP_ICONS))
+        .map(|&font| font.into())
+        .collect();
+
     iced::application(Samaku::boot, update::update, Samaku::view)
         .subscription(Samaku::subscription)
         .settings(Settings {
             id: Some("samaku".to_owned()),
-            fonts: vec![resources::BARLOW.into(), resources::BOOTSTRAP_ICONS.into()],
+            fonts,
             default_font: DEFAULT_FONT,
             default_text_size: iced::Pixels(16.0),
             antialiasing: true,

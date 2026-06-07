@@ -11,9 +11,11 @@ thread_local! {
 }
 
 fn init_font_system() -> cosmic_text::FontSystem {
-    cosmic_text::FontSystem::new_with_fonts([cosmic_text::fontdb::Source::Binary(Arc::new(
-        resources::BARLOW,
-    ))])
+    let fonts: Vec<_> = resources::BARLOW_VARIANTS
+        .iter()
+        .map(|&barlow| cosmic_text::fontdb::Source::Binary(Arc::new(barlow)))
+        .collect();
+    cosmic_text::FontSystem::new_with_fonts(fonts)
 }
 
 /// Calculate the bounding box width and height for the given event.

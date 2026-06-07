@@ -16,7 +16,9 @@ fn library_init() -> ass::Library {
 
     // Load Barlow, our UI font we package anyway, into libass so it can be used as a fallback font
     // in case no system fonts are available for whatever reason
-    library.add_font("Barlow", resources::BARLOW);
+    for &variant in resources::BARLOW_VARIANTS {
+        library.add_font("Barlow", variant);
+    }
 
     library
 }
