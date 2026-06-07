@@ -89,8 +89,6 @@ jobs:
           # ffms2 + the FFmpeg DLLs it ships with
           Copy-Item "deps\ffms2\lib\*.dll" dist
 
-          Compress-Archive -Path "dist\*" -DestinationPath samaku-windows.zip
-
       - name: Delete previous Windows artifact
         if: matrix.profile == 'release' && runner.os == 'Windows' && github.event_name == 'push'
         shell: bash
@@ -108,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: samaku-windows
-          path: samaku-windows.zip
+          path: dist/
           retention-days: 7
 
   test:
