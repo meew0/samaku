@@ -18,6 +18,8 @@ jobs:
   build:
     name: Build (${{ matrix.os }}, ${{ matrix.profile }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +45,71 @@ jobs:
       - name: Build
         shell: bash
         run: cargo build --locked ${{ matrix.profile == 'release' && '--release' || '' }}
+
+      # -- Linux AppImage (release builds on push only) ----------------------
+
+      - name: Build AppImage
+        if: matrix.profile == 'release' && runner.os == 'Linux' && github.event_name == 'push'
+        env:
+          SKIP_BUILD: "1"
+        run: bash packaging/build-appimage.sh
+
+      - name: Delete previous Linux artifact
+        if: matrix.profile == 'release' && runner.os == 'Linux' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts?name=samaku-linux&per_page=100" \
+            --jq '.artifacts[].id' \
+            | xargs -r -I{} gh api --method DELETE \
+                "repos/${{ github.repository }}/actions/artifacts/{}" \
+            || true
+
+      - name: Upload Linux AppImage
+        if: matrix.profile == 'release' && runner.os == 'Linux' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: samaku-linux
+          path: target/appimage/samaku-x86_64.AppImage
+          retention-days: 7
+
+      # -- Windows bundle (release builds on push only) ----------------------
+
+      - name: Bundle Windows DLLs
+        if: matrix.profile == 'release' && runner.os == 'Windows' && github.event_name == 'push'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist
+          Copy-Item "target\release\samaku.exe" dist
+
+          # libass and its vcpkg dependencies (freetype, fribidi, harfbuzz, …)
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\bin"
+          Copy-Item "$vcpkg\*.dll" dist
+
+          # ffms2 + the FFmpeg DLLs it ships with
+          Copy-Item "deps\ffms2\lib\*.dll" dist
+
+          Compress-Archive -Path "dist\*" -DestinationPath samaku-windows.zip
+
+      - name: Delete previous Windows artifact
+        if: matrix.profile == 'release' && runner.os == 'Windows' && github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts?name=samaku-windows&per_page=100" \
+            --jq '.artifacts[].id' \
+            | xargs -r -I{} gh api --method DELETE \
+                "repos/${{ github.repository }}/actions/artifacts/{}" \
+            || true
+
+      - name: Upload Windows artifact
+        if: matrix.profile == 'release' && runner.os == 'Windows' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: samaku-windows
+          path: samaku-windows.zip
+          retention-days: 7
 
   test:
     name: Test (${{ matrix.os }})

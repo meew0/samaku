@@ -44,13 +44,15 @@ if [[ ! -x "${APPIMAGETOOL}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Build the release binary
+# 2. Build the release binary (set SKIP_BUILD=1 to reuse an existing binary)
 # ---------------------------------------------------------------------------
-echo "Building samaku (release)…"
-cd "${REPO_ROOT}"
-cargo build --release
-
 BINARY="${REPO_ROOT}/target/release/samaku"
+
+if [[ -z "${SKIP_BUILD:-}" ]]; then
+    echo "Building samaku (release)…"
+    cd "${REPO_ROOT}"
+    cargo build --release
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Assemble the AppDir
@@ -88,13 +90,19 @@ NO_STRIP=1 \
 
 # ---------------------------------------------------------------------------
 # 5. Bundle libleancrypto unmodified (bypassing patchelf)
+#
+# Only needed when the binary links it dynamically. When aws-lc-sys builds a
+# static libleancrypto (e.g. on CI runners without the system library), the
+# binary has no dynamic dependency on it and linuxdeploy will not touch it.
 # ---------------------------------------------------------------------------
-LIBLEANCRYPTO="$(ldconfig -p | grep 'libleancrypto\.so\.1' | awk '{print $NF}')"
-if [[ -z "${LIBLEANCRYPTO}" ]]; then
-    echo "ERROR: libleancrypto.so.1 not found on this system." >&2
-    exit 1
+if ldd "${BINARY}" 2>/dev/null | grep -q "libleancrypto"; then
+    LIBLEANCRYPTO="$(ldconfig -p | grep 'libleancrypto\.so\.1' | awk '{print $NF}')"
+    if [[ -z "${LIBLEANCRYPTO}" ]]; then
+        echo "ERROR: libleancrypto.so.1 is a dynamic dep but not found via ldconfig." >&2
+        exit 1
+    fi
+    cp "${LIBLEANCRYPTO}" "${APPDIR}/usr/lib/libleancrypto.so.1"
 fi
-cp "${LIBLEANCRYPTO}" "${APPDIR}/usr/lib/libleancrypto.so.1"
 
 # Aliases for OpenBLAS
 ln -sf libopenblas.so.0 "${APPDIR}/usr/lib/liblapack.so.3"
