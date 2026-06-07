@@ -19,9 +19,11 @@ runs:
     - name: Activate pinned toolchain
       shell: bash
       run: |
-        # rust-toolchain.toml selects the channel; this materializes it and any
-        # requested components on the runner's preinstalled rustup.
-        rustup show active-toolchain || rustup toolchain install
+        # rust-toolchain.toml pins the channel (stable). The runner ships a
+        # stable toolchain, but an installed `stable` is never auto-upgraded, so
+        # it can lag behind the project's MSRV (Cargo.toml rust-version). Pull
+        # the latest stable release explicitly before building.
+        rustup update stable --no-self-update
         if [ -n "${{ inputs.components }}" ]; then
           rustup component add ${{ inputs.components }}
         fi
