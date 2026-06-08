@@ -717,7 +717,7 @@ fn view_track_settings(
                     message::Pane::VideoSetTrackingOption(TrackingOption::PrePass(new_value)),
                 )
             }),
-        "Use a brute-force translation only pre-track before refinement [NYI]",
+        "Use a brute-force translation only pre-track before refinement",
     );
 
     let normalize_cb = view::tooltip(
@@ -729,7 +729,7 @@ fn view_track_settings(
                     message::Pane::VideoSetTrackingOption(TrackingOption::Normalize(new_value)),
                 )
             }),
-        "Normalize light intensities while tracking (slower) [NYI]",
+        "Normalize light intensities while tracking (slower)",
     );
 
     let channels_cbs = [
@@ -739,18 +739,20 @@ fn view_track_settings(
     ]
     .iter()
     .map(|&channel| {
-        iced::widget::checkbox(pane_state.track_settings.channels[channel])
-            .label(channel.name())
-            .on_toggle(move |new_value| {
-                message::Message::Pane(
-                    self_pane,
-                    message::Pane::VideoSetTrackingOption(TrackingOption::Channel(
-                        channel, new_value,
-                    )),
-                )
-            })
-            .width(iced::Length::FillPortion(1))
-            .into()
+        view::tooltip(
+            iced::widget::checkbox(pane_state.track_settings.channels[channel])
+                .label(channel.name())
+                .on_toggle(move |new_value| {
+                    message::Message::Pane(
+                        self_pane,
+                        message::Pane::VideoSetTrackingOption(TrackingOption::Channel(
+                            channel, new_value,
+                        )),
+                    )
+                })
+                .width(iced::Length::FillPortion(1)),
+            "Set video channels to use for motion tracking [NYI]",
+        )
     })
     .collect();
     let channels_row = iced::widget::Row::from_vec(channels_cbs).spacing(5.0);
