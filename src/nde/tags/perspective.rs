@@ -800,7 +800,7 @@ mod tests {
         let quad = tags_to_quad(&tags, align, bounding_box, screen_z);
         assert!(quad.is_convex());
         let rec = quad_to_tags(&quad, OrgMode::NoFax, align, bounding_box, screen_z);
-        assert!(rec.raw_fax.abs() < 1e-6);
+        assert_float_absolute_eq!(rec.raw_fax, 0.0, 1e-6);
 
         let quad2 = tags_to_quad(&rec, align, bounding_box, screen_z);
         assert!(quad_approx_equal(&quad, &quad2, 1e-6));

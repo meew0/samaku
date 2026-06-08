@@ -958,6 +958,7 @@ fn top_bar<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     fn make_position(left_ms: i64, right_ms: i64) -> Position {
         Position {
@@ -1077,34 +1078,34 @@ mod tests {
         let pos = make_position(0, 1000);
         let bounds = make_bounds(0, 1000);
         let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
-        assert!((start_x - 0.0).abs() < 0.001);
-        assert!((end_x - 100.0).abs() < 0.001);
+        assert_float_absolute_eq!(start_x, 0.0, 0.001);
+        assert_float_absolute_eq!(end_x, 100.0, 0.001);
 
         // Video entirely right of viewport → start_x == end_x == width (all dark)
         let pos = make_position(0, 1000);
         let bounds = make_bounds(2000, 5000);
         let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
-        assert!((start_x - 100.0).abs() < 0.001);
-        assert!((end_x - 100.0).abs() < 0.001);
+        assert_float_absolute_eq!(start_x, 100.0, 0.001);
+        assert_float_absolute_eq!(end_x, 100.0, 0.001);
 
         // Video entirely left of viewport → start_x == end_x == 0 (all dark)
         let pos = make_position(5000, 6000);
         let bounds = make_bounds(0, 3000);
         let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
-        assert!((start_x - 0.0).abs() < 0.001);
-        assert!((end_x - 0.0).abs() < 0.001);
+        assert_float_absolute_eq!(start_x, 0.0, 0.001);
+        assert_float_absolute_eq!(end_x, 0.0, 0.001);
 
         // Viewport [0, 1000], video [250, 750] → start_x=25%, end_x=75%
         let pos = make_position(0, 1000);
         let bounds = make_bounds(250, 750);
         let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
-        assert!((start_x - 25.0).abs() < 0.001);
-        assert!((end_x - 75.0).abs() < 0.001);
+        assert_float_absolute_eq!(start_x, 25.0, 0.001);
+        assert_float_absolute_eq!(end_x, 75.0, 0.001);
 
         // Empty video → start_x == end_x (zero-width lighter region)
         let pos = make_position(0, 1000);
         let bounds = make_bounds(500, 500);
         let (start_x, end_x) = background_x_bounds(pos, bounds, 100.0);
-        assert!((start_x - end_x).abs() < 0.001);
+        assert_float_absolute_eq!(start_x, end_x, 0.001);
     }
 }

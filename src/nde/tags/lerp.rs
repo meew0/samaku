@@ -102,13 +102,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     #[test]
     fn various_types() {
         assert_eq!((-3_i32).lerp(3_i32, 0.5), 0_i32);
         assert_eq!(3_u32.lerp(6_u32, 0.334), 4_u32);
         assert_eq!(3_u8.lerp(6_u8, 0.334), 4_u8);
-        assert!((3.0_f64.lerp(4.0_f64, 0.25) - 3.25_f64).abs() < f64::EPSILON);
+        assert_float_absolute_eq!(3.0_f64.lerp(4.0_f64, 0.25), 3.25_f64, f64::EPSILON);
 
         assert_eq!(None::<i32>.lerp(None, 0.5), None);
         assert_eq!(None.lerp(Some(3_i32), 0.5), Some(3_i32));

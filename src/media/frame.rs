@@ -765,6 +765,7 @@ pub mod util {
 mod tests {
     use super::util::*;
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     #[test]
     fn frame_timing_24() {
@@ -1157,7 +1158,7 @@ mod tests {
     fn cfr_basic_properties() {
         // 25 fps exactly: numerator 25e9, denominator 1e9.
         let fr = Rate::cfr(25 * DEFAULT_DENOMINATOR, DEFAULT_DENOMINATOR).unwrap();
-        assert!((fr.fps() - 25.0).abs() < 1e-9);
+        assert_float_absolute_eq!(fr.fps(), 25.0, 1e-9);
         assert_eq!(fr.segment_count(), 1);
 
         // EXACT frame at frame n is exactly 40*n ms (1000/25), truncating.

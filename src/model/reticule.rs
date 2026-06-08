@@ -92,6 +92,7 @@ pub enum Shape {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     fn make_reticule(x: f64, y: f64) -> Reticule {
         Reticule {
@@ -111,8 +112,8 @@ mod tests {
             height: 1080.0,
         };
         let point = reticule.iced_position(size, storage);
-        assert!((f64::from(point.x) - 100.0).abs() < 0.01);
-        assert!((f64::from(point.y) - 200.0).abs() < 0.01);
+        assert_float_absolute_eq!(f64::from(point.x), 100.0, 0.01);
+        assert_float_absolute_eq!(f64::from(point.y), 200.0, 0.01);
     }
 
     #[test]
@@ -125,8 +126,8 @@ mod tests {
             height: 540.0,
         };
         let point = reticule.iced_position(size, storage);
-        assert!((f64::from(point.x) - 480.0).abs() < 0.01);
-        assert!((f64::from(point.y) - 270.0).abs() < 0.01);
+        assert_float_absolute_eq!(f64::from(point.x), 480.0, 0.01);
+        assert_float_absolute_eq!(f64::from(point.y), 270.0, 0.01);
     }
 
     #[test]
@@ -140,8 +141,8 @@ mod tests {
         let point = iced::Point { x: 350.0, y: 720.0 };
         let position =
             Reticule::position_from_iced(point, iced::Vector { x: 0.0, y: 0.0 }, size, storage);
-        assert!((position.x - 350.0).abs() < 0.01);
-        assert!((position.y - 720.0).abs() < 0.01);
+        assert_float_absolute_eq!(position.x, 350.0, 0.01);
+        assert_float_absolute_eq!(position.y, 720.0, 0.01);
     }
 
     #[test]
@@ -156,8 +157,8 @@ mod tests {
         let point = iced::Point { x: 200.0, y: 300.0 };
         let offset = iced::Vector { x: 100.0, y: 50.0 };
         let position = Reticule::position_from_iced(point, offset, size, storage);
-        assert!((position.x - 100.0).abs() < 0.01);
-        assert!((position.y - 250.0).abs() < 0.01);
+        assert_float_absolute_eq!(position.x, 100.0, 0.01);
+        assert_float_absolute_eq!(position.y, 250.0, 0.01);
     }
 
     #[test]
@@ -177,7 +178,7 @@ mod tests {
             size,
             storage,
         );
-        assert!((back.x - original.x).abs() < 0.1);
-        assert!((back.y - original.y).abs() < 0.1);
+        assert_float_absolute_eq!(back.x, original.x, 0.1);
+        assert_float_absolute_eq!(back.y, original.y, 0.1);
     }
 }

@@ -155,6 +155,7 @@ impl Default for Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     fn make_position(position: u64, rate: u32) -> Position {
         Position {
@@ -167,15 +168,15 @@ mod tests {
     #[test]
     fn seconds_zero_rate() {
         // should equal zero
-        assert!(make_position(1000, 0).seconds().abs() < 0.0001);
+        assert_float_absolute_eq!(make_position(1000, 0).seconds(), 0.0, 0.0001);
     }
 
     #[test]
     fn seconds_normal() {
-        assert!(make_position(0, 1000).seconds().abs() < 0.0001); // should equal zero
-        assert!((make_position(1000, 1000).seconds() - 1.0).abs() < 0.0001);
-        assert!((make_position(500, 1000).seconds() - 0.5).abs() < 0.0001);
-        assert!((make_position(3000, 1000).seconds() - 3.0).abs() < 0.0001);
+        assert_float_absolute_eq!(make_position(0, 1000).seconds(), 0.0, 0.0001);
+        assert_float_absolute_eq!(make_position(1000, 1000).seconds(), 1.0, 0.0001);
+        assert_float_absolute_eq!(make_position(500, 1000).seconds(), 0.5, 0.0001);
+        assert_float_absolute_eq!(make_position(3000, 1000).seconds(), 3.0, 0.0001);
     }
 
     #[test]

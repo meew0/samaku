@@ -279,6 +279,7 @@ pub(crate) fn track_region(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
 
     /// Returns a black image with a 5x3 white square at the given position.
     fn test_image_data(x: usize, y: usize) -> Vec<f32> {
@@ -325,7 +326,7 @@ mod tests {
         let result = track_region(&options, &image1, &image2, &region1, &region2);
 
         let refined_region2 = result.expect("tracking should have succeeded");
-        assert!((refined_region2.center.x - 102.0).abs() < 0.5);
-        assert!((refined_region2.center.y - 103.0).abs() < 0.5);
+        assert_float_absolute_eq!(refined_region2.center.x, 102.0, 0.5);
+        assert_float_absolute_eq!(refined_region2.center.y, 103.0, 0.5);
     }
 }

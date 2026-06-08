@@ -1153,6 +1153,7 @@ enum Reset {
 
 #[cfg(test)]
 mod tests {
+    use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
     use crate::nde::tags::{Karaoke, KaraokeOnset};
@@ -1758,7 +1759,7 @@ mod tests {
                 end: Milliseconds(2),
             })
         );
-        assert!((anim.acceleration - 3.0).abs() < f64::EPSILON);
+        assert_float_absolute_eq!(anim.acceleration, 3.0, f64::EPSILON);
         assert_eq!(anim.modifiers.letter_spacing, Resettable::Override(10.0));
 
         assert_matches!(

@@ -781,12 +781,12 @@ fn aegi_inline_string_decode(input: &str) -> String {
 
 #[cfg(test)]
 pub mod tests {
+    use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
+    use crate::test_utils::test_file;
+    use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
     use smol::io::AsyncBufReadExt as _;
     use std::path::Path;
-
-    use crate::nde::tags::{HorizontalAlignment, VerticalAlignment, WrapStyle};
-    use crate::test_utils::test_file;
 
     use super::*;
 
@@ -865,7 +865,7 @@ pub mod tests {
 
         assert_eq!(style.name, "Default");
         assert_eq!(style.font_name, "Arial");
-        assert!((style.font_size - 20.0).abs() < f64::EPSILON);
+        assert_float_absolute_eq!(style.font_size, 20.0, f64::EPSILON);
         assert_eq!(
             style.primary_colour,
             Colour {
@@ -906,13 +906,13 @@ pub mod tests {
         assert!(!style.italic);
         assert!(!style.underline);
         assert!(!style.strike_out);
-        assert!((style.scale.x - 1.0).abs() < f64::EPSILON);
-        assert!((style.scale.y - 1.0).abs() < f64::EPSILON);
-        assert!((style.spacing - 0.0).abs() < f64::EPSILON);
+        assert_float_absolute_eq!(style.scale.x, 1.0, f64::EPSILON);
+        assert_float_absolute_eq!(style.scale.y, 1.0, f64::EPSILON);
+        assert_float_absolute_eq!(style.spacing, 0.0, f64::EPSILON);
         assert_eq!(style.angle, Angle(0.0));
         assert_eq!(style.border_style, BorderStyle::Default);
-        assert!((style.border_width - 2.0).abs() < f64::EPSILON);
-        assert!((style.shadow_distance - 2.0).abs() < f64::EPSILON);
+        assert_float_absolute_eq!(style.border_width, 2.0, f64::EPSILON);
+        assert_float_absolute_eq!(style.shadow_distance, 2.0, f64::EPSILON);
         assert_eq!(
             style.alignment,
             Alignment {
