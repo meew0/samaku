@@ -218,7 +218,6 @@ pub enum Message {
     // Create and update nodes in the specified NDE filter.
     AddNode(subtitle::ExtradataId, nde::node::Constructor),
     DeleteNodes(subtitle::ExtradataId, Vec<nde::graph::NodeId>),
-    MoveNode(subtitle::ExtradataId, nde::graph::NodeId, iced::Point),
     MoveNodeGroup(subtitle::ExtradataId, Vec<nde::graph::NodeId>, iced::Vector),
     ConnectNodes(
         subtitle::ExtradataId,

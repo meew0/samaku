@@ -223,10 +223,10 @@ type NodeGraph<'a> = iced_nodegraph::NodeGraph<
     NodeId,
     PinId,
     PinStyleValues,
-    usize,
     message::Message,
     iced::Theme,
     iced::Renderer,
+    usize,
 >;
 
 fn view_filter<'a>(
@@ -298,7 +298,9 @@ fn create_graph(
                 },
             )
         })
-        .on_move(move |node_id, point| message::Message::MoveNode(nde_filter_id, node_id, point))
+        .on_move(move |vector, node_ids| {
+            message::Message::MoveNodeGroup(nde_filter_id, node_ids, vector)
+        })
         .on_select(move |nodes| {
             message::Message::Batch(vec![
                 message::Message::Pane(
@@ -308,10 +310,7 @@ fn create_graph(
                 message::Message::ActivateNodes(nde_filter_id, nodes),
             ])
         })
-        .on_group_move(move |node_ids, vector| {
-            message::Message::MoveNodeGroup(nde_filter_id, node_ids, vector)
-        })
-        .on_camera_change(move |position, zoom| {
+        .on_pan(move |position, zoom| {
             message::Message::Pane(
                 self_pane,
                 message::Pane::NodeEditorCameraChanged(position, zoom),
@@ -319,7 +318,7 @@ fn create_graph(
         })
         .on_delete(move |node_ids| message::Message::DeleteNodes(nde_filter_id, node_ids))
         .selection(&pane_state.selected_nodes)
-        .initial_camera(pane_state.camera.position(), pane_state.camera.zoom)
+        .view(pane_state.camera.position(), pane_state.camera.zoom)
         .width(iced::Length::Fill)
         .height(iced::Length::Fill);
 
@@ -373,7 +372,7 @@ fn create_nodes<'a>(
         }
 
         let pin_list = iced::widget::column(socket_rows).spacing(4);
-        let content_style = node_content_style(node.category());
+        let title_background_color = node_title_background(node.category());
         let title =
             iced::widget::container(iced::widget::text(node.name())).padding(iced::Padding {
                 top: 4.0,
@@ -381,11 +380,7 @@ fn create_nodes<'a>(
                 left: 8.0,
                 right: 8.0,
             });
-        let title_bar = iced_nodegraph::node_header(
-            title,
-            content_style.title_background,
-            content_style.corner_radius,
-        );
+        let title_bar = iced_nodegraph::node_header(title, title_background_color, 5.0);
         let node_element: iced::Element<'_, message::Message> = iced::widget::column![
             title_bar,
             iced::widget::container(
@@ -414,22 +409,22 @@ fn create_nodes<'a>(
 
         graph.push_node(
             iced_nodegraph::node(node_id, visual_node.position, node_element)
-                .style(move |theme, status| {
-                    iced_nodegraph::default_node_style(theme, status)
-                        .border_outline_color(node_outline_color)
-                        .border_outline_width(node_outline_width)
-                        .resolve()
+                .style(move |theme, status| iced_nodegraph::NodeStyle {
+                    border_outline_color: node_outline_color.into(),
+                    border_outline_width: node_outline_width,
+                    ..iced_nodegraph::default_node_style(theme, status)
                 })
                 .pin_style(
                     move |theme,
                           pin_info: &iced_nodegraph::PinInfo<PinId, PinStyleValues>,
                           _other_pin_info,
                           status| {
-                        iced_nodegraph::default_pin_style(theme, status)
-                            .color(pin_info.info().color)
-                            .shape(pin_info.info().shape)
-                            .radius(12.0)
-                            .resolve()
+                        iced_nodegraph::PinStyle {
+                            color: pin_info.info().color.into(),
+                            shape: pin_info.info().shape,
+                            radius: 12.0,
+                            ..iced_nodegraph::default_pin_style(theme, status)
+                        }
                     },
                 ),
         );
@@ -538,16 +533,17 @@ fn create_connections(
         Err(_) => (style::SAMAKU_DESTRUCTIVE, 1.0),
     };
 
-    for (next, previous) in &nde_filter.graph.connections {
+    for (i, (next, previous)) in nde_filter.graph.connections.iter().enumerate() {
         let from =
             iced_nodegraph::PinRef::new(previous.node_index, PinId::output(previous.socket_index));
         let to = iced_nodegraph::PinRef::new(next.node_index, PinId::input(next.socket_index));
         graph.push_edge(
-            iced_nodegraph::edge(from, to).style(move |theme, status, _, _| {
-                iced_nodegraph::default_edge_style(theme, status)
-                    .border_outline_color(outline_color)
-                    .border_outline_width(outline_width)
-                    .resolve()
+            iced_nodegraph::edge(from, to, i).style(move |theme, status, _, _| {
+                iced_nodegraph::EdgeStyle {
+                    border_outline_color: outline_color.into(),
+                    border_outline_width: outline_width,
+                    ..iced_nodegraph::default_edge_style(theme, status)
+                }
             }),
         );
     }
@@ -760,18 +756,29 @@ impl GraphErrorState {
     }
 }
 
-fn node_content_style(category: nde::node::Category) -> iced_nodegraph::NodeContentStyle {
-    match category {
-        nde::node::Category::Input => {
-            iced_nodegraph::NodeContentStyle::input(&style::samaku_theme())
-        }
-        nde::node::Category::Process => {
-            iced_nodegraph::NodeContentStyle::process(&style::samaku_theme())
-        }
+// Matches `from_accent` and `input`/`process`/`output` helper methods
+// in iced_nodegraph demos.
+fn node_title_background(category: nde::node::Category) -> iced::Color {
+    const DARK_TINT: f32 = 0.35;
+
+    let accent_color = match category {
+        nde::node::Category::Input => style::SAMAKU_PRIMARY,
+        nde::node::Category::Process => style::SAMAKU_SUCCESS,
         nde::node::Category::Output => {
-            iced_nodegraph::NodeContentStyle::output(&style::samaku_theme())
+            style::samaku_theme()
+                .extended_palette()
+                .secondary
+                .base
+                .color
         }
-    }
+    };
+
+    iced::Color::from_rgba(
+        accent_color.r * DARK_TINT,
+        accent_color.g * DARK_TINT,
+        accent_color.b * DARK_TINT,
+        0.9,
+    )
 }
 
 fn make_pin<'a>(

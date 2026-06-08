@@ -1169,16 +1169,6 @@ fn update_internal(
                 Message::SetFilterGraph(filter_id, old_graph),
             );
         }
-        Message::MoveNode(filter_id, node_id, point) => {
-            let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
-            let node = &mut filter.graph.nodes[node_id.0];
-            let old_point = replace(&mut node.position, point);
-
-            undo.put_instant(
-                "Move node",
-                Message::MoveNode(filter_id, node_id, old_point),
-            );
-        }
         Message::MoveNodeGroup(filter_id, node_ids, delta) => {
             let filter = global_state.subtitles.extradata[filter_id].assert_filter_mut();
             for node_id in &node_ids {

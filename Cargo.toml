@@ -37,7 +37,7 @@ iced = { version = "0.14.0", default-features = false, features = [
     "svg",
 ] }
 iced_aw = { version = "0.14.1", default-features = false, features = ["menu"] }
-iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "0b85298c49d3cfff8868fb488e01bd1fc5343011" }
+iced_nodegraph = { git = "https://github.com/tuco86/iced_nodegraph.git", rev = "79e0efe5f609ccf02d34c471c3e9585b3ac5cabb" }
 rfd = "0.17.2"
 smol = "2.0"
 

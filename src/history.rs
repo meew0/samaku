@@ -145,7 +145,6 @@ impl History {
             | Message::RestoreFilter(_, _, _)
             | Message::AddNode(_, _)
             | Message::DeleteNodes(_, _)
-            | Message::MoveNode(_, _, _)
             | Message::MoveNodeGroup(_, _, _)
             | Message::ConnectNodes(_, _, _)
             | Message::DisconnectNodes(_, _, _)
