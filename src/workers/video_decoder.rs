@@ -32,6 +32,7 @@ pub(super) fn spawn(
         .name("samaku_video_decoder".to_owned())
         .spawn(move || {
             let mut video_opt: Option<media::Video> = None;
+            let mut video_dirty = false; // whether a new video was loaded before `PlaybackStep`
             let mut last_frame = media::FrameNumber(-1);
 
             let mut tracker_opt: Option<motion::Tracker<media::Video>> = None;
@@ -82,7 +83,8 @@ pub(super) fn spawn(
                             if let Some(ref video) = video_opt {
                                 let new_frame =
                                     playback_position.current_frame(&video.metadata.frame_rate);
-                                if new_frame != last_frame {
+                                if new_frame != last_frame || video_dirty {
+                                    video_dirty = false;
                                     last_frame = new_frame;
                                     match video.get_iced_frame(new_frame) {
                                         Ok(handle) => {
@@ -108,6 +110,7 @@ pub(super) fn spawn(
                                     tx_out.send(message::Message::VideoLoaded(metadata_box));
                                     tracker_opt = None;
                                     video_opt = Some(video);
+                                    video_dirty = true;
                                 }
                                 Err(err) => {
                                     // Display the error to the user as a toast
