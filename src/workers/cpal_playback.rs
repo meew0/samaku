@@ -146,10 +146,12 @@ fn try_build_stream(
     playback_position: Arc<model::playback::Position>,
     tx_out: super::GlobalSender,
 ) -> Option<cpal::Stream> {
+    let stream_config = config.into();
+
     match sample_format {
         cpal::SampleFormat::F32 => Some(build_stream::<f32>(
             device,
-            &config.into(),
+            stream_config,
             audio_mutex,
             playing,
             playback_position,
@@ -157,7 +159,7 @@ fn try_build_stream(
         )),
         cpal::SampleFormat::F64 => Some(build_stream::<f64>(
             device,
-            &config.into(),
+            stream_config,
             audio_mutex,
             playing,
             playback_position,
@@ -165,7 +167,7 @@ fn try_build_stream(
         )),
         cpal::SampleFormat::U8 => Some(build_stream::<u8>(
             device,
-            &config.into(),
+            stream_config,
             audio_mutex,
             playing,
             playback_position,
@@ -173,7 +175,7 @@ fn try_build_stream(
         )),
         cpal::SampleFormat::I16 => Some(build_stream::<i16>(
             device,
-            &config.into(),
+            stream_config,
             audio_mutex,
             playing,
             playback_position,
@@ -181,7 +183,7 @@ fn try_build_stream(
         )),
         cpal::SampleFormat::I32 => Some(build_stream::<i32>(
             device,
-            &config.into(),
+            stream_config,
             audio_mutex,
             playing,
             playback_position,
@@ -196,7 +198,7 @@ fn try_build_stream(
 
 fn build_stream<T>(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     audio_mutex: Arc<Mutex<Option<media::Audio>>>,
     playing: Arc<atomic::AtomicBool>,
     playback_position: Arc<model::playback::Position>,

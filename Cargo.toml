@@ -46,7 +46,7 @@ ffms2-sys = "0.3"
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 libmv-capi-sys = "0.1.3"
 matroska-demuxer = "0.7"
-cpal = "0.17"
+cpal = "0.18"
 
 # FFI utilities
 libc = "0.2.183"
