@@ -19,7 +19,7 @@ For an overview of what is theoretically planned at the moment, you can take a l
 Technology-wise, samaku uses
 
 - Rust,
-- [iced](https://github.com/iced-rs/iced) for the UI,
+- [iced](https://github.com/iced-rs/iced) for the UI (with [iced_nodegraph](https://github.com/tuco86/iced_nodegraph) for the node editor),
 - [libass](https://github.com/libass/libass) for subtitle rendering,
 - [ffms2](https://github.com/FFMS/ffms2) + [ffms2-sys](https://crates.io/crates/ffms2-sys) for audio and video decoding,
 - and [libmv](https://projects.blender.org/blender/libmv) + [libmv-capi-sys](https://crates.io/crates/libmv-capi-sys)
@@ -51,7 +51,21 @@ Apart from samaku's own code, there are the following modules in the root folder
 
 ## How to run
 
-Tested on Linux and Windows.
+If you want to try out samaku yourself, prebuilt nightlies for Linux and Windows are available at nightly.link [here](https://nightly.link/meew0/samaku/workflows/ci/master). The Linux build contains an AppImage that should be ready to run out of the box. The Windows build includes required DLLs; the zip file should be extracted to a folder and then `samaku.exe` can be run from there.
+
+Keep in mind that samaku is not yet ready for production. There may be data loss. In particular, the project/filter file formats will change between revisions, so do not rely on being able to open a file created with an earlier revision in a later revision.
+
+## How to use
+
+You can use the menu at the top to load subtitle and media files. Then, use the controls within the panes to manage events, filters, motion tracks, etc.
+
+Please also take a look at `src/keyboard.rs`, which defines global keyboard shortcuts for functionality that is not yet mapped to any buttons or the like in the UI. In particular, `F2` and `F3` create new panes; `F4` deletes a pane; and `Shift+F4` clears a pane such that something new can be assigned.
+
+Detailed usage instructions TBD.
+
+## How to build
+
+So far, building samaku has been tested on Linux and Windows.
 
 ### Linux
 
@@ -66,10 +80,6 @@ It is also possible to build samaku as an AppImage using the `packaging/build-ap
 ### Windows
 
 See [WINDOWS_BUILD.md](https://github.com/meew0/samaku/blob/master/WINDOWS_BUILD.md).
-
-### Usage
-
-For actually using samaku, please also take a look at `src/keyboard.rs`, which defines global keyboard shortcuts for functionality that is not yet mapped to any buttons or the like in the UI.
 
 ## License notes
 
