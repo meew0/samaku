@@ -74,14 +74,18 @@ pub(super) fn spawn(
                         MessageIn::Play => {
                             if let Some(ref stream) = stream_opt {
                                 playing.store(true, atomic::Ordering::Relaxed);
-                                tx_out.send(message::Message::Playing(true));
+                                tx_out.send(message::Message::UpdatePlaybackStateRepresentation(
+                                    true,
+                                ));
                                 stream.play().expect("Failed to play audio stream");
                             }
                         }
                         MessageIn::Pause => {
                             if let Some(ref stream) = stream_opt {
                                 playing.store(false, atomic::Ordering::Relaxed);
-                                tx_out.send(message::Message::Playing(false));
+                                tx_out.send(message::Message::UpdatePlaybackStateRepresentation(
+                                    false,
+                                ));
                                 stream.pause().expect("Failed to pause audio stream");
                             }
                         }
@@ -209,13 +213,20 @@ where
 {
     use cpal::traits::DeviceTrait as _;
 
+    let tx_out_err = tx_out.clone();
+
     device
         .build_output_stream(
             config,
             move |data: &mut [T], _| {
                 data_callback::<T>(data, &audio_mutex, &playing, &playback_position, &tx_out);
             },
-            move |err| println!("Audio stream error: {err}"),
+            move |err| {
+                tx_out_err.send(message::Message::Toast(model::toast::Toast::error_title(
+                    "Audio stream error",
+                    &err.into(),
+                )));
+            },
             None,
         )
         .expect("Failed to build audio stream")
@@ -235,9 +246,7 @@ fn data_callback<T>(
 
     // If playback is paused, zero the array and return
     if !playing.load(atomic::Ordering::Relaxed) {
-        for i in &mut *data {
-            *i = Default::default();
-        }
+        zero(data);
         return;
     }
 
@@ -255,7 +264,17 @@ fn data_callback<T>(
         let num_frames = num_samples / u64::from(audio.properties.channels);
 
         // Get the actual data
-        audio.fill_buffer_packed(data, *auth_pos, num_frames);
+        if let Err(err) = audio.fill_buffer_packed(data, *auth_pos, num_frames) {
+            // If an error occurred while getting audio data,
+            // show it as a toast and pause playback.
+            tx_out.send(message::Message::Toast(model::toast::Toast::error_title(
+                "Audio playback error",
+                &err,
+            )));
+            tx_out.send(message::Message::SetPlayback(false));
+            zero(data);
+            return;
+        }
 
         *auth_pos += num_frames;
         playback_position
@@ -265,5 +284,11 @@ fn data_callback<T>(
         drop(auth_pos);
 
         tx_out.send(message::Message::PlaybackStep);
+    }
+}
+
+fn zero<T: Default>(data: &mut [T]) {
+    for i in &mut *data {
+        *i = Default::default();
     }
 }

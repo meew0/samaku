@@ -77,6 +77,14 @@ pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
     global_state.workers.emit_restart_audio();
 }
 
+pub(crate) fn set_playback(global_state: &crate::Samaku, should_play: bool) {
+    if should_play {
+        global_state.workers.emit_play();
+    } else {
+        global_state.workers.emit_pause();
+    }
+}
+
 /// Represents an action where multiple events are edited at the same time.
 ///
 /// Either only a `Single` event is set to a value,

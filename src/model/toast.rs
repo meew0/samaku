@@ -146,6 +146,12 @@ impl<M> Toast<M> {
         Self::message(Status::Danger, "Error".to_owned(), format!("{err:#}"))
     }
 
+    /// "Danger" status toast for anyhow errors, with custom title.
+    #[must_use]
+    pub fn error_title<S: Into<String>>(title: S, err: &anyhow::Error) -> Self {
+        Self::message(Status::Danger, title.into(), format!("{err:#}"))
+    }
+
     /// Override the timeout for this specific toast (builder-style).
     #[must_use]
     pub fn with_timeout(self, secs: u64) -> Self {

@@ -206,7 +206,8 @@ impl History {
             | Message::PlaybackAdvanceSeconds(_)
             | Message::PlaybackSetPosition(_)
             | Message::TogglePlayback
-            | Message::Playing(_)
+            | Message::SetPlayback(_)
+            | Message::UpdatePlaybackStateRepresentation(_)
             | Message::DeselectEvents(_, _)
             | Message::DeselectTracks(_, _)
             | Message::MultiAssignFiltersToEvents(_)

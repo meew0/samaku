@@ -116,10 +116,11 @@ pub enum Message {
     PlaybackAdvanceSeconds(f64),
     PlaybackSetPosition(subtitle::StartTime),
     TogglePlayback,
+    SetPlayback(bool),
 
     /// Update the global representation of the playback state; emitted by the playback worker.
     /// Does not cause the playback state itself to change.
-    Playing(bool),
+    UpdatePlaybackStateRepresentation(bool),
 
     CreateStyle,
     DeleteStyle(usize),
@@ -414,7 +415,7 @@ mod tests {
 
     #[test]
     fn name() {
-        let message = Message::Playing(true);
-        assert_eq!(message.name(), "Playing");
+        let message = Message::UpdatePlaybackStateRepresentation(true);
+        assert_eq!(message.name(), "UpdatePlaybackStateRepresentation");
     }
 }

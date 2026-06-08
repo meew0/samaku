@@ -36,14 +36,19 @@ impl Audio {
     ///
     /// # Panics
     /// Panics on overflow, or when FFMS2 fails to retrieve audio data.
-    pub fn fill_buffer_packed<T>(&mut self, data: &mut [T], start_frame: u64, count_frames: u64)
+    pub fn fill_buffer_packed<T>(
+        &mut self,
+        data: &mut [T],
+        start_frame: u64,
+        count_frames: u64,
+    ) -> anyhow::Result<()>
     where
         T: Copy,
     {
         #[expect(clippy::cast_possible_truncation, reason = "64 bit only")]
         self.source
             .get_audio(start_frame as usize, count_frames as usize, data)
-            .unwrap();
+            .context("getting audio data")
     }
 }
 
@@ -73,7 +78,9 @@ mod tests {
         let channels = usize::from(audio.properties.channels);
         #[expect(clippy::cast_possible_truncation, reason = "64 bit only")]
         let mut buf = vec![0.0_f32; channels * count_frames as usize];
-        audio.fill_buffer_packed(&mut buf, 1000, count_frames);
+        audio
+            .fill_buffer_packed(&mut buf, 1000, count_frames)
+            .unwrap();
 
         // The decoded audio should contain some non-zero samples
         assert!(buf.iter().any(|sample| *sample != 0.0));

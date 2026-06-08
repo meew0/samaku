@@ -340,13 +340,12 @@ fn update_internal(
         Message::TogglePlayback => {
             // Notify workers to play or pause. The respective playback controller will assume
             // responsibility of updating us.
-            if global_state.playing {
-                global_state.workers.emit_pause();
-            } else {
-                global_state.workers.emit_play();
-            }
+            action::set_playback(global_state, !global_state.playing);
         }
-        Message::Playing(playing) => {
+        Message::SetPlayback(should_play) => {
+            action::set_playback(global_state, should_play);
+        }
+        Message::UpdatePlaybackStateRepresentation(playing) => {
             global_state.playing = playing;
         }
         Message::CreateStyle => {
