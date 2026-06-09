@@ -2018,7 +2018,7 @@ dependencies = [
 [[package]]
 name = "iced_nodegraph"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=79e0efe5f609ccf02d34c471c3e9585b3ac5cabb#79e0efe5f609ccf02d34c471c3e9585b3ac5cabb"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=1f85f2ed4d9a5479fc76fcada568c0301e33058f#1f85f2ed4d9a5479fc76fcada568c0301e33058f"
 dependencies = [
  "bitflags 2.11.1",
  "euclid",
@@ -2034,7 +2034,7 @@ dependencies = [
 [[package]]
 name = "iced_nodegraph_sdf"
 version = "0.1.0"
-source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=79e0efe5f609ccf02d34c471c3e9585b3ac5cabb#79e0efe5f609ccf02d34c471c3e9585b3ac5cabb"
+source = "git+https://github.com/tuco86/iced_nodegraph.git?rev=1f85f2ed4d9a5479fc76fcada568c0301e33058f#1f85f2ed4d9a5479fc76fcada568c0301e33058f"
 dependencies = [
  "bytemuck",
  "encase",
