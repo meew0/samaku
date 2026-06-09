@@ -380,9 +380,33 @@ fn create_nodes<'a>(
                 left: 8.0,
                 right: 8.0,
             });
+
+        let (node_outline_color, node_outline_width, error_message) = match *nde_result_or_error {
+            Ok(ref nde_result) => match nde_result.intermediates.get(node_index) {
+                Some(&NodeState::Inactive) => (style::SAMAKU_INACTIVE, 0.0, None),
+                Some(&NodeState::Active(_)) => (style::SAMAKU_PRIMARY, 1.0, None),
+                Some(&NodeState::Error(ref err)) => {
+                    let message = collect_anyhow_causes(err);
+                    (style::SAMAKU_DESTRUCTIVE, 1.0, Some(message))
+                }
+                None => panic!("intermediate node not found"),
+            },
+            Err(ref err) => {
+                // If there was an error, make all nodes appear red
+                (style::SAMAKU_DESTRUCTIVE, 1.0, Some(format!("{err:#}")))
+            }
+        };
+
         let title_bar = iced_nodegraph::node_header(title, title_background_color, 5.0);
+        let title_bar_tooltip: iced::Element<message::Message> =
+            if let Some(message) = error_message {
+                view::tooltip(title_bar, message)
+            } else {
+                title_bar.into()
+            };
+
         let node_element: iced::Element<'_, message::Message> = iced::widget::column![
-            title_bar,
+            title_bar_tooltip,
             iced::widget::container(
                 visual_node
                     .node
@@ -393,19 +417,6 @@ fn create_nodes<'a>(
         ]
         .width(200.0)
         .into();
-
-        let (node_outline_color, node_outline_width) = match *nde_result_or_error {
-            Ok(ref nde_result) => match nde_result.intermediates.get(node_index) {
-                Some(&NodeState::Inactive) => (style::SAMAKU_INACTIVE, 0.0),
-                Some(&NodeState::Active(_)) => (style::SAMAKU_PRIMARY, 1.0),
-                Some(&NodeState::Error(_)) => (style::SAMAKU_DESTRUCTIVE, 1.0),
-                None => panic!("intermediate node not found"),
-            },
-            Err(_) => {
-                // If there was an error, make all nodes appear red
-                (style::SAMAKU_DESTRUCTIVE, 1.0)
-            }
-        };
 
         graph.push_node(
             iced_nodegraph::node(node_id, visual_node.position, node_element)
@@ -707,11 +718,7 @@ fn format_error(
 
     if let NodeState::Error(ref error) = *first_error {
         let first_message = error.to_string();
-        let causes = error
-            .chain()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join("\nReason: ");
+        let causes = collect_anyhow_causes(error);
         let message = if let Some(error_count) = error_count_option
             && error_count > 1
         {
@@ -726,6 +733,18 @@ fn format_error(
     } else {
         GraphErrorState::none()
     }
+}
+
+fn collect_anyhow_causes(error: &anyhow::Error) -> String {
+    use std::fmt::Write as _;
+    let mut result = String::new();
+    for (i, cause) in error.chain().enumerate() {
+        if i > 0 {
+            result.push_str("\nReason: ");
+        }
+        write!(result, "{cause}").unwrap();
+    }
+    result
 }
 
 struct GraphErrorState {

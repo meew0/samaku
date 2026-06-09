@@ -153,8 +153,9 @@ pub struct NdeResult<'a, 'b> {
     pub first_error_index: Option<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum NdeError {
+    #[error("Cycle in graph detected")]
     CycleInGraph,
 }
 
