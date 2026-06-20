@@ -65,6 +65,17 @@ impl Sub<Number> for Number {
     }
 }
 
+impl Delta {
+    /// Asserts that this `Delta` is positive, and casts to `u32`.
+    ///
+    /// # Panics
+    /// Panics if this `Delta` is negative.
+    #[must_use]
+    pub fn assert_positive(self) -> u32 {
+        u32::try_from(self.0).expect("expected positive FrameDelta")
+    }
+}
+
 /// Frame-time conversion interpretation mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TimeMode {
