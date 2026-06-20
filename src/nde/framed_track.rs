@@ -63,6 +63,41 @@ where
         }
     }
 
+    /// Construct a `Fixed` track directly from flattened per-frame data: `width`
+    /// elements per frame, for `data.len() / width` consecutive frames starting
+    /// at `start`. Useful for nodes that compute a value for every frame up front
+    /// (e.g. a motion-track node emitting per-frame positions).
+    ///
+    /// # Panics
+    /// Panics if `width` is zero or if `data.len()` is not a multiple of `width`.
+    #[must_use]
+    pub fn from_fixed(start: media::FrameNumber, width: u16, data: Vec<T>) -> Self {
+        assert!(width > 0, "`FramedTrack` width must be nonzero");
+        assert_eq!(
+            data.len() % usize::from(width),
+            0,
+            "`FramedTrack` data length must be a multiple of its width"
+        );
+        Self {
+            inner: Rc::new(Inner::Fixed(Fixed { start, width, data })),
+            frame_adapter: None,
+        }
+    }
+
+    /// Construct a `Variable` track from per-frame element lists. Frames not
+    /// present in the iterator are treated as empty.
+    #[must_use]
+    pub fn from_variable<I: IntoIterator<Item = (media::FrameNumber, Vec<T>)>>(entries: I) -> Self {
+        let map = entries
+            .into_iter()
+            .map(|(frame, values)| (frame, SmallVec::from_vec(values)))
+            .collect();
+        Self {
+            inner: Rc::new(Inner::Variable(map)),
+            frame_adapter: None,
+        }
+    }
+
     #[must_use]
     pub fn map<U: Clone, F: FnMut(T) -> U>(self, map_fn: F) -> FramedTrack<'a, U> {
         self.map_direct(map_fn, None)
@@ -288,29 +323,24 @@ where
             && fixed2_ref.start == start
             && fixed2_ref.duration() == duration
         {
-            if let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) {
-                // If the other track is `Fixed` with exactly the same length as we have,
-                // we can `into_iter` to get ownership of the values inside
-                // without needing to clone anything.
-                // This will be a very common case in practice, so it's worth optimizing
-                // for this specifically.
-                // We need to step over the width though so we get exactly one item
-                // from each frame.
-                // TODO: we can make these `Fixed` cases more general,
-                // since we just need to return `None` for out-of-range values.
-                for (i, value2) in fixed2
-                    .data
-                    .into_iter()
-                    .step_by(usize::from(fixed2.width))
-                    .enumerate()
-                {
-                    let frame =
-                        start + media::FrameDelta(i32::try_from(i).expect("frame offset overflow"));
-                    let new_value1 = clone_adapt(value1, frame, t1_adapter);
-                    result.push(map_fn(frame, new_value1, Some(Cow::Owned(value2))));
-                }
-            } else {
-                panic!("unwrap_or_clone failed");
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
+
+            // If the other track is `Fixed` with exactly the same length as we have,
+            // we can `into_iter` to get ownership of the values inside
+            // without needing to clone anything.
+            // This will be a very common case in practice, so it's worth optimizing
+            // for this specifically.
+            // We step over the width so we get exactly one item from each frame,
+            // and keep a running `frame` counter rather than recomputing it per element.
+            // TODO: we can make these `Fixed` cases more general,
+            // since we just need to return `None` for out-of-range values.
+            let mut frame = start;
+            for value2 in fixed2.data.into_iter().step_by(usize::from(fixed2.width)) {
+                let new_value1 = clone_adapt(value1, frame, t1_adapter);
+                result.push(map_fn(frame, new_value1, Some(Cow::Owned(value2))));
+                frame += media::FrameDelta(1);
             }
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
@@ -347,70 +377,69 @@ where
             && fixed2_ref.start == start
             && fixed2_ref.duration() == duration
         {
-            if let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) {
-                // Same as `frame_zip_t1_single`: optimize for the case where
-                // `track2_inner` is `Fixed` with the same bounds.
-                // We need to further check 2 separate sub-cases: where our
-                // width is 1 (so we always use the first element of T2)
-                // and where our width is the same as T2.
-                // In the first case, we use the first element of each frame,
-                // as above.
-                fixed1
-                    .data
-                    .into_iter()
-                    .enumerate()
-                    .zip(fixed2.data.into_iter().step_by(usize::from(fixed2.width)))
-                    .map(|((i, value1), value2)| {
-                        let frame = start
-                            + media::FrameDelta(i32::try_from(i).expect("frame offset overflow"));
-                        map_fn(frame, value1, Some(Cow::Owned(value2)))
-                    })
-                    .collect()
-            } else {
-                panic!("unwrap_or_clone failed");
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
+
+            // Same as `frame_zip_t1_single`: optimize for the case where
+            // `track2_inner` is `Fixed` with the same bounds.
+            // We need to further check 2 separate sub-cases: where our
+            // width is 1 (so we always use the first element of T2)
+            // and where our width is the same as T2.
+            // In the first case, we use the first element of each frame,
+            // as above, with a running `frame` counter (one frame per element).
+            let mut data = Vec::with_capacity(fixed1.data.len());
+            let mut frame = start;
+            let value2_iter = fixed2.data.into_iter().step_by(usize::from(fixed2.width));
+            for (value1, value2) in fixed1.data.into_iter().zip(value2_iter) {
+                data.push(map_fn(frame, value1, Some(Cow::Owned(value2))));
+                frame += media::FrameDelta(1);
             }
+            data
         } else if let &Inner::Fixed(ref fixed2_ref) = &*track2_inner_rc
             && fixed1.width == fixed2_ref.width
             && fixed2_ref.start == start
             && fixed2_ref.duration() == duration
         {
-            if let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) {
-                // Sub-case 2: both fixeds have the same width,
-                // so we can directly zip them.
-                // We use matching elements from each frame.
-                fixed1
-                    .data
-                    .into_iter()
-                    .enumerate()
-                    .zip(fixed2.data)
-                    .map(|((i, value1), value2)| {
-                        let frame_i = i / usize::from(fixed1.width);
-                        let frame = start
-                            + media::FrameDelta(
-                                i32::try_from(frame_i).expect("frame offset overflow"),
-                            );
-                        map_fn(frame, value1, Some(Cow::Owned(value2)))
-                    })
-                    .collect()
-            } else {
-                panic!("unwrap_or_clone failed");
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
+
+            // Sub-case 2: both fixeds have the same width,
+            // so we can directly zip them.
+            // We use matching elements from each frame, advancing `frame` once
+            // every `width` elements instead of dividing per element.
+            let width = usize::from(fixed1.width);
+            let mut data = Vec::with_capacity(fixed1.data.len());
+            let mut frame = start;
+            let mut column = 0_usize;
+            for (value1, value2) in fixed1.data.into_iter().zip(fixed2.data) {
+                data.push(map_fn(frame, value1, Some(Cow::Owned(value2))));
+                column += 1;
+                if column == width {
+                    column = 0;
+                    frame += media::FrameDelta(1);
+                }
             }
+            data
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
             // In particular, this also occurs if both tracks are Fixed with the same bounds
             // but not matching in width.
-            fixed1
-                .data
-                .into_iter()
-                .enumerate()
-                .map(|(i, value1)| {
-                    let frame_i = i / usize::from(fixed1.width);
-                    let frame = start
-                        + media::FrameDelta(i32::try_from(frame_i).expect("frame offset overflow"));
-                    let value2 = track2_inner_rc.get_frame_adapt(frame, track2_adapter.as_ref());
-                    map_fn(frame, value1, value2)
-                })
-                .collect()
+            let width = usize::from(fixed1.width);
+            let mut data = Vec::with_capacity(fixed1.data.len());
+            let mut frame = start;
+            let mut column = 0_usize;
+            for value1 in fixed1.data {
+                let value2 = track2_inner_rc.get_frame_adapt(frame, track2_adapter.as_ref());
+                data.push(map_fn(frame, value1, value2));
+                column += 1;
+                if column == width {
+                    column = 0;
+                    frame += media::FrameDelta(1);
+                }
+            }
+            data
         }
     }
 
@@ -501,9 +530,8 @@ where
             // each frame's elements directly out of its data without cloning them,
             // iterating forward so the output stays in frame order.
             let width2 = usize::from(fixed2.width);
-            for (frame_index, values2) in fixed2.data.chunks(width2).enumerate() {
-                let frame = start
-                    + media::FrameDelta(i32::try_from(frame_index).expect("frame offset overflow"));
+            let mut frame = start;
+            for values2 in fixed2.data.chunks(width2) {
                 let new_value1 = clone_adapt(value1, frame, t1_adapter);
                 let mapped = map_fn(
                     frame,
@@ -511,6 +539,7 @@ where
                     Cow::Borrowed(values2),
                 );
                 Self::append_fixed(&mut result, mapped, start, num_frames);
+                frame += media::FrameDelta(1);
             }
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
@@ -570,12 +599,12 @@ where
             // The other track is `Fixed` with exactly our bounds, so we can borrow
             // its per-frame elements directly without cloning.
             let width2 = usize::from(fixed2.width);
-            for (frame_index, values2) in fixed2.data.chunks(width2).enumerate() {
-                let frame = start
-                    + media::FrameDelta(i32::try_from(frame_index).expect("frame offset overflow"));
+            let mut frame = start;
+            for values2 in fixed2.data.chunks(width2) {
                 let values1: SmallVec<T1, SMALL_VEC_SIZE> = data1.by_ref().take(width1).collect();
                 let mapped = map_fn(frame, values1, Cow::Borrowed(values2));
                 Self::append_fixed(&mut result, mapped, start, total_frames);
+                frame += media::FrameDelta(1);
             }
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
@@ -840,6 +869,36 @@ mod tests {
     )]
     fn combine(frame: media::FrameNumber, v1: Timed, v2: Option<Cow<i32>>) -> (i32, i32, i32) {
         (frame.0, v1.tag, v2.map_or(-1, |cow| *cow))
+    }
+
+    #[test]
+    fn public_constructors() {
+        // `from_fixed` builds a `Fixed` track that behaves like one produced by a
+        // `frame_zip`.
+        let track = FramedTrack::from_fixed(fr(2), 2, vec![1, 2, 3, 4]);
+        let fixed = unwrap_fixed(track);
+        assert_eq!(fixed.start, fr(2));
+        assert_eq!(fixed.width, 2);
+        assert_eq!(fixed.data, vec![1, 2, 3, 4]);
+
+        // `from_variable` keys per-frame element lists by frame.
+        let track = FramedTrack::from_variable(vec![(fr(0), vec![10]), (fr(2), vec![20, 21])]);
+        let map = unwrap_variable(track);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map[&fr(0)].as_slice(), &[10]);
+        assert_eq!(map[&fr(2)].as_slice(), &[20, 21]);
+    }
+
+    #[test]
+    #[should_panic(expected = "width must be nonzero")]
+    fn from_fixed_rejects_zero_width() {
+        std::hint::black_box(FramedTrack::from_fixed(fr(0), 0, vec![1, 2, 3]));
+    }
+
+    #[test]
+    #[should_panic(expected = "multiple of its width")]
+    fn from_fixed_rejects_ragged_data() {
+        std::hint::black_box(FramedTrack::from_fixed(fr(0), 2, vec![1, 2, 3]));
     }
 
     #[test]
