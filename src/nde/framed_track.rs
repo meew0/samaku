@@ -172,17 +172,11 @@ impl<T> Fixed<T> {
         media::FrameDelta(i32::try_from(num_frames).expect("`Fixed` duration overflow"))
     }
 
-    fn split_off(&mut self, after: media::FrameNumber) -> Vec<T> {
-        let n = self.frame_n(after).expect("frame out of bounds");
-        self.data.split_off(n)
-    }
-
     /// Calculate the index of the first element of the given frame.
     /// Returns `None` if the frame is out of bounds.
     fn frame_n(&self, frame: media::FrameNumber) -> Option<usize> {
-        let n =
-            usize::try_from(self.start.0 + i32::from(self.width) * (frame - self.start).0).ok()?;
-        ((n + usize::from(self.width)) < self.data.len()).then_some(n)
+        let n = usize::try_from(i32::from(self.width) * (frame - self.start).0).ok()?;
+        ((n + usize::from(self.width)) <= self.data.len()).then_some(n)
     }
 
     fn total_frames(&self) -> usize {
@@ -493,49 +487,47 @@ where
             frame_adapter: track2_adapter,
         } = track2;
 
+        let mut result = None;
+
         if let &Inner::Fixed(ref fixed2_ref) = &*track2_inner_rc
             && fixed2_ref.start == start
             && fixed2_ref.duration() == duration
         {
-            if let Inner::Fixed(mut fixed2) = Rc::unwrap_or_clone(track2_inner_rc) {
-                let mut result = None;
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
 
-                for frame_index in (0..duration.0).rev() {
-                    let frame_offset = media::FrameDelta(frame_index);
-                    let frame = start + frame_offset;
-                    let new_value1 = clone_adapt(value1, frame, t1_adapter);
-                    let values2 = fixed2.split_off(frame);
-                    let mapped =
-                        map_fn(frame, SmallVec::from_buf([new_value1]), Cow::Owned(values2));
-                    Self::append_fixed(&mut result, mapped, start, fixed2.total_frames());
-                }
-
-                result.unwrap_or(Fixed {
-                    start,
-                    width: 1,
-                    data: vec![],
-                })
-            } else {
-                panic!("unwrap_or_clone failed");
+            // The other track is `Fixed` with exactly our bounds, so we can borrow
+            // each frame's elements directly out of its data without cloning them,
+            // iterating forward so the output stays in frame order.
+            let width2 = usize::from(fixed2.width);
+            for (frame_index, values2) in fixed2.data.chunks(width2).enumerate() {
+                let frame = start
+                    + media::FrameDelta(i32::try_from(frame_index).expect("frame offset overflow"));
+                let new_value1 = clone_adapt(value1, frame, t1_adapter);
+                let mapped = map_fn(
+                    frame,
+                    SmallVec::from_buf([new_value1]),
+                    Cow::Borrowed(values2),
+                );
+                Self::append_fixed(&mut result, mapped, start, num_frames);
             }
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
-            let mut inner_result = Vec::with_capacity(num_frames);
-
             for frame_n in start.0..(start + duration).0 {
                 let frame = media::FrameNumber(frame_n);
                 let value2 = track2_inner_rc.get_frame_adapt_all(frame, track2_adapter.as_ref());
                 let new_value1 = clone_adapt(value1, frame, t1_adapter);
                 let mapped = map_fn(frame, SmallVec::from_buf([new_value1]), value2);
-                inner_result.extend(mapped);
-            }
-
-            Fixed {
-                start,
-                width: 1,
-                data: inner_result,
+                Self::append_fixed(&mut result, mapped, start, num_frames);
             }
         }
+
+        result.unwrap_or(Fixed {
+            start,
+            width: 1,
+            data: vec![],
+        })
     }
 
     fn frame_zip_sliced_fixed_width_t1_fixed<
@@ -547,64 +539,62 @@ where
             Cow<[T2]>,
         ) -> SmallVec<U, SMALL_VEC_SIZE>,
     >(
-        mut fixed1: Fixed<T1>,
+        fixed1: Fixed<T1>,
         track2: FramedTrack<T2>,
         mut map_fn: F,
     ) -> Fixed<U> {
         let start = fixed1.start;
         let duration = fixed1.duration();
         let total_frames = fixed1.total_frames();
+        let width1 = usize::from(fixed1.width);
 
         let FramedTrack {
             inner: track2_inner_rc,
             frame_adapter: track2_adapter,
         } = track2;
 
+        let mut result = None;
+
+        // Consume our own elements forward, `width1` at a time per frame, so the
+        // output stays in frame order.
+        let mut data1 = fixed1.data.into_iter();
+
         if let &Inner::Fixed(ref fixed2_ref) = &*track2_inner_rc
             && fixed2_ref.start == start
             && fixed2_ref.duration() == duration
         {
-            if let Inner::Fixed(mut fixed2) = Rc::unwrap_or_clone(track2_inner_rc) {
-                let mut result = None;
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
 
-                for frame_index in (0..duration.0).rev() {
-                    let frame_offset = media::FrameDelta(frame_index);
-                    let frame = start + frame_offset;
-                    let values1 = fixed1.split_off(frame);
-                    let values2 = fixed2.split_off(frame);
-                    let mapped = map_fn(frame, SmallVec::from_vec(values1), Cow::Owned(values2));
-                    Self::append_fixed(&mut result, mapped, start, fixed1.total_frames());
-                }
-
-                result.unwrap_or(Fixed {
-                    start,
-                    width: 1,
-                    data: vec![],
-                })
-            } else {
-                panic!("unwrap_or_clone failed");
+            // The other track is `Fixed` with exactly our bounds, so we can borrow
+            // its per-frame elements directly without cloning.
+            let width2 = usize::from(fixed2.width);
+            for (frame_index, values2) in fixed2.data.chunks(width2).enumerate() {
+                let frame = start
+                    + media::FrameDelta(i32::try_from(frame_index).expect("frame offset overflow"));
+                let values1: SmallVec<T1, SMALL_VEC_SIZE> = data1.by_ref().take(width1).collect();
+                let mapped = map_fn(frame, values1, Cow::Borrowed(values2));
+                Self::append_fixed(&mut result, mapped, start, total_frames);
             }
         } else {
             // We cannot make any assumptions. We need to clone elements one by one.
-
             let track2_inner = Rc::unwrap_or_clone(track2_inner_rc);
-            let mut result = None;
 
-            for frame_index in (0..duration.0).rev() {
-                let frame_offset = media::FrameDelta(frame_index);
-                let frame = start + frame_offset;
-                let values1 = fixed1.split_off(frame);
+            for frame_index in 0..duration.0 {
+                let frame = start + media::FrameDelta(frame_index);
+                let values1: SmallVec<T1, SMALL_VEC_SIZE> = data1.by_ref().take(width1).collect();
                 let values2 = track2_inner.get_frame_adapt_all(frame, track2_adapter.as_ref());
-                let mapped = map_fn(frame, SmallVec::from_vec(values1), values2);
+                let mapped = map_fn(frame, values1, values2);
                 Self::append_fixed(&mut result, mapped, start, total_frames);
             }
-
-            result.unwrap_or(Fixed {
-                start,
-                width: 1,
-                data: vec![],
-            })
         }
+
+        result.unwrap_or(Fixed {
+            start,
+            width: 1,
+            data: vec![],
+        })
     }
 
     fn append_fixed<U: Clone>(
@@ -680,18 +670,24 @@ where
 
                 Inner::Variable(variable_map)
             }
-            Inner::Fixed(mut fixed1) => {
+            Inner::Fixed(fixed1) => {
                 let start = fixed1.start;
                 let duration = fixed1.duration();
+                let width1 = usize::from(fixed1.width);
                 let track2_inner = Rc::unwrap_or_clone(track2_inner_rc);
                 let mut variable_map = BTreeMap::new();
 
-                for frame_index in (0..duration.0).rev() {
-                    let frame_offset = media::FrameDelta(frame_index);
-                    let frame = start + frame_offset;
-                    let values1 = fixed1.split_off(frame);
+                // Move our elements out of `data` `width1` at a time, forward,
+                // without cloning them and without a per-frame heap allocation
+                // (a width-1 frame stays inline in the `SmallVec`).
+                let mut data1 = fixed1.data.into_iter();
+
+                for frame_index in 0..duration.0 {
+                    let frame = start + media::FrameDelta(frame_index);
+                    let values1: SmallVec<T1, SMALL_VEC_SIZE> =
+                        data1.by_ref().take(width1).collect();
                     let values2 = track2_inner.get_frame_adapt_all(frame, track2_adapter.as_ref());
-                    let mapped = map_fn(frame, SmallVec::from_vec(values1), values2);
+                    let mapped = map_fn(frame, values1, values2);
                     variable_map.insert(frame, mapped);
                 }
 
@@ -745,5 +741,451 @@ impl InherentTiming for super::Event {
 
     fn duration(&self) -> media::FrameDelta {
         self.duration
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Fixed, FramedTrack, InherentTiming, Inner, SMALL_VEC_SIZE};
+    use crate::media;
+    use smallvec::SmallVec;
+    use std::borrow::Cow;
+    use std::collections::BTreeMap;
+    use std::rc::Rc;
+
+    /// A test value that carries an integer `tag` payload plus its own timing.
+    /// Stands in for `nde::Event`, which is the value most commonly used as the
+    /// first track (`T1`) in real NDE nodes.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Timed {
+        start: i32,
+        dur: i32,
+        tag: i32,
+    }
+
+    impl InherentTiming for Timed {
+        fn start(&self) -> media::FrameNumber {
+            media::FrameNumber(self.start)
+        }
+        fn duration(&self) -> media::FrameDelta {
+            media::FrameDelta(self.dur)
+        }
+    }
+
+    fn fr(n: i32) -> media::FrameNumber {
+        media::FrameNumber(n)
+    }
+
+    /// A `Timed` whose timing is irrelevant (used for `Fixed`/`Variable` tracks,
+    /// where the inherent timing is never consulted).
+    fn timed(tag: i32) -> Timed {
+        Timed {
+            start: 0,
+            dur: 0,
+            tag,
+        }
+    }
+
+    fn fixed_track<T: Clone>(start: i32, width: u16, data: Vec<T>) -> FramedTrack<'static, T> {
+        FramedTrack {
+            inner: Rc::new(Inner::Fixed(Fixed {
+                start: fr(start),
+                width,
+                data,
+            })),
+            frame_adapter: None,
+        }
+    }
+
+    fn variable_track<T: Clone>(entries: Vec<(i32, Vec<T>)>) -> FramedTrack<'static, T> {
+        let map = entries
+            .into_iter()
+            .map(|(frame, values)| (fr(frame), SmallVec::from_vec(values)))
+            .collect();
+        FramedTrack {
+            inner: Rc::new(Inner::Variable(map)),
+            frame_adapter: None,
+        }
+    }
+
+    fn unwrap_fixed<T: Clone>(track: FramedTrack<T>) -> Fixed<T> {
+        match Rc::unwrap_or_clone(track.inner) {
+            Inner::Fixed(fixed) => fixed,
+            _ => panic!("expected a `Fixed` track"),
+        }
+    }
+
+    fn unwrap_variable<T: Clone>(
+        track: FramedTrack<T>,
+    ) -> BTreeMap<media::FrameNumber, SmallVec<T, SMALL_VEC_SIZE>> {
+        match Rc::unwrap_or_clone(track.inner) {
+            Inner::Variable(map) => map,
+            _ => panic!("expected a `Variable` track"),
+        }
+    }
+
+    fn unwrap_single<T: Clone>(track: FramedTrack<T>) -> T {
+        match Rc::unwrap_or_clone(track.inner) {
+            Inner::Single(value) => value,
+            _ => panic!("expected a `Single` track"),
+        }
+    }
+
+    /// Combine `Timed` (T1) with an optional `i32` (T2) into a `(frame, tag, t2)`
+    /// triple, encoding an absent T2 as `-1`. Non-capturing, hence `Copy`, so it
+    /// can be reused across multiple `frame_zip` calls.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "must take `T1` by value to match the `frame_zip` map signature"
+    )]
+    fn combine(frame: media::FrameNumber, v1: Timed, v2: Option<Cow<i32>>) -> (i32, i32, i32) {
+        (frame.0, v1.tag, v2.map_or(-1, |cow| *cow))
+    }
+
+    #[test]
+    fn fixed_indexing() {
+        // width 1, covering frames 5, 6, 7.
+        let single_wide = Fixed {
+            start: fr(5),
+            width: 1,
+            data: vec![10, 20, 30],
+        };
+        assert_eq!(single_wide.frame_n(fr(5)), Some(0));
+        assert_eq!(single_wide.frame_n(fr(6)), Some(1));
+        // The final frame must be reachable.
+        assert_eq!(single_wide.frame_n(fr(7)), Some(2));
+        // Out of range on both ends.
+        assert_eq!(single_wide.frame_n(fr(8)), None);
+        assert_eq!(single_wide.frame_n(fr(4)), None);
+
+        assert_eq!(single_wide.get_frame(fr(5)), Some(&10));
+        assert_eq!(single_wide.get_frame(fr(7)), Some(&30));
+        assert_eq!(single_wide.get_frame(fr(8)), None);
+        assert_eq!(single_wide.get_frame_all(fr(6)), &[20]);
+        assert!(single_wide.get_frame_all(fr(8)).is_empty());
+        assert_eq!(single_wide.duration(), media::FrameDelta(3));
+        assert_eq!(single_wide.total_frames(), 3);
+
+        // width 2, covering frames 2, 3.
+        let double_wide = Fixed {
+            start: fr(2),
+            width: 2,
+            data: vec![1, 2, 3, 4],
+        };
+        assert_eq!(double_wide.frame_n(fr(2)), Some(0));
+        assert_eq!(double_wide.frame_n(fr(3)), Some(2));
+        assert_eq!(double_wide.frame_n(fr(4)), None);
+        assert_eq!(double_wide.get_frame_all(fr(2)), &[1, 2]);
+        assert_eq!(double_wide.get_frame_all(fr(3)), &[3, 4]);
+        // `get_frame` returns the first element of the frame.
+        assert_eq!(double_wide.get_frame(fr(3)), Some(&3));
+        assert_eq!(double_wide.duration(), media::FrameDelta(2));
+        assert_eq!(double_wide.total_frames(), 2);
+    }
+
+    #[test]
+    fn frame_zip_single_t1() {
+        // A `Single` T1 spanning frames 5, 6, 7.
+        let make_t1 = || {
+            FramedTrack::from_single(Timed {
+                start: 5,
+                dur: 3,
+                tag: 100,
+            })
+        };
+
+        // (a) `track2` is a `Fixed` with exactly matching bounds: the fast path.
+        let track2 = fixed_track(5, 1, vec![10, 20, 30]);
+        let out = unwrap_fixed(make_t1().frame_zip(track2, combine));
+        assert_eq!(out.start, fr(5));
+        assert_eq!(out.width, 1);
+        assert_eq!(out.data, vec![(5, 100, 10), (6, 100, 20), (7, 100, 30)]);
+
+        // (b) `track2` is a `Fixed` covering a wider span: the slow path, which
+        // indexes into `track2` frame by frame.
+        let track2 = fixed_track(4, 1, vec![1, 10, 20, 30, 40]); // frames 4..=8
+        let out = unwrap_fixed(make_t1().frame_zip(track2, combine));
+        assert_eq!(out.data, vec![(5, 100, 10), (6, 100, 20), (7, 100, 30)]);
+
+        // (c) `track2` is `Single`: splat the single value over every frame.
+        let track2 = FramedTrack::from_single(7);
+        let out = unwrap_fixed(make_t1().frame_zip(track2, combine));
+        assert_eq!(out.data, vec![(5, 100, 7), (6, 100, 7), (7, 100, 7)]);
+
+        // (d) `track2` is `Variable` with a gap at frame 6: that frame gets `None`.
+        let track2 = variable_track(vec![(5, vec![10]), (7, vec![30])]);
+        let out = unwrap_fixed(make_t1().frame_zip(track2, combine));
+        assert_eq!(out.data, vec![(5, 100, 10), (6, 100, -1), (7, 100, 30)]);
+
+        // (e) `track2` shares our start but is shorter: matching start, mismatched
+        // duration, so the slow path runs and frame 7 falls off the end.
+        let track2 = fixed_track(5, 1, vec![10, 20]); // frames 5, 6 only
+        let out = unwrap_fixed(make_t1().frame_zip(track2, combine));
+        assert_eq!(out.data, vec![(5, 100, 10), (6, 100, 20), (7, 100, -1)]);
+    }
+
+    #[test]
+    fn frame_zip_fixed_t1() {
+        // (a) width-1 T1 with a matching width-1 T2: the width-1 fast sub-case.
+        let t1 = fixed_track(0, 1, vec![timed(1), timed(2), timed(3)]);
+        let t2 = fixed_track(0, 1, vec![10, 20, 30]);
+        let out = unwrap_fixed(t1.frame_zip(t2, combine));
+        assert_eq!(out.width, 1);
+        assert_eq!(out.start, fr(0));
+        assert_eq!(out.data, vec![(0, 1, 10), (1, 2, 20), (2, 3, 30)]);
+
+        // (b) width-2 T1 with a matching width-2 T2: zipped element by element,
+        // preserving the width.
+        let t1 = fixed_track(0, 2, vec![timed(1), timed(2), timed(3), timed(4)]);
+        let t2 = fixed_track(0, 2, vec![10, 20, 30, 40]);
+        let out = unwrap_fixed(t1.frame_zip(t2, combine));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![(0, 1, 10), (0, 2, 20), (1, 3, 30), (1, 4, 40)]
+        );
+
+        // (c) width-2 T1 with a width-1 T2 (matching bounds): the slow path, where
+        // every T1 element of a frame is paired with that frame's first T2 value.
+        let t1 = fixed_track(0, 2, vec![timed(1), timed(2), timed(3), timed(4)]);
+        let t2 = fixed_track(0, 1, vec![10, 20]);
+        let out = unwrap_fixed(t1.frame_zip(t2, combine));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![(0, 1, 10), (0, 2, 10), (1, 3, 20), (1, 4, 20)]
+        );
+
+        // (d) width-1 T1 with a `Single` T2: the slow path splatting the single.
+        let t1 = fixed_track(0, 1, vec![timed(1), timed(2), timed(3)]);
+        let t2 = FramedTrack::from_single(99);
+        let out = unwrap_fixed(t1.frame_zip(t2, combine));
+        assert_eq!(out.data, vec![(0, 1, 99), (1, 2, 99), (2, 3, 99)]);
+    }
+
+    #[test]
+    fn frame_zip_variable_t1() {
+        // Frame 1 is absent; frame 2 carries two elements.
+        let t1 = variable_track(vec![(0, vec![timed(1)]), (2, vec![timed(2), timed(3)])]);
+        let t2 = fixed_track(0, 1, vec![10, 20, 30]);
+        let out = unwrap_variable(t1.frame_zip(t2, combine));
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[&fr(0)].as_slice(), &[(0, 1, 10)]);
+        assert_eq!(out[&fr(2)].as_slice(), &[(2, 2, 30), (2, 3, 30)]);
+    }
+
+    #[test]
+    fn frame_zip_sliced_fixed_width() {
+        // map_fn that emits one output per frame: (frame, sum).
+        let sum_one = |frame: media::FrameNumber,
+                       v1: SmallVec<Timed, SMALL_VEC_SIZE>,
+                       v2: Cow<[i32]>|
+         -> SmallVec<(i32, i32), SMALL_VEC_SIZE> {
+            let mut out = SmallVec::new();
+            out.push((frame.0, v1[0].tag + v2.iter().sum::<i32>()));
+            out
+        };
+
+        // (1) `Single` T1, matching `Fixed` T2, width-1 output: fast branch.
+        let t1 = || {
+            FramedTrack::from_single(Timed {
+                start: 0,
+                dur: 3,
+                tag: 1000,
+            })
+        };
+        let out = unwrap_fixed(
+            t1().frame_zip_sliced_fixed_width(fixed_track(0, 1, vec![10, 20, 30]), sum_one),
+        );
+        assert_eq!(out.start, fr(0));
+        assert_eq!(out.width, 1);
+        assert_eq!(out.data, vec![(0, 1010), (1, 1020), (2, 1030)]);
+
+        // (2) `Single` T1, matching `Fixed` T2, width-2 output: fast branch,
+        // emitting two outputs per frame.
+        let sum_two = |frame: media::FrameNumber,
+                       v1: SmallVec<Timed, SMALL_VEC_SIZE>,
+                       v2: Cow<[i32]>|
+         -> SmallVec<(i32, i32), SMALL_VEC_SIZE> {
+            let base = v1[0].tag + v2.iter().sum::<i32>();
+            let mut out = SmallVec::new();
+            out.push((frame.0, base));
+            out.push((frame.0, -base));
+            out
+        };
+        let out = unwrap_fixed(
+            t1().frame_zip_sliced_fixed_width(fixed_track(0, 1, vec![10, 20, 30]), sum_two),
+        );
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![
+                (0, 1010),
+                (0, -1010),
+                (1, 1020),
+                (1, -1020),
+                (2, 1030),
+                (2, -1030)
+            ]
+        );
+
+        // (3) `Single` T1, `Single` T2, width-2 output: the slow branch must still
+        // report a width of 2.
+        let out =
+            unwrap_fixed(t1().frame_zip_sliced_fixed_width(FramedTrack::from_single(5), sum_two));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![
+                (0, 1005),
+                (0, -1005),
+                (1, 1005),
+                (1, -1005),
+                (2, 1005),
+                (2, -1005)
+            ]
+        );
+
+        // (4) `Fixed` T1, matching `Fixed` T2: fast branch, order preserved.
+        let t1f = fixed_track(0, 1, vec![timed(1), timed(2), timed(3)]);
+        let out = unwrap_fixed(
+            t1f.frame_zip_sliced_fixed_width(fixed_track(0, 1, vec![10, 20, 30]), sum_one),
+        );
+        assert_eq!(out.data, vec![(0, 11), (1, 22), (2, 33)]);
+
+        // (5) `Fixed` T1, `Single` T2: slow branch, order preserved.
+        let t1f = fixed_track(0, 1, vec![timed(1), timed(2), timed(3)]);
+        let out =
+            unwrap_fixed(t1f.frame_zip_sliced_fixed_width(FramedTrack::from_single(100), sum_one));
+        assert_eq!(out.data, vec![(0, 101), (1, 102), (2, 103)]);
+    }
+
+    #[test]
+    fn frame_zip_sliced_variable_width() {
+        let zip_all = |frame: media::FrameNumber,
+                       v1: SmallVec<Timed, SMALL_VEC_SIZE>,
+                       v2: Cow<[i32]>|
+         -> SmallVec<(i32, i32), SMALL_VEC_SIZE> {
+            v2.iter()
+                .map(|value2| (frame.0, v1[0].tag + value2))
+                .collect()
+        };
+
+        // (1) `Single` T1, `Variable` T2 with an empty frame in the middle.
+        let t1 = FramedTrack::from_single(Timed {
+            start: 0,
+            dur: 3,
+            tag: 1,
+        });
+        let t2 = variable_track(vec![(0, vec![10, 11]), (2, vec![30])]);
+        let out = unwrap_variable(t1.frame_zip_sliced_variable_width(t2, zip_all));
+        assert_eq!(out[&fr(0)].as_slice(), &[(0, 11), (0, 12)]);
+        assert!(out[&fr(1)].is_empty());
+        assert_eq!(out[&fr(2)].as_slice(), &[(2, 31)]);
+
+        // (2) `Fixed` T1 with a matching `Fixed` T2.
+        let t1f = fixed_track(0, 1, vec![timed(1), timed(2)]);
+        let t2 = fixed_track(0, 1, vec![10, 20]);
+        let out = unwrap_variable(t1f.frame_zip_sliced_variable_width(t2, zip_all));
+        assert_eq!(out[&fr(0)].as_slice(), &[(0, 11)]);
+        assert_eq!(out[&fr(1)].as_slice(), &[(1, 22)]);
+
+        // (3) `Variable` T1 with a `Variable` T2 whose per-frame width varies, so
+        // the output width genuinely differs between frames.
+        let t1v = variable_track(vec![(0, vec![timed(1)]), (1, vec![timed(5)])]);
+        let t2 = variable_track(vec![(0, vec![10, 100]), (1, vec![20])]);
+        let out = unwrap_variable(t1v.frame_zip_sliced_variable_width(t2, zip_all));
+        assert_eq!(out[&fr(0)].as_slice(), &[(0, 11), (0, 101)]);
+        assert_eq!(out[&fr(1)].as_slice(), &[(1, 25)]);
+    }
+
+    #[test]
+    fn adapters_are_applied() {
+        // The frame adapter rewrites the tag to the current frame number.
+        let adapter = |value: &mut Timed, frame: media::FrameNumber| value.tag = frame.0;
+
+        // Fast path (matching `Fixed` T2).
+        let t1 = FramedTrack::from_single_with_adapter(
+            Timed {
+                start: 0,
+                dur: 3,
+                tag: 0,
+            },
+            adapter,
+        );
+        let out = unwrap_fixed(t1.frame_zip(fixed_track(0, 1, vec![100, 100, 100]), combine));
+        assert_eq!(out.data, vec![(0, 0, 100), (1, 1, 100), (2, 2, 100)]);
+
+        // Slow path (`Single` T2).
+        let t1 = FramedTrack::from_single_with_adapter(
+            Timed {
+                start: 0,
+                dur: 3,
+                tag: 0,
+            },
+            adapter,
+        );
+        let out = unwrap_fixed(t1.frame_zip(FramedTrack::from_single(100), combine));
+        assert_eq!(out.data, vec![(0, 0, 100), (1, 1, 100), (2, 2, 100)]);
+
+        // `map` transforms values and `Single`/`Fixed`/`Variable` shapes are kept.
+        let single = unwrap_single(FramedTrack::from_single(timed(3)).map(|mut value| {
+            value.tag *= 10;
+            value
+        }));
+        assert_eq!(single.tag, 30);
+
+        let mapped_fixed = unwrap_fixed(fixed_track(0, 1, vec![1, 2, 3]).map(|value| value + 100));
+        assert_eq!(mapped_fixed.data, vec![101, 102, 103]);
+
+        let mapped_variable = unwrap_variable(
+            variable_track(vec![(0, vec![1]), (1, vec![2, 3])]).map(|value| value + 100),
+        );
+        assert_eq!(mapped_variable[&fr(0)].as_slice(), &[101]);
+        assert_eq!(mapped_variable[&fr(1)].as_slice(), &[102, 103]);
+    }
+
+    #[test]
+    fn event_as_t1() {
+        use crate::nde::tags;
+        use crate::subtitle;
+
+        let make_event = |start: i32, dur: i32| super::super::Event {
+            start: fr(start),
+            duration: media::FrameDelta(dur),
+            layer_index: 0,
+            style_index: 0,
+            margins: subtitle::Margins::default(),
+            global_tags: tags::Global::empty(),
+            overrides: tags::Local::empty(),
+            text: vec![],
+        };
+
+        // A single event (T1) splat over per-frame x-positions (T2), as a node
+        // baking positions onto a line would do.
+        let event_track = FramedTrack::from_single(make_event(10, 3));
+        let positions = fixed_track(10, 1, vec![1, 2, 3]);
+        let baked = event_track.frame_zip(positions, |frame, event, x| {
+            (frame.0, event.start.0, x.map_or(0, |cow| *cow))
+        });
+        let out = unwrap_fixed(baked);
+        assert_eq!(out.start, fr(10));
+        assert_eq!(out.width, 1);
+        assert_eq!(out.data, vec![(10, 10, 1), (11, 10, 2), (12, 10, 3)]);
+
+        // A frame adapter that "bakes" the event to a single frame, like
+        // `make_static`, must be applied per frame before mapping.
+        let event_track = FramedTrack::from_single_with_adapter(
+            make_event(10, 3),
+            |event: &mut super::super::Event, frame: media::FrameNumber| {
+                *event = event.make_static(frame, media::FrameDelta(1));
+            },
+        );
+        let positions = fixed_track(10, 1, vec![0, 0, 0]);
+        let baked = event_track.frame_zip(positions, |frame, event, _| {
+            (frame.0, event.start.0, event.duration.0)
+        });
+        let out = unwrap_fixed(baked);
+        assert_eq!(out.data, vec![(10, 10, 1), (11, 11, 1), (12, 12, 1)]);
     }
 }
