@@ -40,6 +40,14 @@ enum Inner<T> {
     Single(T),
     Fixed(Fixed<T>),
     Variable(BTreeMap<media::FrameNumber, SmallVec<T, SMALL_VEC_SIZE>>),
+
+    /// A non-empty stack of frame-agnostic values that all share the same inherent
+    /// timing. Behaves like `Single`, except that splatting it over a frame range
+    /// produces a `Fixed` of width `n` (the stack size) rather than width 1, and
+    /// flattening it yields all `n` values. The shared-timing invariant cannot be
+    /// statically enforced (`InherentTiming` is not always available), so timing is
+    /// taken from the first element.
+    Stack(Vec<T>),
 }
 
 /// A vec that stores `width` objects for `data.len() / width` frames,
@@ -127,6 +135,39 @@ where
         }
     }
 
+    /// Construct a `Stack` track from a non-empty list of frame-agnostic values
+    /// that all share the same inherent timing. Useful for nodes that turn one
+    /// value into several covering the same frame range (e.g. a gradient node
+    /// splitting one event into several strips).
+    ///
+    /// # Panics
+    /// Panics if `values` is empty.
+    #[must_use]
+    pub fn from_stack(values: Vec<T>) -> Self {
+        assert!(!values.is_empty(), "`FramedTrack` stack must be non-empty");
+        Self {
+            inner: Rc::new(Inner::Stack(values)),
+            frame_adapter: None,
+        }
+    }
+
+    /// Like `from_stack`, but with a frame adapter that is applied to each value
+    /// when it is materialized for a specific frame.
+    ///
+    /// # Panics
+    /// Panics if `values` is empty.
+    #[must_use]
+    pub fn from_stack_with_adapter<A: Fn(&mut T, media::FrameNumber) + 'a>(
+        values: Vec<T>,
+        adapter: A,
+    ) -> Self {
+        assert!(!values.is_empty(), "`FramedTrack` stack must be non-empty");
+        Self {
+            inner: Rc::new(Inner::Stack(values)),
+            frame_adapter: Some(Rc::new(adapter)),
+        }
+    }
+
     /// Maps every value of this track with the given function, removing the adapter.
     /// If the return track will be of the same type, use `map_same` instead which
     /// retains the adapter.
@@ -176,6 +217,126 @@ where
                     .map(|(frame, vec)| (frame, vec.into_iter().map(&mut map_fn).collect()))
                     .collect(),
             ),
+            Inner::Stack(values) => Inner::Stack(values.into_iter().map(map_fn).collect()),
+        };
+
+        FramedTrack {
+            inner: Rc::new(new_inner),
+            frame_adapter: new_adapter,
+        }
+    }
+
+    /// Maps every value of this track with a function that returns a vector,
+    /// expanding each input value into possibly several output values, removing
+    /// the adapter.
+    ///
+    /// The shape of the track changes accordingly:
+    /// - a `Single` becomes a `Stack` holding the returned vector;
+    /// - a `Stack` becomes a larger `Stack` of all returned values concatenated;
+    /// - a `Fixed` becomes a wider `Fixed`, its width multiplied by the per-element
+    ///   output length (which must be identical for every element);
+    /// - a `Variable` stays `Variable`, with each frame's values flat-mapped.
+    ///
+    /// If the return track will be of the same type, use `expand_same` instead
+    /// which retains the adapter.
+    #[must_use]
+    pub fn expand<U: Clone, F: FnMut(T) -> Vec<U>>(self, map_fn: F) -> FramedTrack<'a, U> {
+        self.expand_direct(map_fn, None)
+    }
+
+    /// Like `expand`, but retaining the adapter.
+    #[must_use]
+    pub fn expand_same<F: FnMut(T) -> Vec<T>>(mut self, map_fn: F) -> FramedTrack<'a, T> {
+        let adapter = self.frame_adapter.take();
+        self.expand_direct(map_fn, adapter)
+    }
+
+    /// Like `expand`, but where the returned track will have a new custom adapter.
+    #[must_use]
+    pub fn expand_adapt<U: Clone, F: FnMut(T) -> Vec<U>, A: Fn(&mut U, media::FrameNumber) + 'a>(
+        self,
+        map_fn: F,
+        new_adapter: A,
+    ) -> FramedTrack<'a, U> {
+        self.expand_direct(map_fn, Some(Rc::new(new_adapter)))
+    }
+
+    fn expand_direct<U: Clone, F: FnMut(T) -> Vec<U>>(
+        self,
+        mut map_fn: F,
+        new_adapter: Option<FrameAdapterFn<'a, U>>,
+    ) -> FramedTrack<'a, U> {
+        let inner = Rc::unwrap_or_clone(self.inner);
+
+        let new_inner = match inner {
+            Inner::Single(value) => {
+                let values = map_fn(value);
+                assert!(
+                    !values.is_empty(),
+                    "`expand` map function must return a non-empty vec"
+                );
+                Inner::Stack(values)
+            }
+            Inner::Stack(values) => {
+                let mapped: Vec<U> = values.into_iter().flat_map(&mut map_fn).collect();
+                assert!(
+                    !mapped.is_empty(),
+                    "`expand` map function must return a non-empty result"
+                );
+                Inner::Stack(mapped)
+            }
+            Inner::Fixed(fixed) => {
+                let Fixed { start, width, data } = fixed;
+                if data.is_empty() {
+                    Inner::Fixed(Fixed {
+                        start,
+                        width,
+                        data: Vec::new(),
+                    })
+                } else {
+                    // Map the first element to learn the per-element output length `k`,
+                    // then require every other element to match it so the result is a
+                    // well-formed `Fixed` of width `width * k`. The frame-major layout
+                    // is preserved because we expand elements in order.
+                    let old_len = data.len();
+                    let mut iter = data.into_iter();
+                    let first = map_fn(iter.next().expect("data is non-empty"));
+                    let per_element = first.len();
+                    assert!(
+                        per_element > 0,
+                        "`expand` map function must return a non-empty vec"
+                    );
+                    let mut new_data = Vec::with_capacity(old_len * per_element);
+                    new_data.extend(first);
+                    for element in iter {
+                        let mapped = map_fn(element);
+                        assert_eq!(
+                            mapped.len(),
+                            per_element,
+                            "`expand` map function must return vecs of equal length for a `Fixed` track"
+                        );
+                        new_data.extend(mapped);
+                    }
+                    let new_width = u16::try_from(usize::from(width) * per_element)
+                        .expect("`expand` width overflow");
+                    Inner::Fixed(Fixed {
+                        start,
+                        width: new_width,
+                        data: new_data,
+                    })
+                }
+            }
+            Inner::Variable(map) => {
+                let mapped = map
+                    .into_iter()
+                    .map(|(frame, vec)| {
+                        let new_vec: SmallVec<U, SMALL_VEC_SIZE> =
+                            vec.into_iter().flat_map(&mut map_fn).collect();
+                        (frame, new_vec)
+                    })
+                    .collect();
+                Inner::Variable(mapped)
+            }
         };
 
         FramedTrack {
@@ -194,6 +355,7 @@ where
                 .into_values()
                 .flat_map(|values| values.into_iter().map(&mut map_fn).collect::<Vec<U>>())
                 .collect(),
+            Inner::Stack(values) => values.into_iter().map(map_fn).collect(),
         }
     }
 
@@ -209,6 +371,9 @@ where
                 frame_count: map.len(),
                 total: map.values().map(SmallVec::len).sum(),
             },
+            Inner::Stack(ref values) => Size::Stack {
+                total: values.len(),
+            },
         }
     }
 }
@@ -218,6 +383,7 @@ pub enum Size {
     Single,
     Fixed { frame_count: usize, total: usize },
     Variable { frame_count: usize, total: usize },
+    Stack { total: usize },
 }
 
 impl<T: Clone> Inner<T> {
@@ -236,6 +402,9 @@ impl<T: Clone> Inner<T> {
                 .get(&number)
                 .and_then(|vec| vec.first())
                 .map(|element| Cow::Borrowed(element)),
+            // A stack is frame-agnostic like a `Single`, so its first element
+            // represents the frame.
+            Inner::Stack(ref values) => Some(Cow::Owned(clone_adapt(&values[0], number, adapter))),
         }
     }
 
@@ -251,6 +420,13 @@ impl<T: Clone> Inner<T> {
             Inner::Variable(ref map) => map
                 .get(&number)
                 .map_or(Cow::Owned(vec![]), |vec| Cow::Borrowed(vec.as_slice())),
+            // All of a stack's values appear on every frame, each adapted to it.
+            Inner::Stack(ref values) => Cow::Owned(
+                values
+                    .iter()
+                    .map(|value| clone_adapt(value, number, adapter))
+                    .collect(),
+            ),
         }
     }
 }
@@ -422,24 +598,76 @@ where
         mut map_fn: F,
         new_adapter: Option<FrameAdapterFn<'b, U>>,
     ) -> FramedTrack<'b, U> {
-        if let &Inner::Single(_) = &*self.inner {
-            if let &Inner::Single(_) = &*track2.inner {
-                let Inner::Single(value1) = Rc::unwrap_or_clone(self.inner) else {
-                    unreachable!("checked to be `Fixed` above");
-                };
-                let Inner::Single(value2) = Rc::unwrap_or_clone(track2.inner) else {
-                    unreachable!("checked to be `Fixed` above");
-                };
+        // `Single` and `Stack` are both frame-agnostic: they carry no frame
+        // information of their own and (in `generic_zip`, which lacks
+        // `InherentTiming`) cannot supply a frame range. When both sides are
+        // frame-agnostic we combine them directly; otherwise the frame-based side
+        // drives the iteration.
+        let self_agnostic = matches!(&*self.inner, Inner::Single(_) | Inner::Stack(_));
+        let track2_agnostic = matches!(&*track2.inner, Inner::Single(_) | Inner::Stack(_));
 
-                let new_value = map_fn(value1, Some(Cow::Owned(value2)));
-
-                FramedTrack {
-                    inner: Rc::new(Inner::Single(new_value)),
-                    frame_adapter: new_adapter,
+        if self_agnostic && track2_agnostic {
+            let new_inner = match (
+                Rc::unwrap_or_clone(self.inner),
+                Rc::unwrap_or_clone(track2.inner),
+            ) {
+                (Inner::Single(value1), Inner::Single(value2)) => {
+                    Inner::Single(map_fn(value1, Some(Cow::Owned(value2))))
                 }
+                (Inner::Single(value1), Inner::Stack(values2)) => {
+                    // The single value is paired with each of the stack's values.
+                    Inner::Stack(
+                        values2
+                            .into_iter()
+                            .map(|value2| map_fn(value1.clone(), Some(Cow::Owned(value2))))
+                            .collect(),
+                    )
+                }
+                (Inner::Stack(values1), Inner::Single(value2)) => {
+                    // Each of our stack's values is paired with the single value.
+                    Inner::Stack(
+                        values1
+                            .into_iter()
+                            .map(|value1| map_fn(value1, Some(Cow::Borrowed(&value2))))
+                            .collect(),
+                    )
+                }
+                (Inner::Stack(values1), Inner::Stack(values2)) => {
+                    // Two frameless stacks have no canonical alignment, so this is
+                    // best-effort: each of our values is paired with the other
+                    // stack's first (representative) value.
+                    let representative = &values2[0];
+                    Inner::Stack(
+                        values1
+                            .into_iter()
+                            .map(|value1| map_fn(value1, Some(Cow::Borrowed(representative))))
+                            .collect(),
+                    )
+                }
+                _ => unreachable!("both sides checked to be `Single` or `Stack`"),
+            };
+
+            FramedTrack {
+                inner: Rc::new(new_inner),
+                frame_adapter: new_adapter,
+            }
+        } else if self_agnostic {
+            // We are frame-agnostic but `track2` is not, so `track2` drives the frames.
+            if matches!(&*self.inner, Inner::Stack(_)) {
+                // Each frame carries all `n` of our stack values, so the output is
+                // `n` wide. We use `track2`'s representative value per frame.
+                track2.frame_zip_sliced_fixed_width_inner(
+                    self,
+                    |_frame, repr2: SmallVec<T2, SMALL_VEC_SIZE>, stack1: Cow<[T1]>| {
+                        stack1
+                            .iter()
+                            .map(|value1| map_fn(value1.clone(), repr2.first().map(Cow::Borrowed)))
+                            .collect()
+                    },
+                    |_| panic!("timing_fn called unexpectedly"),
+                )
             } else {
-                // We are `Single`, but the other is not.
-                // Use the other as the reference.
+                // We are `Single`: use `track2` as the reference and splat our value.
                 track2.frame_zip_inner(
                     self,
                     |_frame, value2, value1| {
@@ -515,6 +743,20 @@ where
                     .collect();
 
                 Inner::Variable(mapped)
+            }
+            Inner::Stack(values) => {
+                // Splatting a stack of `n` values over a frame range yields a
+                // `Fixed` of width `n`: every frame carries all `n` values.
+                let (start, _) = timing_fn(&values[0]);
+                let width = u16::try_from(values.len()).expect("stack width overflow");
+                let data = Self::frame_zip_t1_stack(
+                    &values,
+                    track2,
+                    map_fn,
+                    timing_fn,
+                    self.frame_adapter.as_ref(),
+                );
+                Inner::Fixed(Fixed { start, width, data })
             }
         };
 
@@ -669,6 +911,65 @@ where
         }
     }
 
+    fn frame_zip_t1_stack<
+        T2: Clone,
+        U: Clone,
+        F: FnMut(media::FrameNumber, T1, Option<Cow<T2>>) -> U,
+    >(
+        values1: &[T1],
+        track2: FramedTrack<T2>,
+        mut map_fn: F,
+        timing_fn: TimingFn<T1>,
+        t1_adapter: Option<&FrameAdapterFn<'a, T1>>,
+    ) -> Vec<U> {
+        let (start, duration) = timing_fn(&values1[0]);
+        let n = values1.len();
+
+        let mut result =
+            Vec::with_capacity(n * usize::try_from(duration.0).expect("duration overflow"));
+
+        let FramedTrack {
+            inner: track2_inner_rc,
+            frame_adapter: track2_adapter,
+        } = track2;
+
+        if let &Inner::Fixed(ref fixed2_ref) = &*track2_inner_rc
+            && fixed2_ref.start == start
+            && fixed2_ref.duration() == duration
+        {
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
+
+            // Fast path: like `frame_zip_t1_single`, the other track is `Fixed` with
+            // exactly our bounds. We move out one representative `T2` value per frame
+            // (stepping over its width) and pair it with each of our `n` stack values.
+            // The representative is only borrowed (not cloned) for each of the `n` calls.
+            let mut frame = start;
+            for value2 in fixed2.data.into_iter().step_by(usize::from(fixed2.width)) {
+                for value1 in values1 {
+                    let new_value1 = clone_adapt(value1, frame, t1_adapter);
+                    result.push(map_fn(frame, new_value1, Some(Cow::Borrowed(&value2))));
+                }
+                frame += media::FrameDelta(1);
+            }
+        } else {
+            // We cannot make any assumptions. We fetch each frame's representative
+            // value once and reuse it (by reference) for all `n` stack values.
+            for frame_n in start.0..(start + duration).0 {
+                let frame = media::FrameNumber(frame_n);
+                let value2 = track2_inner_rc.get_frame_adapt(frame, track2_adapter.as_ref());
+                let value2_ref = value2.as_deref();
+                for value1 in values1 {
+                    let new_value1 = clone_adapt(value1, frame, t1_adapter);
+                    result.push(map_fn(frame, new_value1, value2_ref.map(Cow::Borrowed)));
+                }
+            }
+        }
+
+        result
+    }
+
     /// Iterate over pairs of `T1` and `T2` slices per frame, where the output
     /// vector may be of different length than the input vector, but must be
     /// the same for every frame. Use this method over
@@ -708,6 +1009,16 @@ where
             }
             Inner::Fixed(fixed) => {
                 let new_fixed = Self::frame_zip_sliced_fixed_width_t1_fixed(fixed, track2, map_fn);
+                Inner::Fixed(new_fixed)
+            }
+            Inner::Stack(values) => {
+                let new_fixed = Self::frame_zip_sliced_fixed_width_t1_stack(
+                    &values,
+                    track2,
+                    map_fn,
+                    timing_fn,
+                    self.frame_adapter.as_ref(),
+                );
                 Inner::Fixed(new_fixed)
             }
             Inner::Variable(_) => {
@@ -854,6 +1165,74 @@ where
         })
     }
 
+    fn frame_zip_sliced_fixed_width_t1_stack<
+        T2: Clone,
+        U: Clone,
+        F: FnMut(
+            media::FrameNumber,
+            SmallVec<T1, SMALL_VEC_SIZE>,
+            Cow<[T2]>,
+        ) -> SmallVec<U, SMALL_VEC_SIZE>,
+    >(
+        values1: &[T1],
+        track2: FramedTrack<T2>,
+        mut map_fn: F,
+        timing_fn: TimingFn<T1>,
+        t1_adapter: Option<&FrameAdapterFn<'a, T1>>,
+    ) -> Fixed<U> {
+        let (start, duration) = timing_fn(&values1[0]);
+        let num_frames = usize::try_from(duration.0).expect("duration overflow");
+
+        let FramedTrack {
+            inner: track2_inner_rc,
+            frame_adapter: track2_adapter,
+        } = track2;
+
+        let mut result = None;
+
+        if let &Inner::Fixed(ref fixed2_ref) = &*track2_inner_rc
+            && fixed2_ref.start == start
+            && fixed2_ref.duration() == duration
+        {
+            let Inner::Fixed(fixed2) = Rc::unwrap_or_clone(track2_inner_rc) else {
+                unreachable!("checked to be `Fixed` above");
+            };
+
+            // The other track is `Fixed` with exactly our bounds, so we can borrow
+            // each frame's elements directly. Our `n` stack values appear on every
+            // frame, each adapted to it.
+            let width2 = usize::from(fixed2.width);
+            let mut frame = start;
+            for values2 in fixed2.data.chunks(width2) {
+                let values1_adapted: SmallVec<T1, SMALL_VEC_SIZE> = values1
+                    .iter()
+                    .map(|value1| clone_adapt(value1, frame, t1_adapter))
+                    .collect();
+                let mapped = map_fn(frame, values1_adapted, Cow::Borrowed(values2));
+                Self::append_fixed(&mut result, mapped, start, num_frames);
+                frame += media::FrameDelta(1);
+            }
+        } else {
+            // We cannot make any assumptions. We clone our stack values per frame.
+            for frame_n in start.0..(start + duration).0 {
+                let frame = media::FrameNumber(frame_n);
+                let values2 = track2_inner_rc.get_frame_adapt_all(frame, track2_adapter.as_ref());
+                let values1_adapted: SmallVec<T1, SMALL_VEC_SIZE> = values1
+                    .iter()
+                    .map(|value1| clone_adapt(value1, frame, t1_adapter))
+                    .collect();
+                let mapped = map_fn(frame, values1_adapted, values2);
+                Self::append_fixed(&mut result, mapped, start, num_frames);
+            }
+        }
+
+        result.unwrap_or(Fixed {
+            start,
+            width: 1,
+            data: vec![],
+        })
+    }
+
     fn append_fixed<U: Clone>(
         target_opt: &mut Option<Fixed<U>>,
         to_append: SmallVec<U, SMALL_VEC_SIZE>,
@@ -964,6 +1343,25 @@ where
                     })
                     .collect();
                 Inner::Variable(mapped)
+            }
+            Inner::Stack(values1) => {
+                let (start, duration) = timing_fn(&values1[0]);
+                let mut variable_map = BTreeMap::new();
+
+                // Our `n` stack values appear on every frame, each adapted to it.
+                for frame_n in start.0..(start + duration).0 {
+                    let frame = media::FrameNumber(frame_n);
+                    let values2 =
+                        track2_inner_rc.get_frame_adapt_all(frame, track2_adapter.as_ref());
+                    let values1_adapted: SmallVec<T1, SMALL_VEC_SIZE> = values1
+                        .iter()
+                        .map(|value1| clone_adapt(value1, frame, self.frame_adapter.as_ref()))
+                        .collect();
+                    let mapped = map_fn(frame, values1_adapted, values2);
+                    variable_map.insert(frame, mapped);
+                }
+
+                Inner::Variable(variable_map)
             }
         };
 
@@ -1079,6 +1477,13 @@ mod tests {
         match Rc::unwrap_or_clone(track.inner) {
             Inner::Single(value) => value,
             _ => panic!("expected a `Single` track"),
+        }
+    }
+
+    fn unwrap_stack<T: Clone>(track: FramedTrack<T>) -> Vec<T> {
+        match Rc::unwrap_or_clone(track.inner) {
+            Inner::Stack(values) => values,
+            _ => panic!("expected a `Stack` track"),
         }
     }
 
@@ -1468,5 +1873,282 @@ mod tests {
         });
         let out = unwrap_fixed(baked);
         assert_eq!(out.data, vec![(10, 10, 1), (11, 11, 1), (12, 12, 1)]);
+    }
+
+    #[test]
+    fn stack_construction_and_flattening() {
+        // `from_stack` builds a `Stack`; `unwrap_stack` recovers its values.
+        let values = unwrap_stack(FramedTrack::from_stack(vec![timed(1), timed(2), timed(3)]));
+        assert_eq!(values, vec![timed(1), timed(2), timed(3)]);
+
+        // `into_vec` emits every stack value (mapped), like an output node would.
+        let flat = FramedTrack::from_stack(vec![10, 20, 30]).into_vec(|value| value + 1);
+        assert_eq!(flat, vec![11, 21, 31]);
+
+        // `size` reports the stack's total length.
+        assert!(matches!(
+            FramedTrack::from_stack(vec![1, 2, 3, 4]).size(),
+            super::Size::Stack { total: 4 }
+        ));
+
+        // `map` preserves the `Stack` shape.
+        let mapped = unwrap_stack(FramedTrack::from_stack(vec![1, 2, 3]).map(|value| value * 10));
+        assert_eq!(mapped, vec![10, 20, 30]);
+    }
+
+    #[test]
+    #[should_panic(expected = "non-empty")]
+    fn from_stack_rejects_empty() {
+        std::hint::black_box(FramedTrack::<i32>::from_stack(vec![]));
+    }
+
+    #[test]
+    fn expand_shapes() {
+        // `Single` -> `Stack`: the returned vec becomes the stack.
+        let stack = unwrap_stack(
+            FramedTrack::from_single(10).expand(|value| vec![value, value + 1, value + 2]),
+        );
+        assert_eq!(stack, vec![10, 11, 12]);
+
+        // `Fixed` -> wider `Fixed`: width multiplied by the per-element output length.
+        let wide =
+            unwrap_fixed(fixed_track(2, 1, vec![10, 20, 30]).expand(|value| vec![value, -value]));
+        assert_eq!(wide.start, fr(2));
+        assert_eq!(wide.width, 2);
+        assert_eq!(wide.data, vec![10, -10, 20, -20, 30, -30]);
+
+        // A width-2 `Fixed` expands each element, so the width becomes 2 * 2 = 4,
+        // with the frame-major layout preserved.
+        let wide2 = unwrap_fixed(
+            fixed_track(0, 2, vec![1, 2, 3, 4]).expand(|value| vec![value, value * 10]),
+        );
+        assert_eq!(wide2.width, 4);
+        assert_eq!(wide2.data, vec![1, 10, 2, 20, 3, 30, 4, 40]);
+
+        // `Variable` -> `Variable`: each frame's elements are flat-mapped.
+        let var = unwrap_variable(
+            variable_track(vec![(0, vec![1]), (1, vec![2, 3])])
+                .expand(|value| vec![value, value + 100]),
+        );
+        assert_eq!(var[&fr(0)].as_slice(), &[1, 101]);
+        assert_eq!(var[&fr(1)].as_slice(), &[2, 102, 3, 103]);
+
+        // `Stack` -> `Stack`: all returned values concatenated in order.
+        let bigger =
+            unwrap_stack(FramedTrack::from_stack(vec![1, 2]).expand(|value| vec![value, value]));
+        assert_eq!(bigger, vec![1, 1, 2, 2]);
+    }
+
+    #[test]
+    #[should_panic(expected = "equal length")]
+    fn expand_fixed_rejects_ragged() {
+        std::hint::black_box(fixed_track(0, 1, vec![1, 2, 3]).expand(|value| {
+            if value == 2 {
+                vec![value]
+            } else {
+                vec![value, value]
+            }
+        }));
+    }
+
+    #[test]
+    fn expand_retains_and_sets_adapter() {
+        // The frame adapter rewrites the tag to the current frame number.
+        let adapter = |value: &mut Timed, frame: media::FrameNumber| value.tag = frame.0;
+
+        // `expand_same` keeps the adapter: the resulting `Stack`, splatted over its
+        // frame range, has the adapter applied per frame to each of its values.
+        let track = FramedTrack::from_single_with_adapter(
+            Timed {
+                start: 0,
+                dur: 2,
+                tag: 0,
+            },
+            adapter,
+        )
+        .expand_same(|value| vec![value.clone(), value]);
+        let out = unwrap_fixed(track.frame_zip(fixed_track(0, 1, vec![100, 200]), combine));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![(0, 0, 100), (0, 0, 100), (1, 1, 200), (1, 1, 200)]
+        );
+
+        // `expand_adapt` installs a new adapter on the result.
+        let track = FramedTrack::from_single(Timed {
+            start: 0,
+            dur: 2,
+            tag: 99,
+        })
+        .expand_adapt(|value| vec![value], adapter);
+        let out = unwrap_fixed(track.frame_zip(fixed_track(0, 1, vec![5, 6]), combine));
+        assert_eq!(out.data, vec![(0, 0, 5), (1, 1, 6)]);
+    }
+
+    #[test]
+    fn frame_zip_stack_t1() {
+        // A `Stack` of two values spanning frames 5, 6, 7 (timing from the first).
+        let make_t1 = || {
+            FramedTrack::from_stack(vec![
+                Timed {
+                    start: 5,
+                    dur: 3,
+                    tag: 100,
+                },
+                Timed {
+                    start: 5,
+                    dur: 3,
+                    tag: 200,
+                },
+            ])
+        };
+
+        // (a) `Fixed` T2 with matching bounds: the fast path. Each frame produces two
+        // outputs, so the result is `Fixed` width 2.
+        let out = unwrap_fixed(make_t1().frame_zip(fixed_track(5, 1, vec![10, 20, 30]), combine));
+        assert_eq!(out.start, fr(5));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![
+                (5, 100, 10),
+                (5, 200, 10),
+                (6, 100, 20),
+                (6, 200, 20),
+                (7, 100, 30),
+                (7, 200, 30),
+            ]
+        );
+
+        // (b) `Single` T2: the slow path splatting the single over every frame.
+        let out = unwrap_fixed(make_t1().frame_zip(FramedTrack::from_single(7), combine));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![
+                (5, 100, 7),
+                (5, 200, 7),
+                (6, 100, 7),
+                (6, 200, 7),
+                (7, 100, 7),
+                (7, 200, 7),
+            ]
+        );
+
+        // (c) `Variable` T2 with a gap at frame 6: that frame's pair gets `None`.
+        let out = unwrap_fixed(
+            make_t1().frame_zip(variable_track(vec![(5, vec![10]), (7, vec![30])]), combine),
+        );
+        assert_eq!(
+            out.data,
+            vec![
+                (5, 100, 10),
+                (5, 200, 10),
+                (6, 100, -1),
+                (6, 200, -1),
+                (7, 100, 30),
+                (7, 200, 30),
+            ]
+        );
+    }
+
+    #[test]
+    fn frame_zip_sliced_stack_t1() {
+        let make_t1 = || {
+            FramedTrack::from_stack(vec![
+                Timed {
+                    start: 0,
+                    dur: 2,
+                    tag: 1,
+                },
+                Timed {
+                    start: 0,
+                    dur: 2,
+                    tag: 2,
+                },
+            ])
+        };
+
+        // Sliced fixed width: the per-frame T1 slice is both stack values; sum their
+        // tags with the frame's T2 values, emitting one output per frame.
+        let sum_one = |frame: media::FrameNumber,
+                       v1: SmallVec<Timed, SMALL_VEC_SIZE>,
+                       v2: Cow<[i32]>|
+         -> SmallVec<(i32, i32), SMALL_VEC_SIZE> {
+            let tag_sum: i32 = v1.iter().map(|entry| entry.tag).sum();
+            let mut out = SmallVec::new();
+            out.push((frame.0, tag_sum + v2.iter().sum::<i32>()));
+            out
+        };
+        let out = unwrap_fixed(
+            make_t1().frame_zip_sliced_fixed_width(fixed_track(0, 1, vec![10, 20]), sum_one),
+        );
+        assert_eq!(out.width, 1);
+        assert_eq!(out.data, vec![(0, 13), (1, 23)]);
+
+        // Sliced variable width against a `Variable` T2 whose width differs per frame.
+        let zip_all = |frame: media::FrameNumber,
+                       v1: SmallVec<Timed, SMALL_VEC_SIZE>,
+                       v2: Cow<[i32]>|
+         -> SmallVec<(i32, i32), SMALL_VEC_SIZE> {
+            v2.iter()
+                .map(|value2| (frame.0, v1[0].tag + value2))
+                .collect()
+        };
+        let out = unwrap_variable(make_t1().frame_zip_sliced_variable_width(
+            variable_track(vec![(0, vec![10, 11]), (1, vec![20])]),
+            zip_all,
+        ));
+        assert_eq!(out[&fr(0)].as_slice(), &[(0, 11), (0, 12)]);
+        assert_eq!(out[&fr(1)].as_slice(), &[(1, 21)]);
+    }
+
+    #[test]
+    fn generic_zip_stack() {
+        let add =
+            |value1: i32, value2_opt: Option<Cow<i32>>| value1 + value2_opt.map_or(0, |cow| *cow);
+
+        // `Stack` + `Single` -> `Stack`: each stack value paired with the single.
+        let out = unwrap_stack(
+            FramedTrack::from_stack(vec![1, 2, 3]).generic_zip(FramedTrack::from_single(10), add),
+        );
+        assert_eq!(out, vec![11, 12, 13]);
+
+        // `Single` + `Stack` -> `Stack`: the single paired with each stack value.
+        let out = unwrap_stack(
+            FramedTrack::from_single(100).generic_zip(FramedTrack::from_stack(vec![1, 2, 3]), add),
+        );
+        assert_eq!(out, vec![101, 102, 103]);
+
+        // `Stack` + `Stack` -> `Stack`: best-effort, each of ours paired with the
+        // other stack's first (representative) value.
+        let out = unwrap_stack(
+            FramedTrack::from_stack(vec![1, 2])
+                .generic_zip(FramedTrack::from_stack(vec![10, 20, 30]), add),
+        );
+        assert_eq!(out, vec![11, 12]);
+
+        // `Stack` + `Fixed` -> `Fixed` width n: the other track drives the frames.
+        let pair = |value1: Timed, value2_opt: Option<Cow<i32>>| {
+            (value1.tag, value2_opt.map_or(-1, |cow| *cow))
+        };
+        let out = unwrap_fixed(
+            FramedTrack::from_stack(vec![timed(1), timed(2)])
+                .generic_zip(fixed_track(0, 1, vec![10, 20, 30]), pair),
+        );
+        assert_eq!(out.start, fr(0));
+        assert_eq!(out.width, 2);
+        assert_eq!(
+            out.data,
+            vec![(1, 10), (2, 10), (1, 20), (2, 20), (1, 30), (2, 30),]
+        );
+
+        // `Stack` + `Variable` -> `Variable`: the other track drives the frames.
+        let out = unwrap_variable(
+            FramedTrack::from_stack(vec![timed(1), timed(2)])
+                .generic_zip(variable_track(vec![(0, vec![10]), (2, vec![30])]), pair),
+        );
+        assert_eq!(out[&fr(0)].as_slice(), &[(1, 10), (2, 10)]);
+        assert_eq!(out[&fr(2)].as_slice(), &[(1, 30), (2, 30)]);
     }
 }

@@ -13,6 +13,8 @@ criterion_group!(
     framed_track::benchmark_frame_zip_fixed,
     framed_track::benchmark_frame_zip_sliced,
     framed_track::benchmark_frame_zip_variable,
+    framed_track::benchmark_expand_stack,
+    framed_track::benchmark_frame_zip_stack,
 );
 criterion_group!(
     event_track,

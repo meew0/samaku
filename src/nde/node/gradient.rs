@@ -43,47 +43,62 @@ impl Node for Gradient {
             target_tags_opt.map(|target_tags_cow| (rectangle_val, target_tags_cow.into_owned()))
         });
 
-        let new_event = event.generic_zip(gradient, |event_val, gradient_opt| {
+        // Combine the event with the gradient parameters into a single track, then
+        // `expand` each event into the strips covering its frame range. For a
+        // `Single` event this turns into a `Stack`, which the output node flattens
+        // back into the individual strip events.
+        let combined = event.generic_zip(gradient, |event_val, gradient_opt| {
+            (
+                event_val,
+                gradient_opt.and_then(std::borrow::Cow::into_owned),
+            )
+        });
+
+        let new_event = combined.expand(|(event_val, gradient_opt)| {
             // TODO inner error handling
             // if rectangle.x2 < rectangle.x1 || rectangle.y2 < rectangle.y1 {
             //     anyhow::bail!("Input rectangle is inverted");
             // }
 
-            if let Some(gradient_cow1) = gradient_opt
-                && let Some((rectangle_val, target_tags_val)) = gradient_cow1.into_owned()
-            {
-                let mut x = rectangle_val.x1;
-                let width = rectangle_val.x2 - rectangle_val.x1;
+            let Some((rectangle_val, target_tags_val)) = gradient_opt else {
+                // Without gradient parameters, pass the event through unchanged.
+                return vec![event_val];
+            };
 
-                let mut events = vec![];
+            let mut x = rectangle_val.x1;
+            let width = rectangle_val.x2 - rectangle_val.x1;
 
-                while x < rectangle_val.x2 {
-                    let mut new_event = event_val.clone();
-                    new_event.global_tags.rectangle_clip =
-                        Some(nde::tags::Clip::Contained(nde::tags::Rectangle {
-                            x1: x,
-                            x2: x + RESOLUTION,
-                            ..rectangle_val
-                        }));
+            let mut events = vec![];
 
-                    let power = f64::from(x - rectangle_val.x1) / f64::from(width);
-                    for span in &mut new_event.text {
-                        if let &mut (nde::Span::Tags(ref mut local, _)
-                        | nde::Span::Drawing(ref mut local, _)) = span
-                        {
-                            local.interpolate(&target_tags_val, power);
-                        }
+            while x < rectangle_val.x2 {
+                let mut new_event = event_val.clone();
+                new_event.global_tags.rectangle_clip =
+                    Some(nde::tags::Clip::Contained(nde::tags::Rectangle {
+                        x1: x,
+                        x2: x + RESOLUTION,
+                        ..rectangle_val
+                    }));
+
+                let power = f64::from(x - rectangle_val.x1) / f64::from(width);
+                for span in &mut new_event.text {
+                    if let &mut (nde::Span::Tags(ref mut local, _)
+                    | nde::Span::Drawing(ref mut local, _)) = span
+                    {
+                        local.interpolate(&target_tags_val, power);
                     }
-                    events.push(new_event);
-
-                    x += RESOLUTION;
                 }
+                events.push(new_event);
 
-                drop(events);
+                x += RESOLUTION;
             }
 
-            // TODO return all events at once
-            todo!()
+            // `expand` requires a non-empty result. A zero- or negative-width
+            // rectangle produces no strips, so fall back to the unmodified event.
+            if events.is_empty() {
+                events.push(event_val);
+            }
+
+            events
         });
 
         Ok(SocketValue::Event(new_event).into_values())

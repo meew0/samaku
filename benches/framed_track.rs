@@ -23,6 +23,10 @@ const EVENT_TEXT: &str = r"{\i1\c&HFF0000&\pos(100,200)}Sphinx of black quartz, 
 /// which clones the (heavy) source events; `Throughput` normalizes per element.
 const SIZES: [i32; 2] = [256, 4096];
 
+/// Number of values a `Stack` carries, i.e. how many outputs a one-to-many
+/// expansion (such as the `Gradient` node) produces per input value.
+const STACK_WIDTH: i32 = 16;
+
 /// A fully-populated event whose clone cost is representative.
 fn make_event(start: i32, duration: i32) -> nde::Event {
     let (global, spans) = nde::tags::parse(EVENT_TEXT);
@@ -212,6 +216,85 @@ pub fn benchmark_frame_zip_sliced(c: &mut Criterion) {
                             evs
                         },
                     ))
+                },
+                BatchSize::LargeInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+/// Expanding a single event into `STACK_WIDTH` values — the `Gradient` node
+/// pattern, where one event becomes several covering the same frame range.
+///
+/// `expand` stores the closure's returned `Vec` directly as the `Stack`, so this
+/// measures the unavoidable per-output clone plus the `Single` -> `Stack`
+/// machinery, contrasted against a hand-written `Vec` build to show the
+/// abstraction adds no overhead. The sweep `n` is the number of outputs.
+pub fn benchmark_expand_stack(c: &mut Criterion) {
+    let mut group = c.benchmark_group("framed_track/expand into stack");
+    for &n in &SIZES {
+        let elements = u64::try_from(n).unwrap();
+        group.throughput(Throughput::Elements(elements));
+
+        group.bench_with_input(BenchmarkId::new("framed_track", n), &n, |b, &n| {
+            let event = make_event(0, 1);
+            b.iter_batched(
+                || FramedTrack::from_single(event.clone()),
+                |events| {
+                    black_box(events.expand(|ev| {
+                        (0..n)
+                            .map(|i| {
+                                let mut cloned = ev.clone();
+                                cloned.start = media::FrameNumber(i);
+                                cloned
+                            })
+                            .collect()
+                    }))
+                },
+                BatchSize::LargeInput,
+            );
+        });
+
+        group.bench_with_input(BenchmarkId::new("vec_clone", n), &n, |b, &n| {
+            let event = make_event(0, 1);
+            b.iter(|| {
+                let mut out = Vec::with_capacity(usize::try_from(n).unwrap());
+                for i in 0..n {
+                    let mut cloned = event.clone();
+                    cloned.start = media::FrameNumber(i);
+                    out.push(cloned);
+                }
+                black_box(out)
+            });
+        });
+    }
+    group.finish();
+}
+
+/// Splatting a `Stack` of `STACK_WIDTH` events over a frame range against a
+/// per-frame value track: the `frame_zip` `Stack` fast path. It borrows each
+/// frame's `T2` value once and reuses it for all `STACK_WIDTH` stack entries,
+/// cloning only the stack events (which must be cloned in any design).
+pub fn benchmark_frame_zip_stack(c: &mut Criterion) {
+    let mut group = c.benchmark_group("framed_track/splat stack");
+    let stack_width = u64::try_from(STACK_WIDTH).unwrap();
+    for &n in &SIZES {
+        let elements = u64::try_from(n).unwrap() * stack_width;
+        group.throughput(Throughput::Elements(elements));
+
+        group.bench_with_input(BenchmarkId::new("framed_track", n), &n, |b, &n| {
+            let event = make_event(0, n);
+            b.iter_batched(
+                || {
+                    let stack: Vec<nde::Event> = (0..STACK_WIDTH).map(|_| event.clone()).collect();
+                    (FramedTrack::from_stack(stack), positions_track(0, n))
+                },
+                |(events, positions)| {
+                    black_box(events.frame_zip(positions, |frame, mut ev, pos| {
+                        ev.start = media::FrameNumber(frame.0 + pos.map_or(0, |p| *p));
+                        ev
+                    }))
                 },
                 BatchSize::LargeInput,
             );
