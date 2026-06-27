@@ -12,24 +12,26 @@ impl Node for Italic {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents]
+        &[SocketType::Event]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents]
+        &[SocketType::Event]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        let socket_value = inputs[0].map_events(|event| {
-            let mut new_event = event.clone();
-            new_event.overrides.italic = nde::tags::Resettable::Override(true);
-            new_event
-        })?;
-        Ok(vec![socket_value])
+        mut inputs: super::SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
+        super::retrieve!(&mut inputs[0], SocketValue::Event(event));
+
+        let new_event = event.map_same(|mut event_val| {
+            event_val.overrides.italic = nde::tags::Resettable::Override(true);
+            event_val
+        });
+
+        Ok(SocketValue::Event(new_event).into_values())
     }
 }
 

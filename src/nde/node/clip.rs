@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{Context, Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue, SocketValues};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClipRectangle;
@@ -12,31 +12,34 @@ impl Node for ClipRectangle {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents, SocketType::Rectangle]
+        &[SocketType::Event, SocketType::Rectangle]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents]
+        &[SocketType::Event]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
+        mut inputs: SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>> {
         assert!(
             inputs.len() > 1,
             "the required number of inputs should be present"
         ); // Elide bounds checks
+        super::retrieve!(&mut inputs[0], SocketValue::Event(event));
+        super::retrieve!(&mut inputs[1], SocketValue::Rectangle(rectangle));
 
-        super::retrieve!(inputs[1], &SocketValue::Rectangle(ref rectangle));
+        let new_event = event.generic_zip(rectangle, |mut event_val, rectangle_opt| {
+            if let Some(rectangle_cow) = rectangle_opt {
+                event_val.global_tags.rectangle_clip =
+                    Some(nde::tags::Clip::Contained(rectangle_cow.into_owned()));
+            }
+            event_val
+        });
 
-        let socket_value = inputs[0].map_events(|event| {
-            let mut new_event = event.clone();
-            new_event.global_tags.rectangle_clip = Some(nde::tags::Clip::Contained(*rectangle));
-            new_event
-        })?;
-        Ok(vec![socket_value])
+        Ok(SocketValue::Event(new_event).into_values())
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{media, nde};
+use crate::nde;
 
 use super::{Context, Node, Shell, SocketType, SocketValue};
 
@@ -12,32 +12,26 @@ impl Node for SplitFrameByFrame {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::IndividualEvent]
+        &[SocketType::Event]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::MultipleEvents]
+        &[SocketType::Event]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        const ONE: media::FrameDelta = media::FrameDelta(1);
+        mut inputs: super::SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
+        super::retrieve!(&mut inputs[0], SocketValue::Event(event));
 
-        super::retrieve!(inputs[0], &SocketValue::IndividualEvent(ref event));
+        let new_event = event
+            .frame_zip(nde::FramedTrack::from_single(()), |_frame, event_val, _| {
+                event_val
+            });
 
-        let mut res: Vec<nde::Event> = vec![];
-        let mut frame = event.start;
-        let end = event.start + event.duration;
-
-        while frame < end {
-            res.push(event.make_static(frame, ONE));
-            frame += ONE;
-        }
-
-        Ok(vec![SocketValue::MultipleEvents(res)])
+        Ok(SocketValue::Event(new_event).into_values())
     }
 }
 

@@ -17,9 +17,22 @@ use std::rc::Rc;
 ///
 /// It also contains a `frame_adapter`, a closure that specifies the way that a potential
 /// `Single` value should be adapted to fit a specific frame (e.g. baking events).
+#[derive(Clone)]
 pub struct FramedTrack<'a, T: Clone> {
     inner: Rc<Inner<T>>,
     frame_adapter: Option<FrameAdapterFn<'a, T>>,
+}
+
+impl<T: Clone + std::fmt::Debug> std::fmt::Debug for FramedTrack<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FramedTrack")
+            .field("inner", &self.inner)
+            .field(
+                "frame_adapter",
+                &self.frame_adapter.as_ref().map(|_| "<closure>"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +51,7 @@ struct Fixed<T> {
     data: Vec<T>,
 }
 
-type FrameAdapterFn<'a, T> = Box<dyn Fn(&mut T, media::FrameNumber) + 'a>;
+type FrameAdapterFn<'a, T> = Rc<dyn Fn(&mut T, media::FrameNumber) + 'a>;
 
 impl<'a, T> FramedTrack<'a, T>
 where
@@ -59,7 +72,7 @@ where
     ) -> Self {
         Self {
             inner: Rc::new(Inner::Single(value)),
-            frame_adapter: Some(Box::new(adapter)),
+            frame_adapter: Some(Rc::new(adapter)),
         }
     }
 
@@ -98,22 +111,46 @@ where
         }
     }
 
+    /// Construct a `Variable` track from per-frame elements. Frames not
+    /// present in the iterator are treated as empty.
+    #[must_use]
+    pub fn from_variable_singles<I: IntoIterator<Item = (media::FrameNumber, T)>>(
+        entries: I,
+    ) -> Self {
+        let map = entries
+            .into_iter()
+            .map(|(frame, value)| (frame, SmallVec::from_buf([value])))
+            .collect();
+        Self {
+            inner: Rc::new(Inner::Variable(map)),
+            frame_adapter: None,
+        }
+    }
+
+    /// Maps every value of this track with the given function, removing the adapter.
+    /// If the return track will be of the same type, use `map_same` instead which
+    /// retains the adapter.
     #[must_use]
     pub fn map<U: Clone, F: FnMut(T) -> U>(self, map_fn: F) -> FramedTrack<'a, U> {
         self.map_direct(map_fn, None)
     }
 
+    /// Maps every value of this track with the given function, retaining the adapter.
     #[must_use]
-    pub fn map_with_new_adapter<
-        U: Clone,
-        F: FnMut(T) -> U,
-        A: Fn(&mut U, media::FrameNumber) + 'a,
-    >(
+    pub fn map_same<F: FnMut(T) -> T>(mut self, map_fn: F) -> FramedTrack<'a, T> {
+        let adapter = self.frame_adapter.take();
+        self.map_direct(map_fn, adapter)
+    }
+
+    /// Maps every value of this track with the given function, where the returned
+    /// track will have a new custom adapter.
+    #[must_use]
+    pub fn map_adapt<U: Clone, F: FnMut(T) -> U, A: Fn(&mut U, media::FrameNumber) + 'a>(
         self,
         map_fn: F,
         new_adapter: A,
     ) -> FramedTrack<'a, U> {
-        self.map_direct(map_fn, Some(Box::new(new_adapter)))
+        self.map_direct(map_fn, Some(Rc::new(new_adapter)))
     }
 
     fn map_direct<U: Clone, F: FnMut(T) -> U>(
@@ -146,6 +183,41 @@ where
             frame_adapter: new_adapter,
         }
     }
+
+    pub fn into_vec<U, F: FnMut(T) -> U>(self, mut map_fn: F) -> Vec<U> {
+        let inner = Rc::unwrap_or_clone(self.inner);
+
+        match inner {
+            Inner::Single(value) => vec![map_fn(value)],
+            Inner::Fixed(fixed) => fixed.data.into_iter().map(map_fn).collect(),
+            Inner::Variable(map) => map
+                .into_values()
+                .flat_map(|values| values.into_iter().map(&mut map_fn).collect::<Vec<U>>())
+                .collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn size(&self) -> Size {
+        match *self.inner {
+            Inner::Single(_) => Size::Single,
+            Inner::Fixed(ref fixed) => Size::Fixed {
+                frame_count: fixed.total_frames(),
+                total: fixed.data.len(),
+            },
+            Inner::Variable(ref map) => Size::Variable {
+                frame_count: map.len(),
+                total: map.values().map(SmallVec::len).sum(),
+            },
+        }
+    }
+}
+
+/// Represents the imagined “size” of a `FramedTrack` without any values.
+pub enum Size {
+    Single,
+    Fixed { frame_count: usize, total: usize },
+    Variable { frame_count: usize, total: usize },
 }
 
 impl<T: Clone> Inner<T> {
@@ -203,7 +275,7 @@ impl<T> Fixed<T> {
     #[inline]
     #[must_use]
     fn duration(&self) -> media::FrameDelta {
-        let num_frames = self.data.len() / usize::from(self.width);
+        let num_frames = self.total_frames();
         media::FrameDelta(i32::try_from(num_frames).expect("`Fixed` duration overflow"))
     }
 
@@ -222,7 +294,7 @@ impl<T> Fixed<T> {
 // Stack size of the `SmallVec`s used as return values from mapping functions.
 const SMALL_VEC_SIZE: usize = 1;
 
-impl<'a, T1> FramedTrack<'a, T1>
+impl<T1> FramedTrack<'_, T1>
 where
     T1: Clone + InherentTiming + 'static,
 {
@@ -247,15 +319,169 @@ where
     >(
         self,
         track2: FramedTrack<T2>,
-        mut map_fn: F,
+        map_fn: F,
+    ) -> FramedTrack<'static, U> {
+        self.frame_zip_inner(track2, map_fn, <T1 as InherentTiming>::timing)
+    }
+
+    /// Iterate over pairs of `T1` and `T2` slices per frame, where the output
+    /// vector may be of different length than the input vector, but must be
+    /// the same for every frame. Use this method over
+    /// `frame_zip_sliced_variable_width` if possible.
+    #[must_use]
+    pub fn frame_zip_sliced_fixed_width<
+        T2: Clone,
+        U: Clone,
+        F: FnMut(
+            media::FrameNumber,
+            SmallVec<T1, SMALL_VEC_SIZE>,
+            Cow<[T2]>,
+        ) -> SmallVec<U, SMALL_VEC_SIZE>,
+    >(
+        self,
+        track2: FramedTrack<T2>,
+        map_fn: F,
+    ) -> FramedTrack<'static, U> {
+        self.frame_zip_sliced_fixed_width_inner(track2, map_fn, <T1 as InherentTiming>::timing)
+    }
+
+    /// Iterate over pairs of `T1` and `T2` slices per frame, where the output
+    /// vector may be of different length than the input vector and may be
+    /// of different length between different iterations.
+    ///
+    /// Try to avoid this method in favor of `frame_zip_sliced_fixed_width`,
+    /// if possible.
+    #[must_use]
+    pub fn frame_zip_sliced_variable_width<
+        T2: Clone,
+        U: Clone,
+        F: FnMut(
+            media::FrameNumber,
+            SmallVec<T1, SMALL_VEC_SIZE>,
+            Cow<[T2]>,
+        ) -> SmallVec<U, SMALL_VEC_SIZE>,
+    >(
+        self,
+        track2: FramedTrack<T2>,
+        map_fn: F,
+    ) -> FramedTrack<'static, U> {
+        self.frame_zip_sliced_variable_width_inner(track2, map_fn, <T1 as InherentTiming>::timing)
+    }
+}
+
+impl<'a, T1> FramedTrack<'a, T1>
+where
+    T1: Clone + 'static,
+{
+    /// Iterates over pairs of `T1` and `T2` given the other `FramedTrack`,
+    /// but not necessarily over all frames separately. If both tracks are
+    /// `Single`, no iteration will be performed.
+    #[must_use]
+    pub fn generic_zip<T2: Clone + 'static, U: Clone, F: FnMut(T1, Option<Cow<T2>>) -> U>(
+        self,
+        track2: FramedTrack<'a, T2>,
+        map_fn: F,
     ) -> FramedTrack<'a, U> {
+        self.generic_zip_inner(track2, map_fn, None)
+    }
+
+    #[must_use]
+    pub fn generic_zip_same<T2: Clone + 'static, F: FnMut(T1, Option<Cow<T2>>) -> T1>(
+        mut self,
+        track2: FramedTrack<'a, T2>,
+        map_fn: F,
+    ) -> FramedTrack<'a, T1> {
+        let adapter = self.frame_adapter.take();
+        self.generic_zip_inner(track2, map_fn, adapter)
+    }
+
+    #[must_use]
+    pub fn generic_zip_adapt<
+        'b,
+        T2: Clone + 'static,
+        U: Clone,
+        F: FnMut(T1, Option<Cow<T2>>) -> U,
+        A: Fn(&mut U, media::FrameNumber) + 'b,
+    >(
+        self,
+        track2: FramedTrack<T2>,
+        map_fn: F,
+        new_adapter: Option<A>,
+    ) -> FramedTrack<'b, U> {
+        let frame_adapter_fn = new_adapter.map(|new_adapter_value| {
+            let frame_adapter_fn_value: FrameAdapterFn<'b, U> = Rc::new(new_adapter_value);
+            frame_adapter_fn_value
+        });
+        self.generic_zip_inner(track2, map_fn, frame_adapter_fn)
+    }
+
+    #[must_use]
+    fn generic_zip_inner<'b, T2: Clone + 'static, U: Clone, F: FnMut(T1, Option<Cow<T2>>) -> U>(
+        self,
+        track2: FramedTrack<T2>,
+        mut map_fn: F,
+        new_adapter: Option<FrameAdapterFn<'b, U>>,
+    ) -> FramedTrack<'b, U> {
+        if let &Inner::Single(_) = &*self.inner {
+            if let &Inner::Single(_) = &*track2.inner {
+                let Inner::Single(value1) = Rc::unwrap_or_clone(self.inner) else {
+                    unreachable!("checked to be `Fixed` above");
+                };
+                let Inner::Single(value2) = Rc::unwrap_or_clone(track2.inner) else {
+                    unreachable!("checked to be `Fixed` above");
+                };
+
+                let new_value = map_fn(value1, Some(Cow::Owned(value2)));
+
+                FramedTrack {
+                    inner: Rc::new(Inner::Single(new_value)),
+                    frame_adapter: new_adapter,
+                }
+            } else {
+                // We are `Single`, but the other is not.
+                // Use the other as the reference.
+                track2.frame_zip_inner(
+                    self,
+                    |_frame, value2, value1| {
+                        // value1 should never be None since track1 is Single.
+                        let cow1 = value1.unwrap();
+                        map_fn(cow1.into_owned(), Some(Cow::Owned(value2)))
+                    },
+                    |_| panic!("timing_fn called unexpectedly"),
+                )
+            }
+        } else {
+            self.frame_zip_inner(
+                track2,
+                |_frame, value1, value2| map_fn(value1, value2),
+                |_| panic!("timing_fn called unexpectedly"),
+            )
+        }
+    }
+
+    #[must_use]
+    fn frame_zip_inner<
+        T2: Clone,
+        U: Clone,
+        F: FnMut(media::FrameNumber, T1, Option<Cow<T2>>) -> U,
+    >(
+        self,
+        track2: FramedTrack<T2>,
+        mut map_fn: F,
+        timing_fn: TimingFn<T1>,
+    ) -> FramedTrack<'static, U> {
         let inner = Rc::unwrap_or_clone(self.inner);
 
         let new_inner = match inner {
             Inner::Single(value) => {
-                let start = value.start();
-                let data =
-                    Self::frame_zip_t1_single(&value, track2, map_fn, self.frame_adapter.as_ref());
+                let (start, _) = timing_fn(&value);
+                let data = Self::frame_zip_t1_single(
+                    &value,
+                    track2,
+                    map_fn,
+                    timing_fn,
+                    self.frame_adapter.as_ref(),
+                );
                 Inner::Fixed(Fixed {
                     start,
                     width: 1,
@@ -306,10 +532,10 @@ where
         value1: &T1,
         track2: FramedTrack<T2>,
         mut map_fn: F,
+        timing_fn: TimingFn<T1>,
         t1_adapter: Option<&FrameAdapterFn<'a, T1>>,
     ) -> Vec<U> {
-        let start = value1.start();
-        let duration = value1.duration();
+        let (start, duration) = timing_fn(value1);
 
         let mut result =
             Vec::with_capacity(usize::try_from(duration.0).expect("duration overflow"));
@@ -448,7 +674,7 @@ where
     /// the same for every frame. Use this method over
     /// `frame_zip_sliced_variable_width` if possible.
     #[must_use]
-    pub fn frame_zip_sliced_fixed_width<
+    fn frame_zip_sliced_fixed_width_inner<
         T2: Clone,
         U: Clone,
         F: FnMut(
@@ -460,10 +686,11 @@ where
         self,
         track2: FramedTrack<T2>,
         map_fn: F,
-    ) -> FramedTrack<'a, U> {
+        timing_fn: TimingFn<T1>,
+    ) -> FramedTrack<'static, U> {
         // Defer to `variable_width` for the `Variable` case since it would be the same.
         if matches!(&*self.inner, &Inner::Variable(_)) {
-            return self.frame_zip_sliced_variable_width(track2, map_fn);
+            return self.frame_zip_sliced_variable_width_inner(track2, map_fn, timing_fn);
         }
 
         let inner = Rc::unwrap_or_clone(self.inner);
@@ -474,6 +701,7 @@ where
                     &value,
                     track2,
                     map_fn,
+                    timing_fn,
                     self.frame_adapter.as_ref(),
                 );
                 Inner::Fixed(new_fixed)
@@ -505,10 +733,10 @@ where
         value1: &T1,
         track2: FramedTrack<T2>,
         mut map_fn: F,
+        timing_fn: TimingFn<T1>,
         t1_adapter: Option<&FrameAdapterFn<'a, T1>>,
     ) -> Fixed<U> {
-        let start = value1.start();
-        let duration = value1.duration();
+        let (start, duration) = timing_fn(value1);
         let num_frames = usize::try_from(duration.0).expect("duration overflow");
 
         let FramedTrack {
@@ -662,7 +890,7 @@ where
     /// Try to avoid this method in favor of `frame_zip_sliced_fixed_width`,
     /// if possible.
     #[must_use]
-    pub fn frame_zip_sliced_variable_width<
+    fn frame_zip_sliced_variable_width_inner<
         T2: Clone,
         U: Clone,
         F: FnMut(
@@ -674,7 +902,8 @@ where
         self,
         track2: FramedTrack<T2>,
         mut map_fn: F,
-    ) -> FramedTrack<'a, U> {
+        timing_fn: TimingFn<T1>,
+    ) -> FramedTrack<'static, U> {
         let inner = Rc::unwrap_or_clone(self.inner);
 
         let FramedTrack {
@@ -684,8 +913,7 @@ where
 
         let new_inner = match inner {
             Inner::Single(value1) => {
-                let start = value1.start();
-                let duration = value1.duration();
+                let (start, duration) = timing_fn(&value1);
                 let mut variable_map = BTreeMap::new();
 
                 for frame_n in start.0..(start + duration).0 {
@@ -758,18 +986,15 @@ fn clone_adapt<T: Clone>(
     cloned
 }
 
+type TimingFn<T> = fn(&T) -> (media::FrameNumber, media::FrameDelta);
+
 pub trait InherentTiming {
-    fn start(&self) -> media::FrameNumber;
-    fn duration(&self) -> media::FrameDelta;
+    fn timing(&self) -> (media::FrameNumber, media::FrameDelta);
 }
 
 impl InherentTiming for super::Event {
-    fn start(&self) -> media::FrameNumber {
-        self.start
-    }
-
-    fn duration(&self) -> media::FrameDelta {
-        self.duration
+    fn timing(&self) -> (media::FrameNumber, media::FrameDelta) {
+        (self.start, self.duration)
     }
 }
 
@@ -793,11 +1018,8 @@ mod tests {
     }
 
     impl InherentTiming for Timed {
-        fn start(&self) -> media::FrameNumber {
-            media::FrameNumber(self.start)
-        }
-        fn duration(&self) -> media::FrameDelta {
-            media::FrameDelta(self.dur)
+        fn timing(&self) -> (media::FrameNumber, media::FrameDelta) {
+            (media::FrameNumber(self.start), media::FrameDelta(self.dur))
         }
     }
 

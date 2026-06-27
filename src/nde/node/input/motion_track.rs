@@ -1,36 +1,37 @@
-use super::{Context, Node, Shell, SocketType, SocketValue};
+use super::{Category, Context, Node, Shell, SocketType, SocketValue};
 use crate::media::motion;
 use crate::{message, model, nde, subtitle, view};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MotionTrack {
+pub struct InputMotionTrack {
     pub track_id: Option<motion::TrackId>,
     #[serde(skip)]
     pub blend_box_state: view::widget::blend_box::State,
 }
 
 #[typetag::serde]
-impl Node for MotionTrack {
+impl Node for InputMotionTrack {
     fn name(&self) -> &'static str {
-        "Motion track"
+        "Input: Motion track"
+    }
+
+    fn category(&self) -> Category {
+        Category::Input
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::MultipleEvents]
+        &[]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::MultipleEvents]
+        &[SocketType::Marker]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        super::retrieve!(inputs[0], &SocketValue::MultipleEvents(ref events));
-        let mut new_events: Vec<nde::Event> = vec![];
-
+        _inputs: super::SocketValues<'a>,
+        context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
         let Some(track_id) = self.track_id else {
             anyhow::bail!("No motion track selected");
         };
@@ -41,16 +42,11 @@ impl Node for MotionTrack {
             anyhow::bail!("Invalid motion track ID");
         };
 
-        for event in events {
-            let mut cloned = event.clone();
-            if let Some(marker) = track.get_marker(cloned.start) {
-                cloned.global_tags.position =
-                    Some(nde::tags::PositionOrMove::Position(marker.region.center));
-            }
-            new_events.push(cloned);
-        }
+        let marker = nde::FramedTrack::from_variable_singles(
+            track.iter().map(|(frame, marker)| (frame, marker.clone())),
+        );
 
-        Ok(vec![SocketValue::MultipleEvents(new_events)])
+        Ok(SocketValue::Marker(marker).into_values())
     }
 
     fn content<'a>(
@@ -118,8 +114,8 @@ impl Node for MotionTrack {
 
 inventory::submit! {
     Shell::new(
-        &["Motion track"],
-        || Box::new(MotionTrack {
+        &["Input", "Motion track"],
+        || Box::new(InputMotionTrack {
             track_id: None,
             blend_box_state: view::widget::blend_box::State::default(),
         })

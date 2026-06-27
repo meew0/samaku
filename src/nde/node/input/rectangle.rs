@@ -1,4 +1,4 @@
-use super::{Context, Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue, SocketValues};
 use crate::model::reticule;
 use crate::{message, nde, subtitle};
 
@@ -52,12 +52,12 @@ impl Node for InputRectangle {
         &[SocketType::Rectangle]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        _inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        Ok(vec![SocketValue::Rectangle(self.value)])
+        _inputs: SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>> {
+        Ok(SocketValue::Rectangle(nde::FramedTrack::from_single(self.value)).into_values())
     }
 
     fn content<'a>(
