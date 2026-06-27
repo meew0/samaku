@@ -35,10 +35,23 @@ impl<T: Clone + std::fmt::Debug> std::fmt::Debug for FramedTrack<'_, T> {
     }
 }
 
+/// The internal representation of a [`FramedTrack`]'s values. Each variant trades
+/// off differently between memory layout and the kind of per-frame data it can
+/// express; the mapping and zipping operations pick the cheapest path for the
+/// variants involved (for instance *moving* values out of a uniquely-owned `Fixed`
+/// rather than cloning them).
 #[derive(Debug, Clone)]
 enum Inner<T> {
+    /// A single frame-agnostic value, conceptually present on every frame. It is
+    /// splatted over a frame range on demand, adapted per frame via the track's
+    /// `frame_adapter` if one is set.
     Single(T),
+
+    /// A contiguous block of per-frame values; see [`Fixed`].
     Fixed(Fixed<T>),
+
+    /// Sparse per-frame value lists keyed by frame. Frames absent from the map are
+    /// treated as empty. Used when the number of values differs from frame to frame.
     Variable(BTreeMap<media::FrameNumber, SmallVec<T, SMALL_VEC_SIZE>>),
 
     /// A non-empty stack of frame-agnostic values that all share the same inherent
@@ -59,12 +72,18 @@ struct Fixed<T> {
     data: Vec<T>,
 }
 
+/// A closure that adapts a value in place to a specific frame, for example by
+/// baking a `Single` event onto the frame it is being materialized for. Stored
+/// behind an `Rc` so that cloning a `FramedTrack` stays cheap.
 type FrameAdapterFn<'a, T> = Rc<dyn Fn(&mut T, media::FrameNumber) + 'a>;
 
 impl<'a, T> FramedTrack<'a, T>
 where
     T: Clone,
 {
+    /// Construct a `Single` track: one frame-agnostic value, conceptually present
+    /// on every frame, that is splatted over a frame range when zipped against a
+    /// frame-based track.
     #[must_use]
     pub fn from_single(value: T) -> Self {
         Self {
@@ -73,6 +92,10 @@ where
         }
     }
 
+    /// Like `from_single`, but with a frame adapter that is applied to the value
+    /// each time it is materialized for a specific frame (e.g. baking an event onto
+    /// that frame). Operations that keep the value frame-agnostic, such as
+    /// `map_same`, retain the adapter.
     #[must_use]
     pub fn from_single_with_adapter<A: Fn(&mut T, media::FrameNumber) + 'a>(
         value: T,
@@ -345,6 +368,12 @@ where
         }
     }
 
+    /// Flatten the whole track into a single `Vec`, mapping every value with
+    /// `map_fn`. This is the terminal operation an output node uses to collect all
+    /// values regardless of representation: a `Single` yields one element, a `Fixed`
+    /// or `Variable` yields each per-frame element in frame order, and a `Stack`
+    /// yields all of its values. Reuses the track's allocation when it is uniquely
+    /// owned.
     pub fn into_vec<U, F: FnMut(T) -> U>(self, mut map_fn: F) -> Vec<U> {
         let inner = Rc::unwrap_or_clone(self.inner);
 
@@ -359,6 +388,8 @@ where
         }
     }
 
+    /// Describe the track's shape and element count without inspecting the values
+    /// themselves. Used, for example, to display socket contents in the node editor.
     #[must_use]
     pub fn size(&self) -> Size {
         match *self.inner {
@@ -380,13 +411,22 @@ where
 
 /// Represents the imagined “size” of a `FramedTrack` without any values.
 pub enum Size {
+    /// A `Single` value (always exactly one element).
     Single,
+    /// A `Fixed` track: `total` elements spread evenly over `frame_count` frames.
     Fixed { frame_count: usize, total: usize },
+    /// A `Variable` track: `total` elements over `frame_count` populated frames.
     Variable { frame_count: usize, total: usize },
+    /// A `Stack`: `total` frame-agnostic values.
     Stack { total: usize },
 }
 
 impl<T: Clone> Inner<T> {
+    /// Get the representative value for `number`: the single value a width-1
+    /// consumer expects from this track at that frame. `Single`/`Stack` are
+    /// frame-agnostic, so they always yield a value (cloned and adapted, the stack
+    /// using its first element); `Fixed`/`Variable` borrow that frame's first
+    /// element from storage, or return `None` if the frame is not covered.
     #[must_use]
     fn get_frame_adapt(
         &self,
@@ -408,6 +448,10 @@ impl<T: Clone> Inner<T> {
         }
     }
 
+    /// Get every value present at `number` as a slice. `Single`/`Stack` are
+    /// frame-agnostic, so their value(s) appear on every frame (cloned and adapted);
+    /// `Fixed`/`Variable` borrow that frame's elements from storage, or return an
+    /// empty slice if the frame is not covered.
     #[must_use]
     fn get_frame_adapt_all(
         &self,
@@ -440,6 +484,8 @@ impl<T> Fixed<T> {
         Some(&self.data[n])
     }
 
+    /// Get all `width` elements stored at the given frame as a slice, or an empty
+    /// slice if the frame is out of bounds.
     #[must_use]
     fn get_frame_all(&self, number: media::FrameNumber) -> &[T] {
         let Some(n) = self.frame_n(number) else {
@@ -448,6 +494,7 @@ impl<T> Fixed<T> {
         &self.data[n..(n + usize::from(self.width))]
     }
 
+    /// The number of frames this `Fixed` covers, as a `FrameDelta`.
     #[inline]
     #[must_use]
     fn duration(&self) -> media::FrameDelta {
@@ -462,6 +509,7 @@ impl<T> Fixed<T> {
         ((n + usize::from(self.width)) <= self.data.len()).then_some(n)
     }
 
+    /// The number of frames this `Fixed` covers.
     fn total_frames(&self) -> usize {
         self.data.len() / usize::from(self.width)
     }
@@ -484,6 +532,11 @@ where
     ///
     /// Uses the inherent timing of this track, if necessary
     /// (e.g. a track containing a single event with timing information).
+    ///
+    /// The result is shaped according to this track's representation: a `Single` or
+    /// `Stack` is splatted over the frame range given by its inherent timing,
+    /// producing a `Fixed` of width 1 or `n` (the stack size) respectively, while a
+    /// `Fixed`/`Variable` is mapped frame by frame in place.
     ///
     /// # Panics
     /// Panics if the inherent duration of a `Single` value is negative.
@@ -549,9 +602,16 @@ impl<'a, T1> FramedTrack<'a, T1>
 where
     T1: Clone + 'static,
 {
-    /// Iterates over pairs of `T1` and `T2` given the other `FramedTrack`,
-    /// but not necessarily over all frames separately. If both tracks are
-    /// `Single`, no iteration will be performed.
+    /// Combine this track with `track2` value by value, without necessarily
+    /// iterating over every frame. Unlike `frame_zip`, this does not require
+    /// `T1: InherentTiming`: when both tracks are frame-agnostic (`Single`/`Stack`)
+    /// the result is too and no frame iteration happens; otherwise the frame-based
+    /// track drives the iteration. The map function receives each `T1` value
+    /// together with the matching `T2` value for its frame, or `None` if `track2`
+    /// does not cover that frame.
+    ///
+    /// This variant drops any frame adapter; use `generic_zip_same` to retain it or
+    /// `generic_zip_adapt` to install a new one.
     #[must_use]
     pub fn generic_zip<T2: Clone + 'static, U: Clone, F: FnMut(T1, Option<Cow<T2>>) -> U>(
         self,
@@ -561,6 +621,9 @@ where
         self.generic_zip_inner(track2, map_fn, None)
     }
 
+    /// Like `generic_zip`, but retaining this track's frame adapter so the result
+    /// can still be adapted per frame. The map function must return `T1`, since the
+    /// adapter is typed for `T1`.
     #[must_use]
     pub fn generic_zip_same<T2: Clone + 'static, F: FnMut(T1, Option<Cow<T2>>) -> T1>(
         mut self,
@@ -571,6 +634,8 @@ where
         self.generic_zip_inner(track2, map_fn, adapter)
     }
 
+    /// Like `generic_zip`, but installing `new_adapter` as the result's frame
+    /// adapter (when given). Only meaningful if the result stays frame-agnostic.
     #[must_use]
     pub fn generic_zip_adapt<
         'b,
@@ -1372,6 +1437,9 @@ where
     }
 }
 
+/// Clone `value` and, if an adapter is given, adapt the clone to `frame`. This is
+/// how frame-agnostic values (`Single`/`Stack`) are materialized for a specific
+/// frame, e.g. baking an event onto it.
 fn clone_adapt<T: Clone>(
     value: &T,
     frame: media::FrameNumber,
@@ -1384,9 +1452,17 @@ fn clone_adapt<T: Clone>(
     cloned
 }
 
+/// A function extracting the inherent `(start, duration)` timing of a value. The
+/// zip routines are shared between the `InherentTiming`-based public methods
+/// (which pass [`InherentTiming::timing`]) and the `generic_zip` family (which pass
+/// a panicking stub and rely on the frame-based track to drive iteration instead).
 type TimingFn<T> = fn(&T) -> (media::FrameNumber, media::FrameDelta);
 
+/// Implemented by values that carry their own frame range, such as `nde::Event`. A
+/// `Single` or `Stack` track of such a value can be splatted over that range by
+/// `frame_zip` without a separate frame-based track to follow.
 pub trait InherentTiming {
+    /// Return this value's `(start_frame, duration)`.
     fn timing(&self) -> (media::FrameNumber, media::FrameDelta);
 }
 
