@@ -626,11 +626,11 @@ where
     /// adapter is typed for `T1`.
     #[must_use]
     pub fn generic_zip_same<T2: Clone + 'static, F: FnMut(T1, Option<Cow<T2>>) -> T1>(
-        mut self,
+        self,
         track2: FramedTrack<'a, T2>,
         map_fn: F,
     ) -> FramedTrack<'a, T1> {
-        let adapter = self.frame_adapter.take();
+        let adapter = self.frame_adapter.clone(); // this clone is cheap since the adapter is an `Rc`
         self.generic_zip_inner(track2, map_fn, adapter)
     }
 

@@ -51,12 +51,14 @@ impl Node for InputEvent {
             - start;
 
         let adapter = move |event: &mut nde::Event, frame| {
+            let frame_time = context
+                .frame_rate
+                .time_at_frame(frame, media::TimeMode::Exact);
+
             let time = nde::tags::bake::TimeContext {
                 start,
                 duration,
-                now: context
-                    .frame_rate
-                    .time_at_frame(frame, media::TimeMode::Exact),
+                now: frame_time,
             };
             let style_lookup = move |name: &str| {
                 let index = context.styles.find_by_name(name)?;
@@ -72,6 +74,11 @@ impl Node for InputEvent {
                 context.playback_resolution,
                 None,
             );
+
+            dbg!(frame);
+
+            event.start = frame;
+            event.duration = media::FrameDelta(1);
         };
 
         let track = nde::FramedTrack::from_single_with_adapter(nde_event, adapter);
