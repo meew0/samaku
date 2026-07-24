@@ -2,9 +2,12 @@ use std::borrow::Cow;
 
 use crate::nde::tags::{FontSize, FontWeight, Resettable};
 use crate::{media, model, subtitle};
+pub use framed_track::FramedTrack;
+pub use framed_track::Size as FramedTrackSize;
 pub use graph::Graph;
 pub use node::Node;
 
+mod framed_track;
 pub mod graph;
 pub mod node;
 pub mod tags;

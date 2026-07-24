@@ -2,29 +2,33 @@
     clippy::module_name_repetitions,
     reason = "`typetag` for (de)serialising trait objects requires that every struct that implements `Node` must have a unique name. So even if it would lead to more concise code, we can't have the individual node structs be named e.g. `clip::Rectangle` and `input::Rectangle`."
 )]
+#![allow(
+    clippy::missing_asserts_for_indexing,
+    reason = "false positives on retrieve! macro"
+)]
 
+use super::FramedTrack;
 use std::fmt::Debug;
 
 pub use clip::ClipRectangle;
 pub use gradient::Gradient;
 pub use input::InputEvent;
+pub use input::InputMotionTrack;
 pub use input::InputPosition;
 pub use input::InputQuad;
 pub use input::InputRectangle;
 pub use input::InputTags;
-pub use motion_track::MotionTrack;
 pub use output::Output;
 pub use perspective::Perspective;
 pub use positioning::SetPosition;
 pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
-use crate::{media, message, model, nde, subtitle};
+use crate::{media, message, model, subtitle};
 
 mod clip;
 mod gradient;
 mod input;
-mod motion_track;
 mod output;
 mod perspective;
 mod positioning;
@@ -33,47 +37,41 @@ mod style_basic;
 
 /// Represents a value passed into a socket.
 ///
-/// This struct takes a lifetime argument because it needs to support references to events stored
-/// in the global state. But those should not be passed around in the node tree, so only leaf
-/// nodes should have to deal with these — for the most part, the lifetime should be `'static`.
-#[derive(Debug, Clone)]
+/// The lifetime represents the lifetime of any data the contained value might borrow from:
+/// for the most part, this is the lifetime of the `FramedTrack` frame adapter closure,
+/// or also the `SourceEvent` lifetime.
+#[derive(Debug, Clone, Default)]
 pub enum SocketValue<'a> {
     /// No value; unconnected socket.
+    #[default]
     None,
 
-    /// One single event.
-    IndividualEvent(Box<super::Event>),
+    Event(FramedTrack<'a, super::Event>),
 
-    /// A collection of events. Can have any length.
-    MultipleEvents(Vec<super::Event>),
+    LocalTags(FramedTrack<'static, super::tags::Local>),
+    GlobalTags(FramedTrack<'static, super::tags::Global>),
 
-    LocalTags(Box<super::tags::Local>),
-    GlobalTags(Box<super::tags::Global>),
-
-    Position(glam::DVec2),
-    Rectangle(nde::tags::Rectangle),
-    Quad(nde::tags::perspective::Quad),
-
-    SourceEvent(&'a subtitle::Event<'static>),
+    Position(FramedTrack<'static, glam::DVec2>),
+    Rectangle(FramedTrack<'static, super::tags::Rectangle>),
+    Quad(FramedTrack<'static, super::tags::perspective::Quad>),
+    Marker(FramedTrack<'static, media::motion::Marker>),
 
     /// Compiled events that are ready to copy into libass.
     CompiledEvents(Vec<subtitle::Event<'static>>),
 }
 
-impl SocketValue<'_> {
+impl<'a> SocketValue<'a> {
     #[must_use]
     pub fn as_type(&self) -> Option<SocketType> {
         match *self {
-            SocketValue::IndividualEvent(_) => Some(SocketType::IndividualEvent),
-            SocketValue::MultipleEvents(_) => Some(SocketType::MultipleEvents),
+            SocketValue::Event(_) => Some(SocketType::Event),
             SocketValue::LocalTags(_) => Some(SocketType::LocalTags),
             SocketValue::GlobalTags(_) => Some(SocketType::GlobalTags),
             SocketValue::Position(_) => Some(SocketType::Position),
             SocketValue::Rectangle(_) => Some(SocketType::Rectangle),
             SocketValue::Quad(_) => Some(SocketType::Quad),
-            SocketValue::None | SocketValue::SourceEvent(_) | SocketValue::CompiledEvents(_) => {
-                None
-            }
+            SocketValue::Marker(_) => Some(SocketType::Marker),
+            SocketValue::None | SocketValue::CompiledEvents(_) => None,
         }
     }
 
@@ -81,75 +79,46 @@ impl SocketValue<'_> {
     pub fn identifier(&self) -> &'static str {
         match *self {
             SocketValue::None => "None",
-            SocketValue::IndividualEvent(_) => "IndividualEvent",
-            SocketValue::MultipleEvents(_) => "MultipleEvents",
+            SocketValue::Event(_) => "Event",
             SocketValue::LocalTags(_) => "LocalTags",
             SocketValue::GlobalTags(_) => "GlobalTags",
             SocketValue::Position(_) => "Position",
             SocketValue::Rectangle(_) => "Rectangle",
             SocketValue::Quad(_) => "Quad",
-            SocketValue::SourceEvent(_) => "SourceEvent",
+            SocketValue::Marker(_) => "Marker",
             SocketValue::CompiledEvents(_) => "CompiledEvents",
         }
     }
 
-    /// Assumes `self` contains events of some kind, and maps those events one-by-one using the
-    /// given function, returning a [`SocketValue`] of the same kind as `self`.
-    ///
-    /// # Errors
-    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
-    pub fn map_events<F>(&self, func: F) -> anyhow::Result<SocketValue<'static>>
-    where
-        F: Fn(&super::Event) -> super::Event,
-    {
+    #[must_use]
+    pub fn size(&self) -> Option<super::FramedTrackSize> {
         match *self {
-            SocketValue::IndividualEvent(ref event) => {
-                Ok(SocketValue::IndividualEvent(Box::new(func(event.as_ref()))))
-            }
-            SocketValue::MultipleEvents(ref events) => Ok(SocketValue::MultipleEvents(
-                events.iter().map(func).collect(),
-            )),
-            ref other => type_error(other, "event(s)"),
+            SocketValue::None | SocketValue::CompiledEvents(_) => None,
+            SocketValue::Event(ref track) => Some(track.size()),
+            SocketValue::LocalTags(ref track) => Some(track.size()),
+            SocketValue::GlobalTags(ref track) => Some(track.size()),
+            SocketValue::Position(ref track) => Some(track.size()),
+            SocketValue::Rectangle(ref track) => Some(track.size()),
+            SocketValue::Quad(ref track) => Some(track.size()),
+            SocketValue::Marker(ref track) => Some(track.size()),
         }
     }
 
-    /// Assumes `self` contains events of some kind, and maps those events one-by-one using the
-    /// given function, returning a [`Vec`] of returned values.
-    ///
-    /// # Errors
-    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
-    pub fn map_events_into<T, F>(&self, func: F) -> anyhow::Result<Vec<T>>
-    where
-        F: Fn(&super::Event) -> T,
-    {
-        match *self {
-            SocketValue::IndividualEvent(ref event) => Ok(vec![func(event.as_ref())]),
-            SocketValue::MultipleEvents(ref events) => Ok(events.iter().map(func).collect()),
-            ref other => type_error(other, "event(s)"),
-        }
+    #[must_use]
+    pub fn into_values(self) -> SocketValues<'a> {
+        smallvec::smallvec![self]
     }
 
-    /// Assumes `self` contains events of some kind, and calls the given mutable closure for each
-    /// given event.
-    ///
-    /// # Errors
-    /// Returns [`BasicError::MismatchedTypes`] if `self` does not contain events.
-    pub fn each_event<F>(&self, mut func: F) -> anyhow::Result<()>
-    where
-        F: FnMut(&super::Event),
-    {
-        match *self {
-            SocketValue::IndividualEvent(ref event) => func(event.as_ref()),
-            SocketValue::MultipleEvents(ref events) => {
-                for event in events {
-                    func(event);
-                }
-            }
-            ref other => return type_error(other, "event(s)"),
+    #[must_use]
+    pub fn to_result(&self) -> SocketResult {
+        SocketResult {
+            value_type: self.as_type(),
+            size: self.size(),
         }
-        Ok(())
     }
 }
+
+pub type SocketValues<'a> = smallvec::SmallVec<SocketValue<'a>, 2>;
 
 // Handle an undesired socket value: if it is None, return a missing input error,
 // if it is any other type, report mismatched types.
@@ -173,7 +142,7 @@ pub fn type_error<T>(other: &SocketValue, expected: &'static str) -> anyhow::Res
 
 macro_rules! retrieve {
     ($val:expr, $pattern:pat) => {
-        let value = $val;
+        let value = std::mem::take($val);
         let $pattern = value else {
             return crate::nde::node::type_error(&value, stringify!($pattern));
         };
@@ -185,24 +154,25 @@ pub(crate) use retrieve;
 /// Represents a type of socket, as in, what kind of value a node would like to have passed into it.
 #[derive(Debug, Clone, Copy)]
 pub enum SocketType {
-    IndividualEvent,
-    MultipleEvents,
-    AnyEvents,
+    Event,
     LocalTags,
     GlobalTags,
     Position,
     Rectangle,
     Quad,
+    Marker,
 }
 
 impl SocketType {
     #[must_use]
     pub fn is_event(self) -> bool {
-        matches!(
-            self,
-            SocketType::IndividualEvent | SocketType::MultipleEvents | SocketType::AnyEvents
-        )
+        matches!(self, SocketType::Event)
     }
+}
+
+pub struct SocketResult {
+    pub value_type: Option<SocketType>,
+    pub size: Option<super::FramedTrackSize>,
 }
 
 pub type Context<'a> = subtitle::compile::Context<'a>;
@@ -231,11 +201,11 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
     /// # Errors
     /// Can return an [`BasicError`] to indicate that the node is unable to process the given inputs
     /// for whatever reason, for example due to mismatched input types.
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>>;
+        inputs: SocketValues<'a>,
+        context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>>;
 
     /// Content elements that should be displayed at the top of the node. By default, this is simply
     /// some text showing the node's name.
@@ -243,7 +213,7 @@ pub trait Node: dyn_clone::DynClone + Debug + Send {
         &'a self,
         global_state: &'a crate::Samaku,
         filter_index: subtitle::ExtradataId,
-        self_index: nde::graph::NodeId,
+        self_index: super::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
         iced::widget::space().into()
     }

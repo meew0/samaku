@@ -1384,7 +1384,7 @@ dependencies = [
  "lebe",
  "miniz_oxide 0.8.9",
  "rayon-core",
- "smallvec",
+ "smallvec 1.15.1",
  "zune-inflate",
 ]
 
@@ -1829,7 +1829,7 @@ dependencies = [
  "bytemuck",
  "core_maths",
  "read-fonts 0.35.0",
- "smallvec",
+ "smallvec 1.15.1",
 ]
 
 [[package]]
@@ -2381,7 +2381,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1618d4ebd923e97d67e7cd363d80aef35fe961005cbbbb3d2dad8bdd1bc63440"
 dependencies = [
  "arrayvec",
- "smallvec",
+ "smallvec 1.15.1",
 ]
 
 [[package]]
@@ -2392,7 +2392,7 @@ checksum = "c62026ae44756f8a599ba21140f350303d4f08dcdcc71b5ad9c9bb8128c13c62"
 dependencies = [
  "arrayvec",
  "euclid",
- "smallvec",
+ "smallvec 1.15.1",
 ]
 
 [[package]]
@@ -3430,7 +3430,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "redox_syscall 0.5.18",
- "smallvec",
+ "smallvec 1.15.1",
  "windows-link",
 ]
 
@@ -4082,7 +4082,7 @@ dependencies = [
  "bytemuck",
  "core_maths",
  "log",
- "smallvec",
+ "smallvec 1.15.1",
  "ttf-parser",
  "unicode-bidi-mirroring",
  "unicode-ccc",
@@ -4123,6 +4123,7 @@ dependencies = [
  "regex",
  "rfd",
  "serde",
+ "smallvec 2.0.0-alpha.12",
  "smol",
  "static_assertions",
  "thiserror 2.0.18",
@@ -4333,6 +4334,12 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "smallvec"
+version = "2.0.0-alpha.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef784004ca8777809dcdad6ac37629f0a97caee4c685fcea805278d81dd8b857"
 
 [[package]]
 name = "smithay-client-toolkit"
@@ -5076,7 +5083,7 @@ dependencies = [
  "downcast-rs",
  "rustix 1.1.4",
  "scoped-tls",
- "smallvec",
+ "smallvec 1.15.1",
  "wayland-sys",
 ]
 
@@ -5246,7 +5253,7 @@ dependencies = [
  "portable-atomic",
  "profiling",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.15.1",
  "static_assertions",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -5279,7 +5286,7 @@ dependencies = [
  "profiling",
  "raw-window-handle",
  "rustc-hash 1.1.0",
- "smallvec",
+ "smallvec 1.15.1",
  "thiserror 2.0.18",
  "wgpu-core-deps-apple",
  "wgpu-core-deps-emscripten",
@@ -5365,7 +5372,7 @@ dependencies = [
  "range-alloc",
  "raw-window-handle",
  "renderdoc-sys",
- "smallvec",
+ "smallvec 1.15.1",
  "thiserror 2.0.18",
  "wasm-bindgen",
  "web-sys",

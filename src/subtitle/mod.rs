@@ -754,9 +754,15 @@ impl StyleList {
         &self.styles
     }
 
+    /// Returns the style with the given index, or None if it could not be found.
+    #[must_use]
+    pub fn get(&self, style_index: usize) -> Option<&Style> {
+        self.styles.get(style_index)
+    }
+
     /// Returns the style with the given index, or the default style if it could not be found.
     #[must_use]
-    pub fn get(&self, style_index: usize) -> &Style {
+    pub fn get_or_default(&self, style_index: usize) -> &Style {
         self.styles.get(style_index).unwrap_or(&self.styles[0])
     }
 }

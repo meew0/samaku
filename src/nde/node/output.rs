@@ -14,21 +14,23 @@ impl Node for Output {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents]
+        &[SocketType::Event]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
         &[]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        let compiled =
-            inputs[0].map_events_into(|nde_event| nde_event.to_ass_event(context.frame_rate))?;
-        Ok(vec![SocketValue::CompiledEvents(compiled)])
+        mut inputs: super::SocketValues<'a>,
+        context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
+        super::retrieve!(&mut inputs[0], SocketValue::Event(event));
+
+        let compiled = event.into_vec(|nde_event| nde_event.to_ass_event(context.frame_rate));
+
+        Ok(SocketValue::CompiledEvents(compiled).into_values())
     }
 }
 

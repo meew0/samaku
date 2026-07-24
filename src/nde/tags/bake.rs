@@ -46,7 +46,7 @@ struct StyleContext<'a> {
 /// - Effects (as in, marquee etc.) are not handled
 ///
 /// The resulting spans are not yet simplified.
-pub fn bake<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
+pub fn bake<'a, F: for<'b> Fn(&'b str) -> Option<&'a subtitle::Style> + 'a>(
     time: TimeContext,
     event_style: &'a subtitle::Style,
     style_lookup: &'a F,
@@ -878,7 +878,7 @@ enum RespanState {
 /// Spans containing `\N` are split so that each sub-span can be given an independent
 /// `RespanState` (either `StartNewRun` for sub-spans with text content, or `ForcedNewRun`
 /// for a trailing `\N`-only sub-span that is within-run in libass).
-fn respan<'a, F: Fn(&str) -> Option<&'a subtitle::Style>>(
+fn respan<'a, F: for<'b> Fn(&'b str) -> Option<&'a subtitle::Style> + 'a>(
     time: TimeContext,
     mut style_context: StyleContext<'a>,
     style_lookup: &'a F,

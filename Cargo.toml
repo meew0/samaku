@@ -57,6 +57,7 @@ static_assertions = "1.1.0"
 regex = "1.12"
 interavl = "0.6"
 indexmap = "2.14"
+smallvec = "2.0.0-alpha.12"
 fast-float2 = "0.2"
 glam = { version = "0.33", features = ["serde"] }
 

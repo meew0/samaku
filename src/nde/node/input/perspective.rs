@@ -146,12 +146,12 @@ impl Node for InputQuad {
         &[SocketType::Quad]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        _inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        Ok(vec![SocketValue::Quad(self.inner.clone())])
+        _inputs: super::SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
+        Ok(SocketValue::Quad(nde::FramedTrack::from_single(self.inner.clone())).into_values())
     }
 
     fn content<'a>(

@@ -1,6 +1,6 @@
 use crate::nde;
 
-use super::{BasicError, Context, Node, Shell, SocketType, SocketValue};
+use super::{Context, Node, Shell, SocketType, SocketValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SetPosition;
@@ -12,34 +12,41 @@ impl Node for SetPosition {
     }
 
     fn desired_inputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents, SocketType::Position]
+        &[SocketType::Event, SocketType::Position]
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::AnyEvents]
+        &[SocketType::Event]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
+        mut inputs: super::SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
         assert!(
             inputs.len() > 1,
             "the required number of inputs should be present"
         ); // Elide bounds checks
 
-        if let &SocketValue::Position(position) = inputs[1] {
-            let socket_value = inputs[0].map_events(|event| {
-                let mut new_event = event.clone();
-                new_event.global_tags.position =
-                    Some(nde::tags::PositionOrMove::Position(position));
-                new_event
-            })?;
-            Ok(vec![socket_value])
-        } else {
-            Err(BasicError::MismatchedTypes.into())
-        }
+        super::retrieve!(&mut inputs[0], SocketValue::Event(event));
+
+        // If we are given a motion track marker, get the position of its region center
+        let position = match std::mem::take(&mut inputs[1]) {
+            SocketValue::Position(position) => position,
+            SocketValue::Marker(marker) => marker.map(|marker_val| marker_val.region.center),
+            other => anyhow::bail!("Expected position or marker, found {other:?}"),
+        };
+
+        let new_event = event.generic_zip_same(position, |mut event_val, position_opt| {
+            if let Some(position_val) = position_opt {
+                event_val.global_tags.position =
+                    Some(nde::tags::PositionOrMove::Position(*position_val));
+            }
+            event_val
+        });
+
+        Ok(SocketValue::Event(new_event).into_values())
     }
 }
 

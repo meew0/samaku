@@ -1,10 +1,12 @@
-use super::{BasicError, Category, Context, Node, Shell, SocketType, SocketValue};
+use super::{BasicError, Category, Context, Node, Shell, SocketType, SocketValue, SocketValues};
 use crate::model::reticule;
-use crate::{message, nde, subtitle};
+use crate::{media, message, nde, subtitle};
 
+pub use motion_track::InputMotionTrack;
 pub use perspective::InputQuad;
 pub use rectangle::InputRectangle;
 
+mod motion_track;
 mod perspective;
 mod rectangle;
 
@@ -26,20 +28,61 @@ impl Node for InputEvent {
     }
 
     fn predicted_outputs(&self) -> &[SocketType] {
-        &[SocketType::IndividualEvent]
+        &[SocketType::Event]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        _inputs: &[&SocketValue],
-        context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
+        _inputs: SocketValues<'a>,
+        context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>> {
         let Some(source_event) = context.source_event else {
             return Err(BasicError::MissingInput.into());
         };
 
-        let event = nde::Event::from_ass_event(source_event, context.frame_rate);
-        Ok(vec![SocketValue::IndividualEvent(Box::new(event))])
+        let nde_event = nde::Event::from_ass_event(source_event, context.frame_rate);
+
+        let start = context
+            .frame_rate
+            .time_at_frame(nde_event.start, media::TimeMode::Exact);
+        let duration = context
+            .frame_rate
+            .time_at_frame(nde_event.start + nde_event.duration, media::TimeMode::Exact)
+            - start;
+
+        let adapter = move |event: &mut nde::Event, frame| {
+            let frame_time = context
+                .frame_rate
+                .time_at_frame(frame, media::TimeMode::Exact);
+
+            let time = nde::tags::bake::TimeContext {
+                start,
+                duration,
+                now: frame_time,
+            };
+            let style_lookup = move |name: &str| {
+                let index = context.styles.find_by_name(name)?;
+                context.styles.get(index)
+            };
+
+            nde::tags::bake(
+                time,
+                context.get_event_style(event),
+                &style_lookup,
+                &mut event.global_tags,
+                &mut event.text,
+                context.playback_resolution,
+                None,
+            );
+
+            dbg!(frame);
+
+            event.start = frame;
+            event.duration = media::FrameDelta(1);
+        };
+
+        let track = nde::FramedTrack::from_single_with_adapter(nde_event, adapter);
+        Ok(SocketValue::Event(track).into_values())
     }
 }
 
@@ -73,12 +116,12 @@ impl Node for InputPosition {
         &[SocketType::Position]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        _inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
-        Ok(vec![SocketValue::Position(self.value)])
+        _inputs: SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>> {
+        Ok(SocketValue::Position(nde::FramedTrack::from_single(self.value)).into_values())
     }
 
     fn content<'a>(
@@ -164,11 +207,11 @@ impl Node for InputTags {
         &[SocketType::LocalTags, SocketType::GlobalTags]
     }
 
-    fn run(
+    fn run<'a>(
         &'_ self,
-        _inputs: &[&SocketValue],
-        _context: &Context,
-    ) -> anyhow::Result<Vec<SocketValue<'_>>> {
+        _inputs: SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<SocketValues<'a>> {
         if self.value.contains('{') || self.value.contains('}') {
             anyhow::bail!("Input tags contain brackets");
         }
@@ -186,9 +229,9 @@ impl Node for InputTags {
             panic!("span should be `Tags`")
         };
 
-        Ok(vec![
-            SocketValue::LocalTags(Box::new(local)),
-            SocketValue::GlobalTags(global),
+        Ok(smallvec::smallvec![
+            SocketValue::LocalTags(nde::FramedTrack::from_single(local)),
+            SocketValue::GlobalTags(nde::FramedTrack::from_single(*global)),
         ])
     }
 

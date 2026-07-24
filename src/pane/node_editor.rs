@@ -238,7 +238,7 @@ fn view_filter<'a>(
     nde_filter: &'a nde::Filter,
 ) -> (
     iced::Element<'a, message::Message>,
-    Result<NdeResult<'a, 'a>, NdeError>,
+    Result<NdeResult<'a>, NdeError>,
 ) {
     // Before doing much of anything else, we need to run the NDE filter —
     // not to get the output events, but for the intermediate state,
@@ -382,7 +382,7 @@ fn create_nodes<'a>(
             });
 
         let (node_outline_color, node_outline_width, error_message) = match *nde_result_or_error {
-            Ok(ref nde_result) => match nde_result.intermediates.get(node_index) {
+            Ok(ref nde_result) => match nde_result.node_states.get(node_index) {
                 Some(&NodeState::Inactive) => (style::SAMAKU_INACTIVE, 0.0, None),
                 Some(&NodeState::Active(_)) => (style::SAMAKU_PRIMARY, 1.0, None),
                 Some(&NodeState::Error(ref err)) => {
@@ -452,14 +452,11 @@ fn create_out_sockets<'a>(
     // like whether the compilation was successful and whether the current node
     // is even active
     match *nde_result_or_error {
-        Ok(ref nde_result) => match &nde_result.intermediates[node_id.0] {
+        Ok(ref nde_result) => match &nde_result.node_states[node_id.0] {
             &NodeState::Active(ref socket_values) => {
                 let mut merged: Vec<nde::node::SocketType> = vec![];
                 for (i, predicted) in node.predicted_outputs().iter().enumerate() {
-                    match socket_values
-                        .get(i)
-                        .and_then(nde::node::SocketValue::as_type)
-                    {
+                    match socket_values.get(i).and_then(|result| result.value_type) {
                         Some(actual_type) => {
                             // We found the type the output socket actually has!
                             merged.push(actual_type);
@@ -515,13 +512,13 @@ fn create_in_sockets<'a>(
                 // Check whether the previous node is active
                 // (otherwise, ignore it)
                 if let &NodeState::Active(ref previous_socket_values) =
-                    &nde_result.intermediates[previous.node_index.0]
+                    &nde_result.node_states[previous.node_index.0]
                 {
                     // Check whether the previous node has returned
                     // a type-representable value at the given socket position
                     if let Some(actual_type) = previous_socket_values
                         .get(previous.socket_index.0)
-                        .and_then(nde::node::SocketValue::as_type)
+                        .and_then(|result| result.value_type)
                     {
                         merged[next_socket_index.0] = actual_type;
                     }
@@ -668,7 +665,7 @@ fn view_error<'a>(
             } else {
                 // multiple or no nodes selected
                 let error_count = result
-                    .intermediates
+                    .node_states
                     .iter()
                     .filter(|node_state| matches!(node_state, NodeState::Error(_)))
                     .count();
@@ -710,7 +707,7 @@ fn format_error(
     error_index: usize,
     error_count_option: Option<usize>,
 ) -> GraphErrorState {
-    let Some(first_error) = result.intermediates.get(error_index) else {
+    let Some(first_error) = result.node_states.get(error_index) else {
         // There might not be a node state here,
         // for example when the filter changed while the selected node did not.
         return GraphErrorState::none();
@@ -868,12 +865,7 @@ fn pin_properties(socket_type: nde::node::SocketType) -> (PinStyleValues, &'stat
     use iced_nodegraph::PinShape;
 
     let (shape, color, label) = match socket_type {
-        nde::node::SocketType::IndividualEvent => {
-            (PinShape::Square, iced::Color::from_rgb(1.0, 1.0, 1.0), "")
-        }
-        nde::node::SocketType::MultipleEvents | nde::node::SocketType::AnyEvents => {
-            (PinShape::Square, style::SAMAKU_PRIMARY, "")
-        }
+        nde::node::SocketType::Event => (PinShape::Circle, style::SAMAKU_PRIMARY, ""),
         nde::node::SocketType::LocalTags => (
             PinShape::Circle,
             iced::Color::from_rgb(1.0, 1.0, 1.0),
@@ -898,6 +890,11 @@ fn pin_properties(socket_type: nde::node::SocketType) -> (PinStyleValues, &'stat
             PinShape::Circle,
             iced::Color::from_rgb(0.73, 0.38, 0.76),
             "Quad",
+        ),
+        nde::node::SocketType::Marker => (
+            PinShape::Circle,
+            iced::Color::from_rgb(0.97, 0.47, 0.15),
+            "Marker",
         ),
     };
 
