@@ -105,9 +105,10 @@ impl Event {
         let compiled_text = tags::emit(&self.global_tags, &cloned_spans);
 
         let start = frame_rate.time_at_frame(self.start, media::TimeMode::Start);
-        let duration = frame_rate
-            .time_at_frame(self.start + self.duration, media::TimeMode::EndInclusive)
-            - start;
+        let last_visible_frame = self.start + self.duration - media::FrameDelta(1);
+        let duration =
+            frame_rate.time_at_frame(last_visible_frame, media::TimeMode::EndInclusive) - start;
+        // TODO: check for zero- or negative-duration events (maybe makes more sense further downstream)
 
         subtitle::Event {
             start,
