@@ -52,7 +52,6 @@ cpal = "0.18"
 # FFI utilities
 libc = "0.2.186"
 vsprintf = "2.0.0"
-static_assertions = "1.1.0"
 
 # Various data structures and utilities
 regex = "1.13"

@@ -3670,7 +3670,6 @@ dependencies = [
  "serde",
  "smallvec 2.0.0-alpha.12",
  "smol",
- "static_assertions",
  "thiserror 2.0.19",
  "ttf-parser",
  "typetag",

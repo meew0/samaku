@@ -239,7 +239,10 @@ impl From<Quad> for SerdeQuad {
 
 /// The default distance of the screen plane from the camera in script units.
 const SCREEN_Z: f64 = 10000.0 / 32.0;
-static_assertions::const_assert!((SCREEN_Z - 312.5).abs() < f64::EPSILON);
+const _: () = assert!(
+    (SCREEN_Z - 312.5).abs() < f64::EPSILON,
+    "SCREEN_Z must be exactly representable as 312.5"
+);
 
 /// Calculates the effective screenZ after LayoutRes rescaling.
 #[inline]
