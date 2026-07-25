@@ -53,6 +53,10 @@ impl super::LocalState for State {
 
         iced::Task::none()
     }
+
+    fn visit(&mut self, visitor: &mut dyn super::Visitor) {
+        visitor.visit_style_editor(self);
+    }
 }
 
 inventory::submit! {

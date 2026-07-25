@@ -61,6 +61,7 @@ pub trait LocalState {
 /// being called only for node editor panes.
 pub trait Visitor {
     fn visit_node_editor(&mut self, _node_editor_state: &mut node_editor::State) {}
+    fn visit_style_editor(&mut self, _style_editor_state: &mut style_editor::State) {}
     fn visit_text_editor(&mut self, _text_editor_state: &mut text_editor::State) {}
 }
 

@@ -369,6 +369,21 @@ fn update_internal(
             undo.override_redo(Message::RestoreStyle(index, new_style, HashSet::new()));
         }
         Message::DeleteStyle(index) => {
+            struct Visitor {
+                index: usize,
+            }
+
+            impl pane::Visitor for Visitor {
+                fn visit_style_editor(
+                    &mut self,
+                    style_editor_state: &mut pane::style_editor::State,
+                ) {
+                    if style_editor_state.selected_style_index == self.index {
+                        style_editor_state.selected_style_index = 0; // default style guaranteed to exist
+                    }
+                }
+            }
+
             let (style, shift) = global_state.subtitles.styles.remove(index);
 
             // Update style references in events: assign the default style to all events that had
@@ -379,6 +394,13 @@ fn update_internal(
                 .subtitles
                 .events
                 .shift_styles(&shift, &mut collect);
+
+            // Update the selected style index on style editor panes
+            // that currently have the deleted style selected.
+            let mut visitor = Visitor { index };
+            for (_, pane_state) in global_state.panes.iter_mut() {
+                pane_state.local.visit(&mut visitor);
+            }
 
             undo.put_no_batch("Delete style", Message::RestoreStyle(index, style, collect));
         }
