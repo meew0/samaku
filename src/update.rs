@@ -219,7 +219,7 @@ fn update_internal(
             if font_count > 0 {
                 // Reinitialize the subtitle renderer, so we can use the newly added fonts for rendering.
                 global_state.view.get_mut().subtitle_renderer = media::subtitle::Renderer::new();
-                let font_s = if font_count > 1 { "" } else { "s" };
+                let font_s = if font_count > 1 { "s" } else { "" };
                 global_state.toasts.push(model::toast::Toast::message(
                     model::toast::Status::Primary,
                     "Attached fonts".to_owned(),
