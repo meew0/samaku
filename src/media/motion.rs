@@ -10,7 +10,7 @@ use super::bindings::mv;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct TrackId(u64);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TrackList {
     map: HashMap<TrackId, Track>,
     next_id: TrackId,
@@ -79,7 +79,7 @@ impl model::NamedListIterable for TrackList {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Track {
     markers: BTreeMap<super::FrameNumber, Marker>,
     pub name: String,
