@@ -31,7 +31,9 @@ iced = { version = "0.14.0", default-features = false, features = [
     # Non-default features
     "advanced",
     "canvas",
-    "image",
+    # `image` would additionally enable `image/default`, pulling in every codec the `image` crate
+    # supports (including AVIF encoding via `rav1e`). We only ever construct handles from raw RGBA.
+    "image-without-codecs",
     "lazy",
     "smol",
     "svg",
