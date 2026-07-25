@@ -36,7 +36,6 @@ iced = { version = "0.14.0", default-features = false, features = [
     "image-without-codecs",
     "lazy",
     "smol",
-    "svg",
 ] }
 iced_aw = { version = "0.14.1", default-features = false, features = ["menu"] }
 iced_nodegraph = "0.4.2"

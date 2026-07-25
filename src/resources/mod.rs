@@ -15,6 +15,3 @@ pub const BARLOW_VARIANTS: &[&[u8]] = &[
 
 /// The TTF file for Bootstrap's icon font which we use to render icons in the UI.
 pub const BOOTSTRAP_ICONS: &[u8] = include_bytes!("bootstrap-icons/bootstrap-icons-1.13.1.ttf");
-
-/// The samaku logo, as SVG bytes.
-pub const LOGO: &[u8] = include_bytes!("logo.svg");
