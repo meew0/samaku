@@ -54,7 +54,6 @@ libc = "0.2.186"
 vsprintf = "2.0.0"
 
 # Various data structures and utilities
-regex = "1.13"
 interavl = "0.6"
 indexmap = "2.14"
 smallvec = "2.0.0-alpha.12"

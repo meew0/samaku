@@ -3644,7 +3644,6 @@ dependencies = [
  "miniz_oxide 0.9.1",
  "rand",
  "rand_pcg",
- "regex",
  "rfd",
  "serde",
  "smallvec 2.0.0-alpha.12",

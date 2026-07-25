@@ -2,9 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::LazyLock;
 
-use regex::Regex;
 use smol::stream::StreamExt as _;
 use thiserror::Error;
 
@@ -556,19 +554,84 @@ fn parse_aegi_metadata_line(line: &str, aegi_metadata: &mut HashMap<String, Stri
     }
 }
 
-static EXTRADATA_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("Data:[[:space:]]*(\\d+),([^,]+),(.)(.*)").unwrap());
+/// Splits off a non-empty run of ASCII digits at the start of `input`.
+fn split_digits(input: &str) -> Option<(&str, &str)> {
+    let run = input
+        .find(|char: char| !char.is_ascii_digit())
+        .unwrap_or(input.len());
+    (run > 0).then(|| input.split_at(run))
+}
+
+/// The four fields captured from an Aegisub extradata `Data:` line.
+struct ExtradataFields<'a> {
+    id: &'a str,
+    key: &'a str,
+    value_type: &'a str,
+    value_raw: &'a str,
+}
+
+/// Matches the remainder of a Data line, after the literal prefix has been consumed.
+fn match_extradata_after_prefix(input: &str) -> Option<ExtradataFields<'_>> {
+    // `[[:space:]]` is the POSIX ASCII class, which also contains the vertical tab that
+    // `char::is_ascii_whitespace` leaves out.
+    let after_space =
+        input.trim_start_matches(|char: char| char.is_ascii_whitespace() || char == '\u{0b}');
+
+    // The id is matched permissively, as everything up to the next comma, so that a `Data:` line
+    // with a malformed id is rejected loudly by `parse_extradata_line` rather than silently
+    // skipped here.
+    let id_run = after_space.find(',')?;
+    if id_run == 0 {
+        return None;
+    }
+    let (id, after_id) = after_space.split_at(id_run);
+    let key_start = after_id.strip_prefix(',')?;
+
+    let key_run = key_start.find(',')?;
+    if key_run == 0 {
+        return None;
+    }
+    let (key, after_key) = key_start.split_at(key_run);
+    let value_start = after_key.strip_prefix(',')?;
+
+    // `.` matches exactly one character and `.*` matches as many as possible, but neither ever
+    // matches a newline.
+    let value_type_char = value_start.chars().next()?;
+    if value_type_char == '\n' {
+        return None;
+    }
+    let (value_type, after_type) = value_start.split_at(value_type_char.len_utf8());
+    let (value_raw, _) = after_type.split_at(after_type.find('\n').unwrap_or(after_type.len()));
+
+    Some(ExtradataFields {
+        id,
+        key,
+        value_type,
+        value_raw,
+    })
+}
+
+/// Splits a Data line into its four comma-separated fields, searching for the leftmost `Data:`
+/// prefix that is followed by a well-formed remainder.
+///
+/// This replaces the regex `Data:[[:space:]]*(\d+),([^,]+),(.)(.*)`, differing from it only in
+/// that the id is not required to consist of digits — see [`match_extradata_after_prefix`].
+fn match_extradata_line(line: &str) -> Option<ExtradataFields<'_>> {
+    line.match_indices("Data:").find_map(|(start, prefix)| {
+        match_extradata_after_prefix(line.split_at(start).1.split_at(prefix.len()).1)
+    })
+}
 
 fn parse_extradata_line(line: &str, extradata: &mut Extradata) -> Result<(), SubtitleParseError> {
-    if let Some(captures) = EXTRADATA_REGEX.captures(line) {
-        let id_str = captures.get(1).unwrap().as_str();
+    if let Some(fields) = match_extradata_line(line) {
+        let id_str = fields.id;
         let Ok(id_num) = id_str.parse::<u32>() else {
             return Err(SubtitleParseError::InvalidExtradataId(id_str.to_owned()));
         };
 
-        let key = aegi_inline_string_decode(captures.get(2).unwrap().as_str());
-        let value_type = captures.get(3).unwrap().as_str();
-        let value_raw = captures.get(4).unwrap().as_str();
+        let key = aegi_inline_string_decode(fields.key);
+        let value_type = fields.value_type;
+        let value_raw = fields.value_raw;
 
         let value = if value_type == "e" {
             aegi_inline_string_decode(value_raw).into_bytes()
@@ -756,20 +819,82 @@ fn parse_kv_generic(line: &str) -> Option<(&str, &str)> {
         .map(|(key, value)| (key, value.trim_start()))
 }
 
-static TIMECODE_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("(\\d+):(\\d+):(\\d+).(\\d+)").unwrap());
+/// Splits off one `scanf` `%d` conversion: any leading whitespace, an optional sign, and a
+/// non-empty run of ASCII digits. Returns whether the sign was negative, the digits themselves,
+/// and the rest of the input.
+///
+/// The digits are handed back unparsed because the fractional part of a timecode interprets them
+/// positionally rather than as a number.
+fn split_scanf_integer(input: &str) -> Option<(bool, &str, &str)> {
+    // C's `isspace`, which `scanf` skips before a `%d`, includes the vertical tab that
+    // `char::is_ascii_whitespace` leaves out.
+    let after_space =
+        input.trim_start_matches(|char: char| char.is_ascii_whitespace() || char == '\u{0b}');
 
-fn parse_timecode(timecode: &str) -> Result<i64, SubtitleParseError> {
-    let Some(captures) = TIMECODE_REGEX.captures(timecode) else {
-        return Err(SubtitleParseError::InvalidTimecode(timecode.to_owned()));
+    let (negative, after_sign) = if let Some(rest) = after_space.strip_prefix('-') {
+        (true, rest)
+    } else if let Some(rest) = after_space.strip_prefix('+') {
+        (false, rest)
+    } else {
+        (false, after_space)
     };
 
-    let hours = captures[1].parse::<i64>().unwrap();
-    let minutes = captures[2].parse::<i64>().unwrap();
-    let seconds = captures[3].parse::<i64>().unwrap();
-    let centis = captures[4].parse::<i64>().unwrap();
+    let (digits, rest) = split_digits(after_sign)?;
+    Some((negative, digits, rest))
+}
 
-    Ok(((hours * 60 + minutes) * 60 + seconds) * 1000 + centis * 10)
+/// Splits off one whole-number timecode component, returning [`None`] if it is missing or does not
+/// fit into an [`i64`].
+fn split_timecode_component(input: &str) -> Option<(i64, &str)> {
+    let (negative, digits, rest) = split_scanf_integer(input)?;
+    let magnitude = digits.parse::<i64>().ok()?;
+    Some((if negative { -magnitude } else { magnitude }, rest))
+}
+
+/// Converts at most 3 digits following the decimal point into milliseconds, reading them positionally.
+///
+/// Two digits therefore mean centiseconds and three mean milliseconds,
+/// so both the standard `0:00:01.50` and a more precise `0:00:01.500` denote one and a half seconds.
+fn fraction_to_millis(digits: &str) -> i64 {
+    digits
+        .chars()
+        .filter_map(|char| char.to_digit(10))
+        .zip([100_i64, 10, 1])
+        .map(|(digit, weight)| i64::from(digit) * weight)
+        .sum()
+}
+
+/// Converts a timecode into a number of milliseconds, returning [`None`] if it is malformed or
+/// overflows an [`i64`].
+///
+/// This mirrors libass' `string2timecode`, which is a single `sscanf(p, "%d:%d:%d.%d", &h, &m, &s, &ms)`.
+/// The components are separated by literal colons and a literal period,
+/// each one may be preceded by whitespace and a sign, all four are required,
+/// and anything following them is ignored.
+///
+/// However, we intentionally deviate from libass' behavior for the fractional part,
+/// which is read positionally (see [`fraction_to_millis`]) to allow for millisecond precision timecodes,
+/// matching Aegisub in this case rather than libass.
+fn timecode_to_millis(timecode: &str) -> Option<i64> {
+    let (hours, after_hours) = split_timecode_component(timecode)?;
+    let (minutes, after_minutes) = split_timecode_component(after_hours.strip_prefix(':')?)?;
+    let (seconds, after_seconds) = split_timecode_component(after_minutes.strip_prefix(':')?)?;
+
+    let (negative, fraction_digits, _) = split_scanf_integer(after_seconds.strip_prefix('.')?)?;
+    let fraction = fraction_to_millis(fraction_digits);
+
+    hours
+        .checked_mul(60)?
+        .checked_add(minutes)?
+        .checked_mul(60)?
+        .checked_add(seconds)?
+        .checked_mul(1000)?
+        .checked_add(if negative { -fraction } else { fraction })
+}
+
+fn parse_timecode(timecode: &str) -> Result<i64, SubtitleParseError> {
+    timecode_to_millis(timecode)
+        .ok_or_else(|| SubtitleParseError::InvalidTimecode(timecode.to_owned()))
 }
 
 fn parse_packed_colour_and_transparency(
@@ -998,6 +1123,83 @@ pub mod tests {
         assert_eq!(event.text, r"{\fs100}asdhasjkldhsajk");
 
         Ok(())
+    }
+
+    #[test]
+    fn timecode() {
+        // The shape Aegisub and libass write, and the components' relative weights.
+        assert_eq!(timecode_to_millis("0:00:00.00"), Some(0));
+        assert_eq!(timecode_to_millis("0:00:05.00"), Some(5000));
+        assert_eq!(timecode_to_millis("1:02:03.04"), Some(3_723_040));
+        assert_eq!(timecode_to_millis("9:59:59.99"), Some(35_999_990));
+
+        // The fractional part is positional, so centiseconds and milliseconds both work.
+        assert_eq!(timecode_to_millis("0:00:01.5"), Some(1500));
+        assert_eq!(timecode_to_millis("0:00:01.50"), Some(1500));
+        assert_eq!(timecode_to_millis("0:00:01.500"), Some(1500));
+        assert_eq!(timecode_to_millis("0:00:01.05"), Some(1050));
+        assert_eq!(timecode_to_millis("0:00:01.005"), Some(1005));
+        assert_eq!(timecode_to_millis("0:00:01.123"), Some(1123));
+        // Anything past millisecond precision is truncated rather than rounded.
+        assert_eq!(timecode_to_millis("0:00:01.1239"), Some(1123));
+
+        // `scanf` skips whitespace before every component and accepts a sign on each.
+        assert_eq!(timecode_to_millis(" 0:00:01.00"), Some(1000));
+        assert_eq!(timecode_to_millis("0: 0: 1.00"), Some(1000));
+        assert_eq!(timecode_to_millis("-1:02:03.04"), Some(-3_476_960));
+        assert_eq!(timecode_to_millis("+1:02:03.04"), Some(3_723_040));
+
+        // Components are not width-limited, and trailing junk is ignored.
+        assert_eq!(timecode_to_millis("0:00:100.00"), Some(100_000));
+        assert_eq!(timecode_to_millis("0:00:01.00,Default,,"), Some(1000));
+
+        // All four components are required, and the separators are literal.
+        assert_eq!(timecode_to_millis(""), None);
+        assert_eq!(timecode_to_millis("0:00:01"), None);
+        assert_eq!(timecode_to_millis("0:00:01."), None);
+        assert_eq!(timecode_to_millis("0:00.01"), None);
+        assert_eq!(timecode_to_millis("0:00:01,00"), None);
+        assert_eq!(timecode_to_millis("0:00:01x00"), None);
+        // Unlike the regex this replaced, matching is anchored — there is no search.
+        assert_eq!(timecode_to_millis("start=0:00:01.00"), None);
+        // Neither is it Unicode-aware, which used to make `parse_timecode` panic.
+        assert_eq!(timecode_to_millis("\u{661}:02:03.04"), None);
+
+        // Overflow is reported rather than panicking or wrapping.
+        assert_eq!(timecode_to_millis("9999999999999999999999:00:00.00"), None);
+        assert_eq!(timecode_to_millis("9223372036854775807:00:00.00"), None);
+
+        assert_matches!(
+            parse_timecode("nonsense"),
+            Err(SubtitleParseError::InvalidTimecode(text))
+        );
+        assert_eq!(text, "nonsense");
+    }
+
+    #[test]
+    fn extradata_id_must_be_numeric() {
+        let mut extradata = Extradata::default();
+
+        // A well-formed line is accepted.
+        parse_extradata_line("Data: 1,key,evalue", &mut extradata).unwrap();
+        assert_eq!(extradata.entries.len(), 1);
+
+        // A `Data:` line whose id is not a number is a hard error, rather than being dropped.
+        assert_matches!(
+            parse_extradata_line("Data: \u{661},key,evalue", &mut extradata),
+            Err(SubtitleParseError::InvalidExtradataId(id))
+        );
+        assert_eq!(id, "\u{661}");
+        assert_matches!(
+            parse_extradata_line("Data: abc,key,evalue", &mut extradata),
+            Err(SubtitleParseError::InvalidExtradataId(_))
+        );
+
+        // Lines that are not extradata at all are still ignored silently.
+        parse_extradata_line("", &mut extradata).unwrap();
+        parse_extradata_line("; a comment", &mut extradata).unwrap();
+        parse_extradata_line("Data: no commas here", &mut extradata).unwrap();
+        assert_eq!(extradata.entries.len(), 1);
     }
 
     #[test]
