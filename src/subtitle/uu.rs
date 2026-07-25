@@ -1,11 +1,19 @@
 //! Use the `data_encoding` crate to provide an implementation of Aegisub's UUEncode/Decode.
 
-use data_encoding_macro::new_encoding;
+use std::sync::LazyLock;
 
-const UU: data_encoding::Encoding = new_encoding! {
-    symbols: r##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`"##,
-    padding: None,
-};
+use data_encoding::{Encoding, Specification};
+
+/// The 64 symbols used for the UU format: the ASCII range `!` (0x21) through `` ` `` (0x60).
+const UU_SYMBOLS: &str = r##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`"##;
+
+static UU: LazyLock<Encoding> = LazyLock::new(|| {
+    // `Specification::new` leaves `padding` as `None`, which is correct for the UU format.
+    let mut spec = Specification::new();
+    spec.symbols.push_str(UU_SYMBOLS);
+    spec.encoding()
+        .expect("the hardcoded UU specification should be valid")
+});
 
 pub(super) fn encode(input: &[u8]) -> String {
     // First, pad with zero bytes

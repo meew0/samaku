@@ -73,7 +73,6 @@ serde = "1.0.228"
 typetag = "0.2.21"
 ciborium = "0.2.2"
 data-encoding = "2.11"
-data-encoding-macro = "0.1.20"
 miniz_oxide = "0.9"
 
 # Font metric parsing (used by nde::util::measure to read OS/2 Win metrics)
