@@ -83,6 +83,9 @@
 #![warn(clippy::infinite_loop)]
 // #![warn(clippy::inline_asm_x86_att_syntax)]
 // #![warn(clippy::inline_asm_x86_intel_syntax)]
+// TODO enable when fixed (probably Rust 1.98)
+#![allow(clippy::inline_modules, reason = "false positives on test modules")]
+// #![warn(clippy::inline_trait_bounds)]
 // #![warn(clippy::integer_division)]
 // #![warn(clippy::integer_division_remainder_used)]
 #![warn(clippy::iter_on_empty_collections)]

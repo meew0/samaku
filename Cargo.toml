@@ -2,7 +2,7 @@
 name = "samaku"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.97"
 description = "Node-based editor for typesetting of ASS subtitles"
 repository = "https://github.com/meew0/samaku"
 readme = "README.md"
@@ -45,16 +45,16 @@ smol = "2.0"
 ffms2-sys = "0.3"
 libass-sys = { version = "0.1.0", path = "libass-sys" }
 libmv-capi-sys = "0.1.4"
-matroska-demuxer = "0.7"
+matroska-demuxer = "0.8"
 cpal = "0.18"
 
 # FFI utilities
-libc = "0.2.183"
+libc = "0.2.186"
 vsprintf = "2.0.0"
 static_assertions = "1.1.0"
 
 # Various data structures and utilities
-regex = "1.12"
+regex = "1.13"
 interavl = "0.6"
 indexmap = "2.14"
 smallvec = "2.0.0-alpha.12"
@@ -72,8 +72,8 @@ colorous = "1.0"
 serde = "1.0.228"
 typetag = "0.2.21"
 ciborium = "0.2.2"
-data-encoding = "2.10"
-data-encoding-macro = "0.1.19"
+data-encoding = "2.11"
+data-encoding-macro = "0.1.20"
 miniz_oxide = "0.9"
 
 # Font metric parsing (used by nde::util::measure to read OS/2 Win metrics)
