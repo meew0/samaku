@@ -202,9 +202,7 @@ async fn read_events<R: smol::io::AsyncRead + smol::io::AsyncSeek + Unpin>(
                 cluster_timestamp = ebml::read_uint(&body)?;
             }
             id::BLOCK_GROUP => {
-                let body = reader
-                    .read_vec_size(header.size)
-                    .await?;
+                let body = reader.read_vec_size(header.size).await?;
                 if let Some(event) = read_block_group(&body, track)? {
                     write_event(output, &event, cluster_timestamp, timestamp_scale, track)?;
                 }
