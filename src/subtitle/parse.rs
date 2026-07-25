@@ -172,14 +172,12 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
 
     // Match event style names to styles, and construct event track
     let mut events = EventTrack::new_empty();
-    for (mut raw_event, style_name) in raw_events_and_style_names {
-        if let Some(style_index) = style_list.find_by_name(&style_name) {
-            raw_event.style_index = style_index;
-            events.push(raw_event);
-        } else {
-            warnings.push(Warning::UnmatchedStyle(style_name));
-        }
-    }
+    match_styles(
+        &mut events,
+        raw_events_and_style_names,
+        &style_list,
+        &mut warnings,
+    );
 
     let file = File {
         script_info,
@@ -192,6 +190,24 @@ pub(super) async fn parse<R: smol::io::AsyncBufRead + Unpin>(
     };
 
     Ok((file, warnings))
+}
+
+/// Takes a Vec of events and their styles referenced by name, matches the style names to the given style list,
+/// then adds the events with the correct style reference to the given event track.
+pub fn match_styles(
+    target_event_track: &mut EventTrack,
+    raw: Vec<(Event<'static>, String)>,
+    style_list: &StyleList,
+    warnings: &mut Vec<Warning>,
+) {
+    for (mut raw_event, style_name) in raw {
+        if let Some(style_index) = style_list.find_by_name(&style_name) {
+            raw_event.style_index = style_index;
+            target_event_track.push(raw_event);
+        } else {
+            warnings.push(Warning::UnmatchedStyle(style_name));
+        }
+    }
 }
 
 enum ParseState {
@@ -380,6 +396,38 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), SubtitlePars
 
     let start = parse_timecode(next_split_trim::<true>(&mut split)?)?;
     let end = parse_timecode(next_split_trim::<true>(&mut split)?)?;
+
+    let start_time = StartTime(start);
+    let duration = Duration(end - start);
+
+    parse_event_line_tail(event_type, layer, start_time, duration, split)
+}
+
+/// Matroska files store ASS event data fields in the following order:
+/// `ReadOrder,Layer,Style,Name,MarginL,MarginR,MarginV,Effect,Text`.
+///
+/// The timing info is stored outside of the line using Matroska's custom timing fields.
+/// The event type can only be `Dialogue` (TODO is this correct?).
+pub fn matroska_event_line(
+    start: StartTime,
+    duration: Duration,
+    line: &str,
+) -> Result<(Event<'static>, String), SubtitleParseError> {
+    let mut split = line.splitn(9, ',');
+
+    let _read_order = next_split_i32(&mut split)?; // ignore this one
+    let layer = next_split_i32(&mut split)?;
+
+    parse_event_line_tail(EventType::Dialogue, layer, start, duration, split)
+}
+
+fn parse_event_line_tail(
+    event_type: EventType,
+    layer_index: i32,
+    start: StartTime,
+    duration: Duration,
+    mut split: std::str::SplitN<char>,
+) -> Result<(Event<'static>, String), SubtitleParseError> {
     let style = next_split_trim::<true>(&mut split)?.to_owned();
     let actor = next_split_trim::<true>(&mut split)?.to_owned();
 
@@ -408,9 +456,9 @@ fn parse_event_line(line: &str) -> Result<(Event<'static>, String), SubtitlePars
     }
 
     let new_event = Event {
-        start: StartTime(start),
-        duration: Duration(end - start),
-        layer_index: layer,
+        start,
+        duration,
+        layer_index,
         style_index: 0,
         margins: Margins {
             left: margin_l,

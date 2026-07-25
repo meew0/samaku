@@ -29,6 +29,15 @@ pub fn set_libass_callback<F: FnMut(i32, String) + 'static>(callback: F) {
     LIBRARY.with_borrow(|library| library.set_message_callback(callback));
 }
 
+/// Make a font available to libass under the given name, in addition to the system fonts.
+///
+/// Note that the libass library instance is global, so fonts added here stay registered for the
+/// rest of the session — there is no way to remove them again. Renderers created before this call
+/// will not pick the font up; construct a new [`Renderer`] afterwards.
+pub fn add_font(name: &str, data: &[u8]) {
+    LIBRARY.with_borrow(|library| library.add_font(name, data));
+}
+
 /// Set the global libass message callback to one that prints all messages level 5 and below to
 /// stdout, to avoid cluttering the console output in tests.
 pub fn set_libass_test_callback() {

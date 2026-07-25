@@ -171,7 +171,7 @@ impl Library {
                 self.library,
                 c_name.as_ptr().cast(),
                 data.as_ptr().cast(),
-                i32::try_from(data.len()).expect("font data size should fit into an "),
+                i32::try_from(data.len()).expect("font data size should fit into an i32"),
             );
         }
     }

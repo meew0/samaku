@@ -24,7 +24,7 @@ use crate::{media, message, model, nde, style};
 pub mod compile;
 mod emit;
 mod event_track;
-mod import;
+pub mod import;
 pub mod parse;
 mod uu;
 
@@ -1244,8 +1244,8 @@ mod tests {
 
     fn import(path: &Path) -> (File, Vec<Style>) {
         media::subtitle::set_libass_test_callback();
-        let content = smol::block_on(async { subtitle::import(path).await }).unwrap();
-        let opaque = media::subtitle::OpaqueTrack::parse(&content);
+        let imported = smol::block_on(async { subtitle::import(path).await }).unwrap();
+        let opaque = media::subtitle::OpaqueTrack::parse(&imported.text);
         File::from_opaque(&opaque)
     }
 

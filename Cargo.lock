@@ -2585,12 +2585,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "matroska-demuxer"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7037404c874fc7a465dd0356d7d8f9f3237b425511942eb64dbe956e6adc7c01"
-
-[[package]]
 name = "maybe-rayon"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4139,7 +4133,6 @@ dependencies = [
  "libass-sys",
  "libc",
  "libmv-capi-sys",
- "matroska-demuxer",
  "miniz_oxide 0.9.1",
  "rand 0.10.2",
  "rand_pcg",

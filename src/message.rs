@@ -95,7 +95,7 @@ pub enum Message {
     AudioFileSelected(std::path::PathBuf),
 
     /// A subtitle file has been selected and read, and its contents are now available.
-    SubtitleFileReadForImport(String),
+    SubtitleFileReadForImport(subtitle::import::Contents),
 
     /// A subtitle file has been selected, read, and parsed into an `AssFile`.
     /// This message uses `NeverClone`, so it should never be cloned.

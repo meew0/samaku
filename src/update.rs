@@ -203,9 +203,32 @@ fn update_internal(
                 Message::map_anyhow_option(Message::SubtitleFileReadForImport),
             );
         }
-        Message::SubtitleFileReadForImport(content) => {
+        Message::SubtitleFileReadForImport(imported) => {
             global_state.history.clear();
-            let opaque = media::subtitle::OpaqueTrack::parse(&content);
+
+            // Load attached fonts into libass
+            // TODO: maybe also store these in the project file
+            let mut font_count = 0;
+            for attachment in &imported.attachments {
+                if attachment.is_font() {
+                    media::subtitle::add_font(&attachment.name, &attachment.data);
+                    font_count += 1;
+                }
+            }
+
+            if font_count > 0 {
+                // Reinitialize the subtitle renderer, so we can use the newly added fonts for rendering.
+                global_state.view.get_mut().subtitle_renderer = media::subtitle::Renderer::new();
+                let font_s = if font_count > 1 { "" } else { "s" };
+                global_state.toasts.push(model::toast::Toast::message(
+                    model::toast::Status::Primary,
+                    "Attached fonts".to_owned(),
+                    format!("Loaded {font_count} attached font{font_s}"),
+                ));
+            }
+
+            // Load the subtitles themselves
+            let opaque = media::subtitle::OpaqueTrack::parse(&imported.text);
             let (new_file, leftover) = subtitle::File::from_opaque(&opaque);
 
             // Show warning toasts for duplicate styles
