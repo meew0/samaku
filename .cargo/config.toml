@@ -1,0 +1,3 @@
+[env]
+# Use libmv-capi-sys' build cache to avoid rebuilding libmv for different targets
+LIBMV_CAPI_SYS_CACHE_DIR = { value = "target/libmv-cache", relative = true }

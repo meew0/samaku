@@ -2108,9 +2108,9 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libmv-capi-sys"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28c9349ec06691dde7a7b10d0eff0e5d58e3515154f2087afcf95ab89746fa9a"
+checksum = "ffffd2cbf089977a8cbe0e040b1a5b818e733d24d8a155e8c25c5ba46e97a60e"
 dependencies = [
  "bindgen 0.68.1",
  "cc",

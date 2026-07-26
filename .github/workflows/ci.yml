@@ -154,6 +154,13 @@ jobs:
       - name: Run clippy
         # `-- -D warnings` denies lints only for samaku's own crates, not the
         # (potentially warning-emitting) dependency tree.
+        #
+        # Linting never tracks anything, so libmv is stubbed out: the bindings
+        # are identical either way, and building it for real would add several
+        # minutes to this job for no extra coverage. Do not set this on jobs
+        # that run the test suite — motion tracking silently does nothing.
+        env:
+          LIBMV_CAPI_SYS_STUB: 1
         run: cargo clippy --locked --all-targets -- -D warnings
 
   fmt:
