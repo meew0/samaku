@@ -4,6 +4,10 @@
 //! so that we don't need to depend on a bunch of SVG-related crates just to draw one image.
 //! The path data is specified in the SVG file's units, to keep the two comparable for the future.
 
+use iced::advanced::Renderer as _;
+use iced::advanced::graphics::geometry::Renderer as _;
+use iced::advanced::widget::{Tree, tree};
+use iced::advanced::{Layout, Widget, layout, mouse, renderer};
 use iced::widget::canvas;
 
 use crate::style;
@@ -130,11 +134,94 @@ impl<Message> canvas::Program<Message> for Logo {
     }
 }
 
+/// A widget drawing the samaku logo at a fixed square size.
+///
+/// This exists instead of a plain [`canvas`] widget because the geometry has to end up in a render
+/// layer of its own: with antialiasing enabled, `iced_wgpu` renders all the meshes of one layer
+/// into a shared multisampled texture, and only the region covered by the scissor rectangle of the
+/// *last* mesh it drew survives being resolved back into the frame. The logo is drawn long before
+/// the timeline pane's canvas, so within a shared layer it would be discarded. Pushing a layer
+/// gives it its own multisampling pass.
+#[derive(Debug)]
+struct LogoWidget {
+    size: f32,
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for LogoWidget {
+    fn size(&self) -> iced::Size<iced::Length> {
+        iced::Size {
+            width: iced::Length::Fixed(self.size),
+            height: iced::Length::Fixed(self.size),
+        }
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut Tree,
+        _renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        layout::atomic(
+            limits,
+            iced::Length::Fixed(self.size),
+            iced::Length::Fixed(self.size),
+        )
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        _style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &iced::Rectangle,
+    ) {
+        let bounds = layout.bounds();
+
+        if bounds.width < 1.0 || bounds.height < 1.0 {
+            return;
+        }
+
+        let state = tree.state.downcast_ref::<canvas::Cache>();
+
+        renderer.with_layer(bounds, |layer_renderer| {
+            layer_renderer.with_translation(
+                iced::Vector::new(bounds.x, bounds.y),
+                |translated_renderer| {
+                    for geometry in canvas::Program::<Message>::draw(
+                        &Logo,
+                        state,
+                        translated_renderer,
+                        theme,
+                        bounds,
+                        cursor,
+                    ) {
+                        translated_renderer.draw_geometry(geometry);
+                    }
+                },
+            );
+        });
+    }
+
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<canvas::Cache>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(canvas::Cache::<iced::Renderer>::default())
+    }
+}
+
+impl<'a, Message: 'a> From<LogoWidget> for iced::Element<'a, Message> {
+    fn from(widget: LogoWidget) -> Self {
+        Self::new(widget)
+    }
+}
+
 /// Creates a widget drawing the samaku logo at the given square size.
 #[must_use]
 pub fn logo<'a, Message: 'a>(size: f32) -> iced::Element<'a, Message> {
-    canvas(Logo)
-        .width(iced::Length::Fixed(size))
-        .height(iced::Length::Fixed(size))
-        .into()
+    LogoWidget { size }.into()
 }
