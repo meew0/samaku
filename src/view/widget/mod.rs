@@ -3,12 +3,10 @@ pub use blend_box::BlendBox;
 pub use image_stack::EmptyProgram;
 pub use image_stack::ImageStack;
 pub use image_stack::StackedImage;
-pub use logo::logo;
 pub use number_dragger::NumberDragger;
 
 pub mod blend_box;
 mod image_stack;
-pub mod logo;
 pub mod number_dragger;
 
 pub fn number_dragger<'a, T: number_dragger::Numeric, Message, F: Fn(T) -> Message + 'a>(

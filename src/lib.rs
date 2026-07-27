@@ -640,7 +640,7 @@ impl Samaku {
 
         // The title row — currently only contains the logo and the application name.
         let title_row = iced::widget::row![
-            view::widget::logo(30.0),
+            view::logo::logo(30.0),
             iced::widget::text("samaku")
                 .size(25)
                 .style(|_theme| iced::widget::text::Style {

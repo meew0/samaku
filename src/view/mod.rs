@@ -1,6 +1,7 @@
 use crate::{message, subtitle};
 
 pub mod icons;
+pub mod logo;
 pub mod menu;
 pub mod toast;
 pub mod widget;
