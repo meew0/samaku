@@ -1,7 +1,7 @@
 use glam::{DVec2, UVec2};
 pub use mv::MotionModel as Model;
 pub use mv::Region;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::model;
 
@@ -399,7 +399,7 @@ pub struct PatchResponse {
 
 pub struct Tracker<'a, V> {
     pub video: &'a V,
-    pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> PatchResponse,
+    pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> anyhow::Result<PatchResponse>,
     pub markers: HashMap<TrackId, Marker>,
     pub origin_frame: super::FrameNumber,
     pub origin_markers: HashMap<TrackId, Marker>,
@@ -418,32 +418,41 @@ impl<V> Tracker<'_, V> {
         if let Target::Frame(target_frame) = self.target
             && self.current_frame == target_frame
         {
-            return TrackResult::Termination;
+            return TrackResult::TargetReached;
         }
 
         if self.markers.is_empty() {
             // Nothing to track anymore
-            return TrackResult::Failure;
+            return TrackResult::End;
         }
 
         let next_frame = self.current_frame.step(self.direction);
 
         // Iterate over markers, do the actual tracking step,
         // then keep the markers that tracked successfully.
-        self.markers.retain(|track_id, marker| {
-            // TODO: implement TrackSettings stuff
+        let mut remove_marker = HashSet::new();
+        for (&track_id, marker) in self.markers.iter_mut() {
+            // TODO: implement remaining TrackSettings
             let (match_frame, match_marker) = match self.settings.match_mode {
                 MatchMode::Key => (
                     self.origin_frame,
-                    self.origin_markers.get(track_id).unwrap_or(marker),
+                    self.origin_markers.get(&track_id).unwrap_or(marker),
                 ),
                 MatchMode::Previous => (self.current_frame, &*marker),
             };
 
-            let patch_response1 =
+            let patch_result1 =
                 (self.patch_provider)(self.video, match_frame, &match_marker.search_area);
-            let patch_response2 =
-                (self.patch_provider)(self.video, next_frame, &marker.search_area);
+            let patch_result2 = (self.patch_provider)(self.video, next_frame, &marker.search_area);
+
+            let patch_response1 = match patch_result1 {
+                Ok(response) => response,
+                Err(error) => return TrackResult::VideoError(error),
+            };
+            let patch_response2 = match patch_result2 {
+                Ok(response) => response,
+                Err(error) => return TrackResult::VideoError(error),
+            };
 
             let image1 = mv::MonochromeImage::new(
                 patch_response1.data.as_slice(),
@@ -482,27 +491,46 @@ impl<V> Tracker<'_, V> {
                         refined_region2.offset(DVec2::from(patch_response2.patch.origin)),
                     );
                     marker.key_state = KeyState::Tracked;
-                    true // keep marker
+                    // keep marker
                 }
-                None => false, // remove marker
+                None => {
+                    // remove marker
+                    remove_marker.insert(track_id);
+                }
             }
-        });
+        }
+
+        // The actual deletion is done as a second step to allow for proper error handling
+        // during the main marker iteration
+        self.markers
+            .retain(|track_id, _| !remove_marker.contains(track_id));
 
         self.current_frame = next_frame;
 
         if self.markers.is_empty() {
-            TrackResult::Failure
+            TrackResult::End
         } else {
             TrackResult::Success
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum TrackResult {
-    Failure,
-    Termination,
+    /// At least one marker was successfully tracked onto the next frame.
     Success,
+
+    /// An error was encountered when trying to obtain a video patch.
+    VideoError(anyhow::Error),
+
+    /// All specified markers reached the end and could not be tracked onto the next frame.
+    End,
+
+    /// No markers to track were specified.
+    Empty,
+
+    /// The target frame was reached and tracking was aborted.
+    TargetReached,
 }
 
 #[cfg(test)]
@@ -541,12 +569,12 @@ mod tests {
 
         let mut last_result = TrackResult::Success;
         let mut frame_count = 0;
-        while last_result == TrackResult::Success {
+        while matches!(last_result, TrackResult::Success) {
             last_result = tracker.advance();
             frame_count += 1;
         }
 
-        assert_eq!(last_result, TrackResult::Termination);
+        assert_matches!(last_result, TrackResult::TargetReached);
         assert_eq!(frame_count, 100);
         let last_marker = &tracker.markers[&TrackId(0)];
         println!("{last_marker:?}");

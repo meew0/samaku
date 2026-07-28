@@ -148,18 +148,17 @@ impl Video {
 
     /// Get a patch (monochrome region) of frame #`n` with the bounds given by the `request`.
     ///
-    /// # Panics
-    /// Panics if the frame could not be obtained.
+    /// Returns an error if the motion patch could not be obtained (e.g. frame decoding failed).
     pub fn get_libmv_patch(
         &self,
         n: super::FrameNumber,
         request: &super::motion::Patch<glam::DVec2>,
-    ) -> super::motion::PatchResponse {
+    ) -> anyhow::Result<super::motion::PatchResponse> {
         // The conversion coefficients used by Blender, divided by 255
         const GREYSCALE_COEFFICIENTS: [f32; 3] = [0.000_833_373, 0.002_804_71, 0.000_283_14];
 
         let instant = std::time::Instant::now();
-        let (size, ffms_frame) = self.get_frame_internal(n).unwrap(); // TODO proper error handling
+        let (size, ffms_frame) = self.get_frame_internal(n)?;
         let elapsed_obtain = instant.elapsed();
 
         // Fit request parameters into the frame bounds
@@ -221,13 +220,15 @@ impl Video {
             "Frame profiling [motion tracking]: obtaining frame {n:?} took {elapsed_obtain:.2?}, converting it took {elapsed_copy:.2?}"
         );
 
-        super::motion::PatchResponse {
+        let response = super::motion::PatchResponse {
             data: out,
             patch: super::motion::Patch {
                 origin: origin_within_frame,
                 size: true_size,
             },
-        }
+        };
+
+        Ok(response)
     }
 }
 

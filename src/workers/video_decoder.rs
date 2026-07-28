@@ -55,8 +55,12 @@ pub(super) fn spawn(
                                         tracker.current_frame,
                                     ));
                                 }
-                                motion::TrackResult::Failure | motion::TrackResult::Termination => {
+                                motion::TrackResult::End | motion::TrackResult::TargetReached | motion::TrackResult::Empty => {
                                     tracker_opt = None;
+                                }
+                                motion::TrackResult::VideoError(error) => {
+                                    tx_out.error(error, "Error encountered while obtaining video patch for motion tracking");
+                                    tracker_opt = None; // so we don't try again indefinitely
                                 }
                             }
 
