@@ -72,6 +72,7 @@ inventory::submit! {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UvRescale {
+    inside: bool,
     u1: f64,
     v1: f64,
     u2: f64,
@@ -104,8 +105,24 @@ impl Node for UvRescale {
         filter_index: subtitle::ExtradataId,
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
-        // TODO add a control to un-limit the bounds
-        let bounds = 0.0..=1.0;
+        let bounds = if self.inside {
+            0.0..=1.0
+        } else {
+            f64::MIN..=f64::MAX
+        };
+
+        let inside_toggle = view::tooltip(
+            iced::widget::checkbox(self.inside)
+                .label("Inside only")
+                .on_toggle(move |_| {
+                    message::Message::Node(
+                        filter_index,
+                        self_index,
+                        message::Node::ToggleSetting(0),
+                    )
+                }),
+            "Restrict UV coordinates to the [0, 1] range, such that the rescaled quad will be located inside the original quad",
+        );
 
         let u1 = view::widget::number_dragger(self.u1, bounds.clone(), move |value| {
             message::Message::Node(
@@ -147,7 +164,8 @@ impl Node for UvRescale {
         .width(iced::Length::FillPortion(1));
         let v_row = iced::widget::row![v1, v2];
 
-        let column = iced::widget::column!["U start/end", u_row, "V start/end", v_row];
+        let column =
+            iced::widget::column![inside_toggle, "U start/end", u_row, "V start/end", v_row];
 
         column
             .spacing(4.0)
@@ -157,16 +175,16 @@ impl Node for UvRescale {
     }
 
     fn update(&mut self, message: message::Node) -> anyhow::Result<()> {
-        let message::Node::FloatValueChanged(index, value) = message else {
-            anyhow::bail!("UvRescale does not handle message {message:?}");
-        };
-
-        match index {
-            U1 => self.u1 = value,
-            V1 => self.v1 = value,
-            U2 => self.u2 = value,
-            V2 => self.v2 = value,
-            _ => anyhow::bail!("Unknown setting index: {index}"),
+        match message {
+            message::Node::ToggleSetting(0) => self.inside = !self.inside,
+            message::Node::FloatValueChanged(index, value) => match index {
+                U1 => self.u1 = value,
+                V1 => self.v1 = value,
+                U2 => self.u2 = value,
+                V2 => self.v2 = value,
+                _ => anyhow::bail!("Unknown setting index: {index}"),
+            },
+            _ => anyhow::bail!("UvRescale does not handle message {message:?}"),
         }
         Ok(())
     }
@@ -195,6 +213,7 @@ inventory::submit! {
     Shell::new(
         &["UV rescale"],
         || Box::new(UvRescale {
+            inside: true,
             u1: 0.0,
             v1: 0.0,
             u2: 1.0,
