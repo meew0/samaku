@@ -556,8 +556,7 @@ fn view_track_buttons<'a>(
     global_state: &'a crate::Samaku,
     frame_number: media::FrameNumber,
 ) -> iced::Element<'a, message::Message> {
-    // Check if we should allow tracking backward and forward, if we are limited to the current event.
-    let (mut allow_backward, mut allow_forward) = (true, true);
+    // Find the start and end frame of the current event.
     let (mut event_start_frame, mut event_end_frame) = (None, None);
     if pane_state.limit_to_event
         && let Some(active_event) = global_state
@@ -574,17 +573,21 @@ fn view_track_buttons<'a>(
             .frame_rate
             .frame_at_time(active_event.end(), media::TimeMode::EndInclusive);
         (event_start_frame, event_end_frame) = (Some(start_frame), Some(end_frame));
-
-        if frame_number < start_frame || frame_number > end_frame {
-            (allow_backward, allow_forward) = (false, false);
-        } else if frame_number == start_frame {
-            (allow_backward, allow_forward) = (false, true);
-        } else if frame_number == end_frame {
-            (allow_backward, allow_forward) = (true, false);
-        } else {
-            (allow_backward, allow_forward) = (true, true);
-        }
     }
+
+    // First and last video frame
+    let first_frame = media::FrameNumber(0);
+    let last_frame =
+        global_state.video_metadata.as_ref().unwrap().num_frames - media::FrameDelta(1);
+
+    let backward_target_frame = event_start_frame.unwrap_or(first_frame).max(first_frame);
+    let forward_target_frame = event_end_frame.unwrap_or(last_frame).min(last_frame);
+
+    // Check if we should allow tracking backward and forward, if we are limited to the current event
+    let allow_backward =
+        frame_number > backward_target_frame && frame_number <= forward_target_frame;
+    let allow_forward =
+        frame_number < forward_target_frame && frame_number >= backward_target_frame;
 
     let backward_frame = view::tooltip(
         view::Icon::BoxArrowInLeft
@@ -593,7 +596,9 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Backward,
-                    motion::Target::Frame(frame_number - media::FrameDelta(1)),
+                    motion::Target::Frame(
+                        (frame_number - media::FrameDelta(1)).max(media::FrameNumber(0)),
+                    ),
                     pane_state.track_settings,
                 ),
             ))
@@ -607,7 +612,7 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Backward,
-                    motion::Target::event(pane_state.limit_to_event, event_start_frame),
+                    motion::Target::Frame(backward_target_frame),
                     pane_state.track_settings,
                 ),
             ))
@@ -621,7 +626,7 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Forward,
-                    motion::Target::event(pane_state.limit_to_event, event_end_frame),
+                    motion::Target::Frame(forward_target_frame),
                     pane_state.track_settings,
                 ),
             ))
@@ -635,7 +640,7 @@ fn view_track_buttons<'a>(
                 message::Message::TrackMotionForSelectedTracks(
                     frame_number,
                     motion::Direction::Forward,
-                    motion::Target::Frame(frame_number + media::FrameDelta(1)),
+                    motion::Target::Frame((frame_number + media::FrameDelta(1)).min(last_frame)),
                     pane_state.track_settings,
                 ),
             ))

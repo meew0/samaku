@@ -371,20 +371,16 @@ pub enum Target {
     Frame(super::FrameNumber),
 
     /// Track as far as possible.
+    ///
+    /// Should be avoided in practice since it may overrun the video bounds.
     None,
 }
 
-impl Target {
-    #[must_use]
-    pub fn event(limit_to_event: bool, event_target_frame: Option<super::FrameNumber>) -> Self {
-        if limit_to_event && let Some(target_frame) = event_target_frame {
-            Self::Frame(target_frame)
-        } else {
-            Self::None
-        }
-    }
-}
-
+/// An area of a video originating at a given point (top-left)
+/// and extending for a given size to the bottom right.
+///
+/// This type is generic over the vector type used so that it can represent both
+/// floating-point patches (i.e. requests) and integer ones (i.e. responses).
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Patch<V> {
     pub origin: V,
