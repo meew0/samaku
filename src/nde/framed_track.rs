@@ -1437,6 +1437,76 @@ where
     }
 }
 
+impl<T> FramedTrack<'_, Option<T>>
+where
+    T: Clone + 'static,
+{
+    /// Flatten a `FramedTrack` of `Option`s into a new track of the inner type
+    /// that only contains the `Some` values.
+    ///
+    /// Will return `None` for a single or a stack that would be empty,
+    /// but will return empty variable maps/fixed tracks.
+    pub fn flatten<'b>(self) -> Option<FramedTrack<'b, T>> {
+        let inner = Rc::unwrap_or_clone(self.inner);
+
+        let new_inner = match inner {
+            Inner::Single(single_opt) => Inner::Single(single_opt?),
+            Inner::Fixed(fixed) => {
+                let Fixed { start, width, data } = fixed;
+                if data.iter().all(Option::is_some) {
+                    let new_data = data.into_iter().map(Option::unwrap).collect();
+                    Inner::Fixed(Fixed {
+                        start,
+                        width,
+                        data: new_data,
+                    })
+                } else {
+                    let mut map = BTreeMap::new();
+                    for (i, element_opt) in data.into_iter().enumerate() {
+                        if let Some(element) = element_opt {
+                            let frame_i = i / usize::from(width);
+                            #[expect(
+                                clippy::cast_possible_wrap,
+                                reason = "frame number should fit in i32"
+                            )]
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                reason = "frame number should fit in i32"
+                            )]
+                            let frame = start + media::FrameDelta(frame_i as i32);
+                            map.entry(frame).or_insert_with(SmallVec::new).push(element);
+                        }
+                    }
+
+                    Inner::Variable(map)
+                }
+            }
+            Inner::Variable(map) => Inner::Variable(
+                map.into_iter()
+                    .filter_map(|(frame, vec)| {
+                        let new_vec: SmallVec<T, 1> = vec.into_iter().flatten().collect();
+
+                        (!new_vec.is_empty()).then_some((frame, new_vec))
+                    })
+                    .collect(),
+            ),
+            Inner::Stack(stack) => {
+                let new_stack: Vec<T> = stack.into_iter().flatten().collect();
+                if new_stack.is_empty() {
+                    return None;
+                }
+
+                Inner::Stack(new_stack)
+            }
+        };
+
+        Some(FramedTrack {
+            inner: Rc::new(new_inner),
+            frame_adapter: None,
+        })
+    }
+}
+
 /// Clone `value` and, if an adapter is given, adapt the clone to `frame`. This is
 /// how frame-agnostic values (`Single`/`Stack`) are materialized for a specific
 /// frame, e.g. baking an event onto it.
@@ -1476,6 +1546,7 @@ impl InherentTiming for super::Event {
 mod tests {
     use super::{Fixed, FramedTrack, InherentTiming, Inner, SMALL_VEC_SIZE};
     use crate::media;
+    use assert_matches2::assert_matches;
     use smallvec::SmallVec;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
@@ -2226,5 +2297,29 @@ mod tests {
         );
         assert_eq!(out[&fr(0)].as_slice(), &[(1, 10), (2, 10)]);
         assert_eq!(out[&fr(2)].as_slice(), &[(1, 30), (2, 30)]);
+    }
+
+    #[test]
+    fn flatten() {
+        let single = FramedTrack::from_single(Some(1));
+        assert_matches!(single.flatten(), Some(flat));
+        assert_eq!(unwrap_single(flat), 1);
+
+        let none: Option<()> = None;
+        let single_none = FramedTrack::from_single(none);
+        assert!(single_none.flatten().is_none());
+
+        let data = (1..=9).map(Some).collect();
+        let fixed_all = FramedTrack::from_fixed(media::FrameNumber(1), 3, data);
+        assert_matches!(fixed_all.flatten(), Some(flat));
+        assert_eq!(unwrap_fixed(flat).data.len(), 9);
+
+        let mut data: Vec<Option<i32>> = (1..=9).map(Some).collect();
+        data[5] = None;
+        let fixed_part = FramedTrack::from_fixed(media::FrameNumber(1), 3, data);
+        assert_matches!(fixed_part.flatten(), Some(flat));
+        let map = unwrap_variable(flat);
+        assert_eq!(map[&media::FrameNumber(1)].len(), 3);
+        assert_eq!(map[&media::FrameNumber(2)].len(), 2);
     }
 }

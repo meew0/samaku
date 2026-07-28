@@ -32,11 +32,7 @@ impl Node for SetPosition {
         super::retrieve!(&mut inputs[0], SocketValue::Event(event));
 
         // If we are given a motion track marker, get the position of its region center
-        let position = match std::mem::take(&mut inputs[1]) {
-            SocketValue::Position(position) => position,
-            SocketValue::Marker(marker) => marker.map(|marker_val| marker_val.region.center),
-            other => anyhow::bail!("Expected position or marker, found {other:?}"),
-        };
+        let position = super::marker_or_position(&mut inputs[1])?;
 
         let new_event = event.generic_zip_same(position, |mut event_val, position_opt| {
             if let Some(position_val) = position_opt {

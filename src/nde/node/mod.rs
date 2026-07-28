@@ -18,6 +18,7 @@ pub use input::InputPosition;
 pub use input::InputQuad;
 pub use input::InputRectangle;
 pub use input::InputTags;
+pub use motion_quad::MotionQuad;
 pub use output::Output;
 pub use perspective::Perspective;
 pub use positioning::SetPosition;
@@ -29,6 +30,7 @@ use crate::{media, message, model, subtitle};
 mod clip;
 mod gradient;
 mod input;
+mod motion_quad;
 mod output;
 mod perspective;
 mod positioning;
@@ -150,6 +152,17 @@ macro_rules! retrieve {
 }
 
 pub(crate) use retrieve;
+
+/// Converts a socket value containing either `Position` or `Marker` to a `Position` one.
+pub fn marker_or_position<'a>(
+    input: &mut SocketValue<'a>,
+) -> anyhow::Result<FramedTrack<'a, glam::DVec2>> {
+    match std::mem::take(input) {
+        SocketValue::Position(position) => Ok(position),
+        SocketValue::Marker(marker) => Ok(marker.map(|marker_val| marker_val.region.center)),
+        other => anyhow::bail!("Expected position or marker, found {other:?}"),
+    }
+}
 
 /// Represents a type of socket, as in, what kind of value a node would like to have passed into it.
 #[derive(Debug, Clone, Copy)]
