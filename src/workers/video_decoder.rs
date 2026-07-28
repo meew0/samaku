@@ -10,6 +10,7 @@ pub(super) enum MessageIn {
     TrackMotion(
         HashMap<motion::TrackId, motion::Marker>,
         media::FrameNumber,
+        HashMap<motion::TrackId, motion::Marker>,
         motion::Direction,
         motion::Target,
         motion::TrackSettings,
@@ -121,6 +122,7 @@ pub(super) fn spawn(
                         MessageIn::TrackMotion(
                             markers,
                             origin_frame,
+                            origin_markers,
                             direction,
                             target,
                             settings,
@@ -130,6 +132,7 @@ pub(super) fn spawn(
                                     video,
                                     patch_provider: media::Video::get_libmv_patch,
                                     origin_frame,
+                                    origin_markers,
                                     current_frame: origin_frame,
                                     markers,
                                     direction,

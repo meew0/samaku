@@ -402,6 +402,7 @@ pub struct Tracker<'a, V> {
     pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> PatchResponse,
     pub markers: HashMap<TrackId, Marker>,
     pub origin_frame: super::FrameNumber,
+    pub origin_markers: HashMap<TrackId, Marker>,
     pub current_frame: super::FrameNumber,
     pub direction: Direction,
     pub target: Target,
@@ -429,15 +430,18 @@ impl<V> Tracker<'_, V> {
 
         // Iterate over markers, do the actual tracking step,
         // then keep the markers that tracked successfully.
-        self.markers.retain(|_, marker| {
+        self.markers.retain(|track_id, marker| {
             // TODO: implement TrackSettings stuff
-            let match_frame = match self.settings.match_mode {
-                MatchMode::Key => self.origin_frame,
-                MatchMode::Previous => self.current_frame,
+            let (match_frame, match_marker) = match self.settings.match_mode {
+                MatchMode::Key => (
+                    self.origin_frame,
+                    self.origin_markers.get(track_id).unwrap_or(marker),
+                ),
+                MatchMode::Previous => (self.current_frame, &*marker),
             };
 
             let patch_response1 =
-                (self.patch_provider)(self.video, match_frame, &marker.search_area);
+                (self.patch_provider)(self.video, match_frame, &match_marker.search_area);
             let patch_response2 =
                 (self.patch_provider)(self.video, next_frame, &marker.search_area);
 
@@ -452,7 +456,7 @@ impl<V> Tracker<'_, V> {
 
             // In theory, the two different patch responses might have different origin points,
             // because the frames might be of a different size.
-            let region1 = marker
+            let region1 = match_marker
                 .region
                 .offset(-DVec2::from(patch_response1.patch.origin));
             let predicted_region2 = marker
@@ -526,6 +530,7 @@ mod tests {
         let mut tracker = Tracker {
             video: &video,
             patch_provider: video::Video::get_libmv_patch,
+            origin_markers: markers.clone(),
             markers,
             origin_frame: media::FrameNumber(0),
             current_frame: media::FrameNumber(0),

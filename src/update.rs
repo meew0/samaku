@@ -1513,9 +1513,14 @@ fn update_internal(
                 }
             }
 
+            // The markers as they are present at the original tracked frame,
+            // such that the “Keyframe” matching mode knows what area to use as a reference.
+            let origin_markers = markers.clone();
+
             global_state.workers.emit_track_motion(
                 markers,
                 origin_frame,
+                origin_markers,
                 direction,
                 target,
                 settings,

@@ -125,6 +125,7 @@ impl Workers {
         &self,
         markers: HashMap<motion::TrackId, motion::Marker>,
         origin_frame: media::FrameNumber,
+        origin_markers: HashMap<motion::TrackId, motion::Marker>,
         direction: motion::Direction,
         target: motion::Target,
         settings: motion::TrackSettings,
@@ -133,6 +134,7 @@ impl Workers {
             .dispatch(video_decoder::MessageIn::TrackMotion(
                 markers,
                 origin_frame,
+                origin_markers,
                 direction,
                 target,
                 settings,
