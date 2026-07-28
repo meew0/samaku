@@ -407,6 +407,8 @@ pub enum Node {
 
     /// A boolean setting at the given index was toggled.
     ToggleSetting(usize),
+
+    FloatValueChanged(usize, f64),
 }
 
 #[cfg(test)]
