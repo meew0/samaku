@@ -47,7 +47,6 @@ pub(super) fn spawn(
                         Err(std::sync::mpsc::TryRecvError::Empty) => {
                             // No message was received — motion tracking time!
                             let result = tracker.advance();
-                            println!("{result:?}");
 
                             match result {
                                 motion::TrackResult::Success => {
@@ -63,13 +62,18 @@ pub(super) fn spawn(
 
                             None
                         }
-                        Err(_) => return,
+                        Err(_) => {
+                            println!("video_decoder channel was closed");
+                            return;
+                        }
                     }
                 } else {
                     // There's nothing to motion track, so wait for the next message
-                    match rx_in.recv() {
-                        Ok(message) => Some(message),
-                        Err(_) => return,
+                    if let Ok(message) = rx_in.recv() {
+                        Some(message)
+                    } else {
+                        println!("video_decoder channel was closed");
+                        return;
                     }
                 };
 
