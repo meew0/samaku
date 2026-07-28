@@ -71,6 +71,51 @@ inventory::submit! {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MarkerQuad;
+
+#[typetag::serde]
+impl Node for MarkerQuad {
+    fn name(&self) -> &'static str {
+        "Marker quad"
+    }
+
+    fn desired_inputs(&self) -> &[SocketType] {
+        &[SocketType::Marker]
+    }
+
+    fn predicted_outputs(&self) -> &[SocketType] {
+        &[SocketType::Quad]
+    }
+
+    fn run<'a>(
+        &'_ self,
+        mut inputs: super::SocketValues<'a>,
+        _context: &'a Context,
+    ) -> anyhow::Result<super::SocketValues<'a>> {
+        super::retrieve!(&mut inputs[0], SocketValue::Marker(marker));
+
+        let quad = marker.map(|marker_val| {
+            let region = marker_val.region;
+            perspective::Quad {
+                q0: region.top_left,
+                q1: region.top_right,
+                q2: region.bottom_right,
+                q3: region.bottom_left,
+            }
+        });
+
+        Ok(SocketValue::Quad(quad).into_values())
+    }
+}
+
+inventory::submit! {
+    Shell::new(
+        &["Marker quad"],
+        || Box::new(MarkerQuad {})
+    )
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UvRescale {
     inside: bool,
     u1: f64,

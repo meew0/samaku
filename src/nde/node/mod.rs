@@ -21,6 +21,7 @@ pub use input::InputTags;
 pub use output::Output;
 pub use perspective::Perspective;
 pub use positioning::SetPosition;
+pub use quad::MarkerQuad;
 pub use quad::MotionQuad;
 pub use quad::UvRescale;
 pub use split::SplitFrameByFrame;
