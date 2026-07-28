@@ -18,10 +18,10 @@ pub use input::InputPosition;
 pub use input::InputQuad;
 pub use input::InputRectangle;
 pub use input::InputTags;
-pub use motion_quad::MotionQuad;
 pub use output::Output;
 pub use perspective::Perspective;
 pub use positioning::SetPosition;
+pub use quad::MotionQuad;
 pub use split::SplitFrameByFrame;
 pub use style_basic::Italic;
 
@@ -30,10 +30,10 @@ use crate::{media, message, model, subtitle};
 mod clip;
 mod gradient;
 mod input;
-mod motion_quad;
 mod output;
 mod perspective;
 mod positioning;
+mod quad;
 mod split;
 mod style_basic;
 
