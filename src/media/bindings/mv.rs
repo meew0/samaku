@@ -97,7 +97,7 @@ impl std::fmt::Display for MotionModel {
             MotionModel::TranslationScale => write!(f, "Location & Scale"),
             MotionModel::TranslationRotationScale => write!(f, "Location, Rotation, & Scale"),
             MotionModel::Affine => write!(f, "Affine"),
-            MotionModel::Homography => write!(f, "Perspective"),
+            MotionModel::Homography => write!(f, "Homography"),
         }
     }
 }

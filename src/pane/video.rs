@@ -674,7 +674,7 @@ fn view_track_settings(
         motion::Model::TranslationScale,
         motion::Model::TranslationRotationScale,
         motion::Model::Affine,
-        // motion::Model::Homography,
+        motion::Model::Homography,
     ];
 
     const MATCH_MODES: &[motion::MatchMode] =
