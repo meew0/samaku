@@ -512,8 +512,8 @@ mod tests {
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
-    #[test]
-    fn motion_track() -> anyhow::Result<()> {
+    /// Helper function that runs a motion tracking test with the given settings.
+    fn motion_track_test(settings: TrackSettings) -> anyhow::Result<()> {
         media::init();
 
         let path = crate::test_utils::test_file("test_files/cube_av1.mkv");
@@ -536,13 +536,7 @@ mod tests {
             current_frame: media::FrameNumber(0),
             target: Target::Frame(media::FrameNumber(99)),
             direction: Direction::Forward,
-            settings: TrackSettings {
-                model: Model::Translation,
-                match_mode: MatchMode::Previous,
-                pre_pass: true,
-                normalize: false,
-                channels: Channels::rgb(),
-            },
+            settings,
         };
 
         let mut last_result = TrackResult::Success;
@@ -561,6 +555,29 @@ mod tests {
         assert_float_absolute_eq!(last_marker.region.center.y, 81.0, 2.0);
 
         Ok(())
+    }
+
+    #[test]
+    fn motion_track() -> anyhow::Result<()> {
+        motion_track_test(TrackSettings {
+            model: Model::Translation,
+            match_mode: MatchMode::Previous,
+            pre_pass: true,
+            normalize: false,
+            channels: Channels::rgb(),
+        })
+    }
+
+    #[test]
+    fn motion_track_keyframe() -> anyhow::Result<()> {
+        // This should lead to the same results as `Previous` (tested above)
+        motion_track_test(TrackSettings {
+            model: Model::Translation,
+            match_mode: MatchMode::Key,
+            pre_pass: true,
+            normalize: false,
+            channels: Channels::rgb(),
+        })
     }
 
     #[test]
