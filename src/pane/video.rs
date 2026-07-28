@@ -1486,16 +1486,18 @@ fn motion_track_mouse_event(
                                 bounds.size(),
                                 program.storage_size,
                             );
-                            let new_region = if program.modifiers.alt() {
-                                rotation_corner_drag(frame_pos, corner, &marker.region)
-                            } else {
-                                scale_corner_drag(
-                                    frame_pos,
-                                    corner,
-                                    &marker.region,
-                                    !program.modifiers.shift(),
-                                )
-                            };
+                            let new_region =
+                                match (program.modifiers.alt(), program.modifiers.shift()) {
+                                    (true, true) => {
+                                        free_corner_drag(frame_pos, corner, &marker.region)
+                                    }
+                                    (true, false) => {
+                                        rotation_corner_drag(frame_pos, corner, &marker.region)
+                                    }
+                                    (false, shift) => {
+                                        scale_corner_drag(frame_pos, corner, &marker.region, !shift)
+                                    }
+                                };
                             return Some(
                                 Action::publish(message::Message::SetTrackMarkerRegion(
                                     dragging.track_id,
@@ -1656,6 +1658,25 @@ fn scale_corner_drag(
         bottom_left: new_center - new_e1 + new_e2,
         center: new_center,
     }
+}
+
+/// Move only one corner of the quad.
+///
+/// The center is updated proportionally (by 1/4 of the distance).
+fn free_corner_drag(target: DVec2, corner: CornerIndex, region: &motion::Region) -> motion::Region {
+    let mut new_region = *region;
+
+    let corner_ref = match corner {
+        CornerIndex::TopLeft => &mut new_region.top_left,
+        CornerIndex::TopRight => &mut new_region.top_right,
+        CornerIndex::BottomRight => &mut new_region.bottom_right,
+        CornerIndex::BottomLeft => &mut new_region.bottom_left,
+    };
+    let delta = target - *corner_ref;
+    *corner_ref = target;
+
+    new_region.center += delta * 0.25;
+    new_region
 }
 
 fn rotation_corner_drag(
@@ -1901,5 +1922,63 @@ fn draw_base_layer(
             );
             canvas_frame.fill(&circle, iced_color);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_float_eq::assert_float_absolute_eq;
+
+    fn assert_vec_eq(actual: DVec2, expected: DVec2) {
+        assert_float_absolute_eq!(actual.x, expected.x, 1e-9);
+        assert_float_absolute_eq!(actual.y, expected.y, 1e-9);
+    }
+
+    #[test]
+    fn corner_drag_free() {
+        let region = motion::Region::from_center_and_radius(DVec2::new(100.0, 100.0), 20.0);
+        let new_region = free_corner_drag(DVec2::new(60.0, 100.0), CornerIndex::TopRight, &region);
+
+        // Only the dragged corner moved...
+        assert_vec_eq(new_region.top_right, DVec2::new(60.0, 100.0));
+        assert_vec_eq(new_region.top_left, region.top_left);
+        assert_vec_eq(new_region.bottom_right, region.bottom_right);
+        assert_vec_eq(new_region.bottom_left, region.bottom_left);
+
+        // ...and the center followed by a quarter of its displacement, staying at the centroid.
+        assert_vec_eq(
+            new_region.center,
+            DVec2::new(100.0, 100.0) + DVec2::new(-60.0, 20.0) * 0.25,
+        );
+        assert_vec_eq(
+            new_region.center,
+            (new_region.top_left
+                + new_region.top_right
+                + new_region.bottom_right
+                + new_region.bottom_left)
+                * 0.25,
+        );
+
+        // Check that the search area is also updated
+        let region = motion::Region::from_center_and_radius(DVec2::new(100.0, 100.0), 20.0);
+        let mut marker = motion::Marker::from_region_and_search_size(region, 10.0);
+
+        marker.update_region(free_corner_drag(
+            DVec2::new(150.0, 150.0),
+            CornerIndex::BottomRight,
+            &region,
+        ));
+
+        // The search area keeps its distance from the (now larger) bounding box.
+        let bounding_box = marker.region.bounding_box();
+        assert_vec_eq(
+            marker.search_area.origin,
+            bounding_box.origin - DVec2::splat(10.0),
+        );
+        assert_vec_eq(
+            marker.search_area.origin + marker.search_area.size,
+            bounding_box.origin + bounding_box.size + DVec2::splat(10.0),
+        );
     }
 }
