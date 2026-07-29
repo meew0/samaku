@@ -177,11 +177,11 @@ impl Video {
             .ceil()
             .as_uvec2();
 
-        assert!(
+        debug_assert!(
             origin_within_frame.x + true_size.x <= size.x,
             "right side of clamped patch request should fit within horizontal bounds"
         );
-        assert!(
+        debug_assert!(
             origin_within_frame.y + true_size.y <= size.y,
             "bottom side of clamped patch request should fit within vertical bounds"
         );

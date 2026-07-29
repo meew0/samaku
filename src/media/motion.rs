@@ -427,7 +427,7 @@ impl<V> Tracker<'_, V> {
         // Iterate over markers, do the actual tracking step,
         // then keep the markers that tracked successfully.
         let mut remove_marker = HashSet::new();
-        for (&track_id, marker) in self.markers.iter_mut() {
+        for (&track_id, marker) in &mut self.markers {
             // TODO: implement remaining TrackSettings
             let (match_frame, match_marker) = match self.settings.match_mode {
                 MatchMode::Key => (
