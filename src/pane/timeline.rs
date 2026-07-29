@@ -937,10 +937,18 @@ fn top_bar<'a>(
     };
     let play_button = view::tooltip(play_button_active, play_tooltip_text);
 
-    let frame_number_text_widget = iced::widget::text(pane::video::frame_number_text(global_state));
+    let frame_number_text = pane::video::frame_number_text(global_state);
+    let timestamp_text = global_state
+        .shared
+        .playback_position
+        .subtitle_time()
+        .format_long();
+
+    let time_text = format!("{timestamp_text} ({frame_number_text})");
+    let time_text_widget = iced::widget::text(time_text);
 
     iced::widget::container(
-        iced::widget::row![play_button, frame_number_text_widget,]
+        iced::widget::row![play_button, time_text_widget,]
             .spacing(5.0)
             .align_y(iced::Alignment::Center),
     )

@@ -875,16 +875,27 @@ fn view_marker_settings<'a>(
     .into()
 }
 
-pub fn frame_number_text(global_state: &crate::Samaku) -> String {
-    if let Some(metadata) = global_state.video_metadata.as_ref() {
-        let frame_number = global_state
+pub fn frame_number_text(global_state: &crate::Samaku) -> impl std::fmt::Display {
+    let frame_number_opt = global_state.video_metadata.as_ref().map(|metadata| {
+        global_state
             .shared
             .playback_position
             .current_frame(&metadata.frame_rate)
-            .0;
-        format!("{frame_number}")
-    } else {
-        "No video loaded".to_owned()
+            .0
+    });
+
+    FrameNumberFormat(frame_number_opt)
+}
+
+struct FrameNumberFormat(Option<i32>);
+
+impl std::fmt::Display for FrameNumberFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let &Some(frame_number) = &self.0 {
+            write!(f, "{frame_number}")
+        } else {
+            write!(f, "No video loaded")
+        }
     }
 }
 
@@ -893,7 +904,8 @@ fn view_bottom_bar<'a>(
     self_pane: super::Pane,
     global_state: &'a crate::Samaku,
 ) -> iced::Element<'a, message::Message> {
-    let frame_number_text_widget = iced::widget::text(frame_number_text(global_state));
+    let frame_number_text_widget =
+        iced::widget::text(format!("{}", frame_number_text(global_state)));
     let reticules_radio = iced::widget::radio(
         "Reticules",
         ControlsMode::Reticules,

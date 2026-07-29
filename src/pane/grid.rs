@@ -150,10 +150,13 @@ fn row<'a>(
         message::Message::SelectOnlyEvent(event_index)
     };
 
+    let start_text = format!("{}", event.start.format_long());
+    let end_text = format!("{}", event.end().format_long());
+
     iced::widget::button(
         iced::widget::row![
-            iced::widget::text(event.start.format_long()).width(iced::Length::Fixed(150.0)),
-            iced::widget::text(event.end().format_long()).width(iced::Length::Fixed(150.0)),
+            iced::widget::text(start_text).width(iced::Length::Fixed(150.0)),
+            iced::widget::text(end_text).width(iced::Length::Fixed(150.0)),
             iced::widget::text(event_text_slice)
         ]
         .height(iced::Length::Fill)

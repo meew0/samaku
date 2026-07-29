@@ -174,16 +174,22 @@ impl StartTime {
 
     /// Fixed-width: `hh:mm:ss.mmm`.
     #[must_use]
-    pub fn format_long(self) -> String {
-        let (sign, hours, minutes, seconds, millis) = self.split(false);
-        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
+    pub fn format_long(self) -> impl std::fmt::Display {
+        FormatLong(self.split(false))
     }
 
     /// Compact: `h[:mm]:ss[.m..]` — trims leading hour when 0 and
     /// trims trailing zeros from fractional seconds.
     #[must_use]
     pub fn format_short(self) -> String {
-        let (sign, hours, minutes, seconds, millis) = self.split(false);
+        // TODO convert this one into a formatter struct as well
+        let SplitResult {
+            sign,
+            hours,
+            minutes,
+            seconds,
+            millis,
+        } = self.split(false);
 
         let mut result = if hours > 0 {
             format!("{sign}{hours}:{minutes:02}:{seconds:02}")
@@ -204,7 +210,7 @@ impl StartTime {
         result
     }
 
-    fn split(self, minus: bool) -> (&'static str, u64, u32, u32, u32) {
+    fn split(self, minus: bool) -> SplitResult {
         if self.0 < 0 {
             return Self(-self.0).split(true);
         }
@@ -220,7 +226,36 @@ impl StartTime {
 
         let sign = if minus { "-" } else { "" };
 
-        (sign, hours, minutes, seconds, millis)
+        SplitResult {
+            sign,
+            hours,
+            minutes,
+            seconds,
+            millis,
+        }
+    }
+}
+
+struct SplitResult {
+    sign: &'static str,
+    hours: u64,
+    minutes: u32,
+    seconds: u32,
+    millis: u32,
+}
+
+struct FormatLong(SplitResult);
+
+impl std::fmt::Display for FormatLong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let SplitResult {
+            sign,
+            hours,
+            minutes,
+            seconds,
+            millis,
+        } = self.0;
+        write!(f, "{sign}{hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
     }
 }
 
@@ -1252,31 +1287,40 @@ mod tests {
     #[test]
     fn format_times() {
         assert_eq!(StartTime(0).format_short(), "0:00");
-        assert_eq!(StartTime(0).format_long(), "00:00:00.000");
+        assert_eq!(StartTime(0).format_long().to_string(), "00:00:00.000");
 
         assert_eq!(StartTime(1000).format_short(), "0:01");
-        assert_eq!(StartTime(1000).format_long(), "00:00:01.000");
+        assert_eq!(StartTime(1000).format_long().to_string(), "00:00:01.000");
 
         assert_eq!(StartTime(1500).format_short(), "0:01.5");
-        assert_eq!(StartTime(1500).format_long(), "00:00:01.500");
+        assert_eq!(StartTime(1500).format_long().to_string(), "00:00:01.500");
 
         assert_eq!(StartTime(1501).format_short(), "0:01.501");
-        assert_eq!(StartTime(1501).format_long(), "00:00:01.501");
+        assert_eq!(StartTime(1501).format_long().to_string(), "00:00:01.501");
 
         assert_eq!(StartTime(601_500).format_short(), "10:01.5");
-        assert_eq!(StartTime(601_500).format_long(), "00:10:01.500");
+        assert_eq!(StartTime(601_500).format_long().to_string(), "00:10:01.500");
 
         assert_eq!(StartTime(3_601_500).format_short(), "1:00:01.5");
-        assert_eq!(StartTime(3_601_500).format_long(), "01:00:01.500");
+        assert_eq!(
+            StartTime(3_601_500).format_long().to_string(),
+            "01:00:01.500"
+        );
 
         assert_eq!(StartTime(36_001_500).format_short(), "10:00:01.5");
-        assert_eq!(StartTime(36_001_500).format_long(), "10:00:01.500");
+        assert_eq!(
+            StartTime(36_001_500).format_long().to_string(),
+            "10:00:01.500"
+        );
 
         assert_eq!(StartTime(360_001_500).format_short(), "100:00:01.5");
-        assert_eq!(StartTime(360_001_500).format_long(), "100:00:01.500");
+        assert_eq!(
+            StartTime(360_001_500).format_long().to_string(),
+            "100:00:01.500"
+        );
 
         assert_eq!(StartTime(-1500).format_short(), "-0:01.5");
-        assert_eq!(StartTime(-1500).format_long(), "-00:00:01.500");
+        assert_eq!(StartTime(-1500).format_long().to_string(), "-00:00:01.500");
     }
 
     #[test]
