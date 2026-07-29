@@ -269,13 +269,10 @@ impl canvas::Program<message::Message> for CanvasData<'_> {
                         {
                             return match state.drag_mode {
                                 DragMode::None | DragMode::Pan(_) | DragMode::Cursor => {
+                                    // The position setting logic will automatically clamp it to the correct bounds
                                     let new_time = self.position.left
                                         + self.position.ms_from_left(mouse_position, bounds.width);
-                                    let new_time_bounded = new_time
-                                        .max(self.video_bounds.start)
-                                        .min(self.video_bounds.end - subtitle::Duration(1));
-                                    let message =
-                                        message::Message::PlaybackSetPosition(new_time_bounded);
+                                    let message = message::Message::PlaybackSetPosition(new_time);
                                     Some(Action::publish(message).and_capture())
                                 }
                                 DragMode::Event(_, ref event_reference) => {
@@ -479,10 +476,7 @@ impl CanvasData<'_> {
             DragMode::Cursor => {
                 let new_time =
                     self.position.left + self.position.ms_from_left(mouse_position, bounds.width);
-                let new_time_bounded = new_time
-                    .max(self.video_bounds.start)
-                    .min(self.video_bounds.end - subtitle::Duration(1));
-                let message = message::Message::PlaybackSetPosition(new_time_bounded);
+                let message = message::Message::PlaybackSetPosition(new_time);
                 return Some(Action::publish(message).and_capture());
             }
             DragMode::Event(drag_action, ref event_reference) => {
