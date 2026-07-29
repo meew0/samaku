@@ -96,7 +96,7 @@ pub(super) fn spawn(
 
                         match cpal_find_config(&audio_properties) {
                             Ok((device, config)) => {
-                                if let Some(stream) = try_build_stream(
+                                match try_build_stream(
                                     audio_properties.sample_format,
                                     &device,
                                     config,
@@ -105,10 +105,19 @@ pub(super) fn spawn(
                                     Arc::clone(&playback_position),
                                     tx_out.clone(),
                                 ) {
-                                    if playing.load(atomic::Ordering::Relaxed) {
-                                        stream.play().expect("Failed to play audio stream");
+                                    Ok(stream) => {
+                                        if playing.load(atomic::Ordering::Relaxed) {
+                                            handle_cpal_error(
+                                                &tx_out,
+                                                stream.play(),
+                                                "Failed to play audio stream",
+                                            );
+                                        }
+                                        stream_opt = Some(stream);
                                     }
-                                    stream_opt = Some(stream);
+                                    Err(err) => {
+                                        tx_out.error(err, "Failed to build audio stream");
+                                    }
                                 }
                             }
                             Err(err) => {
@@ -121,7 +130,11 @@ pub(super) fn spawn(
                         tx_out.send(message::Message::UpdatePlaybackStateRepresentation(true));
 
                         if let Some(ref stream) = stream_opt {
-                            stream.play().expect("Failed to play audio stream");
+                            handle_cpal_error(
+                                &tx_out,
+                                stream.play(),
+                                "Failed to play audio stream",
+                            );
                         }
                     }
                     MessageIn::Pause => {
@@ -129,7 +142,11 @@ pub(super) fn spawn(
                         tx_out.send(message::Message::UpdatePlaybackStateRepresentation(false));
 
                         if let Some(ref stream) = stream_opt {
-                            stream.pause().expect("Failed to pause audio stream");
+                            handle_cpal_error(
+                                &tx_out,
+                                stream.pause(),
+                                "Failed to pause audio stream",
+                            );
                         }
                     }
                 }
@@ -141,6 +158,16 @@ pub(super) fn spawn(
         worker_type: super::Type::Playback,
         _handle: handle,
         message_in: tx_in,
+    }
+}
+
+fn handle_cpal_error(
+    tx_out: &super::GlobalSender,
+    result: Result<(), cpal::Error>,
+    info: &'static str,
+) {
+    if let Err(error) = result {
+        tx_out.error(anyhow::Error::from(error), info);
     }
 }
 
@@ -190,53 +217,52 @@ fn try_build_stream(
     playing: Arc<atomic::AtomicBool>,
     playback_position: Arc<model::playback::Position>,
     tx_out: super::GlobalSender,
-) -> Option<cpal::Stream> {
+) -> anyhow::Result<cpal::Stream> {
     let stream_config = config.into();
 
     match sample_format {
-        cpal::SampleFormat::F32 => Some(build_stream::<f32>(
+        cpal::SampleFormat::F32 => build_stream::<f32>(
             device,
             stream_config,
             audio_mutex,
             playing,
             playback_position,
             tx_out,
-        )),
-        cpal::SampleFormat::F64 => Some(build_stream::<f64>(
+        ),
+        cpal::SampleFormat::F64 => build_stream::<f64>(
             device,
             stream_config,
             audio_mutex,
             playing,
             playback_position,
             tx_out,
-        )),
-        cpal::SampleFormat::U8 => Some(build_stream::<u8>(
+        ),
+        cpal::SampleFormat::U8 => build_stream::<u8>(
             device,
             stream_config,
             audio_mutex,
             playing,
             playback_position,
             tx_out,
-        )),
-        cpal::SampleFormat::I16 => Some(build_stream::<i16>(
+        ),
+        cpal::SampleFormat::I16 => build_stream::<i16>(
             device,
             stream_config,
             audio_mutex,
             playing,
             playback_position,
             tx_out,
-        )),
-        cpal::SampleFormat::I32 => Some(build_stream::<i32>(
+        ),
+        cpal::SampleFormat::I32 => build_stream::<i32>(
             device,
             stream_config,
             audio_mutex,
             playing,
             playback_position,
             tx_out,
-        )),
+        ),
         other => {
-            println!("Unsupported sample format for playback: {other}");
-            None
+            anyhow::bail!("Unsupported sample format for playback: {other}")
         }
     }
 }
@@ -263,7 +289,7 @@ fn build_stream<T>(
     playing: Arc<atomic::AtomicBool>,
     playback_position: Arc<model::playback::Position>,
     tx_out: super::GlobalSender,
-) -> cpal::Stream
+) -> anyhow::Result<cpal::Stream>
 where
     T: cpal::SizedSample + Default,
 {
@@ -297,7 +323,7 @@ where
             },
             None,
         )
-        .expect("Failed to build audio stream")
+        .context("Failed to build audio stream")
 }
 
 fn data_callback<T>(
@@ -318,7 +344,7 @@ fn data_callback<T>(
     }
 
     // Lock the audio mutex, so nothing else tries to access the audio data at the moment.
-    let mut audio_lock = audio_mutex.lock().unwrap();
+    let mut audio_lock = audio_mutex.lock().expect("audio mutex poisoned");
     let Some(audio) = audio_lock.as_mut() else {
         zero(data);
         return;
