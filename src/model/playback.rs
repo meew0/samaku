@@ -20,6 +20,10 @@ pub struct Position {
 
     /// How many `n`'s per second there are.
     pub rate: AtomicU32,
+
+    // The values the position should ideally be clamped to
+    pub clamp_minimum: u64,
+    pub clamp_maximum: u64,
 }
 
 impl Position {
@@ -70,7 +74,9 @@ impl Position {
     /// Panics if the authoritative position lock is poisoned.
     pub fn add_ticks(&self, delta: i64) {
         let mut lock = self.authoritative_position.lock().unwrap();
-        let new_value = lock.saturating_add_signed(delta);
+        let new_value = lock
+            .saturating_add_signed(delta)
+            .clamp(self.clamp_minimum, self.clamp_maximum);
         *lock = new_value;
         drop(lock);
         self.position.store(new_value, Ordering::Relaxed);
@@ -99,10 +105,12 @@ impl Position {
     /// # Panics
     /// Panics if the authoritative position lock is poisoned.
     pub fn set_ticks(&self, new_value: u64) {
+        let clamped = new_value.clamp(self.clamp_minimum, self.clamp_maximum);
+
         let mut lock = self.authoritative_position.lock().unwrap();
-        *lock = new_value;
+        *lock = clamped;
         drop(lock);
-        self.position.store(new_value, Ordering::Relaxed);
+        self.position.store(clamped, Ordering::Relaxed);
     }
 
     /// Sets the playback position to the given event start time.
@@ -148,6 +156,8 @@ impl Default for Position {
             authoritative_position: Mutex::new(0),
             position: 0.into(),
             rate: 1000.into(), // if nothing is loaded, use milliseconds for position
+            clamp_minimum: 0,
+            clamp_maximum: u64::MAX,
         }
     }
 }
@@ -162,6 +172,8 @@ mod tests {
             authoritative_position: Mutex::new(position),
             position: AtomicU64::new(position),
             rate: AtomicU32::new(rate),
+            clamp_minimum: 0,
+            clamp_maximum: 5 * u64::from(rate),
         }
     }
 
@@ -237,10 +249,13 @@ mod tests {
     }
 
     #[test]
-    fn add_ticks_saturates_at_zero() {
+    fn add_ticks_saturate() {
         let pos = make_position(10, 1000);
         pos.add_ticks(-100);
         assert_eq!(pos.position(), 0);
+
+        pos.add_ticks(10000);
+        assert_eq!(pos.position(), 5000);
     }
 
     #[test]
@@ -261,10 +276,12 @@ mod tests {
     }
 
     #[test]
-    fn set_to_event_negative_clamped_to_zero() {
+    fn set_to_event_saturate() {
         let pos = make_position(1000, 1000);
         pos.set_to_event(subtitle::StartTime(-5000));
         assert_eq!(pos.position(), 0);
+        pos.set_to_event(subtitle::StartTime(10000));
+        assert_eq!(pos.position(), 5000);
     }
 
     #[test]
