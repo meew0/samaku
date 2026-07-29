@@ -1,65 +1,88 @@
 use std::sync::{
     Mutex,
-    atomic::{AtomicU32, AtomicU64, Ordering},
+    atomic::{AtomicI64, Ordering},
 };
 
 use crate::{media, subtitle};
 
-/// Atomically interior-mutable playback position.
+/// Interiorly mutable, thread-safe playback position.
 ///
-/// Represents the playback position in a thread-safe way while also allowing interior mutability with only an immutable reference.
-/// The position is represented as a number of ticks with a variable base rate (specified as the `rate` field).
+/// The position is stored in as a signed integer representing milliseconds.
+/// Playback engines will update the authoritative state based on their own position
+/// at the "native" resolution, and resynchronize their own positions when the
+/// generation counter changes.
+///
+/// For the purposes of UI code, the position can always be read lock-free from the atomic `cached` value.
+/// Locking the mutex is only required for writing to it, and for certain engine-facing
+/// methods that need to read the generation counter as well.
 pub struct Position {
-    /// Position in terms of `rate`. Always guaranteed to be correct,
-    /// but requires a lock on the mutex to access.
-    pub authoritative_position: Mutex<u64>,
+    /// The authoritative state. Always guaranteed to be correct, but requires a lock to access.
+    state: Mutex<State>,
 
-    // TODO fix potential race condition here from position and rate being observed independently
-    /// Last known position in terns of `rate`.
-    pub position: AtomicU64,
+    /// Cached value that can be read without a lock on the mutex. It may be very slightly out of date,
+    /// but this inaccuracy should not matter for most code.
+    cached_millis: AtomicI64,
+}
 
-    /// How many `n`'s per second there are.
-    pub rate: AtomicU32,
+struct State {
+    /// Playback position, in milliseconds.
+    millis: i64,
 
-    // The values the position should ideally be clamped to
-    pub clamp_minimum: u64,
-    pub clamp_maximum: u64,
+    /// Lower end of the range the position is clamped to, inclusive. (This will almost always be 0.)
+    min_millis: i64,
+
+    /// Upper end of the range the position is clamped to, inclusive;
+    /// i.e. the end of the video or audio stream.
+    max_millis: i64,
+
+    /// Counter for changes to the position that occur outside of the playback engine (e.g. seeking).
+    ///
+    /// If the playback engine notices that this value has changed,
+    /// it will know that it needs to re-synchronize its internal position.
+    generation: u64,
+}
+
+/// The playback position together with the generation it belongs to,
+/// for a playback engine to synchronize its own position against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Snapshot {
+    pub millis: i64,
+    pub generation: u64,
+}
+
+/// The outcome of [`Position::advance_to`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Advance {
+    /// The advance was successfully applied to the playback position.
+    Applied,
+
+    /// The position was changed in the meantime, so the advance could not be applied
+    /// and the engine needs to re-synchronize before its next block.
+    Discarded,
+
+    /// The advance ran into the end of the clamp range (i.e. the end of the audio or video),
+    /// so playback should stop here. The engine also needs to re-synchronize before its next block.
+    ReachedEnd,
 }
 
 impl Position {
-    pub fn position(&self) -> u64 {
-        self.position.load(Ordering::Relaxed)
+    /// Returns the current playback position in milliseconds.
+    pub fn millis(&self) -> i64 {
+        self.cached_millis.load(Ordering::Relaxed)
     }
 
-    pub fn rate(&self) -> u32 {
-        self.rate.load(Ordering::Relaxed)
+    /// Returns the current playback position as a time for subtitle purposes.
+    pub fn subtitle_time(&self) -> subtitle::StartTime {
+        subtitle::StartTime(self.millis())
     }
 
-    /// Returns the current non-authoritative position as floating-point seconds.
-    /// May be imprecise for very large positions or rates.
+    /// Returns the current playback position as floating-point seconds.
     #[expect(
         clippy::cast_precision_loss,
         reason = "acceptable amount of precision loss"
     )]
     pub fn seconds(&self) -> f64 {
-        if self.rate() == 0 {
-            return 0.0;
-        }
-        self.position() as f64 / f64::from(self.rate())
-    }
-
-    /// Returns the current non-authoritative position as milliseconds for subtitle purposes.
-    ///
-    /// # Panics
-    /// Panics on overflow.
-    pub fn subtitle_time(&self) -> subtitle::StartTime {
-        subtitle::StartTime(
-            self.position()
-                .checked_mul(1000)
-                .and_then(|result| <u64 as TryInto<i64>>::try_into(result).ok())
-                .expect("playback position overflow")
-                / i64::from(self.rate()),
-        )
+        self.millis() as f64 / 1000.0
     }
 
     /// Converts the playback position into a frame number (rounding down) using the given frame
@@ -68,96 +91,133 @@ impl Position {
         frame_rate.frame_at_time(self.subtitle_time(), media::TimeMode::Exact)
     }
 
-    /// Adds the given `delta` number of ticks to the playback state. May be negative.
+    /// Writes `new_millis` into the given locked state, clamped to the state's range, and
+    /// publishes it to the lock-free snapshot.
+    ///
+    /// Returns whether the value had to be clamped down to the upper end of the range.
+    fn store_locked(&self, state: &mut State, new_millis: i64) -> bool {
+        let clamped = new_millis.clamp(state.min_millis, state.max_millis);
+        state.millis = clamped;
+        self.cached_millis.store(clamped, Ordering::Relaxed);
+        clamped < new_millis
+    }
+
+    /// Sets the playback position to the given number of milliseconds, clamped to the current
+    /// range, and marks the position as seeked.
     ///
     /// # Panics
-    /// Panics if the authoritative position lock is poisoned.
-    pub fn add_ticks(&self, delta: i64) {
-        let mut lock = self.authoritative_position.lock().unwrap();
-        let new_value = lock
-            .saturating_add_signed(delta)
-            .clamp(self.clamp_minimum, self.clamp_maximum);
-        *lock = new_value;
-        drop(lock);
-        self.position.store(new_value, Ordering::Relaxed);
+    /// Panics if the state lock is poisoned.
+    pub fn set_millis(&self, new_millis: i64) {
+        let mut lock = self.state.lock().unwrap();
+        self.store_locked(&mut lock, new_millis);
+        lock.generation = lock.generation.wrapping_add(1);
     }
 
+    /// Adds the given `delta` number of milliseconds to the playback position. May be negative.
+    ///
+    /// # Panics
+    /// Panics if the state lock is poisoned.
+    pub fn add_millis(&self, delta: i64) {
+        let mut lock = self.state.lock().unwrap();
+        let new_millis = lock.millis.saturating_add(delta);
+        self.store_locked(&mut lock, new_millis);
+        lock.generation = lock.generation.wrapping_add(1);
+    }
+
+    /// Adds the given `delta_seconds` to the playback position. May be negative.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "very unlikely to occur in practice"
+    )]
     pub fn add_seconds(&self, delta_seconds: f64) {
-        if self.rate() == 0 {
-            return;
-        }
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "very unlikely to occur in practice"
-        )]
-        let delta_ticks: i64 = (delta_seconds * f64::from(self.rate())).round() as i64;
-        self.add_ticks(delta_ticks);
+        self.add_millis((delta_seconds * 1000.0).round() as i64);
     }
 
+    /// Advances the playback position by the given number of frames, using the given frame rate.
     pub fn add_frames(&self, delta_frames: media::FrameDelta, frame_rate: &media::FrameRate) {
-        let current_frame = self.current_frame(frame_rate);
-        let target_frame = current_frame + delta_frames;
+        let target_frame = self.current_frame(frame_rate) + delta_frames;
         self.set_to_frame(target_frame, frame_rate);
     }
 
-    /// Sets the playback position to the given value in ticks.
-    ///
-    /// # Panics
-    /// Panics if the authoritative position lock is poisoned.
-    pub fn set_ticks(&self, new_value: u64) {
-        let clamped = new_value.clamp(self.clamp_minimum, self.clamp_maximum);
-
-        let mut lock = self.authoritative_position.lock().unwrap();
-        *lock = clamped;
-        drop(lock);
-        self.position.store(clamped, Ordering::Relaxed);
-    }
-
     /// Sets the playback position to the given event start time.
-    ///
-    /// # Panics
-    /// Panics if the authoritative position lock is poisoned, or on overflow.
     pub fn set_to_event(&self, new_value: subtitle::StartTime) {
-        if self.rate() == 0 {
-            return;
-        }
-
-        let ticks: i64 = new_value
-            .0
-            .checked_mul(i64::from(self.rate()))
-            .expect("ticks overflow")
-            / 1000;
-        self.set_ticks(ticks.try_into().unwrap_or(0));
+        self.set_millis(new_value.0);
     }
 
-    /// Sets the playback position to the given frame.
+    /// Sets the playback position to the start of the given frame.
+    pub fn set_to_frame(&self, new_value: media::FrameNumber, frame_rate: &media::FrameRate) {
+        self.set_millis(
+            frame_rate
+                .time_at_frame(new_value, media::TimeMode::Exact)
+                .0,
+        );
+    }
+
+    /// Sets the range, in milliseconds, the playback position is clamped to. Both ends are
+    /// inclusive.
+    ///
+    /// The current position will be instantly clamped into the new range and marked as seeked.
     ///
     /// # Panics
-    /// Panics if the authoritative position lock is poisoned, or on overflow.
-    pub fn set_to_frame(&self, new_value: media::FrameNumber, frame_rate: &media::FrameRate) {
-        if self.rate() == 0 {
-            return;
+    /// Panics if the state lock is poisoned.
+    pub fn set_bounds(&self, min_millis: i64, max_millis: i64) {
+        let mut lock = self.state.lock().unwrap();
+        lock.min_millis = min_millis;
+        lock.max_millis = max_millis.max(min_millis);
+        let current_millis = lock.millis;
+        self.store_locked(&mut lock, current_millis);
+        lock.generation = lock.generation.wrapping_add(1);
+    }
+
+    /// Returns the authoritative playback position together with its generation, for a playback
+    /// engine to synchronise its own cursor against.
+    ///
+    /// # Panics
+    /// Panics if the state lock is poisoned.
+    pub fn snapshot(&self) -> Snapshot {
+        let lock = self.state.lock().unwrap();
+        Snapshot {
+            millis: lock.millis,
+            generation: lock.generation,
+        }
+    }
+
+    /// Applies a position update from a playback engine, without marking the position as seeked.
+    ///
+    /// `expected_generation` is the generation the engine last synchronized against. If the
+    /// position has been seeked since then, the engine's advance was computed from an
+    /// outdated position, so it is discarded and the method will return `Advance::Discarded`.
+    ///
+    /// # Panics
+    /// Panics if the state lock is poisoned.
+    pub fn advance_to(&self, new_millis: i64, expected_generation: u64) -> Advance {
+        let mut lock = self.state.lock().unwrap();
+
+        if lock.generation != expected_generation {
+            return Advance::Discarded;
         }
 
-        let target_ms = frame_rate
-            .time_at_frame(new_value, media::TimeMode::Exact)
-            .0;
-        let target_ticks: i64 = target_ms
-            .checked_mul(i64::from(self.rate()))
-            .expect("ticks overflow")
-            / 1000;
-        self.set_ticks(target_ticks.try_into().unwrap_or(0));
+        if self.store_locked(&mut lock, new_millis) {
+            // We ran into the end of the clamp range. Bump the generation, so the engine
+            // re-synchronises instead of letting its own cursor run away past the end.
+            lock.generation = lock.generation.wrapping_add(1);
+            Advance::ReachedEnd
+        } else {
+            Advance::Applied
+        }
     }
 }
 
 impl Default for Position {
     fn default() -> Self {
         Self {
-            authoritative_position: Mutex::new(0),
-            position: 0.into(),
-            rate: 1000.into(), // if nothing is loaded, use milliseconds for position
-            clamp_minimum: 0,
-            clamp_maximum: u64::MAX,
+            state: Mutex::new(State {
+                millis: 0,
+                min_millis: 0,
+                max_millis: i64::MAX,
+                generation: 0,
+            }),
+            cached_millis: AtomicI64::new(0),
         }
     }
 }
@@ -167,42 +227,41 @@ mod tests {
     use super::*;
     use assert_float_eq::assert_float_absolute_eq;
 
-    fn make_position(position: u64, rate: u32) -> Position {
+    fn make_position(millis: i64) -> Position {
         Position {
-            authoritative_position: Mutex::new(position),
-            position: AtomicU64::new(position),
-            rate: AtomicU32::new(rate),
-            clamp_minimum: 0,
-            clamp_maximum: 5 * u64::from(rate),
+            state: Mutex::new(State {
+                millis,
+                min_millis: 0,
+                max_millis: i64::MAX,
+                generation: 0,
+            }),
+            cached_millis: AtomicI64::new(millis),
         }
     }
 
-    #[test]
-    fn seconds_zero_rate() {
-        // should equal zero
-        assert_float_absolute_eq!(make_position(1000, 0).seconds(), 0.0, 0.0001);
+    fn make_bounded_position(millis: i64, max_millis: i64) -> Position {
+        let position = make_position(millis);
+        position.set_bounds(0, max_millis);
+        position
     }
 
     #[test]
     fn seconds_normal() {
-        assert_float_absolute_eq!(make_position(0, 1000).seconds(), 0.0, 0.0001);
-        assert_float_absolute_eq!(make_position(1000, 1000).seconds(), 1.0, 0.0001);
-        assert_float_absolute_eq!(make_position(500, 1000).seconds(), 0.5, 0.0001);
-        assert_float_absolute_eq!(make_position(3000, 1000).seconds(), 3.0, 0.0001);
+        assert_float_absolute_eq!(make_position(0).seconds(), 0.0, 0.0001);
+        assert_float_absolute_eq!(make_position(1000).seconds(), 1.0, 0.0001);
+        assert_float_absolute_eq!(make_position(500).seconds(), 0.5, 0.0001);
+        assert_float_absolute_eq!(make_position(3000).seconds(), 3.0, 0.0001);
     }
 
     #[test]
     fn subtitle_time_basic() {
+        assert_eq!(make_position(0).subtitle_time(), subtitle::StartTime(0));
         assert_eq!(
-            make_position(0, 1000).subtitle_time(),
-            subtitle::StartTime(0)
-        );
-        assert_eq!(
-            make_position(1000, 1000).subtitle_time(),
+            make_position(1000).subtitle_time(),
             subtitle::StartTime(1000)
         );
         assert_eq!(
-            make_position(2500, 1000).subtitle_time(),
+            make_position(2500).subtitle_time(),
             subtitle::StartTime(2500)
         );
     }
@@ -213,89 +272,144 @@ mod tests {
 
         // 1 second → frame 24
         assert_eq!(
-            make_position(1000, 1000).current_frame(&frame_rate),
+            make_position(1000).current_frame(&frame_rate),
             media::FrameNumber(24)
         );
-        // 0 ticks → frame 0
+        // 0 ms → frame 0
         assert_eq!(
-            make_position(0, 1000).current_frame(&frame_rate),
+            make_position(0).current_frame(&frame_rate),
             media::FrameNumber(0)
         );
         // 500 ms → frame 12
         assert_eq!(
-            make_position(500, 1000).current_frame(&frame_rate),
+            make_position(500).current_frame(&frame_rate),
             media::FrameNumber(12)
         );
-        // Rounds down: one tick less than a full frame
+        // Rounds down: one millisecond less than a full frame
         assert_eq!(
-            make_position(41, 1000).current_frame(&frame_rate),
+            make_position(41).current_frame(&frame_rate),
             media::FrameNumber(0)
         );
         assert_eq!(
-            make_position(42, 1000).current_frame(&frame_rate),
+            make_position(42).current_frame(&frame_rate),
             media::FrameNumber(1)
         );
     }
 
     #[test]
-    fn add_ticks_basic() {
-        let pos = make_position(0, 1000);
-        pos.add_ticks(100);
-        assert_eq!(pos.position(), 100);
-        pos.add_ticks(50);
-        assert_eq!(pos.position(), 150);
-        pos.add_ticks(-100);
-        assert_eq!(pos.position(), 50);
+    fn add_millis_basic() {
+        let position = make_position(0);
+        position.add_millis(100);
+        assert_eq!(position.millis(), 100);
+        position.add_millis(50);
+        assert_eq!(position.millis(), 150);
+        position.add_millis(-100);
+        assert_eq!(position.millis(), 50);
     }
 
     #[test]
-    fn add_ticks_saturate() {
-        let pos = make_position(10, 1000);
-        pos.add_ticks(-100);
-        assert_eq!(pos.position(), 0);
+    fn add_millis_clamp() {
+        let position = make_bounded_position(10, 5000);
+        position.add_millis(-100);
+        assert_eq!(position.millis(), 0);
 
-        pos.add_ticks(10000);
-        assert_eq!(pos.position(), 5000);
+        position.add_millis(10000);
+        assert_eq!(position.millis(), 5000);
     }
 
     #[test]
     fn set_to_event_basic() {
-        let pos = make_position(0, 1000);
-        pos.set_to_event(subtitle::StartTime(2000));
-        assert_eq!(pos.position(), 2000);
-        pos.set_to_event(subtitle::StartTime(0));
-        assert_eq!(pos.position(), 0);
+        let position = make_position(0);
+        position.set_to_event(subtitle::StartTime(2000));
+        assert_eq!(position.millis(), 2000);
+        position.set_to_event(subtitle::StartTime(0));
+        assert_eq!(position.millis(), 0);
     }
 
     #[test]
-    fn set_to_event_zero_rate() {
-        let pos = make_position(500, 0);
-        pos.set_to_event(subtitle::StartTime(2000));
-        // Should not change position when rate is 0
-        assert_eq!(pos.position(), 500);
-    }
-
-    #[test]
-    fn set_to_event_saturate() {
-        let pos = make_position(1000, 1000);
-        pos.set_to_event(subtitle::StartTime(-5000));
-        assert_eq!(pos.position(), 0);
-        pos.set_to_event(subtitle::StartTime(10000));
-        assert_eq!(pos.position(), 5000);
+    fn set_to_event_clamp() {
+        let position = make_bounded_position(1000, 5000);
+        position.set_to_event(subtitle::StartTime(-5000));
+        assert_eq!(position.millis(), 0);
+        position.set_to_event(subtitle::StartTime(10000));
+        assert_eq!(position.millis(), 5000);
     }
 
     #[test]
     fn set_to_frame() {
-        let pos = make_position(0, 1000);
+        let position = make_position(0);
         let frame_rate = media::FrameRate::f24();
 
-        pos.set_to_frame(media::FrameNumber(24), &frame_rate);
-        assert_eq!(pos.position(), 1000);
+        position.set_to_frame(media::FrameNumber(24), &frame_rate);
+        assert_eq!(position.millis(), 1000);
 
-        let pos = make_position(0, 1000);
+        let position = make_position(0);
         let frame_rate = media::FrameRate::cfr(24000, 1001).unwrap();
 
-        pos.set_to_frame(media::FrameNumber(13), &frame_rate);
-        assert_eq!(pos.position(), 542);
+        position.set_to_frame(media::FrameNumber(13), &frame_rate);
+        assert_eq!(position.millis(), 542);
+    }
+
+    #[test]
+    fn set_bounds() {
+        let position = make_position(10000);
+        assert_eq!(position.millis(), 10000);
+
+        position.set_bounds(0, 5000);
+        assert_eq!(position.millis(), 5000);
+        assert_eq!(position.snapshot().millis, 5000);
+
+        position.set_bounds(8000, 10000);
+        assert_eq!(position.millis(), 8000);
+    }
+
+    #[test]
+    fn seek_bumps_generation() {
+        let position = make_position(0);
+        let before = position.snapshot().generation;
+        position.set_millis(1000);
+        assert_ne!(position.snapshot().generation, before);
+    }
+
+    #[test]
+    fn advance_to() {
+        let position = make_position(0);
+        let snapshot = position.snapshot();
+
+        assert_eq!(
+            position.advance_to(1000, snapshot.generation),
+            Advance::Applied
+        );
+        assert_eq!(position.millis(), 1000);
+
+        // The engine's cursor is still valid, so it should not be forced to re-synchronise.
+        assert_eq!(position.snapshot().generation, snapshot.generation);
+
+        // Test discarding an outdated advance
+        let position = make_position(0);
+        let snapshot = position.snapshot();
+
+        // Something seeks while the engine is preparing its data...
+        position.set_millis(30000);
+
+        // ...so the advance the engine computed from the old position must not clobber it.
+        assert_eq!(
+            position.advance_to(1000, snapshot.generation),
+            Advance::Discarded
+        );
+        assert_eq!(position.millis(), 30000);
+
+        // Test reaching the end of the video
+        let position = make_bounded_position(4900, 5000);
+        let snapshot = position.snapshot();
+
+        assert_eq!(
+            position.advance_to(6000, snapshot.generation),
+            Advance::ReachedEnd
+        );
+        assert_eq!(position.millis(), 5000);
+
+        // The engine must re-synchronise, so that its own cursor cannot run away past the end.
+        assert_ne!(position.snapshot().generation, snapshot.generation);
     }
 }
