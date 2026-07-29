@@ -927,15 +927,8 @@ fn top_bar<'a>(
     } else {
         (view::Icon::Play.button(), "Play")
     };
-    let (play_button_active, play_tooltip_text) = if global_state.shared.has_audio() {
-        (
-            play_button_raw.on_press(message::Message::TogglePlayback),
-            play_text,
-        )
-    } else {
-        (play_button_raw, "Play (requires loaded audio)")
-    };
-    let play_button = view::tooltip(play_button_active, play_tooltip_text);
+    let play_button_active = play_button_raw.on_press(message::Message::TogglePlayback);
+    let play_button = view::tooltip(play_button_active, play_text);
 
     let frame_number_text = pane::video::frame_number_text(global_state);
     let timestamp_text = global_state

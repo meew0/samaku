@@ -1,10 +1,9 @@
 use crate::{media, message, model};
+use anyhow::Context as _;
 use std::{
-    sync::{Arc, Mutex, atomic},
+    sync::{Arc, Mutex, atomic, mpsc},
     thread,
 };
-
-use anyhow::Context as _;
 
 #[derive(Debug, Clone)]
 pub(super) enum MessageIn {
@@ -13,86 +12,133 @@ pub(super) enum MessageIn {
     Pause,
 }
 
+const DIRECT_PLAY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "uncoupling all this code is kind of difficult and not so high priority"
+)] // TODO uncouple
 pub(super) fn spawn(
     tx_out: super::GlobalSender,
     shared_state: &crate::SharedState,
 ) -> super::Worker<MessageIn> {
-    let (tx_in, rx_in) = std::sync::mpsc::channel::<MessageIn>();
+    let (tx_in, rx_in) = mpsc::channel::<MessageIn>();
 
     let playing = Arc::new(atomic::AtomicBool::new(false));
     let playback_position = Arc::clone(&shared_state.playback_position);
     let audio_mutex = Arc::clone(&shared_state.audio);
 
     let handle = thread::Builder::new()
-        .name("samaku_cpal_playback".to_owned())
+        .name("samaku_playback".to_owned())
         .spawn(move || {
             use cpal::traits::StreamTrait as _;
             let mut stream_opt: Option<cpal::Stream> = None;
 
             loop {
-                match rx_in.recv() {
-                    Ok(message) => match message {
-                        MessageIn::TryRestart => {
-                            // This drops the existing stream, which is supposedly guaranteed to
-                            // close it (https://github.com/RustAudio/cpal/issues/652)
-                            stream_opt = None;
+                let message = if stream_opt.is_none() && playing.load(atomic::Ordering::Relaxed) {
+                    // If we don't have a stream but playing is set, we ourselves should be responsible for playback timing.
+                    // But before that, we need to check if there is an event we need to handle first.
+                    let mut start_time = std::time::Instant::now();
+                    let mut start_position = playback_position.snapshot();
+                    'playback: loop {
+                        let last_position = playback_position.snapshot();
+                        match rx_in.recv_timeout(DIRECT_PLAY_INTERVAL) {
+                            Ok(message) => break 'playback message,
+                            Err(mpsc::RecvTimeoutError::Timeout) => {
+                                // There's no event, so advance playback timing.
+                                let millis_since_start =
+                                    i64::try_from(start_time.elapsed().as_millis())
+                                        .expect("playback time overflow");
+                                let current_position = start_position.millis + millis_since_start;
 
-                            let audio_properties = {
-                                let audio_lock =
-                                    audio_mutex.lock().expect("Audio mutex lock poisoned");
-                                if let Some(audio) = audio_lock.as_ref() {
-                                    audio.properties.clone()
-                                } else {
-                                    continue;
-                                }
-                            };
-
-                            match cpal_find_config(&audio_properties) {
-                                Ok((device, config)) => {
-                                    if let Some(stream) = try_build_stream(
-                                        audio_properties.sample_format,
-                                        &device,
-                                        config,
-                                        Arc::clone(&audio_mutex),
-                                        Arc::clone(&playing),
-                                        Arc::clone(&playback_position),
-                                        tx_out.clone(),
-                                    ) {
-                                        stream_opt = Some(stream);
+                                let advance_result = playback_position
+                                    .advance_to(current_position, last_position.generation);
+                                match advance_result {
+                                    model::playback::Advance::Applied => {
+                                        // nothing to do
+                                    }
+                                    model::playback::Advance::Discarded => {
+                                        start_time = std::time::Instant::now();
+                                        start_position = playback_position.snapshot();
+                                    }
+                                    model::playback::Advance::ReachedEnd => {
+                                        tx_out.send(message::Message::SetPlayback(false));
                                     }
                                 }
-                                Err(err) => {
-                                    tx_out.error(err, "Failed to open audio stream");
+                                tx_out.send(message::Message::PlaybackStep);
+                            }
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                panic!("playback worker channel closed")
+                            }
+                        }
+                    }
+                } else {
+                    match rx_in.recv() {
+                        Ok(message) => message,
+                        Err(mpsc::RecvError) => panic!("playback worker channel closed"),
+                    }
+                };
+
+                match message {
+                    MessageIn::TryRestart => {
+                        // This drops the existing stream, which is supposedly guaranteed to
+                        // close it (https://github.com/RustAudio/cpal/issues/652)
+                        stream_opt = None;
+
+                        let audio_properties = {
+                            let audio_lock = audio_mutex.lock().expect("Audio mutex lock poisoned");
+                            if let Some(audio) = audio_lock.as_ref() {
+                                audio.properties.clone()
+                            } else {
+                                continue;
+                            }
+                        };
+
+                        match cpal_find_config(&audio_properties) {
+                            Ok((device, config)) => {
+                                if let Some(stream) = try_build_stream(
+                                    audio_properties.sample_format,
+                                    &device,
+                                    config,
+                                    Arc::clone(&audio_mutex),
+                                    Arc::clone(&playing),
+                                    Arc::clone(&playback_position),
+                                    tx_out.clone(),
+                                ) {
+                                    if playing.load(atomic::Ordering::Relaxed) {
+                                        stream.play().expect("Failed to play audio stream");
+                                    }
+                                    stream_opt = Some(stream);
                                 }
                             }
-                        }
-                        MessageIn::Play => {
-                            if let Some(ref stream) = stream_opt {
-                                playing.store(true, atomic::Ordering::Relaxed);
-                                tx_out.send(message::Message::UpdatePlaybackStateRepresentation(
-                                    true,
-                                ));
-                                stream.play().expect("Failed to play audio stream");
+                            Err(err) => {
+                                tx_out.error(err, "Failed to open audio stream");
                             }
                         }
-                        MessageIn::Pause => {
-                            if let Some(ref stream) = stream_opt {
-                                playing.store(false, atomic::Ordering::Relaxed);
-                                tx_out.send(message::Message::UpdatePlaybackStateRepresentation(
-                                    false,
-                                ));
-                                stream.pause().expect("Failed to pause audio stream");
-                            }
+                    }
+                    MessageIn::Play => {
+                        playing.store(true, atomic::Ordering::Relaxed);
+                        tx_out.send(message::Message::UpdatePlaybackStateRepresentation(true));
+
+                        if let Some(ref stream) = stream_opt {
+                            stream.play().expect("Failed to play audio stream");
                         }
-                    },
-                    Err(_) => return,
+                    }
+                    MessageIn::Pause => {
+                        playing.store(false, atomic::Ordering::Relaxed);
+                        tx_out.send(message::Message::UpdatePlaybackStateRepresentation(false));
+
+                        if let Some(ref stream) = stream_opt {
+                            stream.pause().expect("Failed to pause audio stream");
+                        }
+                    }
                 }
             }
         })
         .unwrap();
 
     super::Worker {
-        worker_type: super::Type::CpalPlayback,
+        worker_type: super::Type::Playback,
         _handle: handle,
         message_in: tx_in,
     }

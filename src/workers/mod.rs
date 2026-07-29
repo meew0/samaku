@@ -3,9 +3,9 @@ use crate::{media, message, model};
 use std::collections::HashMap;
 use std::{cell::RefCell, thread};
 
-mod cpal_playback;
 mod indexer;
 mod log_toasts;
+mod playback;
 mod progress_listener;
 mod video_decoder;
 
@@ -13,7 +13,7 @@ mod video_decoder;
 pub enum Type {
     VideoDecoder,
     Indexer,
-    CpalPlayback,
+    Playback,
     LogToasts,
     ProgressListener,
 }
@@ -63,7 +63,7 @@ pub struct Workers {
 
     video_decoder: Worker<video_decoder::MessageIn>,
     indexer: Worker<indexer::MessageIn>,
-    cpal_playback: Worker<cpal_playback::MessageIn>,
+    playback: Worker<playback::MessageIn>,
     _log_toasts: Worker<log_toasts::MessageIn>,
     progress_listener: Worker<progress_listener::MessageIn>,
 }
@@ -78,7 +78,7 @@ impl Workers {
         Self {
             video_decoder: video_decoder::spawn(global_sender.clone(), shared_state),
             indexer: indexer::spawn(global_sender.clone(), shared_state),
-            cpal_playback: cpal_playback::spawn(global_sender.clone(), shared_state),
+            playback: playback::spawn(global_sender.clone(), shared_state),
             _log_toasts: log_toasts::spawn(global_sender.clone(), shared_state),
             progress_listener: progress_listener::spawn(global_sender.clone(), shared_state),
 
@@ -88,11 +88,11 @@ impl Workers {
     }
 
     pub fn emit_play(&self) {
-        self.cpal_playback.dispatch(cpal_playback::MessageIn::Play);
+        self.playback.dispatch(playback::MessageIn::Play);
     }
 
     pub fn emit_pause(&self) {
-        self.cpal_playback.dispatch(cpal_playback::MessageIn::Pause);
+        self.playback.dispatch(playback::MessageIn::Pause);
     }
 
     pub fn emit_playback_step(&self) {
@@ -117,8 +117,7 @@ impl Workers {
     }
 
     pub fn emit_restart_audio(&self) {
-        self.cpal_playback
-            .dispatch(cpal_playback::MessageIn::TryRestart);
+        self.playback.dispatch(playback::MessageIn::TryRestart);
     }
 
     pub fn emit_track_motion(

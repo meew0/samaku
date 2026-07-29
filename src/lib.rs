@@ -543,12 +543,6 @@ pub struct SharedState {
     pub playback_position: Arc<model::playback::Position>,
 }
 
-impl SharedState {
-    fn has_audio(&self) -> bool {
-        self.has_audio.load(std::sync::atomic::Ordering::Relaxed)
-    }
-}
-
 /// More-or-less temporary data, that needs to be mutable within View functions.
 pub struct ViewState {
     pub subtitle_renderer: media::subtitle::Renderer,

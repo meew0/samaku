@@ -191,6 +191,8 @@ impl Position {
     /// # Panics
     /// Panics if the state lock is poisoned.
     pub fn advance_to(&self, new_millis: i64, expected_generation: u64) -> Advance {
+        dbg!(new_millis);
+
         let mut lock = self.state.lock().unwrap();
 
         if lock.generation != expected_generation {
