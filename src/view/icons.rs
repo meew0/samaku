@@ -26,6 +26,7 @@ pub enum Icon {
     ChevronRight = 0xf285,
     Dash = 0xf2ea,
     List = 0xf479,
+    NodePlus = 0xf4a7,
     Pause = 0xf4c4,
     Play = 0xf4f5,
     Plus = 0xf4fe,

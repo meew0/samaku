@@ -929,7 +929,7 @@ fn add_menu<'a>(
     nde_filter_id: subtitle::ExtradataId,
 ) -> Vec<iced_aw::menu::Item<'a, message::Message, iced::Theme, iced::Renderer>> {
     vec![iced_aw::menu::Item::with_menu(
-        iced::widget::button(view::Icon::PlusLg.text().size(24.0))
+        iced::widget::button(view::Icon::NodePlus.text().size(24.0))
             .width(iced::Length::Shrink)
             .on_press(message::Message::None),
         iced_aw::menu::Menu::new(children_from_shell_tree(&SHELL_TREE, nde_filter_id))
