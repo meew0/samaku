@@ -2,9 +2,9 @@
 
 cargo test
 err1=$?
-cargo fmt --check
+cargo fmt --all --check
 err2=$?
-cargo clippy --tests
+cargo clippy --all-targets -- -D warnings
 err3=$?
 
 set -e
