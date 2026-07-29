@@ -216,7 +216,7 @@ impl Default for Position {
             state: Mutex::new(State {
                 millis: 0,
                 min_millis: 0,
-                max_millis: i64::MAX,
+                max_millis: 0,
                 generation: 0,
             }),
             cached_millis: AtomicI64::new(0),
