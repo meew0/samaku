@@ -40,7 +40,7 @@ pub(crate) fn handle_shortcut(
         Key::Character("b") => Some(Message::ImportSubtitleFile),
         Key::Character("n") => Some(Message::SelectAudioFile),
         Key::Character("o") => Some(Message::OpenProject),
-        Key::Character("s") => Some(Message::SaveProject(project::SaveMode::SaveOver)),
+        Key::Character("s") => Some(Message::SaveProject(project::SaveMode::Over)),
         Key::Character(",") => Some(Message::PlaybackAdvanceFrames(media::FrameDelta(-1))),
         Key::Character(".") => Some(Message::PlaybackAdvanceFrames(media::FrameDelta(1))),
         Key::Named(Named::ArrowLeft) => Some(Message::PlaybackAdvanceSeconds(-1.0)),

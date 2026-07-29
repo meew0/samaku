@@ -15,7 +15,7 @@ pub fn file<'a>() -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
             view::menu::item("Import", message::Message::ImportSubtitleFile),
             view::menu::item(
                 "Save",
-                message::Message::SaveProject(project::SaveMode::SaveOver),
+                message::Message::SaveProject(project::SaveMode::Over),
             ),
             view::menu::item(
                 "Save as",

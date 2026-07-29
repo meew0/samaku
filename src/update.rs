@@ -131,6 +131,33 @@ fn update_internal(
         Message::UpdateToastProgress(id, progress) => {
             global_state.toasts.update_progress(id, progress);
         }
+        Message::RequestWindowClose(window_id) => {
+            return if global_state.history.is_dirty(&global_state.project) {
+                let future = rfd::AsyncMessageDialog::new()
+                    .set_title("Unsaved changes")
+                    .set_description("There are unsaved changes. Do you want to save them now?")
+                    .set_buttons(rfd::MessageButtons::YesNoCancel)
+                    .set_level(rfd::MessageLevel::Warning)
+                    .show();
+
+                iced::Task::perform(future, move |result| match result {
+                    rfd::MessageDialogResult::Yes => {
+                        Message::SaveProject(project::SaveMode::OverAndClose(window_id))
+                    }
+                    rfd::MessageDialogResult::No => Message::CloseWindow(window_id),
+                    rfd::MessageDialogResult::Cancel => Message::Unfreeze,
+                    other => panic!("unexpected message dialog result: {other:?}"),
+                })
+            } else {
+                iced::window::close(window_id)
+            };
+        }
+        Message::CloseWindow(window_id) => {
+            return iced::window::close(window_id);
+        }
+        Message::Unfreeze => {
+            // TODO
+        }
         Message::Undo => {
             let messages = global_state.history.undo();
             // Undo messages need to be processed in reverse order, since batching
@@ -311,14 +338,21 @@ fn update_internal(
         Message::SaveProject(mode) => {
             return project::save(global_state, mode);
         }
-        Message::AfterSave(path_opt) => {
+        Message::AfterSave(save_mode, path_opt) => {
             if let Some(path) = path_opt {
                 global_state.project.save_path = Some(path);
 
                 // TODO there's a race condition here (the history might have changed during the save process)
                 // We probably need to somehow pass the history node along in the `AfterSave` message.
                 global_state.project.saved_node = Some(global_state.history.last());
+
+                // This will be the case if the save action was triggered from the window close warning dialog
+                if let Some(window_id) = save_mode.close_after() {
+                    return iced::window::close(window_id);
+                }
             }
+
+            // Don't close the window if the save process was aborted (no path set)
         }
         Message::ExportSubtitleFile => {
             let mut data = String::new();

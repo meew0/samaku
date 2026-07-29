@@ -445,6 +445,7 @@ pub fn run() -> iced::Result {
         .window_size(iced::Size::new(1600.0, 1000.0))
         .title(title)
         .theme(theme)
+        .exit_on_close_request(false)
         .run()
 }
 
@@ -727,6 +728,15 @@ impl Samaku {
             _ => None,
         });
 
+        // Handle window close requests
+        let window_close_events =
+            iced::event::listen_with(|event, _status, window_id| match event {
+                Event::Window(iced::window::Event::CloseRequested) => {
+                    Some(message::Message::RequestWindowClose(window_id))
+                }
+                _ => None,
+            });
+
         // This is the magic code that allows us to listen to messages emitted by the workers.
         // While `subscription` is called frequently, only the result of the first `unfold` call is actually used,
         // which is the only one where `self.workers.receiver.take()` produces a `Some` value.
@@ -744,7 +754,12 @@ impl Samaku {
         };
         let worker_messages = iced::advanced::subscription::from_recipe(runner);
 
-        Subscription::batch(vec![shortcut_events, modifier_events, worker_messages])
+        Subscription::batch(vec![
+            shortcut_events,
+            modifier_events,
+            window_close_events,
+            worker_messages,
+        ])
     }
 }
 

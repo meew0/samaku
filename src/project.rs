@@ -94,8 +94,20 @@ struct Store<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum SaveMode {
-    SaveOver,
+    Over,
+    OverAndClose(iced::window::Id),
     SaveAs,
+}
+
+impl SaveMode {
+    #[must_use]
+    pub fn close_after(self) -> Option<iced::window::Id> {
+        if let SaveMode::OverAndClose(id) = self {
+            Some(id)
+        } else {
+            None
+        }
+    }
 }
 
 pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task<message::Message> {
@@ -110,7 +122,7 @@ pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task
     })();
 
     if let Some(data) = global_state.toasts.anyhow(result) {
-        if matches!(save_mode, SaveMode::SaveOver)
+        if matches!(save_mode, SaveMode::Over | SaveMode::OverAndClose(_))
             && let Some(save_path) = global_state.project.save_path.as_ref()
         {
             let save_path_cloned = save_path.clone();
@@ -120,7 +132,7 @@ pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task
                 smol::fs::write(&save_path_cloned, data).await?;
                 Ok(Some(save_path_cloned))
             };
-            perform_save_future(future)
+            perform_save_future(save_mode, future)
         } else {
             // Save as: select a file path and save the data there
             let future = async {
@@ -128,7 +140,7 @@ pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task
                     .await
                     .context("Failed to write to file")
             };
-            perform_save_future(future)
+            perform_save_future(save_mode, future)
         }
     } else {
         iced::Task::none()
@@ -138,11 +150,14 @@ pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task
 fn perform_save_future<
     F: Future<Output = anyhow::Result<Option<PathBuf>>> + MaybeSend + 'static,
 >(
+    save_mode: SaveMode,
     future: F,
 ) -> iced::Task<message::Message> {
     iced::Task::perform(
         future,
-        message::Message::map_anyhow(message::Message::AfterSave),
+        message::Message::map_anyhow(move |path_opt| {
+            message::Message::AfterSave(save_mode, path_opt)
+        }),
     )
 }
 

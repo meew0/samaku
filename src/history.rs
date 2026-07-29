@@ -191,6 +191,9 @@ impl History {
             | Message::SetFocusedPaneType(_)
             | Message::Toast(_)
             | Message::CloseToast(_)
+            | Message::RequestWindowClose(_)
+            | Message::CloseWindow(_)
+            | Message::Unfreeze
             | Message::Undo
             | Message::Redo
             | Message::SelectVideoFile
@@ -199,7 +202,7 @@ impl History {
             | Message::ImportSubtitleFile
             | Message::OpenProject
             | Message::SaveProject(_)
-            | Message::AfterSave(_)
+            | Message::AfterSave(_, _)
             | Message::ExportSubtitleFile
             | Message::VideoFileSelected(_)
             | Message::VideoLoaded(_)

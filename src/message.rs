@@ -51,6 +51,12 @@ pub enum Message {
     /// Update the progress value of the progress-bar toast with the given stable ID.
     UpdateToastProgress(model::toast::Id, f32),
 
+    RequestWindowClose(iced::window::Id),
+    CloseWindow(iced::window::Id),
+
+    /// Unfreeze the application after closing a dialog box.
+    Unfreeze,
+
     // History control messages
     Undo,
     Redo,
@@ -73,7 +79,7 @@ pub enum Message {
     /// Save subtitle file — storing events as they are represented internally, with NDE filters
     /// reproduced intact as extradata.
     SaveProject(project::SaveMode),
-    AfterSave(Option<std::path::PathBuf>),
+    AfterSave(project::SaveMode, Option<std::path::PathBuf>),
 
     /// Export subtitle file — compiling events and removing extraneous metadata.
     ExportSubtitleFile,
