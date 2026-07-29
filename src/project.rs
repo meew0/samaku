@@ -155,7 +155,7 @@ fn perform_save_future<
 ) -> iced::Task<message::Message> {
     iced::Task::perform(
         future,
-        message::Message::map_anyhow(move |path_opt| {
+        message::Message::map_anyhow_unfreeze(move |path_opt| {
             message::Message::AfterSave(save_mode, path_opt)
         }),
     )

@@ -481,6 +481,10 @@ pub struct Samaku {
     /// Toasts (notifications) to be shown over the UI.
     pub toasts: model::toast::List<message::Message>,
 
+    /// While this is true, the user cannot interact with the application.
+    /// Used to prevent interactions while a dialog box is open.
+    frozen: bool,
+
     /// Metadata of the currently loaded video, if and only if any is loaded.
     pub video_metadata: Option<media::VideoMetadata>,
 
@@ -663,13 +667,21 @@ impl Samaku {
                 .padding(5)
                 .into();
 
-        view::toast::Manager::new(
+        let toast_manager = view::toast::Manager::new(
             content,
             self.toasts.as_slice(),
             message::Message::CloseToast,
         )
-        .timeout(view::toast::DEFAULT_TIMEOUT)
-        .into()
+        .timeout(view::toast::DEFAULT_TIMEOUT);
+
+        if self.frozen {
+            // If a dialog box is open, make sure the user cannot interact with the application
+            // TODO: make this also block keyboard events
+            // TODO: the toasts are still overlaid on top of the freeze element (→ turn the toast stuff into a `stack`)
+            view::freeze(toast_manager)
+        } else {
+            toast_manager.into()
+        }
     }
 
     fn subscription(&self) -> Subscription<message::Message> {
@@ -779,6 +791,7 @@ impl Default for Samaku {
             panes,
             modifiers: iced::keyboard::Modifiers::empty(),
             focus: None,
+            frozen: false,
             toasts: model::toast::List::new(),
             workers: workers::Workers::spawn_all(&shared_state),
             actual_frame: None,

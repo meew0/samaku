@@ -132,6 +132,12 @@ fn update_internal(
             global_state.toasts.update_progress(id, progress);
         }
         Message::RequestWindowClose(window_id) => {
+            if global_state.frozen {
+                // If we already have a dialog box open and the user closes the window regardless,
+                // we don't want to obstruct their desire any further, so just close the window.
+                return iced::window::close(window_id);
+            }
+
             return if global_state.history.is_dirty(&global_state.project) {
                 let future = rfd::AsyncMessageDialog::new()
                     .set_title("Unsaved changes")
@@ -140,6 +146,7 @@ fn update_internal(
                     .set_level(rfd::MessageLevel::Warning)
                     .show();
 
+                global_state.frozen = true;
                 iced::Task::perform(future, move |result| match result {
                     rfd::MessageDialogResult::Yes => {
                         Message::SaveProject(project::SaveMode::OverAndClose(window_id))
@@ -156,7 +163,7 @@ fn update_internal(
             return iced::window::close(window_id);
         }
         Message::Unfreeze => {
-            // TODO
+            global_state.frozen = false;
         }
         Message::Undo => {
             let messages = global_state.history.undo();
@@ -183,9 +190,10 @@ fn update_internal(
             return iced::Task::batch(tasks);
         }
         Message::SelectVideoFile => {
+            global_state.frozen = true;
             return iced::Task::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
-                Message::map_option(|handle: rfd::FileHandle| {
+                Message::map_option_unfreeze(|handle: rfd::FileHandle| {
                     Message::VideoFileSelected(handle.path().to_path_buf())
                 }),
             );
@@ -204,9 +212,10 @@ fn update_internal(
             global_state.workers.emit_playback_step();
         }
         Message::SelectAudioFile => {
+            global_state.frozen = true;
             return iced::Task::perform(
                 rfd::AsyncFileDialog::new().pick_file(),
-                Message::map_option(|handle: rfd::FileHandle| {
+                Message::map_option_unfreeze(|handle: rfd::FileHandle| {
                     Message::AudioFileSelected(handle.path().to_path_buf())
                 }),
             );
@@ -220,6 +229,7 @@ fn update_internal(
             action::replace_subtitle_file(global_state, subtitle::File::default());
         }
         Message::ImportSubtitleFile => {
+            global_state.frozen = true;
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {
                     Some(handle) => subtitle::import(handle.path()).await.map(Some),
@@ -228,7 +238,9 @@ fn update_internal(
             };
             return iced::Task::perform(
                 future,
-                Message::map_anyhow_option(Message::SubtitleFileReadForImport),
+                Message::map_anyhow_unfreeze(Message::map_option(
+                    Message::SubtitleFileReadForImport,
+                )),
             );
         }
         Message::SubtitleFileReadForImport(imported) => {
@@ -278,6 +290,7 @@ fn update_internal(
             action::replace_subtitle_file(global_state, new_file);
         }
         Message::OpenProject => {
+            global_state.frozen = true;
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {
                     Some(handle) => match smol::fs::File::open(handle.path()).await {
@@ -305,6 +318,7 @@ fn update_internal(
             });
         }
         Message::SubtitleFileReadForOpen(path, file_box, warnings) => {
+            global_state.frozen = false;
             global_state.history.clear();
 
             global_state.project.save_path = Some(path);
@@ -329,6 +343,7 @@ fn update_internal(
             }
         }
         Message::SubtitleParseError(err) => {
+            global_state.frozen = false;
             global_state.toasts.push(model::toast::Toast::message(
                 model::toast::Status::Danger,
                 "Error while loading subtitle file".to_owned(),
@@ -336,6 +351,7 @@ fn update_internal(
             ));
         }
         Message::SaveProject(mode) => {
+            global_state.frozen = true;
             return project::save(global_state, mode);
         }
         Message::AfterSave(save_mode, path_opt) => {
@@ -355,6 +371,7 @@ fn update_internal(
             // Don't close the window if the save process was aborted (no path set)
         }
         Message::ExportSubtitleFile => {
+            global_state.frozen = true;
             let mut data = String::new();
             let context = subtitle::compile::context!(global_state, None);
             subtitle::emit(&mut data, &global_state.subtitles, Some(context))
@@ -370,7 +387,7 @@ fn update_internal(
 
             // TODO implement export vs export as, perhaps in project module
             let future = project::select_file_and_save(data);
-            return iced::Task::perform(future, Message::map_anyhow(|_| Message::None));
+            return iced::Task::perform(future, Message::map_anyhow_unfreeze(|_| Message::None));
         }
         Message::VideoFrameAvailable(new_frame, handle) => {
             global_state.actual_frame = Some((new_frame, handle));

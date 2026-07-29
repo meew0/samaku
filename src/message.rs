@@ -319,6 +319,14 @@ impl Message {
         }
     }
 
+    /// Like `map_option`, but will also unfreeze the window.
+    pub fn map_option_unfreeze<A, F1: Fn(A) -> Self>(f1: F1) -> impl Fn(Option<A>) -> Self {
+        move |a_opt| match a_opt {
+            Some(val) => Self::Batch(vec![Self::Unfreeze, f1(val)]),
+            None => Self::Unfreeze,
+        }
+    }
+
     /// Returns a function that maps Ok(x) to some message, and Err(y) to some other message.
     pub fn map_result<A, B, F1: FnOnce(A) -> Self, F2: FnOnce(B) -> Self>(
         f_ok: F1,
@@ -338,17 +346,16 @@ impl Message {
         }
     }
 
-    /// Returns a function that takes an `anyhow::Result<Option<A>>` and maps:
-    ///  - `Ok(Some(...))` to a given message
-    ///  - `Ok(None)` to `message::None`
-    ///  - `Err(...)` to an error toast message
-    pub fn map_anyhow_option<A, F1: Fn(A) -> Self>(
+    /// Like `map_anyhow`, but will also unfreeze the window.
+    pub fn map_anyhow_unfreeze<A, F1: Fn(A) -> Self>(
         f_ok: F1,
-    ) -> impl Fn(anyhow::Result<Option<A>>) -> Self {
-        move |result| match result {
-            Ok(Some(ok_val)) => f_ok(ok_val),
-            Ok(None) => Message::None,
-            Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
+    ) -> impl Fn(anyhow::Result<A>) -> Self {
+        move |result| {
+            let message = match result {
+                Ok(ok_val) => f_ok(ok_val),
+                Err(err_val) => toast_danger("Error".to_owned(), format!("{err_val:#}")),
+            };
+            Self::Batch(vec![Self::Unfreeze, message])
         }
     }
 

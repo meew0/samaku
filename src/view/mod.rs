@@ -94,3 +94,22 @@ pub fn expando<'a, E: Into<iced::Element<'a, message::Message>>>(
         header_element.into()
     }
 }
+
+/// Wrap an element with a mouse area such that the user cannot interact with it.
+pub fn freeze<'a, E: Into<iced::Element<'a, message::Message>>>(
+    content: E,
+) -> iced::Element<'a, message::Message> {
+    let foreground = iced::widget::container("Dialog box open")
+        .center(iced::Length::Fill)
+        .style(|theme: &iced::Theme| {
+            iced::widget::container::background(theme.palette().background.scale_alpha(0.5))
+        });
+
+    iced::widget::stack!(
+        content.into(),
+        iced::widget::opaque(
+            iced::widget::mouse_area(foreground).interaction(iced::mouse::Interaction::NotAllowed)
+        )
+    )
+    .into()
+}
