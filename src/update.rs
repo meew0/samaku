@@ -173,6 +173,7 @@ fn update_internal(
         }
         Message::VideoLoaded(metadata) => {
             global_state.video_metadata = Some(*metadata);
+            action::update_playback_bounds(global_state);
             global_state.workers.emit_playback_step();
         }
         Message::SelectAudioFile => {

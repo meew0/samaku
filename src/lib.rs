@@ -483,6 +483,9 @@ pub struct Samaku {
     /// Metadata of the currently loaded video, if and only if any is loaded.
     pub video_metadata: Option<media::VideoMetadata>,
 
+    /// Length of the currently loaded audio, if and only if any is loaded.
+    pub audio_duration: Option<subtitle::Duration>,
+
     /// Currently loaded subtitles. Will contain some useful defaults if nothing has been loaded
     /// yet.
     pub subtitles: subtitle::File,
@@ -765,6 +768,7 @@ impl Default for Samaku {
             workers: workers::Workers::spawn_all(&shared_state),
             actual_frame: None,
             video_metadata: None,
+            audio_duration: None,
             subtitles: subtitle::File::default(),
             selected_events: model::select::Selection::default(),
             project_properties: project::Properties::default(),

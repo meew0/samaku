@@ -53,11 +53,12 @@ pub(crate) fn load_video(global_state: &crate::Samaku, path_buf: PathBuf, index:
 
 pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
     let mut audio_lock = global_state.shared.audio.lock().unwrap();
-    let has_audio = match media::Audio::load(path_buf) {
+    let audio_duration = match media::Audio::load(path_buf) {
         Ok(audio) => {
+            let duration = audio_duration(&audio.properties);
             *audio_lock = Some(audio);
             drop(audio_lock);
-            true
+            Some(duration)
         }
         Err(err) => {
             *audio_lock = None;
@@ -67,14 +68,56 @@ pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
                 "Error while loading audio file".to_owned(),
                 format!("{err:?}"),
             ));
-            false
+            None
         }
     };
+    global_state.shared.has_audio.store(
+        audio_duration.is_some(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    global_state.audio_duration = audio_duration;
+    update_playback_bounds(global_state);
+    global_state.workers.emit_restart_audio();
+    global_state.workers.emit_playback_step();
+}
+
+/// Returns the length of the audio described by the given properties.
+fn audio_duration(properties: &media::AudioProperties) -> subtitle::Duration {
+    if properties.sample_rate == 0 {
+        return subtitle::Duration(0);
+    }
+
+    let num_frames: i64 = properties.num_frames.try_into().unwrap_or(i64::MAX);
+    subtitle::Duration(num_frames.saturating_mul(1000) / i64::from(properties.sample_rate))
+}
+
+/// Restricts the playback position to the range of the currently loaded media, so it cannot be
+/// seeked or played outside of it.
+///
+/// The video takes precedence if one is loaded, since seeking outside of it would leave the video
+/// pane with nothing to show. Otherwise the audio determines the range, and if neither is loaded,
+/// the position is left unrestricted.
+///
+/// Needs to be called whenever the loaded media changes.
+pub(crate) fn update_playback_bounds(global_state: &crate::Samaku) {
+    let max_millis = if let Some(ref video_metadata) = global_state.video_metadata {
+        // The last frame the video decoder can produce starts here — anything past it would map
+        // to a frame number that does not exist.
+        let last_frame = media::FrameNumber(video_metadata.num_frames.0.saturating_sub(1));
+        video_metadata
+            .frame_rate
+            .time_at_frame(last_frame, media::TimeMode::Exact)
+            .0
+    } else if let Some(duration) = global_state.audio_duration {
+        duration.0.saturating_sub(1)
+    } else {
+        i64::MAX
+    };
+
     global_state
         .shared
-        .has_audio
-        .store(has_audio, std::sync::atomic::Ordering::Relaxed);
-    global_state.workers.emit_restart_audio();
+        .playback_position
+        .set_bounds(0, max_millis.max(0));
 }
 
 pub(crate) fn set_playback(global_state: &crate::Samaku, should_play: bool) {
