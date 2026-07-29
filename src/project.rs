@@ -220,10 +220,10 @@ pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Messa
     }
 
     if let Some(ref audio_path) = global_state.project.properties.audio_path {
-        action::load_audio(global_state, audio_path.clone());
+        action::index_audio_task(audio_path.clone())
+    } else {
+        iced::Task::none()
     }
-
-    iced::Task::none()
 }
 
 pub fn window_title(global_state: &crate::Samaku) -> String {

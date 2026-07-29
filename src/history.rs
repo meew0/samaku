@@ -208,6 +208,7 @@ impl History {
             | Message::VideoLoaded(_)
             | Message::VideoFrameAvailable(_, _)
             | Message::AudioFileSelected(_)
+            | Message::AudioFileIndexed(_, _)
             | Message::SubtitleFileReadForImport(_)
             | Message::SubtitleFileReadForOpen(_, _, _)
             | Message::SubtitleParseError(_)

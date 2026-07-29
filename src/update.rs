@@ -222,7 +222,15 @@ fn update_internal(
         }
         Message::AudioFileSelected(path_buf) => {
             global_state.project.properties.audio_path = Some(path_buf.clone());
-            action::load_audio(global_state, path_buf);
+            return iced::Task::perform(
+                action::index_audio(path_buf.clone()),
+                Message::map_anyhow(move |index| {
+                    Message::AudioFileIndexed(path_buf.clone(), model::NeverClone(index))
+                }),
+            );
+        }
+        Message::AudioFileIndexed(path_buf, index) => {
+            action::load_audio(global_state, &path_buf, index.0);
         }
         Message::NewSubtitleFile => {
             global_state.history.clear();

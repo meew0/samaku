@@ -51,9 +51,32 @@ pub(crate) fn load_video(global_state: &crate::Samaku, path_buf: PathBuf, index:
     global_state.workers.emit_load_video(path_buf, index);
 }
 
-pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
+pub(crate) fn index_audio_task(path_buf: PathBuf) -> iced::Task<message::Message> {
+    iced::Task::perform(
+        index_audio(path_buf.clone()),
+        message::Message::map_anyhow(move |index| {
+            message::Message::AudioFileIndexed(path_buf.clone(), model::NeverClone(index))
+        }),
+    )
+}
+
+pub(crate) async fn index_audio<P: AsRef<std::path::Path>>(
+    path: P,
+) -> anyhow::Result<media::Index> {
+    // TODO progress toast for audio indexing
+    let indexer = media::Audio::create_indexer(&path)?;
+    let index = smol::unblock(|| indexer.run()).await?;
+
+    Ok(index)
+}
+
+pub(crate) fn load_audio<P: AsRef<std::path::Path>>(
+    global_state: &mut crate::Samaku,
+    path: P,
+    index: media::Index,
+) {
     let mut audio_lock = global_state.shared.audio.lock().unwrap();
-    let audio_duration = match media::Audio::load(path_buf) {
+    let audio_duration = match media::Audio::load(path, index) {
         Ok(audio) => {
             let duration = audio_duration(&audio.properties);
             *audio_lock = Some(audio);
@@ -71,6 +94,7 @@ pub(crate) fn load_audio(global_state: &mut crate::Samaku, path_buf: PathBuf) {
             None
         }
     };
+
     global_state.shared.has_audio.store(
         audio_duration.is_some(),
         std::sync::atomic::Ordering::Relaxed,

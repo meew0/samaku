@@ -100,6 +100,7 @@ pub enum Message {
 
     /// An audio file has been selected and should be loaded.
     AudioFileSelected(std::path::PathBuf),
+    AudioFileIndexed(std::path::PathBuf, model::NeverClone<media::Index>),
 
     /// A subtitle file has been selected and read, and its contents are now available.
     SubtitleFileReadForImport(subtitle::import::Contents),

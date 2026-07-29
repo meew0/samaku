@@ -1,6 +1,7 @@
 use anyhow::Context as _;
 
 use super::bindings::ffms2;
+use super::index;
 pub use ffms2::AudioProperties as Properties;
 pub(crate) use ffms2::init;
 
@@ -10,20 +11,27 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn load<P: AsRef<std::path::Path>>(filename: P) -> anyhow::Result<Self> {
+    pub fn create_indexer<P: AsRef<std::path::Path>>(
+        filename: P,
+    ) -> anyhow::Result<index::Indexer> {
         let mut indexer = ffms2::Indexer::new(filename.as_ref()).context("creating indexer")?;
         indexer.set_track_type_index_settings(ffms2::TrackType::Audio, 1);
-        let mut index = indexer
-            .do_indexing(ffms2::IndexErrorHandling::Abort)
-            .context("indexing")?;
+        Ok(index::Indexer::new(indexer))
+    }
 
-        let first_audio_track = index
+    pub fn load<P: AsRef<std::path::Path>>(
+        filename: P,
+        index: index::Index,
+    ) -> anyhow::Result<Self> {
+        let mut ffms_index = index.into_inner();
+
+        let first_audio_track = ffms_index
             .first_track_of_type(ffms2::TrackType::Audio)
             .context("finding first audio track")?;
         let source = ffms2::AudioSource::new(
             filename.as_ref(),
             first_audio_track,
-            &index,
+            &ffms_index,
             ffms2::AudioDelayMode::FirstVideoTrack,
         )
         .context("creating audio source")?;
@@ -57,34 +65,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_music_mp3() {
+    fn read_audio_frames() -> anyhow::Result<()> {
         init();
 
-        let audio = Audio::load(crate::test_utils::test_file("test_files/music.mp3")).unwrap();
+        let path = crate::test_utils::test_file("test_files/music.mp3");
+        let indexer = Audio::create_indexer(&path)?;
+        let index = indexer.run()?;
+        let mut audio = Audio::load(&path, index)?;
 
         assert_eq!(audio.properties.channels, 2);
         assert_eq!(audio.properties.sample_rate, 44100);
         assert_eq!(audio.properties.sample_format, cpal::SampleFormat::F32);
-    }
-
-    #[test]
-    fn read_audio_frames() {
-        init();
-
-        let mut audio = Audio::load(crate::test_utils::test_file("test_files/music.mp3")).unwrap();
 
         // Read 1024 frames starting from frame 1000 (packed: channels * frames samples)
         let count_frames: u64 = 1024;
         let channels = usize::from(audio.properties.channels);
         #[expect(clippy::cast_possible_truncation, reason = "64 bit only")]
         let mut buf = vec![0.0_f32; channels * count_frames as usize];
-        audio
-            .fill_buffer_packed(&mut buf, 1000, count_frames)
-            .unwrap();
+        audio.fill_buffer_packed(&mut buf, 1000, count_frames)?;
 
         // The decoded audio should contain some non-zero samples
         assert!(buf.iter().any(|sample| *sample != 0.0));
         // All samples should be in a valid float range for audio
         assert!(buf.iter().all(|sample| sample.is_finite()));
+
+        Ok(())
     }
 }
