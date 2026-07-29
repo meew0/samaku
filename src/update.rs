@@ -164,7 +164,7 @@ fn update_internal(
             );
         }
         Message::VideoFileSelected(path_buf) => {
-            global_state.project_properties.video_path = Some(path_buf.clone());
+            global_state.project.properties.video_path = Some(path_buf.clone());
             action::index_video_and_load(global_state, path_buf);
         }
         Message::VideoIndexed(path_buf, index_never_clone) => {
@@ -185,7 +185,7 @@ fn update_internal(
             );
         }
         Message::AudioFileSelected(path_buf) => {
-            global_state.project_properties.audio_path = Some(path_buf.clone());
+            global_state.project.properties.audio_path = Some(path_buf.clone());
             action::load_audio(global_state, path_buf);
         }
         Message::NewSubtitleFile => {
@@ -250,13 +250,17 @@ fn update_internal(
 
             action::replace_subtitle_file(global_state, new_file);
         }
-        Message::OpenSubtitleFile => {
+        Message::OpenProject => {
             let future = async {
                 match rfd::AsyncFileDialog::new().pick_file().await {
                     Some(handle) => match smol::fs::File::open(handle.path()).await {
-                        Ok(file) => {
-                            let lines = smol::io::BufReader::new(file).lines();
-                            subtitle::File::parse(lines).await.map(Box::new)
+                        Ok(system_file) => {
+                            let lines = smol::io::BufReader::new(system_file).lines();
+                            subtitle::File::parse(lines)
+                                .await
+                                .map(|(ass_file, warnings)| {
+                                    (handle.path().to_owned(), Box::new(ass_file), warnings)
+                                })
                         }
                         Err(io_err) => Err(subtitle::parse::SubtitleParseError::IoError(io_err)),
                     },
@@ -265,18 +269,25 @@ fn update_internal(
             };
 
             return iced::Task::perform(future, |result| match result {
-                Ok(file_box) => Message::SubtitleFileReadForOpen(model::NeverClone(file_box)),
+                Ok((path, file_box, warnings)) => Message::SubtitleFileReadForOpen(
+                    path,
+                    model::NeverClone(file_box),
+                    model::NeverClone(warnings),
+                ),
                 Err(err) => Message::SubtitleParseError(model::NeverClone(err)),
             });
         }
-        Message::SubtitleFileReadForOpen(file_box) => {
+        Message::SubtitleFileReadForOpen(path, file_box, warnings) => {
             global_state.history.clear();
 
+            global_state.project.save_path = Some(path);
+            global_state.project.saved_node = Some(global_state.history.last());
+
             // Load ASS subtitles themselves
-            let (ass_file, warnings) = *(file_box.0);
+            let ass_file = *(file_box.0);
             action::replace_subtitle_file(global_state, ass_file);
 
-            for warning in &warnings {
+            for warning in &*warnings {
                 global_state.toasts.push(model::toast::Toast::message(
                     model::toast::Status::Primary,
                     "Warning while loading subtitle file".to_owned(),
@@ -297,25 +308,16 @@ fn update_internal(
                 err.to_string(),
             ));
         }
-        Message::SaveSubtitleFile => {
-            let result = (|| {
-                project::store(global_state).context("Failed to serialize project data")?;
+        Message::SaveProject(mode) => {
+            return project::save(global_state, mode);
+        }
+        Message::AfterSave(path_opt) => {
+            if let Some(path) = path_opt {
+                global_state.project.save_path = Some(path);
 
-                let mut data = String::new();
-                subtitle::emit(&mut data, &global_state.subtitles, None)
-                    .context("subtitle::emit() failed")?; // should never happen
-
-                Ok(data)
-            })();
-
-            if let Some(data) = global_state.toasts.anyhow(result) {
-                let future = async {
-                    select_file_and_save(data)
-                        .await
-                        .context("Failed to write to file")?;
-                    Ok(())
-                };
-                return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
+                // TODO there's a race condition here (the history might have changed during the save process)
+                // We probably need to somehow pass the history node along in the `AfterSave` message.
+                global_state.project.saved_node = Some(global_state.history.last());
             }
         }
         Message::ExportSubtitleFile => {
@@ -332,8 +334,9 @@ fn update_internal(
                 ));
             }
 
-            let future = select_file_and_save(data);
-            return iced::Task::perform(future, Message::map_anyhow(|()| Message::None));
+            // TODO implement export vs export as, perhaps in project module
+            let future = project::select_file_and_save(data);
+            return iced::Task::perform(future, Message::map_anyhow(|_| Message::None));
         }
         Message::VideoFrameAvailable(new_frame, handle) => {
             global_state.actual_frame = Some((new_frame, handle));
@@ -1604,13 +1607,4 @@ pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
             &global_state.subtitles.events,
         );
     }
-}
-
-async fn select_file_and_save(data: String) -> anyhow::Result<()> {
-    if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
-        smol::fs::write(handle.path(), data).await?;
-    }
-
-    // No file selected
-    Ok(())
 }

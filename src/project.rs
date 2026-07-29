@@ -13,12 +13,28 @@
 )]
 
 use crate::subtitle::EventIndex;
-use crate::{action, config, media, message, model, pane};
+use crate::{action, config, history, media, message, model, pane, subtitle, version};
 use anyhow::Context as _;
+use iced::advanced::graphics::futures::MaybeSend;
 use iced::widget::pane_grid;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use thiserror::Error;
+
+#[derive(Default)]
+pub struct Project {
+    pub save_path: Option<PathBuf>,
+    pub saved_node: Option<Rc<RefCell<history::Node>>>,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Properties {
+    pub video_path: Option<PathBuf>,
+    pub audio_path: Option<PathBuf>,
+}
 
 /// Serialize data into Samaku's preferred alphanumeric binary format (czb = CBOR + zlib + base64).
 ///
@@ -65,21 +81,69 @@ pub enum DeserializeError {
     Deserialise(String),
 }
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct Properties {
-    pub video_path: Option<PathBuf>,
-    pub audio_path: Option<PathBuf>,
-}
-
 pub const METADATA_KEY: &str = "Samaku Project Metadata";
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Project<'a> {
+struct Store<'a> {
     pane_layout: PaneLayout<'a>,
     selected_events: Cow<'a, model::select::Selection<EventIndex>>,
     properties: Cow<'a, Properties>,
     motion_tracks: Cow<'a, media::motion::TrackList>,
     selected_tracks: Cow<'a, model::select::Selection<media::motion::TrackId>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SaveMode {
+    SaveOver,
+    SaveAs,
+}
+
+pub fn save(global_state: &mut crate::Samaku, save_mode: SaveMode) -> iced::Task<message::Message> {
+    let result = (|| {
+        store(global_state).context("Failed to serialize project data")?;
+
+        let mut data = String::new();
+        subtitle::emit(&mut data, &global_state.subtitles, None)
+            .context("subtitle::emit() failed")?; // should never happen
+
+        Ok(data)
+    })();
+
+    if let Some(data) = global_state.toasts.anyhow(result) {
+        if matches!(save_mode, SaveMode::SaveOver)
+            && let Some(save_path) = global_state.project.save_path.as_ref()
+        {
+            let save_path_cloned = save_path.clone();
+
+            // Save over
+            let future = async {
+                smol::fs::write(&save_path_cloned, data).await?;
+                Ok(Some(save_path_cloned))
+            };
+            perform_save_future(future)
+        } else {
+            // Save as: select a file path and save the data there
+            let future = async {
+                select_file_and_save(data)
+                    .await
+                    .context("Failed to write to file")
+            };
+            perform_save_future(future)
+        }
+    } else {
+        iced::Task::none()
+    }
+}
+
+fn perform_save_future<
+    F: Future<Output = anyhow::Result<Option<PathBuf>>> + MaybeSend + 'static,
+>(
+    future: F,
+) -> iced::Task<message::Message> {
+    iced::Task::perform(
+        future,
+        message::Message::map_anyhow(message::Message::AfterSave),
+    )
 }
 
 /// Copy project data from subtitle data into global state.
@@ -91,9 +155,9 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
         .extra_info
         .get(METADATA_KEY)
     {
-        let project = deserialize_czb::<Project>(czb.as_bytes())
+        let project = deserialize_czb::<Store>(czb.as_bytes())
             .context("Failed to deserialize project metadata")?;
-        let Project {
+        let Store {
             pane_layout,
             selected_events,
             properties,
@@ -102,7 +166,7 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
         } = project;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
         global_state.selected_events = selected_events.into_owned();
-        global_state.project_properties = properties.into_owned();
+        global_state.project.properties = properties.into_owned();
         global_state.motion_tracks = motion_tracks.into_owned();
         global_state.selected_tracks = selected_tracks.into_owned();
         Ok(true)
@@ -116,11 +180,11 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
 pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
     let pane_layout = PaneLayout::from_pane_grid(&global_state.panes, global_state.panes.layout());
 
-    let project = Project {
+    let project = Store {
         pane_layout,
         selected_events: Cow::Borrowed(&global_state.selected_events),
         // TODO store video/audio paths to be relative to the subtitle/project file (e.g. using the `pathdiff` crate)
-        properties: Cow::Borrowed(&global_state.project_properties),
+        properties: Cow::Borrowed(&global_state.project.properties),
         motion_tracks: Cow::Borrowed(&global_state.motion_tracks),
         selected_tracks: Cow::Borrowed(&global_state.selected_tracks),
     };
@@ -136,15 +200,39 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
 
 /// Perform after-load tasks such as opening linked audio and video files.
 pub fn after_load(global_state: &mut crate::Samaku) -> iced::Task<message::Message> {
-    if let Some(ref video_path) = global_state.project_properties.video_path {
+    if let Some(ref video_path) = global_state.project.properties.video_path {
         action::index_video_and_load(global_state, video_path.clone());
     }
 
-    if let Some(ref audio_path) = global_state.project_properties.audio_path {
+    if let Some(ref audio_path) = global_state.project.properties.audio_path {
         action::load_audio(global_state, audio_path.clone());
     }
 
     iced::Task::none()
+}
+
+pub fn window_title(global_state: &crate::Samaku) -> String {
+    let is_dirty = global_state.history.is_dirty(&global_state.project);
+    if let Some(save_path) = global_state.project.save_path.as_ref()
+        && let Some(file_name) = save_path.file_name()
+    {
+        let star = if is_dirty { "*" } else { "" };
+        format!("{}{star} — samaku {}", file_name.display(), version::Long)
+    } else if is_dirty {
+        format!("(unsaved changes) — samaku {}", version::Long)
+    } else {
+        format!("samaku {}", version::Long)
+    }
+}
+
+pub async fn select_file_and_save(data: String) -> anyhow::Result<Option<PathBuf>> {
+    if let Some(handle) = rfd::AsyncFileDialog::new().save_file().await {
+        smol::fs::write(handle.path(), data).await?;
+        return Ok(Some(handle.path().to_owned()));
+    }
+
+    // No file selected
+    Ok(None)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

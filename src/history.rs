@@ -8,6 +8,7 @@
 //! as possible incrementally.
 
 use crate::message::Message;
+use crate::project;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -38,6 +39,10 @@ impl Node {
             timestamp: std::time::Instant::now(),
         }
     }
+
+    fn is_root(&self) -> bool {
+        self.prev.is_none()
+    }
 }
 
 impl Default for History {
@@ -58,7 +63,8 @@ impl History {
         Rc::new(RefCell::new(Node::root()))
     }
 
-    fn last(&self) -> Rc<RefCell<Node>> {
+    #[must_use]
+    pub fn last(&self) -> Rc<RefCell<Node>> {
         Rc::clone(&self.last)
     }
 
@@ -191,15 +197,16 @@ impl History {
             | Message::SelectAudioFile
             | Message::NewSubtitleFile
             | Message::ImportSubtitleFile
-            | Message::OpenSubtitleFile
-            | Message::SaveSubtitleFile
+            | Message::OpenProject
+            | Message::SaveProject(_)
+            | Message::AfterSave(_)
             | Message::ExportSubtitleFile
             | Message::VideoFileSelected(_)
             | Message::VideoLoaded(_)
             | Message::VideoFrameAvailable(_, _)
             | Message::AudioFileSelected(_)
             | Message::SubtitleFileReadForImport(_)
-            | Message::SubtitleFileReadForOpen(_)
+            | Message::SubtitleFileReadForOpen(_, _, _)
             | Message::SubtitleParseError(_)
             | Message::PlaybackStep
             | Message::PlaybackAdvanceFrames(_)
@@ -360,6 +367,16 @@ impl History {
     /// Removes all history nodes.
     pub fn clear(&mut self) {
         self.last = Self::root_node();
+    }
+
+    /// Check whether edits were made since this history was last saved.
+    #[must_use]
+    pub fn is_dirty(&self, project: &project::Project) -> bool {
+        if let Some(saved_node) = project.saved_node.as_ref() {
+            !Rc::ptr_eq(&self.last, saved_node)
+        } else {
+            !self.last.borrow().is_root()
+        }
     }
 }
 

@@ -493,9 +493,9 @@ pub struct Samaku {
     /// The set of events, identified by index, that are currently selected.
     pub selected_events: model::select::Selection<subtitle::EventIndex>,
 
-    /// Project properties, that is, data not stored elsewhere that conceptually belongs to a “Samaku project”,
-    /// for example, paths to linked media files etc.
-    pub project_properties: project::Properties,
+    /// Project data, that is, data not stored elsewhere that conceptually belongs to a “Samaku project”,
+    /// for example, paths to linked media files etc., as well as the file save path and the like.
+    pub project: project::Project,
 
     /// The number of the frame that is actually being displayed right now,
     /// together with the image it represents.
@@ -771,7 +771,7 @@ impl Default for Samaku {
             audio_duration: None,
             subtitles: subtitle::File::default(),
             selected_events: model::select::Selection::default(),
-            project_properties: project::Properties::default(),
+            project: project::Project::default(),
             shared: shared_state,
             view: RefCell::new(ViewState {
                 subtitle_renderer: media::subtitle::Renderer::new(),
@@ -785,8 +785,8 @@ impl Default for Samaku {
     }
 }
 
-fn title(_state: &Samaku) -> String {
-    format!("samaku {}", version::Long)
+fn title(state: &Samaku) -> String {
+    project::window_title(state)
 }
 
 fn theme(_state: &Samaku) -> iced::Theme {

@@ -2,7 +2,7 @@ use iced::widget::pane_grid;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use crate::{action, media, model, nde, pane, subtitle};
+use crate::{action, media, model, nde, pane, project, subtitle};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -68,11 +68,12 @@ pub enum Message {
 
     /// Open — use our own parser for .ass parsing. This will load NDE filters and keep
     /// other metadata intact.
-    OpenSubtitleFile,
+    OpenProject,
 
     /// Save subtitle file — storing events as they are represented internally, with NDE filters
     /// reproduced intact as extradata.
-    SaveSubtitleFile,
+    SaveProject(project::SaveMode),
+    AfterSave(Option<std::path::PathBuf>),
 
     /// Export subtitle file — compiling events and removing extraneous metadata.
     ExportSubtitleFile,
@@ -100,7 +101,9 @@ pub enum Message {
     /// A subtitle file has been selected, read, and parsed into an `AssFile`.
     /// This message uses `NeverClone`, so it should never be cloned.
     SubtitleFileReadForOpen(
-        model::NeverClone<Box<(subtitle::File, Vec<subtitle::parse::Warning>)>>,
+        std::path::PathBuf,
+        model::NeverClone<Box<subtitle::File>>,
+        model::NeverClone<Vec<subtitle::parse::Warning>>,
     ),
 
     SubtitleParseError(model::NeverClone<subtitle::parse::SubtitleParseError>),

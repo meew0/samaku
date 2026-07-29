@@ -2,7 +2,7 @@
 
 use iced_aw::menu::{Item, Menu};
 
-use crate::{history, message, view};
+use crate::{history, message, project, view};
 
 pub fn file<'a>() -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
     Item::with_menu(
@@ -11,9 +11,16 @@ pub fn file<'a>() -> Item<'a, message::Message, iced::Theme, iced::Renderer> {
             .width(iced::Length::Shrink),
         Menu::new(vec![
             view::menu::item("New", message::Message::NewSubtitleFile),
-            view::menu::item("Open", message::Message::OpenSubtitleFile),
+            view::menu::item("Open", message::Message::OpenProject),
             view::menu::item("Import", message::Message::ImportSubtitleFile),
-            view::menu::item("Save", message::Message::SaveSubtitleFile),
+            view::menu::item(
+                "Save",
+                message::Message::SaveProject(project::SaveMode::SaveOver),
+            ),
+            view::menu::item(
+                "Save as",
+                message::Message::SaveProject(project::SaveMode::SaveAs),
+            ),
             view::menu::item("Export", message::Message::ExportSubtitleFile),
         ])
         .width(iced::Length::Fixed(150.0)),
