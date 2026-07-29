@@ -17,7 +17,19 @@ impl super::LocalState for State {
         self_pane: super::Pane,
         global_state: &'a crate::Samaku,
     ) -> super::View<'a> {
-        let video_start = subtitle::StartTime(0);
+        let media_start = subtitle::StartTime(0);
+        // The end assuming no video is loaded.
+        let default_end = global_state.audio_duration.unwrap_or(subtitle::Duration(0));
+        let media_end = media_start
+            + global_state
+                .video_metadata
+                .as_ref()
+                .map_or(default_end, |video_metadata| video_metadata.duration);
+
+        let media_bounds = MediaBounds {
+            start: media_start,
+            end: media_end,
+        };
 
         let canvas_data = CanvasData {
             pane: self_pane,
@@ -26,16 +38,7 @@ impl super::LocalState for State {
                 .video_metadata
                 .as_ref()
                 .map(|video_metadata| &video_metadata.frame_rate),
-            video_bounds: VideoBounds {
-                start: video_start,
-                end: video_start
-                    + global_state
-                        .video_metadata
-                        .as_ref()
-                        .map_or(subtitle::Duration(0), |video_metadata| {
-                            video_metadata.duration
-                        }),
-            },
+            media_bounds,
             playback_position: global_state.shared.playback_position.subtitle_time(),
             events: global_state
                 .subtitles
@@ -155,12 +158,12 @@ struct CanvasData<'a> {
     position: Position,
     frame_rate: Option<&'a FrameRate>,
     playback_position: subtitle::StartTime,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
     events: Vec<EventReference>,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct VideoBounds {
+struct MediaBounds {
     start: subtitle::StartTime,
     end: subtitle::StartTime,
 }
@@ -332,25 +335,21 @@ impl canvas::Program<message::Message> for CanvasData<'_> {
         let draw_bounds = bounds;
         let mut frame = canvas::Frame::new(renderer, draw_bounds.size());
 
-        draw_background(draw_bounds, &mut frame, self.video_bounds, self.position);
+        draw_background(draw_bounds, &mut frame, self.media_bounds, self.position);
 
         if let Some(frame_rate) = self.frame_rate
             && self.position.pixel_per_ms(draw_bounds.width) > 0.4
         {
-            draw_frame_ticks(&mut frame, self.video_bounds, self.position, frame_rate);
+            draw_frame_ticks(&mut frame, self.media_bounds, self.position, frame_rate);
         }
-        draw_seconds_ticks(&mut frame, self.video_bounds, self.position);
+        draw_seconds_ticks(&mut frame, self.media_bounds, self.position);
 
-        if self.frame_rate.is_some() {
-            draw_cursor(
-                &mut frame,
-                self.position,
-                self.playback_position,
-                &mut state.view_state.borrow_mut(),
-            );
-        } else {
-            state.view_state.borrow_mut().cursor_x = None;
-        }
+        draw_cursor(
+            &mut frame,
+            self.position,
+            self.playback_position,
+            &mut state.view_state.borrow_mut(),
+        );
 
         draw_subtitle_stack(
             &mut frame,
@@ -523,22 +522,22 @@ impl CanvasData<'_> {
     }
 }
 
-fn background_x_bounds(position: Position, video_bounds: VideoBounds, width: f32) -> (f32, f32) {
+fn background_x_bounds(position: Position, media_bounds: MediaBounds, width: f32) -> (f32, f32) {
     let pixel_per_ms = position.pixel_per_ms(width);
-    let start_x = (position.time_delta(video_bounds.start) * pixel_per_ms).clamp(0.0, width);
-    let end_x = (position.time_delta(video_bounds.end) * pixel_per_ms).clamp(0.0, width);
+    let start_x = (position.time_delta(media_bounds.start) * pixel_per_ms).clamp(0.0, width);
+    let end_x = (position.time_delta(media_bounds.end) * pixel_per_ms).clamp(0.0, width);
     (start_x, end_x)
 }
 
 fn seconds_tick_positions(
     position: Position,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
     step: i64,
 ) -> Vec<subtitle::StartTime> {
-    let right_limit = position.right.0.min(video_bounds.end.0.saturating_sub(1));
+    let right_limit = position.right.0.min(media_bounds.end.0.saturating_sub(1));
     let mut tick_ms = subtitle::StartTime(right_limit - right_limit.rem_euclid(step));
     let mut ticks = Vec::new();
-    while tick_ms >= position.left && tick_ms >= video_bounds.start {
+    while tick_ms >= position.left && tick_ms >= media_bounds.start {
         ticks.push(tick_ms);
         tick_ms = tick_ms - subtitle::Duration(step);
     }
@@ -547,10 +546,10 @@ fn seconds_tick_positions(
 
 fn frame_tick_bounds(
     position: Position,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
 ) -> (subtitle::StartTime, subtitle::StartTime) {
-    let left_bound = position.left.0.max(video_bounds.start.0);
-    let right_bound = position.right.0.min(video_bounds.end.0);
+    let left_bound = position.left.0.max(media_bounds.start.0);
+    let right_bound = position.right.0.min(media_bounds.end.0);
     (
         subtitle::StartTime(left_bound),
         subtitle::StartTime(right_bound),
@@ -560,10 +559,10 @@ fn frame_tick_bounds(
 fn draw_background(
     draw_bounds: iced::Rectangle,
     frame: &mut canvas::Frame<Renderer>,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
     position: Position,
 ) {
-    let (start_x, end_x) = background_x_bounds(position, video_bounds, draw_bounds.width);
+    let (start_x, end_x) = background_x_bounds(position, media_bounds, draw_bounds.width);
 
     // Dark region before video start
     if start_x > 0.0 {
@@ -602,7 +601,7 @@ fn draw_background(
 
 fn draw_seconds_ticks(
     frame: &mut canvas::Frame<Renderer>,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
     position: Position,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
@@ -612,7 +611,7 @@ fn draw_seconds_ticks(
     )]
     let step = ((1000.0 * 2_f32.powi(-3 - pixel_per_ms.log2().round() as i32)) as i64).max(500);
 
-    for tick_ms in seconds_tick_positions(position, video_bounds, step) {
+    for tick_ms in seconds_tick_positions(position, media_bounds, step) {
         let tick_x = position.time_delta(tick_ms) * pixel_per_ms;
 
         frame.fill_rectangle(
@@ -635,12 +634,12 @@ fn draw_seconds_ticks(
 
 fn draw_frame_ticks(
     frame: &mut canvas::Frame<Renderer>,
-    video_bounds: VideoBounds,
+    media_bounds: MediaBounds,
     position: Position,
     frame_rate: &FrameRate,
 ) {
     let pixel_per_ms = position.pixel_per_ms(frame.width());
-    let (left_bound, right_bound) = frame_tick_bounds(position, video_bounds);
+    let (left_bound, right_bound) = frame_tick_bounds(position, media_bounds);
     let first_frame = media::FrameNumber(
         frame_rate
             .frame_at_time(left_bound, media::TimeMode::Exact)
@@ -961,8 +960,8 @@ mod tests {
         }
     }
 
-    fn make_bounds(start_ms: i64, end_ms: i64) -> VideoBounds {
-        VideoBounds {
+    fn make_bounds(start_ms: i64, end_ms: i64) -> MediaBounds {
+        MediaBounds {
             start: subtitle::StartTime(start_ms),
             end: subtitle::StartTime(end_ms),
         }
