@@ -79,6 +79,7 @@ ttf-parser = { version = "0.25.1", default-features = false }
 [dev-dependencies]
 
 # Test dependencies
+iced_test = "0.14"
 assert_matches2 = "0.1.2"
 assert_float_eq = "1.2.0"
 

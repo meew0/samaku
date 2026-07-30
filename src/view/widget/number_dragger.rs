@@ -823,3 +823,33 @@ where
         Self::new(widget)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    enum Message {
+        Change(i64),
+    }
+
+    #[test]
+    fn simulate() {
+        let mut value: i64 = 1;
+
+        let element: NumberDragger<i64, Message, iced::Theme> =
+            NumberDragger::new(value, 0..=2, Message::Change);
+        let mut simulator = iced_test::simulator(element);
+
+        simulator.point_at(Point::new(10.0, 10.0));
+        simulator.simulate(iced_test::simulator::click());
+        simulator.simulate(iced_test::simulator::click());
+
+        for message in simulator.into_messages() {
+            let Message::Change(new_value) = message;
+            value = new_value;
+        }
+
+        assert_eq!(value, 0);
+    }
+}
