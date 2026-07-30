@@ -60,6 +60,7 @@ pub trait LocalState {
 /// this trait can be passed to the `LocalState::visit` method, which will result in the `visit_node_editor` method
 /// being called only for node editor panes.
 pub trait Visitor {
+    fn visit_grid(&mut self, _grid_state: &mut grid::State) {}
     fn visit_node_editor(&mut self, _node_editor_state: &mut node_editor::State) {}
     fn visit_style_editor(&mut self, _style_editor_state: &mut style_editor::State) {}
     fn visit_text_editor(&mut self, _text_editor_state: &mut text_editor::State) {}

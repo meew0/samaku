@@ -9,13 +9,15 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::mem::replace;
 
-/// The global update method. Takes a [`Message`] emitted by a UI widget somewhere, runs
+/// The global update method.
+///
+/// Takes a [`Message`] emitted by a UI widget somewhere, runs
 /// whatever processing is required, and updates the global state based on it. This will cause
 /// iced to rerender the application afterwards.
 ///
 /// This specific method is primarily concerned with updating the history (undo/redo),
 /// the message processing is handed by internal methods.
-pub(crate) fn update(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
+pub fn update(global_state: &mut super::Samaku, message: Message) -> iced::Task<Message> {
     // Create a history key, if the message is one that could potentially be undone.
     let mut key = global_state.history.make_key(&message);
 
@@ -1659,7 +1661,7 @@ fn update_internal(
 
 /// Notifies all entities (like node and text editor panes) that keep some internal copy of the
 /// selected events to update their internal representations.
-pub(crate) fn notify_selected_events(global_state: &mut super::Samaku) {
+pub fn notify_selected_events(global_state: &mut super::Samaku) {
     for pane in global_state.panes.panes.values_mut() {
         pane.local.update_selected_events(
             &global_state.selected_events,

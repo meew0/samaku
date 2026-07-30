@@ -11,6 +11,7 @@ mod video_decoder;
 
 #[derive(Debug, Clone)]
 pub enum Type {
+    Dummy,
     VideoDecoder,
     Indexer,
     Playback,
@@ -25,6 +26,15 @@ pub struct Worker<M> {
 }
 
 impl<M> Worker<M> {
+    fn dummy() -> Worker<M> {
+        let (tx_in, _) = std::sync::mpsc::channel::<M>();
+        Worker {
+            worker_type: Type::Dummy,
+            _handle: thread::spawn(|| {}),
+            message_in: tx_in,
+        }
+    }
+
     fn dispatch(&self, message: M) {
         self.message_in.send(message).unwrap_or_else(|err| {
             panic!(
@@ -81,6 +91,25 @@ impl Workers {
             playback: playback::spawn(global_sender.clone(), shared_state),
             _log_toasts: log_toasts::spawn(global_sender.clone(), shared_state),
             progress_listener: progress_listener::spawn(global_sender.clone(), shared_state),
+
+            _sender: global_sender,
+            receiver: RefCell::new(Some(receiver)),
+        }
+    }
+
+    /// Construct a new `Workers` instance where all workers are dummies
+    /// that cannot receive any messages.
+    #[must_use]
+    pub fn spawn_dummies(_shared_state: &crate::SharedState) -> Self {
+        let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
+        let global_sender = GlobalSender(sender);
+
+        Self {
+            video_decoder: Worker::dummy(),
+            indexer: Worker::dummy(),
+            playback: Worker::dummy(),
+            _log_toasts: Worker::dummy(),
+            progress_listener: Worker::dummy(),
 
             _sender: global_sender,
             receiver: RefCell::new(Some(receiver)),

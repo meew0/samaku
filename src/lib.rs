@@ -415,7 +415,7 @@ pub mod project;
 pub mod resources;
 pub mod style;
 pub mod subtitle;
-mod update;
+pub mod update;
 pub mod version;
 pub mod view;
 pub mod workers;
@@ -473,10 +473,10 @@ pub struct Samaku {
 
     /// The current state of the global pane grid.
     /// Includes all state for the individual panes themselves.
-    panes: pane_grid::State<pane::State>,
+    pub panes: pane_grid::State<pane::State>,
 
     /// Currently focused pane, if one exists.
-    focus: Option<pane_grid::Pane>,
+    pub focus: Option<pane_grid::Pane>,
 
     /// Toasts (notifications) to be shown over the UI.
     pub toasts: model::toast::List<message::Message>,
@@ -550,6 +550,47 @@ pub struct ViewState {
 
 /// Utility methods for global state.
 impl Samaku {
+    /// Create a new samaku instance.
+    ///
+    /// The given function will be called with the shared state and should spawn the workers as desired.
+    pub fn new<W: FnOnce(&SharedState) -> workers::Workers>(worker_spawn_fn: W) -> Self {
+        let panes = pane_grid::State::with_configuration(initial_pane_configuration());
+
+        // Initial shared state...
+        let shared_state = SharedState {
+            has_audio: AtomicBool::new(false),
+            audio: Arc::new(Mutex::new(None)),
+            playback_position: Arc::new(model::playback::Position::default()),
+        };
+
+        let workers = worker_spawn_fn(&shared_state);
+
+        // ...and initial global state
+        Samaku {
+            panes,
+            modifiers: iced::keyboard::Modifiers::empty(),
+            focus: None,
+            frozen: false,
+            toasts: model::toast::List::new(),
+            workers,
+            actual_frame: None,
+            video_metadata: None,
+            audio_duration: None,
+            subtitles: subtitle::File::default(),
+            selected_events: model::select::Selection::default(),
+            project: project::Project::default(),
+            shared: shared_state,
+            view: RefCell::new(ViewState {
+                subtitle_renderer: media::subtitle::Renderer::new(),
+            }),
+            playing: false,
+            reticules: None,
+            motion_tracks: media::motion::TrackList::new(),
+            selected_tracks: model::select::Selection::default(),
+            history: history::History::new(),
+        }
+    }
+
     /// Returns the frame rate of the loaded video, or 24 fps if no video is loaded.
     pub fn frame_rate(&self) -> &media::FrameRate {
         if let Some(video_metadata) = self.video_metadata.as_ref() {
@@ -588,11 +629,11 @@ impl Samaku {
     }
 
     fn boot() -> (Self, iced::Task<message::Message>) {
-        (Samaku::default(), iced::Task::none())
+        (Samaku::new(workers::Workers::spawn_all), iced::Task::none())
     }
 
     /// Construct the user interface. Called whenever iced needs to rerender the application.
-    fn view(&'_ self) -> Element<'_, message::Message> {
+    pub fn view(&'_ self) -> Element<'_, message::Message> {
         let focus = self.focus;
 
         // The pane grid makes up the main part of the application. All the fundamental
@@ -766,44 +807,6 @@ impl Samaku {
             window_close_events,
             worker_messages,
         ])
-    }
-}
-
-impl Default for Samaku {
-    fn default() -> Self {
-        let panes = pane_grid::State::with_configuration(initial_pane_configuration());
-
-        // Initial shared state...
-        let shared_state = SharedState {
-            has_audio: AtomicBool::new(false),
-            audio: Arc::new(Mutex::new(None)),
-            playback_position: Arc::new(model::playback::Position::default()),
-        };
-
-        // ...and initial global state
-        Samaku {
-            panes,
-            modifiers: iced::keyboard::Modifiers::empty(),
-            focus: None,
-            frozen: false,
-            toasts: model::toast::List::new(),
-            workers: workers::Workers::spawn_all(&shared_state),
-            actual_frame: None,
-            video_metadata: None,
-            audio_duration: None,
-            subtitles: subtitle::File::default(),
-            selected_events: model::select::Selection::default(),
-            project: project::Project::default(),
-            shared: shared_state,
-            view: RefCell::new(ViewState {
-                subtitle_renderer: media::subtitle::Renderer::new(),
-            }),
-            playing: false,
-            reticules: None,
-            motion_tracks: media::motion::TrackList::new(),
-            selected_tracks: model::select::Selection::default(),
-            history: history::History::new(),
-        }
     }
 }
 
