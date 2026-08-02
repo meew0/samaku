@@ -1,5 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
+pub mod object;
 pub mod playback;
 pub mod reticule;
 pub mod select;

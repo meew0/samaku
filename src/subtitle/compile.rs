@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::{media, nde};
+use crate::{media, model, nde};
 
 #[must_use]
 pub fn trivial<'a>(event: &'a super::Event) -> super::Event<'a> {
@@ -27,7 +27,7 @@ pub struct Context<'a> {
     pub frame_rate: &'a media::FrameRate,
     pub source_event: Option<&'a super::Event<'static>>,
     pub styles: &'a super::StyleList,
-    pub motion_tracks: Option<&'a media::motion::TrackList>,
+    pub motion_tracks: Option<&'a model::object::Store<media::motion::Track>>,
 
     /// The `PlayRes` defined in the ASS file header,
     /// or the video resolution, if none is defined.
@@ -59,7 +59,7 @@ macro_rules! context {
             },
             source_event: $source_event,
             styles: &$global_state.subtitles.styles,
-            motion_tracks: Some(&$global_state.motion_tracks),
+            motion_tracks: Some(&$global_state.objects.motion_tracks),
             playback_resolution: $global_state.subtitles.script_info.playback_resolution,
             layout_resolution: $global_state.effective_layout_resolution(),
         }

@@ -151,9 +151,9 @@ impl Workers {
 
     pub fn emit_track_motion(
         &self,
-        markers: HashMap<motion::TrackId, motion::Marker>,
+        markers: HashMap<model::object::Id, motion::Marker>,
         origin_frame: media::FrameNumber,
-        origin_markers: HashMap<motion::TrackId, motion::Marker>,
+        origin_markers: HashMap<model::object::Id, motion::Marker>,
         direction: motion::Direction,
         target: motion::Target,
         settings: motion::TrackSettings,

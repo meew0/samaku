@@ -516,11 +516,7 @@ pub struct Samaku {
     /// and the like.
     pub reticules: Option<model::reticule::Reticules>,
 
-    /// The tracks containing motion tracking markers at different timepoints.
-    pub motion_tracks: media::motion::TrackList,
-
-    /// Currently selected motion tracks.
-    pub selected_tracks: model::select::Selection<media::motion::TrackId>,
+    pub objects: model::object::Stores,
 }
 
 /// Data that needs to be shared with workers.
@@ -585,8 +581,7 @@ impl Samaku {
             }),
             playing: false,
             reticules: None,
-            motion_tracks: media::motion::TrackList::new(),
-            selected_tracks: model::select::Selection::default(),
+            objects: model::object::Stores::default(),
             history: history::History::new(),
         }
     }

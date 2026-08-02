@@ -1407,62 +1407,109 @@ fn update_internal(
                 }
             }
         }
-        Message::CreateTrack => {
-            let origin_frame = global_state
-                .current_frame()
-                .expect("video should be loaded");
+        Message::CreateObject(object_type) => {
+            let new_object = model::object::create(object_type, global_state);
+            let (new_id, cloned) = global_state.objects.add(object_type, new_object);
 
-            let marker = media::motion::Marker::default();
-            let track = media::motion::Track::new(origin_frame, marker, "New track".to_owned());
-            let track_copy = track.clone();
-
-            let new_id = global_state.motion_tracks.add(track);
-
-            let old_selected = global_state.selected_tracks.clear();
-            global_state.selected_tracks.select(new_id);
+            let selection = global_state.objects.selection_mut(object_type);
+            let old_selected = selection.clear();
+            selection.select(new_id);
+            let new_selection = selection.clone();
 
             let mut to_delete = HashSet::new();
             to_delete.insert(new_id);
 
-            undo.put_no_batch("Create motion track", Message::DeleteTracks(to_delete));
+            let create_name = model::object::Stores::undo_names(object_type).create;
+            undo.put_no_batch(create_name, Message::DeleteObjects(object_type, to_delete));
             undo.put_no_batch(
-                "Create motion track",
-                Message::SetTrackSelection(old_selected),
+                create_name,
+                Message::SetObjectSelection(object_type, old_selected),
             );
-            undo.override_redo(Message::RestoreTracks(
-                vec![(new_id, track_copy)],
-                global_state.selected_tracks.clone(),
+            undo.override_redo(Message::RestoreObjects(
+                object_type,
+                model::object::RestoreData::new_single(new_id, cloned),
+                new_selection,
             ));
         }
-        Message::DeleteTracks(track_ids) => {
-            let old_selected = global_state
-                .selected_tracks
-                .deselect_all(track_ids.iter().copied());
-            let restore = track_ids
-                .iter()
-                .filter_map(|&id| {
-                    global_state
-                        .motion_tracks
-                        .remove(id)
-                        .map(|track| (id, track))
-                })
-                .collect();
+        Message::DeleteObjects(object_type, ids) => {
+            let (restore, old_selected) = global_state.objects.delete(object_type, ids);
+
             undo.put_no_batch(
-                "Delete tracks",
-                Message::RestoreTracks(restore, old_selected),
+                model::object::Stores::undo_names(object_type).delete,
+                Message::RestoreObjects(object_type, restore, old_selected),
             );
         }
-        Message::RestoreTracks(restore, old_selected) => {
-            let mut restored = HashSet::with_capacity(restore.len());
-            for (track_id, track) in restore {
-                global_state.motion_tracks.restore(track_id, track);
-                restored.insert(track_id);
-            }
-            global_state.selected_tracks.select_from(&old_selected);
-            undo.put_no_batch("Restore tracks", Message::DeleteTracks(restored));
+        Message::RestoreObjects(object_type, restore, old_selected) => {
+            let restored = global_state
+                .objects
+                .restore(object_type, restore, old_selected);
+
+            undo.put_no_batch(
+                model::object::Stores::undo_names(object_type).restore,
+                Message::DeleteObjects(object_type, restored),
+            );
+        }
+        Message::ToggleObjectSelection(object_type, id) => {
+            let selection = global_state.objects.selection_mut(object_type);
+            let old_last = selection.last;
+            let previously_selected = if selection.contains(id) {
+                selection.deselect(id);
+                true
+            } else {
+                selection.select(id);
+                false
+            };
+
+            undo.put_incremental(
+                model::object::Stores::undo_names(object_type).toggle_selection,
+                Message::SetObjectSelectionSingle(object_type, id, previously_selected, old_last),
+            );
+            undo.override_redo(Message::SetObjectSelectionSingle(
+                object_type,
+                id,
+                !previously_selected,
+                selection.last,
+            ));
+        }
+        Message::SetObjectSelectionSingle(object_type, track_id, state, last) => {
+            let selection = global_state.objects.selection_mut(object_type);
+            let (old_state, old_last) = selection.set_single(track_id, state, last);
+
+            undo.put_instant(
+                model::object::Stores::undo_names(object_type).set_selection_single,
+                Message::SetObjectSelectionSingle(object_type, track_id, old_state, old_last),
+            );
+        }
+        Message::SelectOnlyObject(object_type, track_id) => {
+            let selection = global_state.objects.selection_mut(object_type);
+            let old = selection.clear();
+            selection.select(track_id);
+            notify_selected_events(global_state);
+
+            undo.put_instant(
+                model::object::Stores::undo_names(object_type).select_only,
+                Message::SetObjectSelection(object_type, old),
+            );
+        }
+        Message::SetObjectSelection(object_type, new_selected_tracks) => {
+            let old = replace(
+                global_state.objects.selection_mut(object_type),
+                new_selected_tracks,
+            );
+            undo.put_instant(
+                model::object::Stores::undo_names(object_type).set_selection_many,
+                Message::SetObjectSelection(object_type, old),
+            );
+        }
+        Message::DeselectObjects(object_type, to_deselect, old_last) => {
+            let selection = global_state.objects.selection_mut(object_type);
+            selection.deselect_all(to_deselect.into_iter());
+            selection.last = old_last;
+
+            // no undo
         }
         Message::SetTrackName(track_id, name) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id) {
                 let old_name = replace(&mut track.name, name);
 
                 undo.put_instant(
@@ -1472,7 +1519,7 @@ fn update_internal(
             }
         }
         Message::SetTrackMarker(track_id, frame, new_marker) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = replace(marker, new_marker);
@@ -1483,7 +1530,7 @@ fn update_internal(
             }
         }
         Message::MoveTrackMarkerRegion(track_id, frame, new_center) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_center = marker.region.center;
@@ -1496,7 +1543,7 @@ fn update_internal(
             }
         }
         Message::SetTrackMarkerRegion(track_id, frame, new_region) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = marker.clone();
@@ -1508,7 +1555,7 @@ fn update_internal(
             }
         }
         Message::SetTrackMarkerCenterCoordinate(axis, track_id, frame, new_value) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_center = marker.region.center;
@@ -1523,7 +1570,7 @@ fn update_internal(
             // TODO implement offset tracking
         }
         Message::SetTrackMarkerSizeCoordinate(axis, track_id, frame, new_value) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = marker.clone();
@@ -1538,7 +1585,7 @@ fn update_internal(
             }
         }
         Message::SetTrackMarkerSearchAreaOriginCoordinate(axis, track_id, frame, new_value) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = marker.clone();
@@ -1552,7 +1599,7 @@ fn update_internal(
             }
         }
         Message::SetTrackMarkerSearchAreaSizeCoordinate(axis, track_id, frame, new_value) => {
-            if let Some(track) = global_state.motion_tracks.get_mut(track_id)
+            if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id)
                 && let Some(marker) = track.get_marker_mut(frame)
             {
                 let old_marker = marker.clone();
@@ -1569,9 +1616,10 @@ fn update_internal(
         }
         Message::TrackMotionForSelectedTracks(origin_frame, direction, target, settings) => {
             // Find markers present at the current frame for selected tracks
-            let mut markers = HashMap::with_capacity(global_state.selected_tracks.len());
-            for id in &global_state.selected_tracks {
-                if let Some(track) = global_state.motion_tracks.get(id)
+            let mut markers =
+                HashMap::with_capacity(global_state.objects.motion_tracks.selection.len());
+            for id in &global_state.objects.motion_tracks.selection {
+                if let Some(track) = global_state.objects.motion_tracks.get(id)
                     && let Some(marker) = track.get_marker(origin_frame)
                 {
                     markers.insert(id, marker.clone());
@@ -1593,7 +1641,7 @@ fn update_internal(
         }
         Message::MotionTrackUpdate(markers, current_frame) => {
             for (track_id, marker) in markers {
-                if let Some(track) = global_state.motion_tracks.get_mut(track_id) {
+                if let Some(track) = global_state.objects.motion_tracks.get_mut(track_id) {
                     track.set_marker(current_frame, marker);
                 }
             }
@@ -1604,55 +1652,6 @@ fn update_internal(
                 .playback_position
                 .set_to_frame(current_frame, global_state.frame_rate());
             global_state.workers.emit_playback_step();
-        }
-        Message::ToggleTrackSelection(track_id) => {
-            let old_last = global_state.selected_tracks.last;
-            let previously_selected = if global_state.selected_tracks.contains(track_id) {
-                global_state.selected_tracks.deselect(track_id);
-                true
-            } else {
-                global_state.selected_tracks.select(track_id);
-                false
-            };
-
-            undo.put_incremental(
-                "Toggle motion track selection",
-                Message::SetTrackSelectionSingle(track_id, previously_selected, old_last),
-            );
-            undo.override_redo(Message::SetTrackSelectionSingle(
-                track_id,
-                !previously_selected,
-                global_state.selected_tracks.last,
-            ));
-        }
-        Message::SetTrackSelectionSingle(track_id, state, last) => {
-            let (old_state, old_last) = global_state
-                .selected_tracks
-                .set_single(track_id, state, last);
-
-            undo.put_instant(
-                "Set motion track selection (single)",
-                Message::SetTrackSelectionSingle(track_id, old_state, old_last),
-            );
-        }
-        Message::SelectOnlyTrack(track_id) => {
-            let old = global_state.selected_tracks.clear();
-            global_state.selected_tracks.select(track_id);
-            notify_selected_events(global_state);
-
-            undo.put_instant("Select motion track", Message::SetTrackSelection(old));
-        }
-        Message::SetTrackSelection(new_selected_tracks) => {
-            let old = replace(&mut global_state.selected_tracks, new_selected_tracks);
-            undo.put_instant("Select motion tracks", Message::SetTrackSelection(old));
-        }
-        Message::DeselectTracks(to_deselect, old_last) => {
-            global_state
-                .selected_tracks
-                .deselect_all(to_deselect.into_iter());
-            global_state.selected_tracks.last = old_last;
-
-            // no undo
         }
     }
 

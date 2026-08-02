@@ -1,5 +1,5 @@
 use crate::media::motion;
-use crate::{media, message};
+use crate::{media, message, model};
 use std::collections::HashMap;
 use std::{sync::Arc, thread};
 
@@ -8,9 +8,9 @@ pub(super) enum MessageIn {
     PlaybackStep,
     LoadVideo(std::path::PathBuf, media::Index),
     TrackMotion(
-        HashMap<motion::TrackId, motion::Marker>,
+        HashMap<model::object::Id, motion::Marker>,
         media::FrameNumber,
-        HashMap<motion::TrackId, motion::Marker>,
+        HashMap<model::object::Id, motion::Marker>,
         motion::Direction,
         motion::Target,
         motion::TrackSettings,

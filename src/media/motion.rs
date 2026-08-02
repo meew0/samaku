@@ -7,84 +7,12 @@ use crate::model;
 
 use super::bindings::mv;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct TrackId(u64);
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TrackList {
-    map: HashMap<TrackId, Track>,
-    next_id: TrackId,
-}
-
-impl TrackList {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn get(&self, id: TrackId) -> Option<&Track> {
-        self.map.get(&id)
-    }
-
-    #[must_use]
-    pub fn get_mut(&mut self, id: TrackId) -> Option<&mut Track> {
-        self.map.get_mut(&id)
-    }
-
-    pub fn add(&mut self, track: Track) -> TrackId {
-        let id = self.next_id;
-        self.next_id = TrackId(id.0 + 1);
-        self.map.insert(id, track);
-        id
-    }
-
-    pub fn remove(&mut self, id: TrackId) -> Option<Track> {
-        self.map.remove(&id)
-    }
-
-    pub fn restore(&mut self, id: TrackId, track: Track) {
-        self.map.insert(id, track);
-    }
-
-    #[must_use]
-    pub fn stab(&self, frame: super::FrameNumber) -> Vec<(TrackId, &Track)> {
-        // TODO: optimize this using interavl
-        self.map
-            .iter()
-            .filter_map(|(&id, track)| {
-                (frame >= track.first_frame && frame <= track.last_frame).then_some((id, track))
-            })
-            .collect()
-    }
-}
-
-impl Default for TrackList {
-    fn default() -> Self {
-        Self {
-            map: HashMap::new(),
-            next_id: TrackId(0),
-        }
-    }
-}
-
-impl model::NamedListIterable for TrackList {
-    type Key = TrackId;
-
-    fn iter_named(&self) -> impl Iterator<Item = model::NamedEntry<'_, Self::Key>> {
-        self.map.iter().map(|(&key, value)| model::NamedEntry {
-            id: key,
-            name: &value.name,
-        })
-    }
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Track {
     markers: BTreeMap<super::FrameNumber, Marker>,
     pub name: String,
-    first_frame: super::FrameNumber,
-    last_frame: super::FrameNumber,
+    pub first_frame: super::FrameNumber,
+    pub last_frame: super::FrameNumber,
 }
 
 impl Track {
@@ -396,9 +324,9 @@ pub struct PatchResponse {
 pub struct Tracker<'a, V> {
     pub video: &'a V,
     pub patch_provider: fn(&V, super::FrameNumber, &Patch<DVec2>) -> anyhow::Result<PatchResponse>,
-    pub markers: HashMap<TrackId, Marker>,
+    pub markers: HashMap<model::object::Id, Marker>,
     pub origin_frame: super::FrameNumber,
-    pub origin_markers: HashMap<TrackId, Marker>,
+    pub origin_markers: HashMap<model::object::Id, Marker>,
     pub current_frame: super::FrameNumber,
     pub direction: Direction,
     pub target: Target,
@@ -540,6 +468,8 @@ mod tests {
     fn motion_track_test(settings: TrackSettings) -> anyhow::Result<()> {
         media::init();
 
+        let zero_id = model::object::Id::new(0);
+
         let path = crate::test_utils::test_file("test_files/cube_av1.mkv");
 
         let index = video::Video::create_indexer(&path)?.run()?;
@@ -549,7 +479,7 @@ mod tests {
         let initial_marker = Marker::from_region_and_search_size(initial_region, 10.0);
 
         let mut markers = HashMap::new();
-        markers.insert(TrackId(0), initial_marker);
+        markers.insert(zero_id, initial_marker);
 
         let mut tracker = Tracker {
             video: &video,
@@ -572,7 +502,7 @@ mod tests {
 
         assert_matches!(last_result, TrackResult::TargetReached);
         assert_eq!(frame_count, 100);
-        let last_marker = &tracker.markers[&TrackId(0)];
+        let last_marker = &tracker.markers[&zero_id];
         println!("{last_marker:?}");
         assert_matches!(last_marker.key_state, KeyState::Tracked);
         assert_float_absolute_eq!(last_marker.region.center.x, 45.0, 2.0);

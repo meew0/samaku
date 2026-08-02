@@ -13,7 +13,7 @@
 )]
 
 use crate::subtitle::EventIndex;
-use crate::{action, config, history, media, message, model, pane, subtitle, version};
+use crate::{action, config, history, message, model, pane, subtitle, version};
 use anyhow::Context as _;
 use iced::advanced::graphics::futures::MaybeSend;
 use iced::widget::pane_grid;
@@ -88,8 +88,7 @@ struct Store<'a> {
     pane_layout: PaneLayout<'a>,
     selected_events: Cow<'a, model::select::Selection<EventIndex>>,
     properties: Cow<'a, Properties>,
-    motion_tracks: Cow<'a, media::motion::TrackList>,
-    selected_tracks: Cow<'a, model::select::Selection<media::motion::TrackId>>,
+    objects: Cow<'a, model::object::Stores>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -176,14 +175,12 @@ pub fn load(global_state: &mut crate::Samaku) -> anyhow::Result<bool> {
             pane_layout,
             selected_events,
             properties,
-            motion_tracks,
-            selected_tracks,
+            objects,
         } = project;
         global_state.panes = pane_grid::State::with_configuration(pane_layout.into_configuration());
         global_state.selected_events = selected_events.into_owned();
         global_state.project.properties = properties.into_owned();
-        global_state.motion_tracks = motion_tracks.into_owned();
-        global_state.selected_tracks = selected_tracks.into_owned();
+        global_state.objects = objects.into_owned();
         Ok(true)
     } else {
         println!("No project metadata found in opened subtitle file");
@@ -200,8 +197,7 @@ pub fn store(global_state: &mut crate::Samaku) -> anyhow::Result<()> {
         selected_events: Cow::Borrowed(&global_state.selected_events),
         // TODO store video/audio paths to be relative to the subtitle/project file (e.g. using the `pathdiff` crate)
         properties: Cow::Borrowed(&global_state.project.properties),
-        motion_tracks: Cow::Borrowed(&global_state.motion_tracks),
-        selected_tracks: Cow::Borrowed(&global_state.selected_tracks),
+        objects: Cow::Borrowed(&global_state.objects),
     };
 
     let czb = serialize_czb(&project, config::PROJECT_COMPRESSION_LEVEL)?;

@@ -156,9 +156,13 @@ impl History {
             | Message::DisconnectNodes(_, _, _)
             | Message::SetNodeConnection(_, _, _)
             | Message::UpdateReticulePosition(_, _)
-            | Message::CreateTrack
-            | Message::DeleteTracks(_)
-            | Message::RestoreTracks(_, _)
+            | Message::CreateObject(_)
+            | Message::DeleteObjects(_, _)
+            | Message::RestoreObjects(_, _, _)
+            | Message::ToggleObjectSelection(_, _)
+            | Message::SetObjectSelectionSingle(_, _, _, _)
+            | Message::SelectOnlyObject(_, _)
+            | Message::SetObjectSelection(_, _)
             | Message::SetTrackName(_, _)
             | Message::SetTrackMarker(_, _, _)
             | Message::MoveTrackMarkerRegion(_, _, _)
@@ -167,11 +171,7 @@ impl History {
             | Message::SetTrackMarkerOffsetCoordinate(_, _, _, _)
             | Message::SetTrackMarkerSizeCoordinate(_, _, _, _)
             | Message::SetTrackMarkerSearchAreaOriginCoordinate(_, _, _, _)
-            | Message::SetTrackMarkerSearchAreaSizeCoordinate(_, _, _, _)
-            | Message::ToggleTrackSelection(_)
-            | Message::SetTrackSelectionSingle(_, _, _)
-            | Message::SelectOnlyTrack(_)
-            | Message::SetTrackSelection(_) => {
+            | Message::SetTrackMarkerSearchAreaSizeCoordinate(_, _, _, _) => {
                 let cloned = message.clone();
                 let node = self.make_leaf(cloned);
                 Key::Record(node, None)
@@ -220,7 +220,7 @@ impl History {
             | Message::SetPlayback(_)
             | Message::UpdatePlaybackStateRepresentation(_)
             | Message::DeselectEvents(_, _)
-            | Message::DeselectTracks(_, _)
+            | Message::DeselectObjects(_, _, _)
             | Message::MultiAssignFiltersToEvents(_)
             | Message::ActivateNodes(_, _)
             | Message::TrackMotionForSelectedTracks(_, _, _, _)

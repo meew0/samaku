@@ -1,10 +1,9 @@
 use super::{Category, Context, Node, Shell, SocketType, SocketValue};
-use crate::media::motion;
 use crate::{message, model, nde, subtitle, view};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InputMotionTrack {
-    pub track_id: Option<motion::TrackId>,
+    pub track_id: Option<model::object::Id>,
     #[serde(skip)]
     pub blend_box_state: view::widget::blend_box::State,
 }
@@ -56,7 +55,7 @@ impl Node for InputMotionTrack {
         self_index: nde::graph::NodeId,
     ) -> iced::Element<'a, message::Message> {
         let (text, selection) = if let Some(track_id) = self.track_id {
-            if let Some(track) = global_state.motion_tracks.get(track_id) {
+            if let Some(track) = global_state.objects.motion_tracks.get(track_id) {
                 let count = track.count();
                 let s_str = if count == 1 { "" } else { "s" };
                 let selection = model::NamedEntry {
@@ -77,7 +76,7 @@ impl Node for InputMotionTrack {
 
         let track_button = view::widget::blend_box(
             &self.blend_box_state,
-            &global_state.motion_tracks,
+            &global_state.objects.motion_tracks,
             "Motion track",
             selection,
             move |new_selection| {

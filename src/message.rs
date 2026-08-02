@@ -259,56 +259,53 @@ pub enum Message {
         media::motion::TrackSettings,
     ),
     MotionTrackUpdate(
-        HashMap<media::motion::TrackId, media::motion::Marker>,
+        HashMap<model::object::Id, media::motion::Marker>,
         media::FrameNumber,
     ),
 
-    // Motion track management
-    CreateTrack,
-    DeleteTracks(HashSet<media::motion::TrackId>),
-    RestoreTracks(
-        Vec<(media::motion::TrackId, media::motion::Track)>,
-        model::select::Selection<media::motion::TrackId>,
+    // Object management
+    CreateObject(model::object::Type),
+    DeleteObjects(model::object::Type, HashSet<model::object::Id>),
+    RestoreObjects(
+        model::object::Type,
+        model::object::RestoreData,
+        model::select::Selection<model::object::Id>,
     ),
-    SetTrackName(media::motion::TrackId, String),
+
+    // Object selection
+    ToggleObjectSelection(model::object::Type, model::object::Id),
+    SetObjectSelectionSingle(
+        model::object::Type,
+        model::object::Id,
+        bool,
+        Option<model::object::Id>,
+    ),
+    SelectOnlyObject(model::object::Type, model::object::Id),
+    SetObjectSelection(
+        model::object::Type,
+        model::select::Selection<model::object::Id>,
+    ),
+    DeselectObjects(
+        model::object::Type,
+        HashSet<model::object::Id>,
+        Option<model::object::Id>,
+    ),
 
     // Motion track editing
-    SetTrackMarker(
-        media::motion::TrackId,
-        media::FrameNumber,
-        media::motion::Marker,
-    ),
-    MoveTrackMarkerRegion(media::motion::TrackId, media::FrameNumber, glam::DVec2),
-    SetTrackMarkerRegion(
-        media::motion::TrackId,
-        media::FrameNumber,
-        media::motion::Region,
-    ),
-    SetTrackMarkerCenterCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
-    SetTrackMarkerOffsetCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
-    SetTrackMarkerSizeCoordinate(model::Axis, media::motion::TrackId, media::FrameNumber, f64),
+    SetTrackName(model::object::Id, String),
+    SetTrackMarker(model::object::Id, media::FrameNumber, media::motion::Marker),
+    MoveTrackMarkerRegion(model::object::Id, media::FrameNumber, glam::DVec2),
+    SetTrackMarkerRegion(model::object::Id, media::FrameNumber, media::motion::Region),
+    SetTrackMarkerCenterCoordinate(model::Axis, model::object::Id, media::FrameNumber, f64),
+    SetTrackMarkerOffsetCoordinate(model::Axis, model::object::Id, media::FrameNumber, f64),
+    SetTrackMarkerSizeCoordinate(model::Axis, model::object::Id, media::FrameNumber, f64),
     SetTrackMarkerSearchAreaOriginCoordinate(
         model::Axis,
-        media::motion::TrackId,
+        model::object::Id,
         media::FrameNumber,
         f64,
     ),
-    SetTrackMarkerSearchAreaSizeCoordinate(
-        model::Axis,
-        media::motion::TrackId,
-        media::FrameNumber,
-        f64,
-    ),
-
-    // Motion track selection
-    ToggleTrackSelection(media::motion::TrackId),
-    SetTrackSelectionSingle(media::motion::TrackId, bool, Option<media::motion::TrackId>),
-    SelectOnlyTrack(media::motion::TrackId),
-    SetTrackSelection(model::select::Selection<media::motion::TrackId>),
-    DeselectTracks(
-        HashSet<media::motion::TrackId>,
-        Option<media::motion::TrackId>,
-    ),
+    SetTrackMarkerSearchAreaSizeCoordinate(model::Axis, model::object::Id, media::FrameNumber, f64),
 }
 
 impl Message {
@@ -417,7 +414,7 @@ pub enum Pane {
 #[derive(Debug, Clone)]
 pub enum Node {
     /// A motion track has been selected.
-    MotionTrackSelect(media::motion::TrackId),
+    MotionTrackSelect(model::object::Id),
 
     /// The text input in a node has changed, to be used generically by different nodes.
     TextInputChanged(String),
