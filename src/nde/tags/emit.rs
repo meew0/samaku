@@ -8,8 +8,6 @@ use crate::nde::Span;
     reason = "the expectations should never fail"
 )]
 pub fn emit(global: &super::Global, spans: &[Span]) -> String {
-    use std::fmt::Write as _;
-
     let mut compiled_text = String::new();
 
     // Reused buffer for compiled tags
@@ -40,10 +38,10 @@ pub fn emit(global: &super::Global, spans: &[Span]) -> String {
                 tags.emit(&mut compiled_tags)
                     .expect("emitting tags into a String should not fail");
                 maybe_write_block(&mut compiled_text, compiled_tags.as_str());
-                write!(compiled_text, "{{\\p{}}}", drawing.scale)
-                    .expect("writing drawing scale to String should not fail");
-                push_escaped(&mut compiled_text, &drawing.commands);
-                compiled_text.push_str("{\\p0}");
+                drawing
+                    .emit_inline()
+                    .emit_value(&mut compiled_text)
+                    .expect("emitting a drawing into a String should not fail");
             }
         }
     }

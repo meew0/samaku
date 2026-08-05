@@ -1,11 +1,13 @@
 use std::{fmt::Debug, ops::Add};
 
 pub use bake::bake;
+pub use drawing::Drawing;
 pub use emit::emit;
 pub use parse::parse;
 pub use parse::raw as parse_raw;
 
 pub mod bake;
+mod drawing;
 mod emit;
 mod lerp;
 mod parse;
@@ -1868,34 +1870,6 @@ impl emit::Value for Rectangle {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Drawing {
-    pub scale: i32,
-    pub commands: String,
-}
-
-impl Drawing {
-    #[must_use]
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.commands.is_empty()
-    }
-}
-
-impl emit::Value for Drawing {
-    /// Only valid for vector clips, not for inline drawings.
-    fn emit_value<W>(&self, sink: &mut W) -> Result<(), std::fmt::Error>
-    where
-        W: std::fmt::Write,
-    {
-        write!(sink, "{},{}", self.scale, self.commands)
-    }
-}
-
 /// See <http://www.tcax.org/docs/ass-specs.htm>.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapStyle {
@@ -2146,7 +2120,7 @@ mod tests {
                 y2: 13,
             })),
             vector_clip: Some(Clip::Contained(Drawing {
-                commands: "abc".to_owned(),
+                commands: vec![drawing::Command::MoveTo(glam::DVec2::new(100.0, 100.0))],
                 scale: 1,
             })),
             origin: Some(glam::DVec2::new(3.0, 4.0)),
@@ -2169,7 +2143,7 @@ mod tests {
 
         assert_emits!(
             global,
-            "\\pos(1,2)\\iclip(10,11,12,13)\\clip(1,abc)\\org(3,4)\\fade(0,100,200,300,400,500,600)\\q0\\an1"
+            "\\pos(1,2)\\iclip(10,11,12,13)\\clip(1,m 100 100)\\org(3,4)\\fade(0,100,200,300,400,500,600)\\q0\\an1"
         );
 
         Ok(())

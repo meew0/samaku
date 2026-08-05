@@ -82,7 +82,7 @@ pub fn raw(text: &str) -> (Box<Global>, Vec<Span>) {
                             // Create a new drawing
                             drawing = Some(Drawing {
                                 scale: new_drawing_scale,
-                                commands: String::new(),
+                                commands: vec![],
                             });
                         }
                     }
@@ -993,10 +993,7 @@ where
         };
 
         let commands = twa.string_arg(twa.nargs() - 1).unwrap();
-        let drawing = Drawing {
-            scale,
-            commands: commands.to_owned(),
-        };
+        let drawing = Drawing::parse(scale, commands);
 
         global.vector_clip = Some(vector_clip(drawing));
     } else {
@@ -1015,7 +1012,7 @@ fn end_span(
 ) -> Option<Drawing> {
     if let Some(mut drawing) = drawing_option {
         if end_drawing {
-            drawing.commands = span_text;
+            drawing.commands = Drawing::parse_commands(&span_text);
             spans.push(Span::Drawing(*last_local, drawing));
             None
         } else {
@@ -1156,7 +1153,7 @@ mod tests {
     use assert_float_eq::assert_float_absolute_eq;
     use assert_matches2::assert_matches;
 
-    use crate::nde::tags::{Karaoke, KaraokeOnset};
+    use crate::nde::tags::{Karaoke, KaraokeOnset, drawing};
 
     use super::*;
 
@@ -1243,7 +1240,7 @@ mod tests {
 
     #[test]
     fn span_drawing() {
-        let (global, spans) = raw("a{\\1c&HFF0000&\\p2}b{\\p0\\p1}c{\\p0}d");
+        let (global, spans) = raw("a{\\1c&HFF0000&\\p2}m 100 100{\\p0\\p1}m 200 200{\\p0}d");
         assert_eq!(*global, Global::empty());
         assert_eq!(spans.len(), 4);
         assert_matches!(&spans[0], &Span::Tags(ref local, ref text));
@@ -1271,7 +1268,10 @@ mod tests {
             }
         );
         assert_eq!(*scale, 2);
-        assert_eq!(commands, "b");
+        assert_eq!(
+            *commands,
+            vec![drawing::Command::MoveTo(glam::dvec2(100.0, 100.0))]
+        );
         assert_matches!(
             &spans[2],
             &Span::Drawing(
@@ -1284,7 +1284,10 @@ mod tests {
         );
         assert_eq!(*local, Local::empty());
         assert_eq!(*scale, 1);
-        assert_eq!(commands, "c");
+        assert_eq!(
+            *commands,
+            vec![drawing::Command::MoveTo(glam::dvec2(200.0, 200.0))]
+        );
         assert_matches!(&spans[3], &Span::Tags(ref local, ref text));
         assert_eq!(*local, Local::empty());
         assert_eq!(text, "d");
@@ -1432,7 +1435,7 @@ mod tests {
 
         let mut global = Global::empty();
         let block = parse_tag_block(
-            "\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,abc)\\clip(2,def)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1",
+            "\\xbord1\\ybord2\\xshad3\\yshad4\\fax5\\fay6\\clip(70,80,90,100)\\iclip(7,8,9,10)\\iclip(1,m 100 100)\\clip(2,m 200 200)\\blur11\\fscx12\\fscy13\\fsp14\\fs15\\frx16\\fry17\\frz18\\fnAlegreya\\an5\\pos(19,20)\\fade(0,255,0,0,1000,2000,3000)\\org(21,22)\\t(\\xbord23)\\1c&HFF0000&\\2c&H00FF00&\\3c&H0000FF&\\4c&HFF00FF&\\1a&H22&\\2a&H44&\\3a&H66&\\4a&H88&\\be24\\b1\\i1\\kt25\\s1\\u1\\pbo26\\p1\\q1\\fe1",
             &mut global,
         );
 
@@ -1455,7 +1458,7 @@ mod tests {
             global.vector_clip,
             Some(Clip::Inverse(Drawing {
                 scale: 1,
-                commands: "abc".to_owned(),
+                commands: vec![drawing::Command::MoveTo(glam::dvec2(100.0, 100.0))],
             }))
         );
         assert_eq!(block.new_local.gaussian_blur, Override(11.0));
@@ -1629,7 +1632,15 @@ mod tests {
             global.vector_clip,
             Some(Clip::Contained(Drawing {
                 scale: 2,
-                commands: "m 0 0 s 100 0 100 100 0 100 c".to_owned(),
+                commands: vec![
+                    drawing::Command::MoveTo(glam::DVec2::ZERO),
+                    drawing::Command::BSpline(
+                        glam::dvec2(100.0, 0.0),
+                        glam::dvec2(100.0, 100.0),
+                        glam::dvec2(0.0, 100.0)
+                    ),
+                    drawing::Command::Close,
+                ],
             }))
         );
         assert_eq!(
@@ -2085,12 +2096,12 @@ mod tests {
 
         let empty_drawing = super::Drawing {
             scale: 1,
-            commands: String::new(),
+            commands: vec![],
         };
 
         let non_empty_drawing = super::Drawing {
             scale: 1,
-            commands: "Drawing".to_owned(),
+            commands: vec![drawing::Command::MoveTo(glam::dvec2(100.0, 100.0))],
         };
 
         let spans: Vec<Span> = vec![
