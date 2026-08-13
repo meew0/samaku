@@ -97,7 +97,8 @@ So far, building samaku has been tested on Linux and Windows.
 ### Linux
 
 - Install dependencies:
-    - [libass](https://github.com/libass/libass) (including headers)
+    - [libass](https://github.com/libass/libass) (including headers), version 0.17.2 or newer. Older versions are
+      unsupported and will result in files getting mangled.
     - [ffms2](https://github.com/FFMS/ffms2) (including headers)
 - Run `cargo test` to ensure the dependencies have been installed correctly.
 - Then, start the program using `cargo run` (debug mode) or `cargo run --release` (release mode).

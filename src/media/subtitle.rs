@@ -38,6 +38,13 @@ pub fn add_font(name: &str, data: &[u8]) {
     LIBRARY.with_borrow(|library| library.add_font(name, data));
 }
 
+/// Version of libass we use, in the same numeric format as `LIBASS_VERSION`
+/// (e.g. `0x0170_5000` for 0.17.5).
+#[must_use]
+pub fn libass_version() -> u32 {
+    ass::library_version()
+}
+
 /// Set the global libass message callback to one that prints all messages level 5 and below to
 /// stdout, to avoid cluttering the console output in tests.
 pub fn set_libass_test_callback() {

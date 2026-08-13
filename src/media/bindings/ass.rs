@@ -60,6 +60,13 @@ fn malloc_string(source: &str) -> *mut i8 {
 
 pub(crate) type Callback = Box<dyn FnMut(i32, String)>;
 
+pub(crate) fn library_version() -> u32 {
+    #[expect(clippy::cast_sign_loss, reason = "this value should not be negative")]
+    unsafe {
+        libass::ass_library_version() as u32
+    }
+}
+
 pub(crate) struct Library {
     library: *mut libass::ASS_Library,
     callback: Mutex<Option<Box<Callback>>>,

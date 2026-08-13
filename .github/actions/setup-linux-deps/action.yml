@@ -1,9 +1,14 @@
 name: Set up Linux build dependencies
 description: >-
-  Installs the native libraries samaku links against (libass, ffms2) plus the
-  toolchain its build scripts need (cmake for the bundled libmv, libclang for
-  bindgen) from the distribution package manager. Mirrors the "Linux" section of
-  README.md but uses apt instead of building from source.
+  Installs the native libraries samaku links against (ffms2 from apt, libass
+  built from source) plus the toolchain its build scripts need (cmake for the
+  bundled libmv, libclang for bindgen). Mirrors the "Linux" section of
+  README.md.
+
+inputs:
+  libass-version:
+    description: libass release to build and link against.
+    required: true
 
 runs:
   using: composite
@@ -11,12 +16,76 @@ runs:
     - name: Install system libraries
       shell: bash
       run: |
+        # libass is deliberately *not* installed from apt: ubuntu-latest still
+        # ships 0.17.1, which predates the drawing tokenisation rewrite
+        # (libass e012cb2, released in 0.17.2) that tests/libass_compare.rs
+        # compares against. It is built from source below instead; everything
+        # after pkg-config here is one of its build dependencies.
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
-          libass-dev \
           libffms2-dev \
           libasound2-dev \
           libgtk-3-dev \
           libclang-dev \
           cmake \
-          pkg-config
+          pkg-config \
+          nasm \
+          libfontconfig-dev \
+          libfreetype-dev \
+          libfribidi-dev \
+          libharfbuzz-dev \
+          libunibreak-dev
+
+    - name: Restore cached libass build
+      id: libass-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.local/libass-${{ inputs.libass-version }}
+        key: libass-${{ inputs.libass-version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Build libass
+      if: steps.libass-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="${{ inputs.libass-version }}"
+        prefix="$HOME/.local/libass-$version"
+        work="$(mktemp -d)"
+
+        curl -fsSL -o "$work/libass.tar.xz" \
+          "https://github.com/libass/libass/releases/download/$version/libass-$version.tar.xz"
+        tar -xf "$work/libass.tar.xz" -C "$work"
+
+        cd "$work/libass-$version"
+        ./configure --prefix="$prefix" --disable-static --enable-shared
+
+        # The rasterizer's C and ASM paths do not produce byte-identical output,
+        # and tests/libass_compare.rs compares rendered bitmaps, so a libass
+        # built without nasm fails those comparisons on vector clips. configure
+        # only warns when nasm is missing; make that fatal here instead.
+        if ! grep -q '^#define CONFIG_ASM 1' config.h; then
+          echo "::error::libass configured without ASM support (is nasm installed?)"
+          exit 1
+        fi
+
+        make -j"$(nproc)"
+        make install
+
+    - name: Export libass paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        prefix="$HOME/.local/libass-${{ inputs.libass-version }}"
+
+        # libass-sys/build.rs picks up the headers and the import library from
+        # these; LD_LIBRARY_PATH makes the built binaries (and linuxdeploy, when
+        # packaging the AppImage) resolve libass.so.9 to this build rather than
+        # to the older copy apt pulls in as an FFmpeg dependency.
+        {
+          echo "LIBASS_INCLUDE_DIR=$prefix/include"
+          echo "LIBASS_LIB_DIR=$prefix/lib"
+          echo "LD_LIBRARY_PATH=$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          echo "PKG_CONFIG_PATH=$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+        } >> "$GITHUB_ENV"
+
+        PKG_CONFIG_PATH="$prefix/lib/pkgconfig" pkg-config --modversion libass

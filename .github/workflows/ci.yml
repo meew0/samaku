@@ -13,6 +13,9 @@ concurrency:
 env:
   # ffms2 MSVC release used for the Windows builds (see WINDOWS_BUILD.md).
   FFMS2_VERSION: "5.0"
+  # libass release built from source on Linux, since the distribution package is
+  # too old for tests/libass_compare.rs (see setup-linux-deps).
+  LIBASS_VERSION: "0.17.5"
 
 jobs:
   build:
@@ -31,6 +34,8 @@ jobs:
       - name: Set up Linux dependencies
         if: runner.os == 'Linux'
         uses: ./.github/actions/setup-linux-deps
+        with:
+          libass-version: ${{ env.LIBASS_VERSION }}
 
       - name: Set up Windows dependencies
         if: runner.os == 'Windows'
@@ -122,6 +127,8 @@ jobs:
       - name: Set up Linux dependencies
         if: runner.os == 'Linux'
         uses: ./.github/actions/setup-linux-deps
+        with:
+          libass-version: ${{ env.LIBASS_VERSION }}
 
       - name: Set up Windows dependencies
         if: runner.os == 'Windows'
@@ -145,6 +152,8 @@ jobs:
 
       - name: Set up Linux dependencies
         uses: ./.github/actions/setup-linux-deps
+        with:
+          libass-version: ${{ env.LIBASS_VERSION }}
 
       - uses: ./.github/actions/setup-rust
         with:

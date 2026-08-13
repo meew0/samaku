@@ -23,12 +23,21 @@ pub const ASS_FILES: &[(&str, &str)] = &[
 
 pub const FRAME_SIZE: subtitle::Resolution = subtitle::Resolution { x: 192, y: 108 };
 
+fn check_libass_version() {
+    let version = media::subtitle::libass_version();
+    assert!(
+        version >= 0x0170_2000,
+        "the libass_compare tests require libass 0.17.2 or newer (currently available: {version:#010x})"
+    );
+}
+
 // ignored on Windows since font rendering seems to be slightly non-deterministic,
 // making it impossible to reliably compare rendered images.
 // TODO: figure out whether maybe libass can be configured to be deterministic here
 #[cfg_attr(windows, ignore)]
 #[test]
 fn parse() {
+    check_libass_version();
     media::subtitle::set_libass_test_callback();
 
     for &(file_name, file_content) in ASS_FILES {
@@ -39,6 +48,7 @@ fn parse() {
 #[cfg_attr(windows, ignore)]
 #[test]
 fn bake() {
+    check_libass_version();
     media::subtitle::set_libass_test_callback();
 
     for &(file_name, file_content) in ASS_FILES {
